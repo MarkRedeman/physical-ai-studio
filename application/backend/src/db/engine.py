@@ -1,8 +1,10 @@
+import logging
 from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from sqlite3 import Connection
 from typing import Any
 
+from loguru import logger
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.create import create_engine, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -10,6 +12,9 @@ from sqlalchemy.orm.session import Session, sessionmaker
 from sqlalchemy.pool.impl import NullPool
 
 from settings import get_settings
+
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+logger.enable("sqlalchemy.engine")
 
 settings = get_settings()
 
