@@ -54,6 +54,7 @@
         "static-path": "^0.0.4",
         "three": "^0.180.0",
         "urdf-loader": "^0.12.6",
+        "usehooks-ts": "^3.1.1",
         "uuid": "^11.1.0"
     },
     "devDependencies": {
