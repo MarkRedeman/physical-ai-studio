@@ -4,7 +4,9 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+from schemas.base import BaseIDModel
 
 
 class RobotPortInfo(BaseModel):
@@ -26,8 +28,28 @@ class RobotType(StrEnum):
     SO101_LEADER = "SO101_Leader"
 
 
-class Robot(ABC, BaseModel):
-    id: Annotated[UUID, Field(description="Unique identifier")]
+SupportedRobotDriver = Literal[
+    "feetech",
+    "virtual", # virtual state handled by Geti Action
+    # "gym", 
+    "websocket",
+    "zmq",
+]
+
+
+class FeetechRobotPayload(BaseModel):
+    """Configuration for Robot."""
+
+    serial_id: str = Field(..., description="Unique serial identifier for the robot")
+
+class WebsocketRobotPayload(BaseModel):
+    """Configuration for Robot."""
+
+    stream_url: str = Field(..., description="WebSocket stream URL")
+
+
+class BaseRobot(BaseIDModel, ABC):
+    driver: SupportedRobotDriver = "feetech"
 
     created_at: datetime | None = Field(None)
     updated_at: datetime | None = Field(None)
@@ -50,3 +72,29 @@ class Robot(ABC, BaseModel):
             }
         }
     )
+
+
+class FeetechRobot(BaseRobot):
+    driver: Literal["feetech"] = "feetech"  # type: ignore[assignment]
+    payload: FeetechRobotPayload = FeetechRobotPayload(
+        serial_id = ""
+    )
+
+class WebSocketRobot(BaseRobot):
+    driver: Literal["websocket"] = "websocket"  # type: ignore[assignment]
+    payload: WebsocketRobotPayload 
+
+
+class VirtualRobot(BaseRobot):
+    driver: Literal["virtual"] = "virtual"  # type: ignore[assignment]
+    #payload: WebsocketRobotPayload 
+
+class ZMQRobot(BaseRobot):
+    driver: Literal["zqm"] = "zmq"  # type: ignore[assignment]
+
+Robot = Annotated[
+    FeetechRobot | WebSocketRobot | VirtualRobot | ZMQRobot,
+    Field(discriminator="driver"),
+]
+
+RobotAdapter: TypeAdapter[Robot] = TypeAdapter(Robot)

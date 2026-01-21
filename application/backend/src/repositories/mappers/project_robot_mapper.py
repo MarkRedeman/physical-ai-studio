@@ -1,6 +1,6 @@
 from db.schema import ProjectRobotDB
 from repositories.mappers.base_mapper_interface import IBaseMapper
-from schemas.robot import Robot
+from schemas.robot import Robot, RobotAdapter
 
 
 class ProjectRobotMapper(IBaseMapper):
@@ -20,12 +20,17 @@ class ProjectRobotMapper(IBaseMapper):
     @staticmethod
     def from_schema(model: ProjectRobotDB) -> Robot:
         """Convert Robot db entity to schema."""
-        return Robot(
-            id=model.id,
-            name=model.name,
-            serial_id=model.serial_id,
-            type=model.type,
-            active_calibration_id=model.active_calibration_id,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-        )
+        return RobotAdapter.validate_python({
+                "id": model.id,
+                "name": model.name,
+                "serial_id": model.serial_id,
+                "type": model.type,
+                "active_calibration_id": model.active_calibration_id,
+                "driver": "feetech", # TODO model.driver
+                "payload": {
+                    "serial_id": model.serial_id
+                    },
+                "created_at": model.created_at,
+                "updated_at": model.updated_at,
+                # **model, driver: "feetech"
+            }, from_attributes=True)
