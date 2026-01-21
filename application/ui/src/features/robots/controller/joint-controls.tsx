@@ -178,8 +178,8 @@ const useJointState = () => {
 
     const setJoint = (name: string, value: number) => {
         socket.sendJsonMessage({
-            event: 'set_joints_state',
-            payload: {
+            command: 'set_joints_state',
+            joints: {
                 [name]: value,
             },
         });
@@ -338,9 +338,9 @@ export const JointControls = () => {
                         isSelected={isControlled}
                         onChange={(value) => {
                             if (value === true) {
-                                socket.sendJsonMessage({ event: 'enable_torque' });
+                                socket.sendJsonMessage({ command: 'enable_torque' });
                             } else {
-                                socket.sendJsonMessage({ event: 'disable_torque' });
+                                socket.sendJsonMessage({ command: 'disable_torque' });
                             }
                         }}
                     >
