@@ -36,6 +36,9 @@ const EmptyPreview = () => {
 };
 
 const So101FollowerCell = ({ robot_id, teleoperate_robot_id }: { robot_id: string; teleoperate_robot_id?: string }) => {
+    if (robot_id === undefined) {
+        return <div>Test</div>;
+    }
     // TODO: identify button
     return (
         <RobotModelsProvider>
@@ -45,6 +48,9 @@ const So101FollowerCell = ({ robot_id, teleoperate_robot_id }: { robot_id: strin
 };
 
 const So101LeaderCell = ({ robot_id }: { robot_id: string }) => {
+    if (robot_id === undefined) {
+        return <div>Test</div>;
+    }
     return <span>TODO: revert once we can share websockets...</span>;
     return (
         <RobotModelsProvider>

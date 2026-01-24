@@ -171,7 +171,7 @@ const Joint = ({
 const useTeleoperateTheRobot = (
     socket: ReturnType<typeof useWebSocket>,
     project_id: string,
-    teleoperate_robot_id: string
+    teleoperate_robot_id?: string
 ) => {
     // WebSocket message handler
     const handleLeaderMessage = useCallback(
@@ -189,7 +189,13 @@ const useTeleoperateTheRobot = (
         [socket]
     );
 
-    const leaderSocket = useWebSocket(`/api/projects/${project_id}/robots/${teleoperate_robot_id}/ws`, {
+    const mujoco = 'f004cffd-4517-4731-a9ae-c3a041c1fa4c';
+    const url =
+        teleoperate_robot_id === mujoco
+            ? 'ws://localhost:8081'
+            : `/api/projects/${project_id}/robots/${teleoperate_robot_id}/ws`;
+
+    const leaderSocket = useWebSocket(url, {
         queryParams: {
             fps: 60,
         },
@@ -200,7 +206,6 @@ const useTeleoperateTheRobot = (
         onError: (error) => console.error('WebSocket error:', error),
         onClose: () => console.info('WebSocket closed'),
     });
-    console.info(leaderSocket);
 
     return leaderSocket;
 };
@@ -213,7 +218,7 @@ type JointsState = Array<{
     decreaseKey: string;
     increaseKey: string;
 }>;
-const useJointState = (project_id: string, robot_id: string, teleoperate_robot_id: string) => {
+const useJointState = (project_id: string, robot_id: string, teleoperate_robot_id?: string) => {
     const [isControlled, setIsControlled] = useState(false);
     const [joints, setJoints] = useState<JointsState>([]);
     const { models } = useRobotModels();
@@ -260,7 +265,10 @@ const useJointState = (project_id: string, robot_id: string, teleoperate_robot_i
         [models]
     );
 
-    const socket = useWebSocket(`/api/projects/${project_id}/robots/${robot_id}/ws`, {
+    const mujoco = 'f004cffd-4517-4731-a9ae-c3a041c1fa4c';
+    const url = robot_id === mujoco ? 'ws://localhost:8081' : `/api/projects/${project_id}/robots/${robot_id}/ws`;
+
+    const socket = useWebSocket(url, {
         queryParams: {
             fps: 60,
         },
