@@ -1,13 +1,21 @@
-import { Suspense, useRef } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 
 import { Content, Flex, Heading, IllustratedMessage, Loading, Text, View } from '@geti/ui';
-import { DockviewApi, IDockviewPanelProps } from 'dockview';
-import { DockviewReact, DockviewReadyEvent, IDockviewReactProps } from 'dockview-react';
+import { DockviewReact, GridviewApi, IGridviewPanelProps } from 'dockview';
+import { GridviewReadyEvent } from 'dockview-react';
 
+import { $api } from '../../../api/client';
+import { SchemaCameraConfigInput, SchemaWebcamCameraOutput } from '../../../api/openapi-spec';
+import { WebRTCConnectionProvider } from '../../../components/stream/web-rtc-connection-provider';
+import { CameraView } from '../../../routes/cameras/camera';
+import { WebsocketCamera } from '../../cameras/websocket-camera';
+import { useProjectId } from '../../projects/use-project';
+import { RobotModelsProvider } from '../robot-models-context';
 import { ReactComponent as RobotIllustration } from './../../../assets/illustrations/INTEL_08_NO-TESTS.svg';
-import { CameraCell } from './cells/camera-cell';
-import { RobotCell } from './cells/robot-cell';
+import { LeaderCell } from './preview-robot-move';
 import { useEnvironmentForm } from './provider';
+
+import classes from './form.module.scss';
 
 const EmptyPreview = () => {
     return (
@@ -27,73 +35,270 @@ const EmptyPreview = () => {
     );
 };
 
+const So101FollowerCell = ({ robot_id, teleoperate_robot_id }: { robot_id: string; teleoperate_robot_id?: string }) => {
+    // TODO: identify button
+    return (
+        <RobotModelsProvider>
+            <LeaderCell robot_id={robot_id} label={'Follower'} teleoperate_robot_id={teleoperate_robot_id} />
+        </RobotModelsProvider>
+    );
+};
+
+const So101LeaderCell = ({ robot_id }: { robot_id: string }) => {
+    return <span>TODO: revert once we can share websockets...</span>;
+    return (
+        <RobotModelsProvider>
+            <LeaderCell robot_id={robot_id} label={'Leader'} />
+        </RobotModelsProvider>
+    );
+};
+
+const CameraCell = ({
+    camera,
+    storedCamera,
+}: {
+    camera: SchemaCameraConfigInput;
+    storedCamera: SchemaWebcamCameraOutput;
+}) => {
+    return (
+        <View backgroundColor={'gray-500'}>
+            <View maxHeight='100%' height='100%' position='relative'>
+                <WebsocketCamera
+                    camera={{
+                        driver: storedCamera.driver,
+                        fingerprint: storedCamera.fingerprint,
+                        name: storedCamera.name,
+                        hardware_name: storedCamera.hardware_name,
+                        fps: storedCamera.payload.fps,
+                        width: storedCamera.payload.width,
+                        height: storedCamera.payload.height,
+                        payload: storedCamera.payload,
+                    }}
+                />
+            </View>
+        </View>
+    );
+};
+
+const CameraCellById = ({ camera_id }: { camera_id: string }) => {
+    const availableCamerasQuery = $api.useSuspenseQuery('get', '/api/hardware/cameras');
+
+    const { project_id } = useProjectId();
+    const camerasQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/cameras', {
+        params: { path: { project_id } },
+    });
+
+    const storedCamera = camerasQuery.data.find((camera) => camera.id === camera_id);
+    const availableCamera =
+        availableCamerasQuery.data.find(({ driver, fingerprint }) => {
+            return storedCamera?.fingerprint === fingerprint && storedCamera.driver === driver;
+        }) ?? availableCamerasQuery.data.at(0);
+
+    if (availableCamera === undefined || storedCamera === undefined) {
+        return 'loading?';
+    }
+
+    return <CameraCell camera={availableCamera} storedCamera={storedCamera} />;
+};
+
 const components = {
-    leader: (props: IDockviewPanelProps<{ title: string; robot_id: string }>) => {
-        return <RobotCell robot_id={props.params.robot_id} />;
+    leader: (props: IGridviewPanelProps<{ title: string; robot_id: string }>) => {
+        return <So101LeaderCell robot_id={props.params.robot_id} />;
     },
-    follower: (props: IDockviewPanelProps<{ title: string; robot_id: string }>) => {
-        return <RobotCell robot_id={props.params.robot_id} />;
+    follower: (props: IGridviewPanelProps<{ title: string; robot_id: string; teleoperate_robot_id?: string }>) => {
+        return (
+            <So101FollowerCell
+                robot_id={props.params.robot_id}
+                teleoperate_robot_id={props.params.teleoperate_robot_id}
+            />
+        );
     },
-    camera: (props: IDockviewPanelProps<{ camera_id: string }>) => {
-        return <CameraCell camera_id={props.params.camera_id} />;
+    camera: (props: IGridviewPanelProps<{ camera_id: string }>) => {
+        return <CameraCellById camera_id={props.params.camera_id} />;
     },
-    default: (props: IDockviewPanelProps<{ title: string }>) => {
+    default: (props: IGridviewPanelProps<{ title: string }>) => {
         return <div style={{ padding: '20px', color: 'white' }}>{props.params.title}</div>;
     },
-} satisfies IDockviewReactProps['components'];
+};
 
 const ActualPreview = () => {
     const environment = useEnvironmentForm();
-    const api = useRef<DockviewApi>(null);
+    const availableCamerasQuery = $api.useSuspenseQuery('get', '/api/hardware/cameras');
 
-    const onReady = (event: DockviewReadyEvent): void => {
-        environment.camera_ids.forEach((camera_id, idx) => {
+    const { project_id } = useProjectId();
+    const robotsQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots', {
+        params: { path: { project_id } },
+    });
+    const camerasQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/cameras', {
+        params: { path: { project_id } },
+    });
+
+    const robots = environment.robots
+        .map((robot) => {
+            return {
+                availableRobot: robotsQuery.data.find(({ id }) => id === robot.robot_id),
+                robot,
+            };
+        })
+        .filter((x) => x.robot !== undefined);
+    const teleoperators = environment.robots
+        .map(({ teleoperator }) => {
+            if (teleoperator.type === 'robot') {
+                return robotsQuery.data.find(({ id }) => id === teleoperator.robot_id);
+            }
+
+            return undefined;
+        })
+        .filter((x) => x !== undefined);
+
+    const cameras = environment.camera_ids
+        .map((cameraId) => {
+            const storedCamera = camerasQuery.data.find((camera) => camera.id === cameraId);
+            const availableCamera =
+                availableCamerasQuery.data.find(({ driver, fingerprint }) => {
+                    return storedCamera?.fingerprint === fingerprint && storedCamera.driver === driver;
+                }) ?? availableCamerasQuery.data.at(0);
+
+            if (availableCamera === undefined) {
+                return undefined;
+            }
+
+            return { availableCamera, storedCamera };
+        })
+        .filter((x) => x !== undefined);
+
+    const apii = useRef<GridviewApi>();
+    const onReady = (event: GridviewReadyEvent) => {
+        let lastRobot = '';
+        robots.forEach(({ availableRobot, robot }) => {
+            if (availableRobot === undefined) {
+                return;
+            }
+
+            const robotId = availableRobot.name;
+            const teleoperateRobotId = robot.teleoperator.robot_id;
             event.api.addPanel({
-                id: camera_id,
+                id: robotId,
+                params: { title: 'Follower', robot_id: availableRobot.id, teleoperate_robot_id: teleoperateRobotId },
+                component: 'follower',
+            });
+            lastRobot = robotId;
+        });
+
+        teleoperators.forEach((robot) => {
+            if (robot === undefined) {
+                return;
+            }
+            const robotId = robot.name;
+            event.api.addPanel({
+                id: robotId,
+                params: {
+                    title: 'Leader',
+                    robot_id: robot.id,
+                },
+                component: 'leader',
+            });
+        });
+
+        let lastCamera = '';
+        cameras.forEach(({ storedCamera }, idx) => {
+            const camera_id = storedCamera.id;
+
+            event.api.addPanel({
+                id: storedCamera.name,
                 component: 'camera',
                 params: {
                     title: `Camera ${idx}`,
                     camera_id,
                 },
-                position: {
-                    direction: 'right',
-                    referencePanel: '',
-                },
+                position:
+                    lastCamera !== ''
+                        ? { direction: 'right', referencePanel: lastCamera }
+                        : lastRobot !== ''
+                          ? { direction: 'above', referencePanel: lastRobot }
+                          : undefined,
             });
+            lastCamera = storedCamera.name;
         });
 
-        environment.robots.forEach((robot) => {
-            event.api.addPanel({
-                id: robot.robot_id,
-                params: { title: 'Follower', robot_id: robot.robot_id },
-                title: 'Follower',
-                component: 'follower',
+        apii.current = event.api;
+    };
 
-                position: {
-                    direction: 'below',
-                    referencePanel: '',
-                },
-            });
+    useEffect(() => {
+        if (apii.current === undefined) {
+            return;
+        }
 
-            if (robot.teleoperator.type === 'robot') {
-                event.api.addPanel({
-                    id: robot.teleoperator.robot_id,
-                    params: { title: 'Leader', robot_id: robot.teleoperator.robot_id },
-                    component: 'leader',
-                    title: 'Leader',
+        const api = apii.current;
 
-                    position: {
-                        direction: 'right',
-                        referencePanel: robot.robot_id,
+        let lastRobot = '';
+        robots.forEach(({ robot }) => {
+            if (robot === undefined) {
+                return;
+            }
+            const robotId = robot.name;
+
+            if (api.getPanel(robotId) === undefined) {
+                api.addPanel({
+                    id: robotId,
+                    params: { title: 'Follower', robot_id: robot.id },
+                    component: 'follower',
+                });
+            }
+            lastRobot = robotId;
+        });
+
+        teleoperators.forEach((robot) => {
+            if (robot === undefined) {
+                return;
+            }
+            const robotId = robot.name;
+            if (api.getPanel(robotId) === undefined) {
+                api.addPanel({
+                    id: robotId,
+                    params: {
+                        title: 'Leader',
+                        robot_id: robot.id,
                     },
+                    component: 'leader',
                 });
             }
         });
 
-        api.current = event.api;
-    };
+        let lastCamera = '';
+        cameras.forEach(({ storedCamera }, idx) => {
+            const camera_id = storedCamera.id;
 
-    return <DockviewReact onReady={onReady} components={components} />;
+            if (api.getPanel(storedCamera.name) === undefined) {
+                api.addPanel({
+                    id: storedCamera.name,
+                    component: 'camera',
+                    params: {
+                        title: `Camera ${idx}`,
+                        camera_id,
+                    },
+                    position:
+                        lastCamera !== ''
+                            ? { direction: 'right', referencePanel: lastCamera }
+                            : lastRobot !== ''
+                              ? { direction: 'above', referencePanel: lastRobot }
+                              : undefined,
+                });
+            }
+
+            lastCamera = storedCamera.name;
+        });
+    }, [cameras, robots, teleoperators]);
+
+    return (
+        <DockviewReact
+            onReady={onReady}
+            components={components}
+            theme={{
+                className: classes.dockview,
+            }}
+        />
+    );
 };
 
 const CenteredLoading = () => {
@@ -112,7 +317,7 @@ export const Preview = () => {
 
     if (hasRobots || hasCameras) {
         return (
-            <View height='100%'>
+            <View UNSAFE_className={classes.dockview} height='100%'>
                 <Suspense fallback={<CenteredLoading />}>
                     <ActualPreview />
                 </Suspense>
@@ -121,22 +326,26 @@ export const Preview = () => {
     }
 
     return (
-        <View padding={'size-400'} height='100%'>
-            <View
-                backgroundColor={'gray-200'}
-                height={'100%'}
-                maxHeight='100vh'
-                padding={'size-200'}
-                UNSAFE_style={{
-                    borderRadius: 'var(--spectrum-alias-border-radius-regular)',
-                    borderColor: 'var(--spectrum-global-color-gray-700)',
-                    borderWidth: '1px',
-                    borderStyle: 'dashed',
-                }}
-                position={'relative'}
-            >
+        <View
+            backgroundColor={'gray-200'}
+            height={'100%'}
+            maxHeight='100vh'
+            padding='size-200'
+            UNSAFE_style={{
+                borderRadius: 'var(--spectrum-alias-border-radius-regular)',
+                borderColor: 'var(--spectrum-global-color-gray-700)',
+                borderWidth: '1px',
+                borderStyle: 'dashed',
+            }}
+            position={'relative'}
+        >
+            {hasRobots || hasCameras ? (
+                <Suspense fallback={<CenteredLoading />}>
+                    <ActualPreview />
+                </Suspense>
+            ) : (
                 <EmptyPreview />
-            </View>
+            )}
         </View>
     );
 };

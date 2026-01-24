@@ -52,7 +52,7 @@ export const AddCameraForm = ({
     const environment = useEnvironmentForm();
 
     const availableCameras = camerasQuery.data.filter((camera) => {
-        return environment.camera_ids.includes(camera.id!) === false;
+        return environment.camera_ids.includes(camera.id) === false;
     });
 
     const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
