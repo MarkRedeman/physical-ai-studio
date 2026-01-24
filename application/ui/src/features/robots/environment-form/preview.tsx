@@ -51,7 +51,7 @@ const So101LeaderCell = ({ robot_id }: { robot_id: string }) => {
     if (robot_id === undefined) {
         return <div>Test</div>;
     }
-    return <span>TODO: revert once we can share websockets...</span>;
+    //return <span>TODO: revert once we can share websockets...</span>;
     return (
         <RobotModelsProvider>
             <LeaderCell robot_id={robot_id} label={'Leader'} />
@@ -129,182 +129,58 @@ const components = {
 
 const ActualPreview = () => {
     const environment = useEnvironmentForm();
-    const availableCamerasQuery = $api.useSuspenseQuery('get', '/api/hardware/cameras');
+    const api = useRef<DockviewApi>(null);
 
-    const { project_id } = useProjectId();
-    const robotsQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots', {
-        params: { path: { project_id } },
-    });
-    const camerasQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/cameras', {
-        params: { path: { project_id } },
-    });
-
-    const robots = environment.robots
-        .map((robot) => {
-            return {
-                availableRobot: robotsQuery.data.find(({ id }) => id === robot.robot_id),
-                robot,
-            };
-        })
-        .filter((x) => x.robot !== undefined);
-    const teleoperators = environment.robots
-        .map(({ teleoperator }) => {
-            if (teleoperator.type === 'robot') {
-                return robotsQuery.data.find(({ id }) => id === teleoperator.robot_id);
-            }
-
-            return undefined;
-        })
-        .filter((x) => x !== undefined);
-
-    const cameras = environment.camera_ids
-        .map((cameraId) => {
-            const storedCamera = camerasQuery.data.find((camera) => camera.id === cameraId);
-            const availableCamera =
-                availableCamerasQuery.data.find(({ driver, fingerprint }) => {
-                    return storedCamera?.fingerprint === fingerprint && storedCamera.driver === driver;
-                }) ?? availableCamerasQuery.data.at(0);
-
-            if (availableCamera === undefined) {
-                return undefined;
-            }
-
-            return { availableCamera, storedCamera };
-        })
-        .filter((x) => x !== undefined);
-
-    const apii = useRef<GridviewApi>();
-    const onReady = (event: GridviewReadyEvent) => {
-        let lastRobot = '';
-        robots.forEach(({ availableRobot, robot }) => {
-            if (availableRobot === undefined) {
-                return;
-            }
-
-            const robotId = availableRobot.name;
-            const teleoperateRobotId = robot.teleoperator.robot_id;
+    const onReady = (event: DockviewReadyEvent): void => {
+        environment.camera_ids.forEach((camera_id, idx) => {
             event.api.addPanel({
-                id: robotId,
-                params: { title: 'Follower', robot_id: availableRobot.id, teleoperate_robot_id: teleoperateRobotId },
-                component: 'follower',
-            });
-            lastRobot = robotId;
-        });
-
-        teleoperators.forEach((robot) => {
-            if (robot === undefined) {
-                return;
-            }
-            const robotId = robot.name;
-            event.api.addPanel({
-                id: robotId,
-                params: {
-                    title: 'Leader',
-                    robot_id: robot.id,
-                },
-                component: 'leader',
-            });
-        });
-
-        let lastCamera = '';
-        cameras.forEach(({ storedCamera }, idx) => {
-            const camera_id = storedCamera.id;
-
-            event.api.addPanel({
-                id: storedCamera.name,
+                id: camera_id,
                 component: 'camera',
                 params: {
                     title: `Camera ${idx}`,
                     camera_id,
                 },
-                position:
-                    lastCamera !== ''
-                        ? { direction: 'right', referencePanel: lastCamera }
-                        : lastRobot !== ''
-                          ? { direction: 'above', referencePanel: lastRobot }
-                          : undefined,
+                position: {
+                    direction: 'right',
+                    referencePanel: '',
+                },
             });
-            lastCamera = storedCamera.name;
         });
 
-        apii.current = event.api;
+        environment.robots.forEach((robot) => {
+            event.api.addPanel({
+                id: robot.robot_id,
+                params: {
+                    title: 'Follower',
+                    robot_id: robot.robot_id,
+                    teleoperate_robot_id: robot.teleoperator.type === 'robot' ? robot.teleoperator.robot_id : undefined,
+                },
+                component: 'follower',
+
+                position: {
+                    direction: 'below',
+                    referencePanel: '',
+                },
+            });
+
+            if (robot.teleoperator.type === 'robot') {
+                event.api.addPanel({
+                    id: robot.teleoperator.robot_id,
+                    params: { title: 'Leader', robot_id: robot.teleoperator.robot_id },
+                    component: 'leader',
+
+                    position: {
+                        direction: 'right',
+                        referencePanel: robot.robot_id,
+                    },
+                });
+            }
+        });
+
+        api.current = event.api;
     };
 
-    useEffect(() => {
-        if (apii.current === undefined) {
-            return;
-        }
-
-        const api = apii.current;
-
-        let lastRobot = '';
-        robots.forEach(({ robot }) => {
-            if (robot === undefined) {
-                return;
-            }
-            const robotId = robot.name;
-
-            if (api.getPanel(robotId) === undefined) {
-                api.addPanel({
-                    id: robotId,
-                    params: { title: 'Follower', robot_id: robot.id },
-                    component: 'follower',
-                });
-            }
-            lastRobot = robotId;
-        });
-
-        teleoperators.forEach((robot) => {
-            if (robot === undefined) {
-                return;
-            }
-            const robotId = robot.name;
-            if (api.getPanel(robotId) === undefined) {
-                api.addPanel({
-                    id: robotId,
-                    params: {
-                        title: 'Leader',
-                        robot_id: robot.id,
-                    },
-                    component: 'leader',
-                });
-            }
-        });
-
-        let lastCamera = '';
-        cameras.forEach(({ storedCamera }, idx) => {
-            const camera_id = storedCamera.id;
-
-            if (api.getPanel(storedCamera.name) === undefined) {
-                api.addPanel({
-                    id: storedCamera.name,
-                    component: 'camera',
-                    params: {
-                        title: `Camera ${idx}`,
-                        camera_id,
-                    },
-                    position:
-                        lastCamera !== ''
-                            ? { direction: 'right', referencePanel: lastCamera }
-                            : lastRobot !== ''
-                              ? { direction: 'above', referencePanel: lastRobot }
-                              : undefined,
-                });
-            }
-
-            lastCamera = storedCamera.name;
-        });
-    }, [cameras, robots, teleoperators]);
-
-    return (
-        <DockviewReact
-            onReady={onReady}
-            components={components}
-            theme={{
-                className: classes.dockview,
-            }}
-        />
-    );
+    return <DockviewReact onReady={onReady} components={components} />;
 };
 
 const CenteredLoading = () => {
@@ -323,7 +199,7 @@ export const Preview = () => {
 
     if (hasRobots || hasCameras) {
         return (
-            <View UNSAFE_className={classes.dockview} height='100%'>
+            <View height='100%'>
                 <Suspense fallback={<CenteredLoading />}>
                     <ActualPreview />
                 </Suspense>
@@ -332,26 +208,22 @@ export const Preview = () => {
     }
 
     return (
-        <View
-            backgroundColor={'gray-200'}
-            height={'100%'}
-            maxHeight='100vh'
-            padding='size-200'
-            UNSAFE_style={{
-                borderRadius: 'var(--spectrum-alias-border-radius-regular)',
-                borderColor: 'var(--spectrum-global-color-gray-700)',
-                borderWidth: '1px',
-                borderStyle: 'dashed',
-            }}
-            position={'relative'}
-        >
-            {hasRobots || hasCameras ? (
-                <Suspense fallback={<CenteredLoading />}>
-                    <ActualPreview />
-                </Suspense>
-            ) : (
+        <View padding={'size-400'} height='100%'>
+            <View
+                backgroundColor={'gray-200'}
+                height={'100%'}
+                maxHeight='100vh'
+                padding={'size-200'}
+                UNSAFE_style={{
+                    borderRadius: 'var(--spectrum-alias-border-radius-regular)',
+                    borderColor: 'var(--spectrum-global-color-gray-700)',
+                    borderWidth: '1px',
+                    borderStyle: 'dashed',
+                }}
+                position={'relative'}
+            >
                 <EmptyPreview />
-            )}
+            </View>
         </View>
     );
 };
