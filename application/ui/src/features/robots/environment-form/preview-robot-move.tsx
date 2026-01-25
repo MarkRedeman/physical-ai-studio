@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button, Flex, Grid, Heading, Slider, View } from '@geti/ui';
+import { sortBy } from 'lodash-es';
 import useWebSocket from 'react-use-websocket';
 import { degToRad, radToDeg } from 'three/src/math/MathUtils.js';
 
@@ -338,7 +339,7 @@ export const LeaderCell = ({
             <View backgroundColor={'gray-100'} padding='size-50' gridArea='controls'>
                 <ul>
                     <Grid gap='size-50' columns={['1fr', '1fr']}>
-                        {joints.map((joint) => {
+                        {sortBy(joints, (joint) => joint.name).map((joint) => {
                             return (
                                 <Joint
                                     isDisabled={isDisabled}
