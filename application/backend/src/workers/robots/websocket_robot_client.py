@@ -1,18 +1,17 @@
 """WebSocket-based robot client implementation.
 
 This module provides a RobotClient implementation that communicates with a remote
-robot server over WebSocket, forwarding commands and receiving responses.
+robot server over WebSocket. The server continuously pushes state updates, and
+the client sends commands in a fire-and-forget manner.
 """
 
 import asyncio
 import json
-from collections import deque
 from typing import Any, Optional
 
 import websockets
 from loguru import logger
 from tenacity import (
-    RetryError,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
@@ -22,8 +21,8 @@ from tenacity import (
 from .robot_client import RobotClient
 
 # Constants
-RECEIVE_TIMEOUT = 5.0  # seconds
 CONNECTION_TIMEOUT = 10.0  # seconds
+STATE_READ_TIMEOUT = 5.0  # seconds for waiting on state in read_state()
 MAX_RECONNECT_ATTEMPTS = 3
 DEFAULT_RECONNECT_DELAY = 1.0  # seconds
 MAX_RECONNECT_DELAY = 10.0  # seconds
@@ -35,35 +34,35 @@ class WebSocketConnectionError(Exception):
     pass
 
 
-class WebSocketResponseError(Exception):
-    """Raised when response is invalid or times out."""
-
-    pass
-
-
 class WebsocketRobotClient(RobotClient):
     """
     RobotClient implementation that communicates over WebSocket.
 
-    Connects to a remote WebSocket server that controls a robot,
-    forwarding commands and receiving responses/state updates.
+    This client connects to a remote WebSocket server that controls a robot.
+    The server continuously pushes state updates, which are stored and returned
+    by `read_state()`. Commands are sent in a fire-and-forget manner.
 
-    This client acts as a proxy, sending commands to a remote robot server
-    and receiving responses. It does not implement the Calibratable protocol
-    as calibration is typically handled by the remote server directly.
+    The client uses a background listener task to continuously receive messages
+    from the server, allowing state updates to arrive asynchronously while
+    commands can be sent at any time.
 
     Args:
         websocket_url: WebSocket URL of the remote robot server
-            (e.g., 'ws://localhost:8000/robot' or 'wss://...')
+            (e.g., 'ws://localhost:8000/robot?normalize=true')
+            The normalize preference can be passed as a query parameter.
         normalize: Default normalization setting for joint values.
-            This is sent with read_state commands.
+            Currently used for documentation; actual normalization is
+            controlled via the websocket_url query parameter.
 
     Example:
         ```python
-        client = WebsocketRobotClient("ws://192.168.1.100:8765/robot")
+        client = WebsocketRobotClient("ws://192.168.1.100:8765/robot?normalize=true")
         await client.connect()
 
+        # State is continuously pushed by server
         state = await client.read_state()
+
+        # Commands are fire-and-forget
         await client.set_joints_state({"shoulder": 0.5, "elbow": -0.3})
 
         await client.disconnect()
@@ -76,18 +75,26 @@ class WebsocketRobotClient(RobotClient):
 
         Args:
             websocket_url: WebSocket URL of the remote robot server.
-            normalize: Default normalization setting for joint values.
+                Normalization preference should be passed as query parameter.
+            normalize: Default normalization setting (for documentation).
         """
         self.websocket_url = websocket_url
         self.normalize = normalize
 
-        self._websocket: Optional[websockets.WebSocketClientProtocol] = None
+        # WebSocket connection (type is websockets.WebSocketClientProtocol at runtime)
+        self._websocket: Any = None
         self._is_connected = False
         self._is_controlled = False
-        self._lock = asyncio.Lock()
 
-        # Buffer for unsolicited state updates
-        self._state_buffer: deque[dict] = deque(maxlen=10)
+        # State management - single latest state, not a buffer
+        self._latest_state: Optional[dict] = None
+        self._state_event = asyncio.Event()
+
+        # Background listener task
+        self._listener_task: Optional[asyncio.Task] = None
+
+        # Lock for sending commands
+        self._send_lock = asyncio.Lock()
 
     @property
     def is_connected(self) -> bool:
@@ -102,7 +109,7 @@ class WebsocketRobotClient(RobotClient):
     )
     async def connect(self) -> None:
         """
-        Connect to the remote robot server.
+        Connect to the remote robot server and start the background listener.
 
         Uses tenacity for automatic retry with exponential backoff.
 
@@ -117,20 +124,15 @@ class WebsocketRobotClient(RobotClient):
                 timeout=CONNECTION_TIMEOUT,
             )
             self._is_connected = True
+
+            # Start background listener task
+            self._listener_task = asyncio.create_task(self._listener_loop())
+
             logger.info("Connected to WebSocket robot server: {}", self.websocket_url)
 
         except asyncio.TimeoutError as e:
             logger.error("Connection timeout to {}", self.websocket_url)
             raise WebSocketConnectionError(f"Connection timeout to {self.websocket_url}") from e
-        except RetryError as e:
-            logger.error(
-                "Failed to connect after {} attempts: {}",
-                MAX_RECONNECT_ATTEMPTS,
-                e.last_attempt.exception(),
-            )
-            raise WebSocketConnectionError(
-                f"Failed to connect to {self.websocket_url} after {MAX_RECONNECT_ATTEMPTS} attempts"
-            ) from e
         except Exception as e:
             logger.error("Connection error: {}", e)
             raise
@@ -139,12 +141,22 @@ class WebsocketRobotClient(RobotClient):
         """
         Disconnect from the remote robot server.
 
-        Safely closes the WebSocket connection if open.
+        Cancels the background listener task and closes the WebSocket connection.
         """
         logger.info("Disconnecting from WebSocket robot server")
 
         self._is_connected = False
 
+        # Cancel listener task
+        if self._listener_task is not None:
+            self._listener_task.cancel()
+            try:
+                await self._listener_task
+            except asyncio.CancelledError:
+                pass
+            self._listener_task = None
+
+        # Close WebSocket
         if self._websocket is not None:
             try:
                 await self._websocket.close()
@@ -153,178 +165,202 @@ class WebsocketRobotClient(RobotClient):
             finally:
                 self._websocket = None
 
-        self._state_buffer.clear()
+        # Clear state
+        self._latest_state = None
+        self._state_event.clear()
+
         logger.debug("Disconnected from WebSocket robot server")
+
+    async def _listener_loop(self) -> None:
+        """
+        Background task that continuously receives messages from the server.
+
+        Handles incoming messages based on event type:
+        - state_was_updated: Updates _latest_state and signals _state_event
+        - Other events: Logged for debugging
+
+        This task runs until cancelled or the connection is closed.
+        """
+        if self._websocket is None:
+            return
+
+        logger.debug("Starting WebSocket listener loop")
+
+        try:
+            async for message in self._websocket:
+                try:
+                    data = json.loads(message)
+
+                    if not isinstance(data, dict):
+                        logger.warning("Received non-dict message: {}", type(data).__name__)
+                        continue
+
+                    await self._handle_message(data)
+
+                except json.JSONDecodeError as e:
+                    logger.warning("Invalid JSON from server: {}", e)
+
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.warning("WebSocket connection closed: {}", e)
+            self._is_connected = False
+        except asyncio.CancelledError:
+            logger.debug("Listener loop cancelled")
+            raise
+        except Exception as e:
+            logger.error("Error in listener loop: {}", e)
+            self._is_connected = False
+
+    async def _handle_message(self, data: dict) -> None:
+        """
+        Handle an incoming message from the server.
+
+        Args:
+            data: Parsed JSON message dictionary.
+        """
+        event_type = data.get("event")
+
+        if event_type == "state_was_updated":
+            # Update latest state and signal waiters
+            self._latest_state = data
+
+            # Update is_controlled from server if present
+            if "is_controlled" in data:
+                self._is_controlled = data["is_controlled"]
+
+            self._state_event.set()
+            logger.debug("State updated: {} joints", len(data.get("state", {})))
+
+        elif event_type == "pong":
+            logger.debug("Received pong from server")
+
+        elif event_type == "torque_was_enabled":
+            self._is_controlled = True
+            logger.debug("Torque enabled confirmed by server")
+
+        elif event_type == "torque_was_disabled":
+            self._is_controlled = False
+            logger.debug("Torque disabled confirmed by server")
+
+        elif event_type == "joints_state_was_set":
+            logger.debug("Joints state set confirmed by server")
+
+        elif event_type == "error":
+            logger.warning("Error from server: {}", data.get("message", "unknown"))
+
+        else:
+            logger.debug("Received event: {}", event_type)
 
     async def ping(self) -> dict:
         """
-        Send ping command to verify communication.
+        Send ping command to the server.
+
+        This is fire-and-forget; returns a synthetic pong response immediately.
+        The actual pong from the server is handled by the background listener.
 
         Returns:
-            A 'pong' event dictionary from the server.
-
-        Raises:
-            WebSocketResponseError: If no response or invalid response.
+            A synthetic 'pong' event dictionary with timestamp.
         """
-        return await self._send_command({"command": "ping"})
+        await self._send_command({"command": "ping"})
+        return self._create_event("pong")
 
     async def set_joints_state(self, joints: dict) -> dict:
         """
         Set target positions for multiple joints.
 
+        This is fire-and-forget; the command is sent and returns immediately.
+
         Args:
             joints: Dictionary mapping joint names to target positions.
 
         Returns:
-            Confirmation event dictionary from the server.
-
-        Raises:
-            WebSocketResponseError: If no response or invalid response.
+            A synthetic confirmation event dictionary with timestamp.
         """
-        response = await self._send_command({"command": "set_joints_state", "joints": joints})
-
-        # Track controlled state based on successful joint commands
+        await self._send_command({"command": "set_joints_state", "joints": joints})
         self._is_controlled = True
-
-        return response
+        return self._create_event("joints_state_was_set", joints=joints)
 
     async def enable_torque(self) -> dict:
         """
         Enable torque on all motors.
 
-        Returns:
-            Confirmation event dictionary from the server.
+        This is fire-and-forget; the command is sent and returns immediately.
 
-        Raises:
-            WebSocketResponseError: If no response or invalid response.
+        Returns:
+            A synthetic confirmation event dictionary with timestamp.
         """
-        response = await self._send_command({"command": "enable_torque"})
+        await self._send_command({"command": "enable_torque"})
         self._is_controlled = True
-        return response
+        return self._create_event("torque_was_enabled")
 
     async def disable_torque(self) -> dict:
         """
         Disable torque on all motors.
 
-        Returns:
-            Confirmation event dictionary from the server.
+        This is fire-and-forget; the command is sent and returns immediately.
 
-        Raises:
-            WebSocketResponseError: If no response or invalid response.
+        Returns:
+            A synthetic confirmation event dictionary with timestamp.
         """
-        response = await self._send_command({"command": "disable_torque"})
+        await self._send_command({"command": "disable_torque"})
         self._is_controlled = False
-        return response
+        return self._create_event("torque_was_disabled")
 
     async def read_state(self, *, normalize: bool = True) -> dict:
         """
         Read the current position of all joints.
 
-        First checks the buffer for any unsolicited state updates.
-        If buffer is empty, sends a read_state command to the server.
+        Returns the latest state pushed by the server. If no state has been
+        received yet, waits up to STATE_READ_TIMEOUT seconds for one to arrive.
+
+        Note: The normalize parameter is ignored; normalization is controlled
+        via the websocket_url query parameter set during construction.
 
         Args:
-            normalize: Whether to return normalized values.
+            normalize: Ignored. Present for interface compatibility.
 
         Returns:
-            Event dictionary containing the current joint states.
-
-        Raises:
-            WebSocketResponseError: If no response or invalid response.
+            Event dictionary containing the current joint states,
+            or an empty dict if timeout occurs waiting for state.
         """
-        # Check buffer first for any buffered state updates
-        if self._state_buffer:
-            state = self._state_buffer.popleft()
-            logger.debug("Returning buffered state update")
-            return state
+        # If we already have state, return it immediately
+        if self._latest_state is not None:
+            return self._latest_state
 
-        # No buffered state, request fresh state from server
-        return await self._send_command({"command": "read_state", "normalize": normalize})
+        # Wait for state to arrive
+        try:
+            await asyncio.wait_for(
+                self._state_event.wait(),
+                timeout=STATE_READ_TIMEOUT,
+            )
+            # State event was set, return the state
+            if self._latest_state is not None:
+                return self._latest_state
+        except asyncio.TimeoutError:
+            logger.warning("Timeout waiting for state after {}s", STATE_READ_TIMEOUT)
 
-    async def _send_command(self, command: dict) -> dict:
+        # Return empty dict on timeout or if state is still None
+        return {}
+
+    async def _send_command(self, command: dict) -> None:
         """
-        Send a command to the remote server and wait for response.
+        Send a command to the remote server (fire-and-forget).
 
         Args:
             command: Command dictionary to send.
 
-        Returns:
-            Response dictionary from the server.
-
         Raises:
             WebSocketConnectionError: If not connected.
-            WebSocketResponseError: If response times out or is invalid.
         """
         if not self.is_connected or self._websocket is None:
             raise WebSocketConnectionError("Not connected to robot server")
 
-        async with self._lock:
+        async with self._send_lock:
             try:
-                # Send command as JSON
                 command_json = json.dumps(command)
                 await self._websocket.send(command_json)
                 logger.debug("Sent command: {}", command.get("command"))
-
-                # Wait for response with timeout
-                response = await self._receive_response()
-                return response
 
             except websockets.exceptions.ConnectionClosed as e:
                 self._is_connected = False
                 logger.error("Connection closed while sending command: {}", e)
                 raise WebSocketConnectionError(f"Connection closed: {e}") from e
-
-    async def _receive_response(self) -> dict:
-        """
-        Receive and parse a response from the server.
-
-        Handles buffering of unsolicited state updates while waiting
-        for the expected response.
-
-        Returns:
-            Response dictionary.
-
-        Raises:
-            WebSocketResponseError: If response times out or is invalid.
-        """
-        if self._websocket is None:
-            raise WebSocketConnectionError("Not connected")
-
-        try:
-            response_text = await asyncio.wait_for(
-                self._websocket.recv(),
-                timeout=RECEIVE_TIMEOUT,
-            )
-
-            response = json.loads(response_text)
-
-            if not isinstance(response, dict):
-                raise WebSocketResponseError(f"Expected dict response, got {type(response).__name__}")
-
-            # Check if this is a state update that should be buffered
-            event_type = response.get("event")
-            if event_type == "state_was_updated":
-                # Update is_controlled from server response if present
-                if "is_controlled" in response:
-                    self._is_controlled = response["is_controlled"]
-
-            logger.debug("Received response: {}", event_type)
-            return response
-
-        except asyncio.TimeoutError as e:
-            raise WebSocketResponseError(f"Response timeout after {RECEIVE_TIMEOUT}s") from e
-        except json.JSONDecodeError as e:
-            raise WebSocketResponseError(f"Invalid JSON response: {e}") from e
-        except websockets.exceptions.ConnectionClosed as e:
-            self._is_connected = False
-            raise WebSocketConnectionError(f"Connection closed: {e}") from e
-
-    async def _buffer_state_update(self, state: dict) -> None:
-        """
-        Buffer an unsolicited state update for later retrieval.
-
-        Args:
-            state: State update dictionary to buffer.
-        """
-        self._state_buffer.append(state)
-        logger.debug("Buffered state update, buffer size: {}", len(self._state_buffer))
