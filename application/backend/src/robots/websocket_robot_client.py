@@ -364,3 +364,7 @@ class WebsocketRobotClient(RobotClient):
                 self._is_connected = False
                 logger.error("Connection closed while sending command: {}", e)
                 raise WebSocketConnectionError(f"Connection closed: {e}") from e
+
+    def features(self) -> list[str]:
+        """Get Robot features. Returns list with joints."""
+        return []

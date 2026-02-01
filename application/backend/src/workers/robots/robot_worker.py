@@ -11,6 +11,7 @@ from services.robot_calibration_service import RobotCalibrationService, find_rob
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.robots.commands import handle_command, parse_command
 from robots.feetech_robot_client import FeetechRobotClient
+from robots.websocket_robot_client import WebsocketRobotClient
 from robots.robot_client import RobotClient
 from workers.transport.worker_transport import WorkerTransport
 from workers.transport_worker import TransportWorker, WorkerState, WorkerStatus
@@ -43,8 +44,7 @@ class RobotWorker(TransportWorker):
         try:
             await self.transport.connect()
 
-            config = await get_robot_config(self.robot, self.robot_manager, self.calibration_service)
-            self.client = FeetechRobotClient(config, self.normalize)
+            self.client = await self.create_robot_client()
 
             try:
                 await self.client.connect()
@@ -133,6 +133,19 @@ class RobotWorker(TransportWorker):
         except Exception as e:
             logger.error(f"Failed to disconnect robot client: {e}")
         await super().shutdown()
+
+    async def create_robot_client(self) -> RobotClient:
+        return WebsocketRobotClient("ws://localhost:8080/lekiwi/control", self.normalize)
+
+        if (str(self.robot.id) == "dd862523-3e04-428e-930d-9cc4a514b187"):
+            return WebsocketRobotClient("ws://localhost:8080/so101/control", self.normalize)
+        else:
+            config = await get_robot_config(self.robot, self.robot_manager, self.calibration_service)
+
+            logger.info("Using config: {}", config)
+
+            return FeetechRobotClient(config, self.normalize)
+
 
 
 async def get_robot_config(
