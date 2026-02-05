@@ -59,52 +59,25 @@ const So101LeaderCell = ({ robot_id }: { robot_id: string }) => {
     );
 };
 
-const CameraCell = ({
-    camera,
-    storedCamera,
-}: {
-    camera: SchemaCameraConfigInput;
-    storedCamera: SchemaWebcamCameraOutput;
-}) => {
+const CameraCell = ({ storedCamera }: { storedCamera: SchemaWebcamCameraOutput }) => {
     return (
         <View backgroundColor={'gray-500'}>
             <View maxHeight='100%' height='100%' position='relative'>
-                <WebsocketCamera
-                    camera={{
-                        driver: storedCamera.driver,
-                        fingerprint: storedCamera.fingerprint,
-                        name: storedCamera.name,
-                        hardware_name: storedCamera.hardware_name,
-                        fps: storedCamera.payload.fps,
-                        width: storedCamera.payload.width,
-                        height: storedCamera.payload.height,
-                        payload: storedCamera.payload,
-                    }}
-                />
+                <WebsocketCamera camera={storedCamera} />
             </View>
         </View>
     );
 };
 
 const CameraCellById = ({ camera_id }: { camera_id: string }) => {
-    const availableCamerasQuery = $api.useSuspenseQuery('get', '/api/hardware/cameras');
-
     const { project_id } = useProjectId();
     const camerasQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/cameras', {
         params: { path: { project_id } },
     });
 
     const storedCamera = camerasQuery.data.find((camera) => camera.id === camera_id);
-    const availableCamera =
-        availableCamerasQuery.data.find(({ driver, fingerprint }) => {
-            return storedCamera?.fingerprint === fingerprint && storedCamera.driver === driver;
-        }) ?? availableCamerasQuery.data.at(0);
 
-    if (availableCamera === undefined || storedCamera === undefined) {
-        return 'loading?';
-    }
-
-    return <CameraCell camera={availableCamera} storedCamera={storedCamera} />;
+    return <CameraCell storedCamera={storedCamera} />;
 };
 
 const components = {
