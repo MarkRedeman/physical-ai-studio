@@ -174,7 +174,7 @@ class RobotClientFactory:
             logger.info("Building a websocket client for lekiwi")
             # ws://localhost:8000/api/robot/ws?serial_id=5A7C121475&robot_type=lekiwi&calibration_id=kiwi
             #return WebsocketRobotClient("ws://localhost:8080/lekiwi/control?leader=so101", normalize)
-            return WebsocketRobotClient("ws://localhost:8008/api/robot/ws?serial_id=5A7C121475&robot_type=lekiwi&calibration_id=kiwi", normalize)
+            return WebsocketRobotClient("ws://localhost:8008/api/robot/ws?serial_id=5A7C121475&robot_type=lekiwi&calibration_id=kiwi&fps=60", normalize)
 
 
         if (str(robot.id) == "dd862523-3e04-428e-930d-9cc4a514b187"):
