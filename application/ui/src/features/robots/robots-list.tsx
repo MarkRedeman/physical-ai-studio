@@ -57,6 +57,7 @@ const RobotListItem = ({
     type,
     connectionString,
     serialNumber,
+    port,
 }: {
     id: string;
     name: string;
@@ -65,6 +66,7 @@ const RobotListItem = ({
     connectionString: string | undefined;
     serialNumber: string | undefined;
     isActive: boolean;
+    port: string;
 }) => {
     return (
         <View
@@ -113,7 +115,10 @@ const RobotListItem = ({
                                 </li>
                             ) : null}
                             <li style={{ marginLeft: 'var(--spectrum-global-dimension-size-200)' }}>
-                                ID: <pre style={{ margin: 0, display: 'inline' }}>{id}</pre>
+                                Port:{' '}
+                                <pre style={{ margin: 0, display: 'inline' }}>
+                                    {port === undefined ? 'Unknown' : port}
+                                </pre>
                             </li>
                         </ul>
                     </View>
@@ -172,6 +177,7 @@ export const RobotsList = () => {
                                     type={robot.type}
                                     status={onlineProjectRobots === undefined ? 'unknown' : status}
                                     isActive={isActive}
+                                    port={''}
                                 />
                             );
                         }}

@@ -53,6 +53,24 @@ async def get_project_robot_motor_calibration(
 
     return await robot_calibration_service.get_robot_motor_calibration(robot)
 
+@router.put("/{robot_id}/calibrations/motor")
+async def set_project_robot_motor_calibration(
+    project_id: Annotated[UUID, Depends(get_project_id)],
+    robot_id: Annotated[UUID, Depends(get_robot_id)],
+    robot_service: Annotated[RobotService, Depends(get_robot_service)],
+    robot_calibration_service: RobotCalibrationServiceDep,
+) -> None:
+    """Store the active calibration to the robot's motor."""
+    robot = await robot_service.get_robot_by_id(project_id, robot_id)
+    if (robot.active_calibration_id is None):
+        return None
+
+    active_calibration = await robot_calibration_service.get_calibration(robot.active_calibration_id)
+
+    return await robot_calibration_service.set_robot_motor_calibration(
+        robot,
+        active_calibration.to_motor_calibrations()
+        )
 
 @router.get("/{robot_id}/calibrations/{calibration_id}")
 async def get_project_robot_calibration(

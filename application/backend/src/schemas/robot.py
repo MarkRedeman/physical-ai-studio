@@ -33,6 +33,8 @@ class NetworkIpRobotConfig(BaseRobotConfig):
 
 
 class RobotType(StrEnum):
+    LEKIWI_FOLLOWER = "LEKIWI_Follower"
+    LEKIWI_LEADER = "LEKIWI_Leader"
     SO101_FOLLOWER = "SO101_Follower"
     SO101_LEADER = "SO101_Leader"
     TROSSEN_WIDOWXAI_LEADER = "Trossen_WidowXAI_Leader"

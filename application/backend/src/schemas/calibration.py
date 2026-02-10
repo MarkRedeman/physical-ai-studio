@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
+from lerobot.motors import MotorCalibration
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -65,3 +66,16 @@ class Calibration(ABC, BaseModel):
             }
         }
     )
+
+    def to_motor_calibrations(self) -> dict[str, MotorCalibration]:
+        """Convert calibration values to motor calibrations indexed by motor id."""
+        return {
+            calibration.joint_name: MotorCalibration(
+                id=calibration.id,
+                drive_mode=calibration.drive_mode,
+                homing_offset=calibration.homing_offset,
+                range_min=calibration.range_min,
+                range_max=calibration.range_max,
+            )
+            for calibration in self.values.values()
+        }

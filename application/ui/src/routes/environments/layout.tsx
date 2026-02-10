@@ -3,6 +3,9 @@ import { Suspense } from 'react';
 import {
     ActionButton,
     Button,
+    Content,
+    Dialog,
+    DialogTrigger,
     Divider,
     Flex,
     Grid,
@@ -13,6 +16,7 @@ import {
     Menu,
     MenuTrigger,
     minmax,
+    repeat,
     View,
 } from '@geti-ui/ui';
 import { Add, MoreMenu } from '@geti-ui/ui/icons';
@@ -53,7 +57,7 @@ const MenuActions = ({ environment_id }: { environment_id: string }) => {
     );
 };
 
-const EnvironmentListItem = ({
+const EnvironmentListItemSmall = ({
     environment,
     isActive,
 }: {
@@ -84,6 +88,68 @@ const EnvironmentListItem = ({
     );
 };
 
+const EnvironmentListItem = ({
+    environment,
+    isActive,
+}: {
+    environment: SchemaEnvironmentOutput;
+    isActive: boolean;
+}) => {
+    return (
+        <View
+            padding='size-200'
+            UNSAFE_className={clsx({
+                [classes.robotListItem]: true,
+                [classes.robotListItemActive]: isActive,
+            })}
+        >
+            <Flex direction={'column'} justifyContent={'space-between'} gap={'size-50'}>
+                <Grid
+                    areas={['icon name status', 'parameters parameters menu']}
+                    columns={['auto', '1fr']}
+                    gap={'size-100'}
+                >
+                    <View gridArea={'icon'} padding='size-100'>
+                        Env
+                    </View>
+                    <View gridArea='name'>
+                        <Heading level={2} UNSAFE_style={isActive ? { color: 'var(--energy-blue)' } : {}}>
+                            {environment.name}
+                        </Heading>
+                    </View>
+                    <View gridArea='status'>...status?</View>
+                    <View gridArea='menu' alignSelf={'end'} justifySelf={'end'}>
+                        <MenuActions environment_id={environment.id} />
+                    </View>
+                    <View gridArea='parameters'>
+                        <ul
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 'var(--spectrum-global-dimension-size-10)',
+                                listStyleType: 'disc',
+                                fontSize: '10px',
+                            }}
+                        >
+                            <li style={{ marginLeft: 'var(--spectrum-global-dimension-size-200)' }}>
+                                Cameras: {environment.camera_ids?.length ?? 0}
+                            </li>
+                            <li style={{ marginLeft: 'var(--spectrum-global-dimension-size-200)' }}>
+                                Robots: {environment.robots?.length ?? 0}
+                            </li>
+                            <li style={{ marginLeft: 'var(--spectrum-global-dimension-size-200)' }}>
+                                Tele operators:{' '}
+                                {environment.robots?.filter(({ tele_operator }) => tele_operator.type === 'robot')
+                                    .length ?? 0}
+                            </li>
+                        </ul>
+                    </View>
+                </Grid>
+            </Flex>
+        </View>
+    );
+};
+
 export const EnvironmentsList = () => {
     const { project_id = '' } = useParams<{ project_id: string }>();
     const {} = $api.useSuspenseQuery('get', '/api/projects/{project_id}/cameras', {
@@ -104,11 +170,81 @@ export const EnvironmentsList = () => {
                 </Flex>
                 <Divider size='S' marginY='size-200' />
             </View>
+            <DialogTrigger type='modal'>
+                <Button variant='secondary' UNSAFE_className={classes.addNewRobotButton}>
+                    <Icon marginEnd='size-50'>
+                        <Add />
+                    </Icon>
+                    Configure a new environment
+                </Button>
+                <Dialog>
+                    <Heading>Create a new environment</Heading>
+                    <Divider />
+                    <Content>
+                        <Grid gap='size-100' columns={[repeat('auto-fit', minmax('size-3000', '1fr'))]}>
+                            <Button
+                                variant='secondary'
+                                href={paths.project.environments.new({ project_id })}
+                                UNSAFE_className={classes.addNewRobotButton}
+                                height={'100%'}
+                            >
+                                Custom
+                            </Button>
+
+                            <Button
+                                variant='secondary'
+                                href={paths.project.environments.new({ project_id })}
+                                UNSAFE_className={classes.addNewRobotButton}
+                                height={'100%'}
+                            >
+                                Third Party
+                            </Button>
+
+                            <Button
+                                variant='secondary'
+                                href={paths.project.environments.new({ project_id })}
+                                UNSAFE_className={classes.addNewRobotButton}
+                                height={'100%'}
+                            >
+                                SO101
+                            </Button>
+
+                            <Button
+                                variant='secondary'
+                                href={paths.project.environments.new({ project_id })}
+                                UNSAFE_className={classes.addNewRobotButton}
+                                height={'100%'}
+                            >
+                                Trossen
+                            </Button>
+
+                            <Button
+                                variant='secondary'
+                                href={paths.project.environments.new({ project_id })}
+                                UNSAFE_className={classes.addNewRobotButton}
+                                height={'100%'}
+                            >
+                                LeKiwi
+                            </Button>
+
+                            <Button
+                                variant='secondary'
+                                href={paths.project.environments.new({ project_id })}
+                                UNSAFE_className={classes.addNewRobotButton}
+                                height={'100%'}
+                            >
+                                AlohaMini
+                            </Button>
+                        </Grid>
+                    </Content>
+                </Dialog>
+            </DialogTrigger>
 
             <Button
                 variant='secondary'
                 href={paths.project.environments.new({ project_id })}
                 UNSAFE_className={classes.addNewRobotButton}
+                isHidden
             >
                 <Icon marginEnd='size-50'>
                     <Add />
@@ -123,7 +259,32 @@ export const EnvironmentsList = () => {
                     return (
                         <NavLink key={environment.id} to={to}>
                             {({ isActive }) => {
-                                return <EnvironmentListItem environment={environment} isActive={isActive} />;
+                                return (
+                                    <EnvironmentListItemSmall
+                                        environment={environment}
+                                        isActive={isActive}
+                                        status={'connected'}
+                                    />
+                                );
+                            }}
+                        </NavLink>
+                    );
+                })}
+            </Flex>
+            <Flex direction='column' gap='size-100' isHidden>
+                {environmentsQuery.data.map((environment) => {
+                    const to = paths.project.environments.show({ project_id, environment_id: environment.id });
+
+                    return (
+                        <NavLink key={environment.id} to={to}>
+                            {({ isActive }) => {
+                                return (
+                                    <EnvironmentListItem
+                                        environment={environment}
+                                        isActive={isActive}
+                                        status={'connected'}
+                                    />
+                                );
                             }}
                         </NavLink>
                     );

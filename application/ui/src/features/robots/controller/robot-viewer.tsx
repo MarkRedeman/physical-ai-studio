@@ -98,7 +98,16 @@ const useLoadURDF = (robotType: SchemaRobotType) => {
     const loadModelMutation = useLoadModelMutation();
     const { hasModel } = useRobotModels();
 
-    const PATH = urdfPathForType(robotType);
+    let PATH = urdfPathForType(robotType);
+
+    if (robotType !== undefined && robotType.toLowerCase().includes('trossen')) {
+        PATH = '/widowx/urdf/generated/wxai/wxai_follower.urdf';
+    }
+
+    if (robotType === 'lekiwi') {
+        //PATH = 'http://localhost:8080/lekiwi/urdf';
+        PATH = '/lekiwi/LeKiwi.urdf';
+    }
 
     useEffect(() => {
         if (hasModel(PATH)) {

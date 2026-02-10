@@ -19,3 +19,50 @@
         background-color: var(--spectrum-global-color-gray-100) !important;
     }
 }
+
+.dockview {
+    --dv-background-color: var(--spectrum-global-color-gray-100);
+
+    --dv-paneview-active-outline-color: #596f99;
+    --dv-color-abyss-dark: #000c18;
+    --dv-color-abyss: var(--spectrum-global-color-gray-200);
+    --dv-color-abyss-light: var(--spectrum-global-color-gray-50);
+    --dv-color-abyss-lighter: var(--spectrum-global-color-gray-100);
+    --dv-color-abyss-accent: blue;
+    --dv-color-abyss-primary-text: white;
+    --dv-color-abyss-secondary-text: #9497a9;
+
+    // --dv-color-abyss-dark: var(--spectrum-global-color-gray-50);
+    // --dv-color-abyss: var(--spectrum-global-color-gray-100);
+    // --dv-color-abyss-light: var(--spectrum-global-color-gray-400);
+    // --dv-color-abyss-lighter: var(--spectrum-global-color-gray-600);
+
+    --dv-tabs-and-actions-container-font-size: 13px;
+    --dv-tabs-and-actions-container-height: 35px;
+    --dv-drag-over-background-color: #53595d80;
+    --dv-drag-over-border-color: transparent;
+    --dv-tabs-container-scrollbar-color: #888;
+    --dv-icon-hover-background-color: #5a5d5e4f;
+    --dv-floating-box-shadow: 8px 8px 8px 0px #53595d80;
+    --dv-overlay-z-index: 999;
+    --dv-tab-font-size: inherit;
+    --dv-border-radius: 0px;
+    --dv-tab-margin: 0;
+    --dv-sash-color: transparent;
+    --dv-active-sash-color: transparent;
+    --dv-active-sash-transition-duration: 0.1s;
+    --dv-active-sash-transition-delay: 0.5s;
+    --dv-group-view-background-color: var(--dv-color-abyss-dark);
+    --dv-tabs-and-actions-container-background-color: var(--dv-color-abyss-light);
+    --dv-activegroup-visiblepanel-tab-background-color: var(--dv-color-abyss-dark);
+    --dv-activegroup-hiddenpanel-tab-background-color: var(--dv-color-abyss);
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--dv-color-abyss-dark);
+    --dv-inactivegroup-hiddenpanel-tab-background-color: var(--dv-color-abyss);
+    --dv-tab-divider-color: var(--dv-color-abyss-lighter);
+    --dv-activegroup-visiblepanel-tab-color: white;
+    --dv-activegroup-hiddenpanel-tab-color: #ffffff80;
+    --dv-inactivegroup-visiblepanel-tab-color: #ffffff80;
+    --dv-inactivegroup-hiddenpanel-tab-color: #ffffff40;
+    --dv-separator-border: var(--dv-color-abyss-lighter);
+    --dv-paneview-header-border-color: var(--dv-color-abyss-lighter);
+}

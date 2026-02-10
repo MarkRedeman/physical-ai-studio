@@ -23,7 +23,7 @@ export const New = () => {
                         <EnvironmentForm />
                     </Suspense>
                 </View>
-                <View gridArea='controls' backgroundColor={'gray-50'}>
+                <View gridArea='controls' backgroundColor={'gray-50'} padding='size-400'>
                     <Preview />
                 </View>
             </Grid>

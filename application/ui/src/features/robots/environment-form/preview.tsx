@@ -1,13 +1,23 @@
 import { Suspense, useEffect, useRef } from 'react';
 
 import { Content, Flex, Heading, IllustratedMessage, Loading, Text, View } from '@geti-ui/ui';
-import { DockviewApi, IDockviewPanelProps } from 'dockview';
-import { DockviewReact, DockviewReadyEvent, IDockviewReactProps } from 'dockview-react';
+import { DockviewReact, GridviewApi, IGridviewPanelProps } from 'dockview';
+import { GridviewReadyEvent } from 'dockview-react';
 
+import { $api } from '../../../api/client';
+import { SchemaCameraConfigInput, SchemaWebcamCameraOutput } from '../../../api/openapi-spec';
+import { WebRTCConnectionProvider } from '../../../components/stream/web-rtc-connection-provider';
+import { CameraView } from '../../../routes/cameras/camera';
+import { WebsocketCamera } from '../../cameras/websocket-camera';
+import { useProjectId } from '../../projects/use-project';
+import { RobotModelsProvider } from '../robot-models-context';
 import { ReactComponent as RobotIllustration } from './../../../assets/illustrations/INTEL_08_NO-TESTS.svg';
 import { CameraCell } from './cells/camera-cell';
 import { RobotCell } from './cells/robot-cell';
+import { LeaderCell } from './preview-robot-move';
 import { EnvironmentFormState, useEnvironmentForm } from './provider';
+
+import classes from './form.module.scss';
 
 const EmptyPreview = () => {
     return (
@@ -27,34 +37,78 @@ const EmptyPreview = () => {
     );
 };
 
+const So101FollowerCell = ({ robot_id, teleoperate_robot_id }: { robot_id: string; teleoperate_robot_id?: string }) => {
+    if (robot_id === undefined) {
+        return <div>Test</div>;
+    }
+    // TODO: identify button
+    return (
+        <RobotModelsProvider>
+            <LeaderCell robot_id={robot_id} label={'Follower'} teleoperate_robot_id={teleoperate_robot_id} />
+        </RobotModelsProvider>
+    );
+};
+
+const So101LeaderCell = ({ robot_id }: { robot_id: string }) => {
+    if (robot_id === undefined) {
+        return <div>Test</div>;
+    }
+    //return <span>TODO: revert once we can share websockets...</span>;
+    return (
+        <RobotModelsProvider>
+            <LeaderCell robot_id={robot_id} label={'Leader'} />
+        </RobotModelsProvider>
+    );
+};
+
+const CameraCell = ({ storedCamera }: { storedCamera: SchemaWebcamCameraOutput }) => {
+    return (
+        <View backgroundColor={'gray-500'}>
+            <View maxHeight='100%' height='100%' position='relative'>
+                <WebsocketCamera camera={storedCamera} />
+            </View>
+        </View>
+    );
+};
+
+const CameraCellById = ({ camera_id }: { camera_id: string }) => {
+    const { project_id } = useProjectId();
+    const camerasQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/cameras', {
+        params: { path: { project_id } },
+    });
+
+    const storedCamera = camerasQuery.data.find((camera) => camera.id === camera_id);
+
+    return <CameraCell storedCamera={storedCamera} />;
+};
+
 const components = {
-    leader: (props: IDockviewPanelProps<{ title: string; robot_id: string }>) => {
-        return <RobotCell robot_id={props.params.robot_id} />;
+    leader: (props: IGridviewPanelProps<{ title: string; robot_id: string }>) => {
+        return <So101LeaderCell robot_id={props.params.robot_id} />;
     },
-    follower: (props: IDockviewPanelProps<{ title: string; robot_id: string }>) => {
-        return <RobotCell robot_id={props.params.robot_id} />;
+    follower: (props: IGridviewPanelProps<{ title: string; robot_id: string; teleoperate_robot_id?: string }>) => {
+        return (
+            <So101FollowerCell
+                robot_id={props.params.robot_id}
+                teleoperate_robot_id={props.params.teleoperate_robot_id}
+            />
+        );
     },
-    camera: (props: IDockviewPanelProps<{ camera_id: string }>) => {
-        return <CameraCell camera_id={props.params.camera_id} />;
+    camera: (props: IGridviewPanelProps<{ camera_id: string }>) => {
+        return <CameraCellById camera_id={props.params.camera_id} />;
     },
-    default: (props: IDockviewPanelProps<{ title: string }>) => {
+    default: (props: IGridviewPanelProps<{ title: string }>) => {
         return <div style={{ padding: '20px', color: 'white' }}>{props.params.title}</div>;
     },
-} satisfies IDockviewReactProps['components'];
+};
 
-// Builds up all panels that we should add to Dockview
-// also removes any panels that are no longer part of the environment
-const buildDockviewPanels = (api: DockviewReadyEvent['api'], environment: EnvironmentFormState) => {
-    if (environment === null) {
-        return api;
-    }
+const ActualPreview = () => {
+    const environment = useEnvironmentForm();
+    const api = useRef<DockviewApi>(null);
 
-    const panels = new Set<string>();
-
-    environment.camera_ids.forEach((camera_id, idx) => {
-        panels.add(camera_id);
-        if (!api.panels.some((panel) => panel.id === camera_id)) {
-            api.addPanel({
+    const onReady = (event: DockviewReadyEvent): void => {
+        environment.camera_ids.forEach((camera_id, idx) => {
+            event.api.addPanel({
                 id: camera_id,
                 component: 'camera',
                 params: {
@@ -66,16 +120,16 @@ const buildDockviewPanels = (api: DockviewReadyEvent['api'], environment: Enviro
                     referencePanel: '',
                 },
             });
-        }
-    });
+        });
 
-    environment.robots.forEach((robot) => {
-        panels.add(robot.robot_id);
-        if (!api.panels.some((panel) => panel.id === robot.robot_id)) {
-            api.addPanel({
+        environment.robots.forEach((robot) => {
+            event.api.addPanel({
                 id: robot.robot_id,
-                params: { title: 'Follower', robot_id: robot.robot_id },
-                title: 'Follower',
+                params: {
+                    title: 'Follower',
+                    robot_id: robot.robot_id,
+                    teleoperate_robot_id: robot.teleoperator.type === 'robot' ? robot.teleoperator.robot_id : undefined,
+                },
                 component: 'follower',
 
                 position: {
@@ -83,18 +137,12 @@ const buildDockviewPanels = (api: DockviewReadyEvent['api'], environment: Enviro
                     referencePanel: '',
                 },
             });
-        }
 
-        if (robot.teleoperator.type === 'robot') {
-            const teleoperator_id = robot.teleoperator.robot_id;
-            panels.add(teleoperator_id);
-
-            if (!api.panels.some((panel) => panel.id === teleoperator_id)) {
-                api.addPanel({
-                    id: teleoperator_id,
+            if (robot.teleoperator.type === 'robot') {
+                event.api.addPanel({
+                    id: robot.teleoperator.robot_id,
                     params: { title: 'Leader', robot_id: robot.teleoperator.robot_id },
                     component: 'leader',
-                    title: 'Leader',
 
                     position: {
                         direction: 'right',
@@ -102,34 +150,10 @@ const buildDockviewPanels = (api: DockviewReadyEvent['api'], environment: Enviro
                     },
                 });
             }
-        }
-    });
-
-    // Remove any panels that are no longer part of the environment
-    api.panels
-        .filter((panel) => panels.has(panel.id) === false)
-        .forEach((panel) => {
-            api.removePanel(panel);
         });
 
-    return api;
-};
-
-const ActualPreview = () => {
-    const environment = useEnvironmentForm();
-    const api = useRef<DockviewApi>(null);
-
-    const onReady = (event: DockviewReadyEvent): void => {
-        api.current = buildDockviewPanels(event.api, environment);
+        api.current = event.api;
     };
-
-    useEffect(() => {
-        if (!api.current) {
-            return;
-        }
-
-        buildDockviewPanels(api.current, environment);
-    }, [environment]);
 
     return <DockviewReact onReady={onReady} components={components} />;
 };

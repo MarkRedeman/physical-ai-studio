@@ -9,23 +9,21 @@ import { RobotConfiguration, useEnvironmentForm, useSetEnvironmentForm } from '.
 
 import classes from './form.module.scss';
 
-const RobotListItem = ({ robot, onRemove }: { robot: RobotConfiguration; onRemove: () => void }) => {
+export const RobotListItem = ({ robot, onRemove }: { robot: RobotConfiguration; onRemove: () => void }) => {
     const { project_id } = useProjectId();
     const robotsQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots', {
         params: { path: { project_id } },
     });
 
     const followerRobot = robotsQuery.data.find(({ id }) => id === robot.robot_id);
+    const leaderRobot = robotsQuery.data.find(({ id }) => id === robot.teleoperator.robot_id);
 
     if (followerRobot === undefined) {
         return <li>{robot.robot_id} - unknown</li>;
     }
 
-    const leaderRobot = robotsQuery.data.find(
-        ({ id }) => robot.teleoperator.type === 'robot' && robot.teleoperator.robot_id === id
-    );
     if (leaderRobot === undefined) {
-        return <li>Unknown leader robot</li>;
+        return <li>{robot.teleoperator.robot_id} - unknown</li>;
     }
 
     return (
