@@ -84,7 +84,11 @@ const IdentifyRobot = () => {
     const robotForm = useRobotForm();
     const identifyMutation = $api.useMutation('post', '/api/hardware/identify');
 
-    const isDisabled = identifyMutation.isPending || !robotForm.name || !robotForm.type || !robotForm.connection_string;
+    const isDisabled =
+        identifyMutation.isPending ||
+        !robotForm.name ||
+        !robotForm.type ||
+        (!robotForm.connection_string && !robotForm.serial_number);
 
     const onIdentify = () => {
         if (isDisabled || robotForm.type === null) {

@@ -35,6 +35,7 @@ export const useRobotFormBody = (robot_id: string): SchemaRobot | null => {
         type: robotForm.type,
         connection_string: robotForm.connection_string ?? '',
         serial_number: robotForm.serial_number ?? '',
+        driver: 'feetech',
     };
 };
 

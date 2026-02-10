@@ -6,6 +6,15 @@ import { RobotViewer } from '../../features/robots/controller/robot-viewer';
 import { RobotModelsProvider } from '../../features/robots/robot-models-context';
 import { useRobot } from '../../features/robots/use-robot';
 
+const IdentifyRobot = () => {
+    return null;
+    // const robot = useRobot();
+    // const { data: robots } = $api.useSuspenseQuery('get', '/api/hardware/robots');
+    // const hardwareRobot = robots.find(({ serial_id }) => serial_id === robot.serial_id);
+
+    // return <IdentifyRobotButton port_id={hardwareRobot?.port ?? ''} />;
+};
+
 export const Robot = () => {
     const robot = useRobot();
 
