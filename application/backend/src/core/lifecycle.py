@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from loguru import logger
 
+from cameras.websocket_capture import WebSocketCapture
 from services.event_processor import EventProcessor
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
@@ -11,6 +12,10 @@ from workers.camera_worker_registry import CameraWorkerRegistry
 from workers.robot_worker_registry import RobotWorkerRegistry
 
 from .scheduler import Scheduler
+
+from frame_source import FrameSourceFactory
+
+FrameSourceFactory.register_capture_type("websocket", WebSocketCapture)
 
 
 @asynccontextmanager
