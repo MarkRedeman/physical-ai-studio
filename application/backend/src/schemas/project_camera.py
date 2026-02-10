@@ -13,6 +13,7 @@ SupportedCameraDriver = Literal[
     "basler",
     "realsense",
     "genicam",
+    "websocket"
 ]
 
 
@@ -89,6 +90,14 @@ class GenicamCameraPayload(BaseModel):
     x: int | None = Field(None, ge=0, description="Horizontal offset in pixels")
     y: int | None = Field(None, ge=0, description="Vertical offset in pixels")
 
+
+class WebsocketCameraPayload(BaseModel):
+    """Configuration for IPCameraCapture."""
+
+    websocket_url: str = Field(..., description="Websocket URL")
+    width: int | None = Field(None, ge=160, le=4096, description="Frame width in pixels (if supported)")
+    height: int | None = Field(None, ge=120, le=2160, description="Frame height in pixels (if supported)")
+    fps: int = Field(30, ge=1, le=60, description="Expected frame rate")
 
 # ============================================================================
 # Camera Models (Metadata + Payload)
@@ -208,10 +217,33 @@ class GenicamCamera(BaseCamera):
         }
     )
 
+class WebsocketCamera(BaseCamera):
+    """Websocket Camera consuming raw bytes."""
+
+    driver: Literal["websocket"] = "websocket"  # type: ignore[assignment]
+    payload: WebsocketCameraPayload
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Lekiwi front",
+                "driver": "websocket",
+                "fingerprint": "ws://localhost:8001",
+                "hardware_name": None,
+                "payload": {
+                    "stream_url": "ws://localhost:8001",
+                    "width": 640,
+                    "height": 480,
+                    "fps": 30,
+                },
+            }
+        }
+    )
+
 
 # Discriminated union of all camera types
 Camera = Annotated[
-    USBCamera | IPCamera | BaslerCamera | RealsenseCamera | GenicamCamera,
+    USBCamera | IPCamera | BaslerCamera | RealsenseCamera | GenicamCamera | WebsocketCamera,
     Field(discriminator="driver"),
 ]
 
