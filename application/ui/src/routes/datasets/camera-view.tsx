@@ -13,7 +13,8 @@ type SchemaCamera =
     | components['schemas']['IPCamera-Output']
     | components['schemas']['BaslerCamera-Output']
     | components['schemas']['RealsenseCamera-Output']
-    | components['schemas']['GenicamCamera-Output'];
+    | components['schemas']['GenicamCamera-Output']
+    | components['schemas']['WebsocketCamera-Output'];
 
 interface CameraViewProps {
     observation: RefObject<Observation | undefined>;
