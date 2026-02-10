@@ -10,6 +10,7 @@ import { useProjectId } from '../../projects/use-project';
 import { RobotViewer } from '../controller/robot-viewer';
 import { IdentifyRobotButton } from '../identify-robot-button';
 import { useRobotModels } from '../robot-models-context';
+import useRobotControl from './use-xbox';
 
 const POSITIONS = {
     Middle: {
@@ -169,8 +170,18 @@ const Joint = ({
     );
 };
 
+type JointsState = Array<{
+    name: string;
+    value: number;
+    rangeMin: number;
+    rangeMax: number;
+    decreaseKey: string;
+    increaseKey: string;
+}>;
+
 const useTeleoperateTheRobot = (
     socket: ReturnType<typeof useWebSocket>,
+    joints: JointsState,
     project_id: string,
     teleoperate_robot_id?: string
 ) => {
@@ -181,7 +192,21 @@ const useTeleoperateTheRobot = (
                 const payload = JSON.parse(event.data);
 
                 if (payload['event'] === 'state_was_updated') {
-                    socket.sendJsonMessage({ command: 'set_joints_state', joints: payload['state'] });
+                    socket.sendJsonMessage({
+                        command: 'set_joints_state',
+                        joints: {
+                            ...Object.fromEntries(joints.map((joint) => [joint.name, joint.value])),
+                            x: 0,
+                            y: 0,
+                            theta: 0,
+                            ...Object.fromEntries(
+                                Object.keys(payload['state']).map((jointName) => [
+                                    `arm_${jointName}`,
+                                    payload['state'][jointName],
+                                ])
+                            ),
+                        },
+                    });
                 }
             } catch (error) {
                 console.error('Failed to parse WebSocket message:', error);
@@ -211,14 +236,6 @@ const useTeleoperateTheRobot = (
     return leaderSocket;
 };
 
-type JointsState = Array<{
-    name: string;
-    value: number;
-    rangeMin: number;
-    rangeMax: number;
-    decreaseKey: string;
-    increaseKey: string;
-}>;
 const useJointState = (project_id: string, robot_id: string, teleoperate_robot_id?: string) => {
     const [isControlled, setIsControlled] = useState(false);
     const [joints, setJoints] = useState<JointsState>([]);
@@ -235,7 +252,11 @@ const useJointState = (project_id: string, robot_id: string, teleoperate_robot_i
 
                     Object.keys(newJoints).forEach((joint) => {
                         models.forEach((model) => {
-                            model.setJointValue(joint, degToRad(newJoints[joint]));
+                            if (joint.startsWith('arm_')) {
+                                model.setJointValue(joint.slice(4), degToRad(newJoints[joint]));
+                            } else {
+                                model.setJointValue(joint, degToRad(newJoints[joint]));
+                            }
                         });
                     });
 
@@ -282,7 +303,7 @@ const useJointState = (project_id: string, robot_id: string, teleoperate_robot_i
     });
 
     // WebSocket message handler
-    useTeleoperateTheRobot(socket, project_id, teleoperate_robot_id);
+    useTeleoperateTheRobot(socket, joints, project_id, teleoperate_robot_id);
 
     const setJoint = (name: string, value: number) => {
         socket.sendJsonMessage({
@@ -311,6 +332,13 @@ const Identify = ({ robot_id }: { robot_id: string }) => {
     return <IdentifyRobotButton port_id={port_id} />;
 };
 
+const XboxController = ({ socket, joints }: { socket: ReturnType<typeof useWebSocket>; joints: JointsState }) => {
+    //console.log('Robot control', { socket, joints });
+    useRobotControl(socket, joints);
+
+    return null;
+};
+
 export const LeaderCell = ({
     robot_id,
     label,
@@ -335,6 +363,9 @@ export const LeaderCell = ({
 
             <View gridArea='viewer' maxWidth='size-6000' maxHeight='size-6000'>
                 <RobotViewer />
+                {teleoperate_robot_id !== undefined && (
+                    <XboxController joints={joints} isControlled={isControlled} socket={socket} />
+                )}
             </View>
             <View backgroundColor={'gray-100'} padding='size-50' gridArea='controls'>
                 <ul>

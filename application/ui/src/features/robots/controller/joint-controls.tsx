@@ -68,6 +68,7 @@ export const Joint = ({
                             defaultValue={value}
                             minValue={minValue}
                             maxValue={maxValue}
+                            step={0.01}
                             flexGrow={1}
                             isDisabled={isDisabled}
                             onChangeEnd={isDisabled ? undefined : onChange}
@@ -125,15 +126,22 @@ const useJointState = () => {
                         { name: 'J4', value: 60, rangeMin: -360, rangeMax: 360, decreaseKey: 'r', increaseKey: '4' },
                         { name: 'J5', value: 10, rangeMin: -360, rangeMax: 360, decreaseKey: 't', increaseKey: '5' },
                         { name: 'J6', value: 84, rangeMin: -360, rangeMax: 360, decreaseKey: 'y', increaseKey: '6' },
+
+                        { name: 'x', value: 0, rangeMin: -1, rangeMax: 1, decreaseKey: 'y', increaseKey: '6' },
+                        { name: 'y', value: 0, rangeMin: -1, rangeMax: 1, decreaseKey: 'y', increaseKey: '6' },
+                        { name: 'theta', value: 0, rangeMin: -1, rangeMax: 1, decreaseKey: 'y', increaseKey: '6' },
                     ];
 
                     const modelJoints = Object.values(models.at(0)?.joints) ?? [];
 
                     const jointState = Object.keys(newJoints).map((joint_name, idx) => {
+                        const isVelocity = ['x', 'y', 'theta'].includes(joint_name);
+                        const defaultRange = isVelocity ? 1 : 180;
+
                         const joint = modelJoints.find(({ urdfName }) => urdfName === joint_name);
 
-                        const rangeMax = joint === undefined ? 180 : radToDeg(joint.limit.upper);
-                        const rangeMin = joint === undefined ? -180 : radToDeg(joint.limit.lower);
+                        const rangeMax = joint === undefined ? defaultRange : radToDeg(joint.limit.upper);
+                        const rangeMin = joint === undefined ? -defaultRange : radToDeg(joint.limit.lower);
 
                         return {
                             ...placeholderJoints[idx],
@@ -180,6 +188,7 @@ const useJointState = () => {
         socket.sendJsonMessage({
             command: 'set_joints_state',
             joints: {
+                ...joints,
                 [name]: value,
             },
         });
@@ -349,7 +358,7 @@ export const JointControls = () => {
                 </Flex>
                 {collapsed === false && (
                     <>
-                        <Joints joints={joints} isDisabled={isControlled === false} setJoint={setJoint} />
+                        <Joints joints={joints} isDisabled={false} setJoint={setJoint} />
                         <CompoundMovements />
                     </>
                 )}

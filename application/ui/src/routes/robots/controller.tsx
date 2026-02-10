@@ -20,7 +20,12 @@ export const Controller = () => {
                 minHeight={0}
             >
                 <View gridArea='controller'>
-                    <RobotViewer robot={robot} />
+                    <RobotViewer
+                        robot={{
+                            ...robot,
+                            type: robot.id === 'ab1e9694-a8af-4d51-abfb-b0743eebd6f6' ? 'lekiwi' : robot.type,
+                        }}
+                    />
                 </View>
                 <JointControls />
             </Grid>

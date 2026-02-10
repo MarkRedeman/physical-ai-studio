@@ -5,8 +5,10 @@ from pathlib import Path
 from lerobot.robots.so101_follower import SO101FollowerConfig
 from loguru import logger
 
+from robots.widowxai.trossen_widowx_ai_follower import TrossenWidowXAIFollower
+from robots.widowxai.trossen_widowx_ai_leader import TrossenWidowXAILeader
 from exceptions import ResourceNotFoundError, ResourceType
-from schemas.robot import Robot
+from schemas.robot import NetworkIpRobotConfig, Robot, RobotType
 from services.robot_calibration_service import RobotCalibrationService, find_robot_port
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.robots.commands import handle_command, parse_command
@@ -135,43 +137,81 @@ class RobotWorker(TransportWorker):
         await super().shutdown()
 
     async def create_robot_client(self) -> RobotClient:
-        return WebsocketRobotClient("ws://localhost:8080/lekiwi/control", self.normalize)
+        factory = RobotClientFactory(
+            self.robot_manager,
+            self.calibration_service,
+        )
 
-        if (str(self.robot.id) == "dd862523-3e04-428e-930d-9cc4a514b187"):
-            return WebsocketRobotClient("ws://localhost:8080/so101/control", self.normalize)
+        return await factory.build(self.robot)
+
+
+class RobotClientFactory:
+    calibration_service: RobotCalibrationService
+    robot_manager: RobotConnectionManager
+
+    def __init__(
+        self,
+        robot_manager: RobotConnectionManager,
+        calibration_service: RobotCalibrationService,
+    ) -> None:
+        self.robot_manager = robot_manager
+        self.calibration_service = calibration_service
+
+    async def build(self, robot: Robot, normalize: bool = True) -> RobotClient:
+        if robot.type == RobotType.TROSSEN_WIDOWXAI_LEADER:
+            config = NetworkIpRobotConfig(
+                type="leader", robot_type=RobotType.TROSSEN_WIDOWXAI_LEADER, connection_string=robot.connection_string
+            )
+            return TrossenWidowXAILeader(config=config)
+        if robot.type == RobotType.TROSSEN_WIDOWXAI_FOLLOWER:
+            config = NetworkIpRobotConfig(
+                type="follower", robot_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER, connection_string=robot.connection_string
+            )
+            return TrossenWidowXAIFollower(config=config)
+
+
+        if (str(robot.id) == "ab1e9694-a8af-4d51-abfb-b0743eebd6f6"):
+            logger.info("Building a websocket client for lekiwi")
+            # ws://localhost:8000/api/robot/ws?serial_id=5A7C121475&robot_type=lekiwi&calibration_id=kiwi
+            #return WebsocketRobotClient("ws://localhost:8080/lekiwi/control?leader=so101", normalize)
+            return WebsocketRobotClient("ws://localhost:8008/api/robot/ws?serial_id=5A7C121475&robot_type=lekiwi&calibration_id=kiwi", normalize)
+
+
+        if (str(robot.id) == "dd862523-3e04-428e-930d-9cc4a514b187"):
+            return WebsocketRobotClient("ws://localhost:8080/lekiwi/control?leader=lekiwi", normalize)
+            # return WebsocketRobotClient("ws://localhost:8080/lekiwi/control?leader=so101", normalize)
+
+        if (str(robot.id) == "dd862523-3e04-428e-930d-9cc4a514b187"):
+            return WebsocketRobotClient("ws://localhost:8080/so101/control", normalize)
         else:
-            config = await get_robot_config(self.robot, self.robot_manager, self.calibration_service)
+            config = await self.get_robot_config(robot, )
 
             logger.info("Using config: {}", config)
 
-            return FeetechRobotClient(config, self.normalize)
+            return FeetechRobotClient(config, normalize)
 
+    async def get_robot_config(self, robot: Robot) -> SO101FollowerConfig:
+        """
+        Load robot configuration with calibration data.
 
+        Args:
+            robot: The robot to configure
+            robot_manager: Service for discovering robot ports
+            calibration_service: Service for loading calibration data
 
-async def get_robot_config(
-    robot: Robot, robot_manager: RobotConnectionManager, calibration_service: RobotCalibrationService
-) -> SO101FollowerConfig:
-    """
-    Load robot configuration with calibration data.
+        Returns:
+            SO101FollowerConfig configured with port and calibration
 
-    Args:
-        robot: The robot to configure
-        robot_manager: Service for discovering robot ports
-        calibration_service: Service for loading calibration data
+        Raises:
+            ResourceNotFoundError: If robot port cannot be found
+        """
+        port = await find_robot_port(self.robot_manager, robot)
+        if port is None:
+            raise ResourceNotFoundError(ResourceType.ROBOT, robot.serial_id)
 
-    Returns:
-        SO101FollowerConfig configured with port and calibration
+        if robot.active_calibration_id is None:
+            return SO101FollowerConfig(port=port)
 
-    Raises:
-        ResourceNotFoundError: If robot port cannot be found
-    """
-    port = await find_robot_port(robot_manager, robot)
-    if port is None:
-        raise ResourceNotFoundError(ResourceType.ROBOT, robot.serial_id)
+        calibration = await self.calibration_service.get_calibration(robot.active_calibration_id)
 
-    if robot.active_calibration_id is None:
-        return SO101FollowerConfig(port=port)
-
-    calibration = await calibration_service.get_calibration(robot.active_calibration_id)
-
-    return SO101FollowerConfig(port=port, id=str(calibration.id), calibration_dir=Path(calibration.file_path).parent)
+        return SO101FollowerConfig(port=port, id=str(calibration.id), calibration_dir=Path(calibration.file_path).parent)

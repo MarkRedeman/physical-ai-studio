@@ -34,6 +34,11 @@ const useLoadURDF = (robotType: SchemaRobotType) => {
         PATH = '/widowx/urdf/generated/wxai/wxai_follower.urdf';
     }
 
+    if (robotType === 'lekiwi') {
+        PATH = 'http://localhost:8080/lekiwi/urdf';
+        // PATH = '/lekiwi/LeKiwi.urdf';
+    }
+
     const ref = useRef(false);
     useEffect(() => {
         if (models.length > 0) {
