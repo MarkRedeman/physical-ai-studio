@@ -8,11 +8,12 @@ import { paths } from '../../router';
 import { getPathSegment } from '../../utils';
 
 const IdentifyRobot = () => {
-    const robot = useRobot();
-    const { data: robots } = $api.useSuspenseQuery('get', '/api/hardware/robots');
-    const hardwareRobot = robots.find(({ serial_id }) => serial_id === robot.serial_id);
+    return null;
+    // const robot = useRobot();
+    // const { data: robots } = $api.useSuspenseQuery('get', '/api/hardware/robots');
+    // const hardwareRobot = robots.find(({ serial_id }) => serial_id === robot.serial_id);
 
-    return <IdentifyRobotButton port_id={hardwareRobot?.port ?? ''} />;
+    // return <IdentifyRobotButton port_id={hardwareRobot?.port ?? ''} />;
 };
 
 export const Robot = () => {
