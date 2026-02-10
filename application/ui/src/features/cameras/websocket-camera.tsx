@@ -64,7 +64,9 @@ export const WebsocketCamera = ({ camera }: { camera: SchemaProjectCamera }) => 
         [processFrame]
     );
 
-    useWebSocket(CAMERA_WS_URL, {
+    const url = camera.driver === 'ipcam' ? camera.fingerprint : CAMERA_WS_URL;
+
+    useWebSocket(url, {
         queryParams: {
             camera: JSON.stringify({
                 ...camera,

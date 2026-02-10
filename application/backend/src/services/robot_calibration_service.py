@@ -4,6 +4,7 @@ from uuid import UUID
 import aiofiles
 from lerobot.motors import MotorCalibration
 from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
+from lerobot.robots.lekiwi import LeKiwi, LeKiwiConfig
 from loguru import logger
 
 from db.engine import get_async_db_session_ctx
@@ -100,11 +101,34 @@ class RobotCalibrationService:
         if port is None:
             raise ResourceNotFoundError(ResourceType.ROBOT, robot.serial_number)
 
+        # TODO: for lekiwi needs to be updated
         # TODO: make this depend on the robot type
         # Assume follower since leader shares same FeetechMotorBus layout
         robot_config = SOFollower(SOFollowerRobotConfig(port=port))
+        #robot_config = LeKiwi(LeKiwiConfig(port=port, cameras={}))
         robot_config.bus.connect()
         calibration = robot_config.bus.read_calibration()
         robot_config.bus.disconnect()
 
         return calibration
+
+
+    async def set_robot_motor_calibration(self, robot: Robot, calibration: dict[str, MotorCalibration]) -> None:
+        """
+        Persists the calibration data for a specific robot.
+        """
+        if robot.type not in (RobotType.SO101_FOLLOWER, RobotType.SO101_LEADER):
+            raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
+
+        port = await find_robot_port(self.robot_manager, robot)
+
+        if port is None:
+            raise ResourceNotFoundError(ResourceType.ROBOT, robot.serial_id)
+         
+        # TODO: make this depend on the robot type
+        # Assume follower since leader shares same FeetechMotorBus layout
+        robot_config = SOFollower(SOFollowerRobotConfig(port=port))
+        #robot_config = LeKiwi(LeKiwiConfig(port=port, cameras={}))
+        robot_config.bus.connect()
+        robot_config.bus.write_calibration(calibration)
+        robot_config.bus.disconnect()

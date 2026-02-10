@@ -1,0 +1,24 @@
+.pulseGreen {
+    animation: pulseGreen 0.6s ease-out;
+}
+
+.pulseRed {
+    animation: pulseRed 0.6s ease-out;
+}
+
+@keyframes pulseGreen {
+    0% {
+        background-color: #4ade80;
+    }
+    100% {
+        background-color: #111;
+    }
+}
+@keyframes pulseRed {
+    0% {
+        background-color: #f87171;
+    }
+    100% {
+        background-color: #111;
+    }
+}
