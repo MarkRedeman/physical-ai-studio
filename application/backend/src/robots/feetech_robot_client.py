@@ -1,6 +1,8 @@
 from lerobot.robots.so101_follower import SO101Follower, SO101FollowerConfig
 from loguru import logger
 
+from schemas.robot import RobotType
+
 from .robot_client import RobotClient
 
 
@@ -135,3 +137,17 @@ class FeetechRobotClient(RobotClient):
             logger.error(f"Robot read error: {e}")
             raise
 
+
+
+    async def read_forces(self) -> dict | None:
+        """Read current robot forces. Returns state dict with timestamp."""
+        return None
+
+    async def set_forces(self, forces: dict) -> dict:
+        """Set current robot forces. Returns event dict with timestamp."""
+        raise Exception("Not implemented for Feetech Robot Client")
+
+    @property
+    def robot_type(self) -> RobotType:
+        """Specify the RobotType"""
+        return RobotType(self.robot.robot_type)

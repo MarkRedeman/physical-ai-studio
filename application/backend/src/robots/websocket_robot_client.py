@@ -18,6 +18,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from schemas.robot import RobotType
+
 from .robot_client import RobotClient
 
 # Constants
@@ -368,3 +370,16 @@ class WebsocketRobotClient(RobotClient):
     def features(self) -> list[str]:
         """Get Robot features. Returns list with joints."""
         return []
+
+    async def read_forces(self) -> dict | None:
+        """Read current robot forces. Returns state dict with timestamp."""
+        return None
+
+    async def set_forces(self, forces: dict) -> dict:
+        """Set current robot forces. Returns event dict with timestamp."""
+        raise Exception("Not implemented for Feetech Robot Client")
+
+    @property
+    def robot_type(self) -> RobotType:
+        """Specify the RobotType"""
+        return RobotType("SO101_Follower")
