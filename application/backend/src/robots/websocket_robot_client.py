@@ -230,7 +230,6 @@ class WebsocketRobotClient(RobotClient):
                 self._is_controlled = data["is_controlled"]
 
             self._state_event.set()
-            logger.debug("State updated: {} joints", len(data.get("state", {})))
 
         elif event_type == "pong":
             logger.debug("Received pong from server")
@@ -244,7 +243,7 @@ class WebsocketRobotClient(RobotClient):
             logger.debug("Torque disabled confirmed by server")
 
         elif event_type == "joints_state_was_set":
-            logger.debug("Joints state set confirmed by server")
+            return
 
         elif event_type == "error":
             logger.warning("Error from server: {}", data.get("message", "unknown"))
@@ -360,7 +359,6 @@ class WebsocketRobotClient(RobotClient):
             try:
                 command_json = json.dumps(command)
                 await self._websocket.send(command_json)
-                logger.debug("Sent command: {}", command.get("command"))
 
             except websockets.exceptions.ConnectionClosed as e:
                 self._is_connected = False
