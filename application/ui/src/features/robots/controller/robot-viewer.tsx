@@ -35,8 +35,8 @@ const useLoadURDF = (robotType: SchemaRobotType) => {
     }
 
     if (robotType === 'lekiwi') {
-        PATH = 'http://localhost:8080/lekiwi/urdf';
-        // PATH = '/lekiwi/LeKiwi.urdf';
+        //PATH = 'http://localhost:8080/lekiwi/urdf';
+        PATH = '/lekiwi/LeKiwi.urdf';
     }
 
     const ref = useRef(false);
