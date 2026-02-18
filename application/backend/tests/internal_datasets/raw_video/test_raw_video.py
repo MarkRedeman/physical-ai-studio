@@ -436,6 +436,7 @@ class TestRawVideoDatasetAdapter:
         action_dim: int = 6,
         cameras: list[str] | None = None,
         fps: int = 30,
+        image_transforms=None,
     ):
         """Construct a ``RawVideoDatasetAdapter`` with all externals mocked."""
         if cameras is None:
@@ -540,7 +541,7 @@ class TestRawVideoDatasetAdapter:
         ):
             from internal_datasets.raw_video.adapter import RawVideoDatasetAdapter
 
-            adapter = RawVideoDatasetAdapter(Path("/fake/dataset"))
+            adapter = RawVideoDatasetAdapter(Path("/fake/dataset"), image_transforms=image_transforms)
 
         # After construction, also patch decode_frame/decode_frames for __getitem__.
         adapter._decode_frame_patch = patch(f"{self._PATCH_PREFIX}.decode_frame", return_value=torch.rand(3, 480, 640))
@@ -660,3 +661,49 @@ class TestRawVideoDatasetAdapter:
 
         assert isinstance(adapter, Dataset)
         assert isinstance(adapter, TorchDataset)
+
+    def test_adapter_image_transforms_applied(self):
+        """Verify that image_transforms is called for each camera in simple mode."""
+        transform_fn = MagicMock(side_effect=lambda x: x * 0.5)
+        adapter, *_ = self._build_adapter(cameras=["top", "gripper"], image_transforms=transform_fn)
+
+        with patch(f"{self._PATCH_PREFIX}.decode_frame", return_value=torch.rand(3, 480, 640)):
+            obs = adapter[0]
+
+        # The transform should have been called once per camera.
+        assert transform_fn.call_count == 2
+        assert "top" in obs.images
+        assert "gripper" in obs.images
+
+    def test_adapter_image_transforms_temporal(self):
+        """Verify that image_transforms is called per frame in temporal mode."""
+        call_count = 0
+
+        def counting_transform(x):
+            nonlocal call_count
+            call_count += 1
+            return x
+
+        adapter, *_ = self._build_adapter(cameras=["top"], image_transforms=counting_transform)
+        adapter.delta_indices = {"action": [0, 1, 2, 3]}
+
+        with (
+            patch(f"{self._PATCH_PREFIX}.decode_frame", return_value=torch.rand(3, 480, 640)),
+            patch(f"{self._PATCH_PREFIX}.decode_frames", return_value=torch.rand(4, 3, 480, 640)),
+        ):
+            obs = adapter[0]
+
+        # Single camera, single frame (not in delta_indices for images) → 1 call.
+        assert call_count == 1
+
+    def test_adapter_no_transforms_when_none(self):
+        """Verify no error and identity behaviour when image_transforms is None."""
+        adapter, *_ = self._build_adapter(image_transforms=None)
+
+        with patch(f"{self._PATCH_PREFIX}.decode_frame", return_value=torch.rand(3, 480, 640)) as mock_decode:
+            obs = adapter[0]
+
+        assert obs.images is not None
+        assert "top" in obs.images
+        # The decoded tensor should be passed through unchanged.
+        assert obs.images["top"].shape == (3, 480, 640)

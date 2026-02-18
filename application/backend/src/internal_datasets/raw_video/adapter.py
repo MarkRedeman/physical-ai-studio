@@ -45,6 +45,8 @@ from .stats import DatasetStats, load_or_compute_stats
 from .video_decode import decode_frame, decode_frames, get_video_info
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from .manifest import DatasetManifest
 
 logger = logging.getLogger(__name__)
@@ -149,6 +151,11 @@ class RawVideoDatasetAdapter(Dataset):
     Args:
         dataset_root: Path to the top-level dataset directory that contains
             ``manifest.json``.
+        image_transforms: Optional callable (e.g. a
+            ``torchvision.transforms.v2.Transform``) applied independently to
+            each camera image tensor after decoding.  The callable must accept
+            a single ``(C, H, W)`` float32 tensor in ``[0, 1]`` and return a
+            tensor of the same layout.  ``None`` means no augmentation.
         tolerance_s: Tolerance in seconds used to keep delta timestamps in
             sync with the target FPS.  Passed through to the training
             pipeline.  Defaults to ``1e-4``.
@@ -158,11 +165,18 @@ class RawVideoDatasetAdapter(Dataset):
     # Construction
     # ------------------------------------------------------------------
 
-    def __init__(self, dataset_root: Path, *, tolerance_s: float = 1e-4) -> None:
+    def __init__(
+        self,
+        dataset_root: Path,
+        *,
+        image_transforms: Callable | None = None,
+        tolerance_s: float = 1e-4,
+    ) -> None:
         super().__init__()
 
         self._dataset_root = Path(dataset_root)
         self._tolerance_s = tolerance_s
+        self._image_transforms = image_transforms
 
         # Load and validate the manifest.
         self._manifest: DatasetManifest = load_manifest(self._dataset_root)
@@ -241,6 +255,25 @@ class RawVideoDatasetAdapter(Dataset):
     # Simple (single-frame) access
     # ------------------------------------------------------------------
 
+    def _apply_image_transforms(self, images: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Apply ``image_transforms`` to each camera tensor in-place.
+
+        Handles both single-frame ``(C, H, W)`` and temporal ``(T, C, H, W)``
+        layouts.  When the tensor has a temporal axis the transform is applied
+        independently to each frame.
+        """
+        if self._image_transforms is None:
+            return images
+        transformed: dict[str, torch.Tensor] = {}
+        for cam_name, tensor in images.items():
+            if tensor.ndim == 3:
+                transformed[cam_name] = self._image_transforms(tensor)
+            elif tensor.ndim == 4:
+                transformed[cam_name] = torch.stack([self._image_transforms(tensor[t]) for t in range(tensor.shape[0])])
+            else:
+                transformed[cam_name] = tensor
+        return transformed
+
     def _getitem_simple(self, idx: int) -> Observation:
         """Retrieve a single-frame observation without temporal windowing."""
         episode_idx, video_frame_idx, data_row_idx = self._frame_index.lookup(idx)
@@ -257,6 +290,8 @@ class RawVideoDatasetAdapter(Dataset):
         action_tensor = torch.from_numpy(self._action_data[episode_idx][data_row_idx].copy())
 
         timestamp = video_frame_idx / self._manifest.fps
+
+        images = self._apply_image_transforms(images)
 
         return Observation(
             action=action_tensor,
@@ -364,6 +399,8 @@ class RawVideoDatasetAdapter(Dataset):
                 images[cam.name] = decode_frame(video_path, video_frame_idx)
 
         timestamp = video_frame_idx / self._manifest.fps
+
+        images = self._apply_image_transforms(images)
 
         return Observation(
             action=action_tensor,

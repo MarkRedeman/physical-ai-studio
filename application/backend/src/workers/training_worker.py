@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from multiprocessing.synchronize import Event as EventClass
 
 from loguru import logger
-from physicalai.data import LeRobotDataModule
+from physicalai.data import DataModule, LeRobotDataModule
 from physicalai.train import Trainer
 
 from schemas import Job, Model, Snapshot
@@ -90,6 +90,30 @@ class TrainingWorker(BaseProcessWorker):
                 raise RuntimeError("The event loop must be set.")
             self.loop.run_until_complete(TrainingService.abort_orphan_jobs())
 
+    @staticmethod
+    def _create_datamodule(snapshot_path: Path) -> DataModule:
+        """Create the appropriate DataModule based on the dataset format at *snapshot_path*.
+
+        If the snapshot directory contains a ``manifest.json`` file the dataset
+        is treated as a raw-video dataset and loaded via
+        :class:`RawVideoDatasetAdapter`.  Otherwise, it is assumed to be in
+        LeRobot format and loaded via :class:`LeRobotDataModule`.
+        """
+        manifest_file = snapshot_path / "manifest.json"
+        if manifest_file.exists():
+            from internal_datasets.raw_video import RawVideoDatasetAdapter
+
+            logger.info("Detected raw-video dataset at {}", snapshot_path)
+            dataset = RawVideoDatasetAdapter(snapshot_path)
+            return DataModule(train_dataset=dataset, train_batch_size=8)
+
+        logger.info("Loading LeRobot dataset from {}", snapshot_path)
+        return LeRobotDataModule(
+            repo_id="snapshot",  # doesn't matter for loading the data.
+            root=str(snapshot_path),
+            train_batch_size=8,
+        )
+
     async def _train_model(self, job: Job, model: Model, snapshot: Snapshot):
         settings = get_settings()
         await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Training started")
@@ -100,12 +124,9 @@ class TrainingWorker(BaseProcessWorker):
         )
         try:
             path = Path(model.path)
+            snapshot_path = Path(str(snapshot.path))
 
-            l_dm = LeRobotDataModule(
-                repo_id="snapshot",  # doesnt matter for loading the data.
-                root=snapshot.path,
-                train_batch_size=8,
-            )
+            datamodule = self._create_datamodule(snapshot_path)
             policy = setup_policy(model)
 
             checkpoint_callback = ModelCheckpoint(
@@ -133,7 +154,7 @@ class TrainingWorker(BaseProcessWorker):
             )
 
             dispatcher.start()
-            trainer.fit(model=policy, datamodule=l_dm)
+            trainer.fit(model=policy, datamodule=datamodule)
 
             for backend in settings.supported_backends:
                 export_dir = path / "exports" / backend
