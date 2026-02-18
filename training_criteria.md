@@ -9,7 +9,7 @@ it flows through the training pipeline.
 ## 1. High-Level Training Flow
 
 ```
-Dataset on disk (LeRobot v2.1 format)
+Dataset on disk (LeRobot v3.0 format, lerobot 0.4.2)
   -> SnapshotService copies the entire directory tree
   -> LeRobotDataModule wraps the snapshot as a _LeRobotDatasetAdapter
   -> Policy.setup() reads dataset.stats and dataset features
@@ -25,29 +25,45 @@ statistics and feature metadata to configure normalization and architecture para
 
 ---
 
-## 2. On-Disk Dataset Structure (LeRobot v2.1)
+## 2. On-Disk Dataset Structure (LeRobot v3.0)
 
+The backend uses lerobot `0.4.2` which writes datasets in `CODEBASE_VERSION = "v3.0"` format.
 A valid dataset must have this directory layout:
 
 ```
 <dataset_root>/
 ├── meta/
 │   ├── info.json              # REQUIRED - the only existence check performed
-│   ├── episodes.jsonl         # Episode boundaries and metadata
-│   ├── episodes_stats.jsonl   # Per-episode statistics (v2.1+)
-│   ├── stats.json             # Aggregated statistics (v2.0 compat)
-│   └── tasks.jsonl            # Task descriptions
+│   ├── stats.json             # Aggregated global statistics
+│   ├── tasks.parquet          # Task index <-> task string mapping
+│   └── episodes/
+│       └── chunk-000/
+│           └── file-000.parquet   # Episode metadata + per-episode stats
 ├── data/
 │   └── chunk-000/
-│       ├── episode_000000.parquet
-│       ├── episode_000001.parquet
+│       ├── file-000.parquet   # Consolidated multi-episode frame data
+│       ├── file-001.parquet   # New file when previous exceeds ~100 MB
 │       └── ...
 └── videos/
-    └── chunk-000/
-        └── observation.images.<camera_name>/
-            ├── episode_000000.mp4
+    └── observation.images.<camera_name>/
+        └── chunk-000/
+            ├── file-000.mp4   # Consolidated multi-episode video
             └── ...
 ```
+
+**Key v3.0 changes vs v2.1:**
+- Data files are **consolidated** (multiple episodes per parquet file), size-limited
+  to `data_files_size_in_mb` (default: 100 MB), not one-per-episode.
+- Video files are **consolidated** (multiple episodes per mp4), size-limited to
+  `video_files_size_in_mb` (default: 200 MB), not one-per-episode.
+- Episode metadata moved from `meta/episodes.jsonl` (JSONL) to chunked Parquet files
+  under `meta/episodes/chunk-NNN/file-NNN.parquet`.
+- Per-episode stats are **embedded in the episode Parquet files** as flattened
+  `stats/` columns (no separate `meta/episodes_stats.jsonl`).
+- Tasks moved from `meta/tasks.jsonl` (JSONL) to `meta/tasks.parquet`.
+- File naming changed from `episode_{NNNNNN}` to `file-{NNN}`.
+- Video files are nested under the video key directory:
+  `videos/{video_key}/chunk-NNN/file-NNN.mp4`.
 
 **Existence check**: The application only validates that `meta/info.json` exists
 (`InternalLeRobotDataset._check_repository_exists()` at
@@ -58,19 +74,22 @@ Everything else is delegated to the upstream `lerobot` library.
 
 | Field | Type | Description |
 |---|---|---|
-| `codebase_version` | string | LeRobot format version (e.g., `"v2.1"`) |
-| `robot_type` | string | Robot identifier (e.g., `"so100"`, `"aloha"`) |
+| `codebase_version` | string | LeRobot format version (`"v3.0"`) |
+| `robot_type` | string | Robot identifier (e.g., `"so100"`, `"aloha"`) or `null` |
 | `total_episodes` | int | Number of episodes in the dataset |
 | `total_frames` | int | Total number of frames across all episodes |
 | `total_tasks` | int | Number of unique tasks |
-| `total_videos` | int | Number of video files |
-| `total_chunks` | int | Number of data chunks |
-| `chunks_size` | int | Max episodes per chunk (default: 1000) |
+| `chunks_size` | int | Max files per chunk directory (default: 1000) |
+| `data_files_size_in_mb` | int | Max size per data parquet file (default: 100) |
+| `video_files_size_in_mb` | int | Max size per video file (default: 200) |
 | `fps` | int | Frames per second of the recording |
 | `splits` | dict | Train/test splits |
-| `data_path` | string | Format string for parquet file paths |
-| `video_path` | string | Format string for video file paths |
+| `data_path` | string | Format string: `"data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"` |
+| `video_path` | string | Format string: `"videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"` |
 | `features` | dict | Feature definitions (see below) |
+
+**Fields removed vs v2.1:** `total_videos` and `total_chunks` are no longer present.
+Chunking is now dynamic (size-based) rather than episode-count-based.
 
 ### Feature Definitions (in `info.json`)
 
@@ -134,7 +153,7 @@ prefix format.
 
 The LeRobot library computes per-feature normalization statistics when a dataset is
 finalized. These are **not computed by geti-action code** -- they come entirely from
-the upstream `lerobot` library. The stats contain four values per feature:
+the upstream `lerobot` library. The stats contain these values per feature:
 
 | Stat | Description |
 |---|---|
@@ -142,10 +161,25 @@ the upstream `lerobot` library. The stats contain four values per feature:
 | `std` | Element-wise standard deviation |
 | `min` | Element-wise minimum value |
 | `max` | Element-wise maximum value |
+| `count` | Number of samples (v3.0+) |
+| `q01` | 1st percentile (v3.0+) |
+| `q10` | 10th percentile (v3.0+) |
+| `q50` | 50th percentile / median (v3.0+) |
+| `q90` | 90th percentile (v3.0+) |
+| `q99` | 99th percentile (v3.0+) |
 
-For **v2.0** datasets, stats are stored in `meta/stats.json` (single aggregated file).
-For **v2.1+** datasets, per-episode stats are stored in `meta/episodes_stats.jsonl`
-and aggregated at load time.
+**Storage in v3.0:**
+- **Global (aggregated) stats**: `meta/stats.json` -- a JSON file with all features'
+  aggregated statistics. This is the primary source consumed during training.
+- **Per-episode stats**: Embedded in the episode metadata Parquet files at
+  `meta/episodes/chunk-NNN/file-NNN.parquet` as flattened columns with prefix
+  `stats/{feature_name}/{stat_name}` (e.g., `stats/observation.state/mean`).
+  These are stripped out during loading for performance and are only used for
+  incremental aggregation.
+
+**Difference from v2.1:** In v2.1, per-episode stats were in a separate
+`meta/episodes_stats.jsonl` file. In v3.0, they are co-located in the episode
+Parquet files. The global `meta/stats.json` file remains the same.
 
 ### 4.2. Stats Structure in Memory
 
@@ -301,9 +335,11 @@ Uses `library/src/getiaction/policies/pi0/preprocessor.py`.
 - **ACTION**: Normalized with `mean`/`std` (or `q01`/`q99`)
 - **VISUAL**: Not normalized by the normalization module (scaled to `[-1, 1]` directly)
 
-Has `NormStats` dataclass with `mean`, `std`, `q01`, `q99` fields. The `q01`/`q99`
-quantile fields are **not provided by LeRobot's default stats** -- they would need
-to be computed separately if quantile normalization is desired.
+Has `NormStats` dataclass with `mean`, `std`, `q01`, `q99` fields. In v3.0,
+LeRobot now computes and stores `q01`/`q99` (along with `q10`, `q50`, `q90`) in
+`meta/stats.json`. However, geti-action's `_LeRobotDatasetAdapter` currently only
+extracts `mean`/`std`/`min`/`max`, so quantile normalization would require adapter
+changes to pass through the quantile values.
 
 State is padded to `max_state_dim=32`, action to `max_action_dim=32`, action
 sequence padded to `chunk_size=50`.
@@ -375,14 +411,16 @@ The `dtype` field in the feature definition determines visual vs. state:
 
 ## 8. Summary Checklist for a Valid Training Dataset
 
-- [ ] `meta/info.json` exists and contains valid metadata
-- [ ] `meta/episodes.jsonl` lists all episodes with boundaries
-- [ ] `meta/tasks.jsonl` contains at least one task
-- [ ] `meta/stats.json` or `meta/episodes_stats.jsonl` contains normalization
-      statistics for ALL features (observation.state, observation.images.*, action)
-- [ ] Each stat entry has all four fields: `mean`, `std`, `min`, `max`
-- [ ] Parquet files exist in `data/chunk-NNN/` with all non-video features as columns
-- [ ] Video files exist in `videos/chunk-NNN/observation.images.<camera>/` for each camera
+- [ ] `meta/info.json` exists and contains valid metadata with `codebase_version: "v3.0"`
+- [ ] `meta/episodes/chunk-NNN/file-NNN.parquet` lists all episodes with boundaries
+- [ ] `meta/tasks.parquet` contains at least one task
+- [ ] `meta/stats.json` contains aggregated normalization statistics for ALL features
+      (observation.state, observation.images.*, action)
+- [ ] Each stat entry has at minimum: `mean`, `std`, `min`, `max`
+      (v3.0 also provides `count`, `q01`, `q10`, `q50`, `q90`, `q99`)
+- [ ] Parquet files exist in `data/chunk-NNN/file-NNN.parquet` with all non-video features
+- [ ] Video files exist in `videos/observation.images.<camera>/chunk-NNN/file-NNN.mp4`
+      for each camera
 - [ ] At least one `observation.state` feature with joint positions
 - [ ] At least one `observation.images.*` feature (video/image)
 - [ ] Exactly one `action` feature matching the robot's joint dimensions
@@ -390,6 +428,8 @@ The `dtype` field in the feature definition determines visual vs. state:
 - [ ] Video frame count matches the parquet row count per episode
 - [ ] Feature shapes in `info.json` match actual data dimensions
 - [ ] Visual feature shapes are `(H, W, C)` in metadata (adapter handles transposition to `(C, H, W)`)
+- [ ] `data_path` and `video_path` format strings in `info.json` use v3.0 naming
+      (`file-{file_index:03d}` not `episode_{episode_index:06d}`)
 
 ---
 
@@ -404,18 +444,25 @@ The `dtype` field in the feature definition determines visual vs. state:
    datasets have the `names` field wrong (`"channel"` vs `"channels"` at index 2),
    which the adapter handles, but it's a source of bugs.
 
-3. **Quantile stats (`q01`/`q99`) not provided by LeRobot**. Pi0 supports quantile
-   normalization, but LeRobot's default stats only include `mean`/`std`/`min`/`max`.
-   If `use_quantile_norm=True` is set but quantiles aren't available, Pi0 falls back
-   to `mean`/`std` normalization silently.
+3. **Quantile stats (`q01`/`q99`) now available in v3.0**. Pi0 supports quantile
+   normalization, and v3.0 stats now include `q01`, `q10`, `q50`, `q90`, `q99` in
+   addition to `mean`/`std`/`min`/`max`. However, geti-action's
+   `_LeRobotDatasetAdapter` only extracts `mean`/`std`/`min`/`max` from
+   `dataset.meta.stats`, so the quantile values are available on disk but not
+   passed through to the policies. If `use_quantile_norm=True` is set on Pi0
+   without adapter changes, it will fall back to `mean`/`std` normalization.
 
 4. **Stats shape for images**. Image stats are channel-wise: shape `(C, 1, 1)` not
    `(C, H, W)`. The normalization code reshapes to `(channels, 1, 1)` for
    broadcasting. If stats have the wrong shape, normalization will fail.
 
-5. **`tasks.jsonl` vs `tasks.parquet`**. Older LeRobot versions used parquet for
-   tasks; current v2.1 uses JSONL. A version mismatch causes
-   `FileNotFoundError: No such file or directory: .../meta/tasks.parquet`.
+5. **`tasks.parquet` vs `tasks.jsonl` format mismatch**. v3.0 uses `meta/tasks.parquet`;
+   older versions used `meta/tasks.jsonl`. If a dataset was created with an older
+   LeRobot version (e.g., v2.1) and is loaded by the current backend (v3.0 / lerobot
+   0.4.2), the library will look for `meta/tasks.parquet` and fail with
+   `FileNotFoundError: No such file or directory: .../meta/tasks.parquet`. Similarly,
+   episode metadata changed from `meta/episodes.jsonl` to chunked Parquet files under
+   `meta/episodes/`. Datasets must be migrated to v3.0 format before training.
 
 6. **Snapshot is a full directory copy**. The `SnapshotService` does a
    `shutil.copytree()` of the entire dataset directory. For large datasets with
@@ -443,3 +490,20 @@ The `dtype` field in the feature definition determines visual vs. state:
     the dataset contents before starting training. If the dataset is malformed
     (e.g., missing features, corrupted videos), the error will surface during
     the training loop, potentially after significant computation.
+
+12. **Library `.venv` has stale lerobot version**. The `library/.venv` has lerobot
+    `0.3.3` installed (v2.1 format), but the library's `pyproject.toml` requires
+    `>=0.4.1`. The backend `.venv` correctly has `0.4.2` (v3.0). Training runs in
+    the backend venv, so this only matters if library tests are run against the
+    stale venv without reinstalling dependencies.
+
+13. **Consolidated video seeking**. In v3.0, multiple episodes are concatenated into
+    single video files. The episode metadata stores `from_timestamp` / `to_timestamp`
+    per video key to locate each episode within the concatenated file. If these
+    timestamps are wrong or missing, video frame decoding will return frames from
+    the wrong episode.
+
+14. **Episode metadata includes per-episode stats as flattened columns**. When loading
+    episodes, the `load_episodes()` function strips all columns starting with
+    `stats/` for performance. If code directly reads episode parquet files without
+    this filtering, it may get unexpectedly wide DataFrames.
