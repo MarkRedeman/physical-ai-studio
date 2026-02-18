@@ -72,21 +72,21 @@ Everything else is delegated to the upstream `lerobot` library.
 
 ### `info.json` Contents
 
-| Field | Type | Description |
-|---|---|---|
-| `codebase_version` | string | LeRobot format version (`"v3.0"`) |
-| `robot_type` | string | Robot identifier (e.g., `"so100"`, `"aloha"`) or `null` |
-| `total_episodes` | int | Number of episodes in the dataset |
-| `total_frames` | int | Total number of frames across all episodes |
-| `total_tasks` | int | Number of unique tasks |
-| `chunks_size` | int | Max files per chunk directory (default: 1000) |
-| `data_files_size_in_mb` | int | Max size per data parquet file (default: 100) |
-| `video_files_size_in_mb` | int | Max size per video file (default: 200) |
-| `fps` | int | Frames per second of the recording |
-| `splits` | dict | Train/test splits |
-| `data_path` | string | Format string: `"data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"` |
-| `video_path` | string | Format string: `"videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"` |
-| `features` | dict | Feature definitions (see below) |
+| Field                    | Type   | Description                                                                             |
+|--------------------------|--------|-----------------------------------------------------------------------------------------|
+| `codebase_version`       | string | LeRobot format version (`"v3.0"`)                                                       |
+| `robot_type`             | string | Robot identifier (e.g., `"so100"`, `"aloha"`) or `null`                                 |
+| `total_episodes`         | int    | Number of episodes in the dataset                                                       |
+| `total_frames`           | int    | Total number of frames across all episodes                                              |
+| `total_tasks`            | int    | Number of unique tasks                                                                  |
+| `chunks_size`            | int    | Max files per chunk directory (default: 1000)                                           |
+| `data_files_size_in_mb`  | int    | Max size per data parquet file (default: 100)                                           |
+| `video_files_size_in_mb` | int    | Max size per video file (default: 200)                                                  |
+| `fps`                    | int    | Frames per second of the recording                                                      |
+| `splits`                 | dict   | Train/test splits                                                                       |
+| `data_path`              | string | Format string: `"data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"`           |
+| `video_path`             | string | Format string: `"videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"` |
+| `features`               | dict   | Feature definitions (see below)                                                         |
 
 **Fields removed vs v2.1:** `total_videos` and `total_chunks` are no longer present.
 Chunking is now dynamic (size-based) rather than episode-count-based.
@@ -126,16 +126,16 @@ Each feature in the `features` dict has:
 
 Every sample (frame) returned by the dataset's `__getitem__` must contain:
 
-| Key | Type | Required | Description |
-|---|---|---|---|
-| `observation.state` | Tensor `(D,)` | Yes | Robot joint positions / proprioceptive state |
-| `observation.images.<camera>` | Tensor `(C, H, W)` | Yes (at least one) | Camera frame (decoded from video) |
-| `action` | Tensor `(D,)` | Yes | Robot joint commands / action |
-| `episode_index` | int tensor | Yes | Which episode this frame belongs to |
-| `frame_index` | int tensor | Yes | Frame position within its episode |
-| `index` | int tensor | Yes | Global frame index across all episodes |
-| `task_index` | int tensor | Yes | Index into the tasks table |
-| `timestamp` | float tensor | Yes | Timestamp in seconds |
+| Key                           | Type               | Required           | Description                                  |
+|-------------------------------|--------------------|--------------------|----------------------------------------------|
+| `observation.state`           | Tensor `(D,)`      | Yes                | Robot joint positions / proprioceptive state |
+| `observation.images.<camera>` | Tensor `(C, H, W)` | Yes (at least one) | Camera frame (decoded from video)            |
+| `action`                      | Tensor `(D,)`      | Yes                | Robot joint commands / action                |
+| `episode_index`               | int tensor         | Yes                | Which episode this frame belongs to          |
+| `frame_index`                 | int tensor         | Yes                | Frame position within its episode            |
+| `index`                       | int tensor         | Yes                | Global frame index across all episodes       |
+| `task_index`                  | int tensor         | Yes                | Index into the tasks table                   |
+| `timestamp`                   | float tensor       | Yes                | Timestamp in seconds                         |
 
 These are validated in `_convert_lerobot_dict_to_observation()`
 (`library/src/getiaction/data/lerobot/converters.py:72-90`).
@@ -155,18 +155,18 @@ The LeRobot library computes per-feature normalization statistics when a dataset
 finalized. These are **not computed by geti-action code** -- they come entirely from
 the upstream `lerobot` library. The stats contain these values per feature:
 
-| Stat | Description |
-|---|---|
-| `mean` | Element-wise mean across all frames in the dataset |
-| `std` | Element-wise standard deviation |
-| `min` | Element-wise minimum value |
-| `max` | Element-wise maximum value |
-| `count` | Number of samples (v3.0+) |
-| `q01` | 1st percentile (v3.0+) |
-| `q10` | 10th percentile (v3.0+) |
-| `q50` | 50th percentile / median (v3.0+) |
-| `q90` | 90th percentile (v3.0+) |
-| `q99` | 99th percentile (v3.0+) |
+| Stat    | Description                                        |
+|---------|----------------------------------------------------|
+| `mean`  | Element-wise mean across all frames in the dataset |
+| `std`   | Element-wise standard deviation                    |
+| `min`   | Element-wise minimum value                         |
+| `max`   | Element-wise maximum value                         |
+| `count` | Number of samples (v3.0+)                          |
+| `q01`   | 1st percentile (v3.0+)                             |
+| `q10`   | 10th percentile (v3.0+)                            |
+| `q50`   | 50th percentile / median (v3.0+)                   |
+| `q90`   | 90th percentile (v3.0+)                            |
+| `q99`   | 99th percentile (v3.0+)                            |
 
 **Storage in v3.0:**
 - **Global (aggregated) stats**: `meta/stats.json` -- a JSON file with all features'
@@ -395,12 +395,12 @@ from the policy's config and sets them on the dataset.
 
 The adapter classifies features into types based on metadata:
 
-| Feature Key Pattern | `dtype` | Classified As |
-|---|---|---|
-| `observation.state` | `float32` | `FeatureType.STATE` |
-| `observation.environment_state` | `float32` | `FeatureType.ENV` |
-| `observation.images.*` | `image` or `video` | `FeatureType.VISUAL` |
-| `action` | `float32` | `FeatureType.ACTION` |
+| Feature Key Pattern             | `dtype`            | Classified As        |
+|---------------------------------|--------------------|----------------------|
+| `observation.state`             | `float32`          | `FeatureType.STATE`  |
+| `observation.environment_state` | `float32`          | `FeatureType.ENV`    |
+| `observation.images.*`          | `image` or `video` | `FeatureType.VISUAL` |
+| `action`                        | `float32`          | `FeatureType.ACTION` |
 
 The `dtype` field in the feature definition determines visual vs. state:
 - `"image"` or `"video"` -> `VISUAL`

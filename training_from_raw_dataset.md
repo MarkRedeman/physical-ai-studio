@@ -26,16 +26,16 @@ Your data -> _LeRobotDatasetAdapter (or replacement) -> Dataset abstract class -
 
 Policies only access:
 
-| Property / Method | Purpose |
-|---|---|
-| `dataset.observation_features` | `dict[str, Feature]` with `NormalizationParameters` |
-| `dataset.action_features` | `dict[str, Feature]` with `NormalizationParameters` |
-| `dataset.stats` | Derived automatically from the above two properties |
-| `dataset.fps` | Integer FPS of the dataset |
-| `dataset.tolerance_s` | Float tolerance for delta timestamp validation |
-| `dataset.delta_indices` | Temporal windowing offsets (set by `reformat_dataset_to_match_policy()`) |
-| `dataset.__getitem__(idx)` | Returns an `Observation` dataclass |
-| `dataset.__len__()` | Total number of frames |
+| Property / Method              | Purpose                                                                  |
+|--------------------------------|--------------------------------------------------------------------------|
+| `dataset.observation_features` | `dict[str, Feature]` with `NormalizationParameters`                      |
+| `dataset.action_features`      | `dict[str, Feature]` with `NormalizationParameters`                      |
+| `dataset.stats`                | Derived automatically from the above two properties                      |
+| `dataset.fps`                  | Integer FPS of the dataset                                               |
+| `dataset.tolerance_s`          | Float tolerance for delta timestamp validation                           |
+| `dataset.delta_indices`        | Temporal windowing offsets (set by `reformat_dataset_to_match_policy()`) |
+| `dataset.__getitem__(idx)`     | Returns an `Observation` dataclass                                       |
+| `dataset.__len__()`            | Total number of frames                                                   |
 
 **Nothing in the training path reads `info.json`, `tasks.parquet`, `episodes/`
 metadata, or `stats.json` directly.** All of that is consumed by the upstream
@@ -48,16 +48,16 @@ metadata, or `stats.json` directly.** All of that is consumed by the upstream
 The base class is `library/src/getiaction/data/dataset.py`. A valid dataset
 implementation must provide:
 
-| Member | Type | Signature |
-|---|---|---|
-| `__getitem__` | abstractmethod | `(self, idx: int) -> Observation` |
-| `__len__` | abstractmethod | `(self) -> int` |
-| `raw_features` | abstract property | `-> dict` |
-| `observation_features` | abstract property | `-> dict[str, Feature]` |
-| `action_features` | abstract property | `-> dict[str, Feature]` |
-| `fps` | abstract property | `-> int` |
-| `tolerance_s` | abstract property | `-> float` |
-| `delta_indices` | abstract property | getter + setter |
+| Member                 | Type              | Signature                         |
+|------------------------|-------------------|-----------------------------------|
+| `__getitem__`          | abstractmethod    | `(self, idx: int) -> Observation` |
+| `__len__`              | abstractmethod    | `(self) -> int`                   |
+| `raw_features`         | abstract property | `-> dict`                         |
+| `observation_features` | abstract property | `-> dict[str, Feature]`           |
+| `action_features`      | abstract property | `-> dict[str, Feature]`           |
+| `fps`                  | abstract property | `-> int`                          |
+| `tolerance_s`          | abstract property | `-> float`                        |
+| `delta_indices`        | abstract property | getter + setter                   |
 
 The `stats` property is **concrete** on the base class -- it derives entirely from
 `observation_features` and `action_features`. You do not need to implement it; you
@@ -65,12 +65,12 @@ just need to ensure your features carry correct `NormalizationParameters`.
 
 ### 2.2. What Each Policy Reads
 
-| Policy | What It Reads From the Dataset |
-|---|---|
-| ACT | `observation_features`, `action_features` |
-| Pi0 | `stats` (which reads `observation_features` + `action_features`) |
-| Groot | `stats`, `action_features` |
-| SmolVLA | `stats` (same as Pi0) |
+| Policy  | What It Reads From the Dataset                                   |
+|---------|------------------------------------------------------------------|
+| ACT     | `observation_features`, `action_features`                        |
+| Pi0     | `stats` (which reads `observation_features` + `action_features`) |
+| Groot   | `stats`, `action_features`                                       |
+| SmolVLA | `stats` (same as Pi0)                                            |
 
 All policies also interact with `delta_indices` via `reformat_dataset_to_match_policy()`.
 
@@ -89,14 +89,14 @@ All policies also interact with `delta_indices` via `reformat_dataset_to_match_p
 A custom adapter that implements the `Dataset` abstract interface. The requirements
 break down as follows:
 
-| Requirement | How to Satisfy | Online Computable? |
-|---|---|---|
-| **Stats** (mean/std/min/max per feature) | Single pass over all frames. Running stats for state/action, channel-wise stats for images. | Yes. Compute once, cache locally. |
-| **Feature metadata** (shape, dtype, name) | Infer from data: video resolution gives image shape, vector lengths give state/action shapes. | Yes. Trivial. |
-| **`__getitem__` returning `Observation`** | Decode video frame at index, pair with corresponding action/state. Handle FPS mismatch. | Yes. |
-| **`episode_data_index`** | **Not needed.** Never accessed during training. | N/A |
-| **`delta_indices`** (temporal windowing) | Must be a settable attribute. `reformat_dataset_to_match_policy()` writes it based on policy config. Your `__getitem__` must respect it. | Yes, but `__getitem__` must handle multi-timestep queries. |
-| **FPS alignment** | If video and state/action are at different FPS, resample to a unified FPS. | Yes. |
+| Requirement                               | How to Satisfy                                                                                                                           | Online Computable?                                         |
+|-------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| **Stats** (mean/std/min/max per feature)  | Single pass over all frames. Running stats for state/action, channel-wise stats for images.                                              | Yes. Compute once, cache locally.                          |
+| **Feature metadata** (shape, dtype, name) | Infer from data: video resolution gives image shape, vector lengths give state/action shapes.                                            | Yes. Trivial.                                              |
+| **`__getitem__` returning `Observation`** | Decode video frame at index, pair with corresponding action/state. Handle FPS mismatch.                                                  | Yes.                                                       |
+| **`episode_data_index`**                  | **Not needed.** Never accessed during training.                                                                                          | N/A                                                        |
+| **`delta_indices`** (temporal windowing)  | Must be a settable attribute. `reformat_dataset_to_match_policy()` writes it based on policy config. Your `__getitem__` must respect it. | Yes, but `__getitem__` must handle multi-timestep queries. |
+| **FPS alignment**                         | If video and state/action are at different FPS, resample to a unified FPS.                                                               | Yes.                                                       |
 
 ---
 
@@ -341,15 +341,15 @@ only through the abstract `Dataset` interface, which your adapter implements.
 
 ## 9. Effort Estimate
 
-| Component | Complexity | Notes |
-|---|---|---|
-| FPS alignment / frame indexing | Moderate | One-time computation, but must handle edge cases (rounding, boundary alignment) |
-| Video frame decoding in `__getitem__` | Moderate | Standard with `decord` or `torchvision.io`; temporal windowing adds complexity |
-| Temporal windowing (`delta_indices`) | Moderate | Must replicate LeRobot's `__getitem__` logic for clamping, padding, and `*_is_pad` masks |
-| Online stats computation + caching | Straightforward | Single-pass Welford's for state/action; channel-wise for images |
-| Feature metadata inference | Trivial | Read shapes from data files |
-| `Observation` construction | Straightforward | Follow `FormatConverter.to_observation()` pattern |
-| Integration with `DataModule` | Trivial | Base `DataModule` accepts `train_dataset` directly |
+| Component                             | Complexity      | Notes                                                                                    |
+|---------------------------------------|-----------------|------------------------------------------------------------------------------------------|
+| FPS alignment / frame indexing        | Moderate        | One-time computation, but must handle edge cases (rounding, boundary alignment)          |
+| Video frame decoding in `__getitem__` | Moderate        | Standard with `decord` or `torchvision.io`; temporal windowing adds complexity           |
+| Temporal windowing (`delta_indices`)  | Moderate        | Must replicate LeRobot's `__getitem__` logic for clamping, padding, and `*_is_pad` masks |
+| Online stats computation + caching    | Straightforward | Single-pass Welford's for state/action; channel-wise for images                          |
+| Feature metadata inference            | Trivial         | Read shapes from data files                                                              |
+| `Observation` construction            | Straightforward | Follow `FormatConverter.to_observation()` pattern                                        |
+| Integration with `DataModule`         | Trivial         | Base `DataModule` accepts `train_dataset` directly                                       |
 
 **No changes needed to**: policies, normalization code, training worker (beyond
 the `DataModule` construction), or the library's data abstract classes.
