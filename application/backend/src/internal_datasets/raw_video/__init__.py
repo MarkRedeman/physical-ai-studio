@@ -28,10 +28,13 @@ Example usage::
 from __future__ import annotations
 
 from .adapter import RawVideoDatasetAdapter
+from .converters import LeRobotToRawVideoConverter, RawVideoToLeRobotConverter
 from .manifest import DatasetManifest, load_manifest
 
 __all__ = [
     "DatasetManifest",
+    "LeRobotToRawVideoConverter",
     "RawVideoDatasetAdapter",
+    "RawVideoToLeRobotConverter",
     "load_manifest",
 ]
