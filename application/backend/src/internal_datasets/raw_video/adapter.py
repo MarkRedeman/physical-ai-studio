@@ -42,7 +42,7 @@ from getiaction.data.observation import Feature, FeatureType, NormalizationParam
 from .frame_index import FrameIndex
 from .manifest import load_manifest
 from .stats import DatasetStats, load_or_compute_stats
-from .video_decode import decode_frame, decode_frames
+from .video_decode import decode_frame, decode_frames, get_video_info
 
 if TYPE_CHECKING:
     from .manifest import DatasetManifest
@@ -176,6 +176,15 @@ class RawVideoDatasetAdapter(Dataset):
         self._timestamps: list[np.ndarray]
         self._state_data, self._action_data, self._timestamps = _load_jsonl_data(self._manifest, self._dataset_root)
 
+        # Probe camera image shapes from the first episode's videos.
+        self._camera_shapes: dict[str, tuple[int, ...]] = {}
+        if self._manifest.episodes:
+            first_ep = self._manifest.episodes[0]
+            for cam in self._manifest.cameras:
+                video_path = self._dataset_root / first_ep.episode_dir / first_ep.video_files[cam.name]
+                info = get_video_info(video_path)
+                self._camera_shapes[cam.name] = (3, info.height, info.width)
+
         # Load (or lazily compute and cache) normalization statistics.
         self._stats: DatasetStats = load_or_compute_stats(self._manifest, self._frame_index, self._dataset_root)
 
@@ -273,7 +282,7 @@ class RawVideoDatasetAdapter(Dataset):
         """
         episode_idx, video_frame_idx, data_row_idx = self._frame_index.lookup(idx)
         episode = self._manifest.episodes[episode_idx]
-        ep_start, ep_end = self._frame_index.episode_range(episode_idx)
+        ep_start, ep_end = self._frame_index.get_episode_range(episode_idx)
 
         # Containers for the final observation fields.
         action_tensor: torch.Tensor | None = None
@@ -396,7 +405,7 @@ class RawVideoDatasetAdapter(Dataset):
         }
 
         for cam in self._manifest.cameras:
-            shape = self._frame_index.camera_shape(cam.name)  # (C, H, W)
+            shape = self._camera_shapes[cam.name]  # (C, H, W)
             features[f"observation.images.{cam.name}"] = {
                 "dtype": "video",
                 "shape": shape,
@@ -431,8 +440,8 @@ class RawVideoDatasetAdapter(Dataset):
 
         # Camera features.
         for cam in self._manifest.cameras:
-            cam_stats = self._stats.cameras[cam.name]
-            shape = self._frame_index.camera_shape(cam.name)  # (C, H, W)
+            cam_stats = self._stats.images[cam.name]
+            shape = self._camera_shapes[cam.name]  # (C, H, W)
             features[cam.name] = Feature(
                 ftype=FeatureType.VISUAL,
                 shape=shape,

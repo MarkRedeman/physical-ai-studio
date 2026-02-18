@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -249,11 +250,13 @@ def compute_stats(
     camera_names = [cam.name for cam in manifest.cameras]
     image_stats: dict[str, dict[str, list[float]]] = {}
 
-    if total_frames > 0 and camera_names:
-        sample_count = min(image_sample_count, total_frames)
+    total_dataset_frames = frame_index.total_frames
+
+    if total_dataset_frames > 0 and camera_names:
+        sample_count = min(image_sample_count, total_dataset_frames)
         # Uniformly spaced global frame indices
-        sample_indices = np.linspace(0, total_frames - 1, sample_count, dtype=int)
-        # Remove duplicates (can happen when total_frames < sample_count)
+        sample_indices = np.linspace(0, total_dataset_frames - 1, sample_count, dtype=int)
+        # Remove duplicates (can happen when total_dataset_frames < sample_count)
         sample_indices = np.unique(sample_indices)
         sample_count = len(sample_indices)
 
@@ -266,20 +269,24 @@ def compute_stats(
         for cam_name in camera_names:
             acc = WelfordAccumulator(3)  # RGB channels
 
-            # Decode the sampled frames for this camera.
-            frames = decode_frames(
-                frame_index=frame_index,
-                camera_name=cam_name,
-                global_indices=sample_indices.tolist(),
-                dataset_root=dataset_root,
-            )
+            # Group sampled global indices by episode so we can batch-decode
+            # frames from each video file efficiently.
+            episode_frame_map: dict[int, list[int]] = defaultdict(list)
+            for g_idx in sample_indices:
+                ep_idx_s, vid_frame, _ = frame_index.lookup(int(g_idx))
+                episode_frame_map[ep_idx_s].append(vid_frame)
 
-            for frame in frames:
-                # frame: float32, shape (C, H, W), values in [0, 1].
-                # Flatten spatial dims so each pixel becomes a sample for
-                # per-channel stats.  shape -> (C, H*W) -> (H*W, C)
-                pixels = frame.reshape(frame.shape[0], -1).T  # (H*W, C)
-                acc.update_batch(pixels)
+            for ep_idx_s, vid_frames in sorted(episode_frame_map.items()):
+                episode = manifest.episodes[ep_idx_s]
+                video_path = dataset_root / episode.episode_dir / episode.video_files[cam_name]
+                frames_tensor = decode_frames(video_path, vid_frames)  # (N, C, H, W)
+
+                for frame in frames_tensor:
+                    # frame: float32, shape (C, H, W), values in [0, 1].
+                    # Flatten spatial dims so each pixel becomes a sample for
+                    # per-channel stats.  shape -> (C, H*W) -> (H*W, C)
+                    pixels = frame.numpy().reshape(frame.shape[0], -1).T  # (H*W, C)
+                    acc.update_batch(pixels)
 
             image_stats[cam_name] = _accumulator_to_dict(acc)
             logger.info(
