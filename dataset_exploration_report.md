@@ -3,9 +3,7 @@
 This document evaluates LeRobot's v3.0 dataset format from the perspective of a
 platform that needs to **acquire**, **review/manipulate**, and **train on**
 teleoperation data. It identifies where the current format creates friction for
-non-training workflows and proposes an architecture that addresses these gaps,
-building on the raw-video dataset module already implemented in
-`application/backend/src/internal_datasets/raw_video/`.
+non-training workflows and proposes an architecture that addresses these gaps.
 
 ---
 
@@ -56,13 +54,13 @@ Key design decisions:
 
 ### 2.1. Dataset Manipulation
 
-| Operation | Difficulty | Why |
-|-----------|-----------|-----|
-| **Delete an episode** | Hard | Must rewrite the consolidated Parquet + video chunk files, update all episode offset metadata, recompute global stats |
-| **Truncate an episode** (remove bad frames) | Hard | Must re-encode the video chunk, rewrite the Parquet chunk, update frame counts and timestamp offsets, recompute stats |
-| **Split a dataset** (train/val by episode) | Medium | Requires duplicating or rewriting consolidated files since episodes share physical files |
-| **Merge datasets** from different sessions | Medium | Must re-consolidate Parquet and video files, reconcile episode indices and task tables |
-| **Reorder episodes** | Hard | Consolidated files encode ordering implicitly via offsets; reordering means rewriting everything |
+| Operation                                   | Difficulty | Why                                                                                                                   |
+|---------------------------------------------|------------|-----------------------------------------------------------------------------------------------------------------------|
+| **Delete an episode**                       | Hard       | Must rewrite the consolidated Parquet + video chunk files, update all episode offset metadata, recompute global stats |
+| **Truncate an episode** (remove bad frames) | Hard       | Must re-encode the video chunk, rewrite the Parquet chunk, update frame counts and timestamp offsets, recompute stats |
+| **Split a dataset** (train/val by episode)  | Medium     | Requires duplicating or rewriting consolidated files since episodes share physical files                              |
+| **Merge datasets** from different sessions  | Medium     | Must re-consolidate Parquet and video files, reconcile episode indices and task tables                                |
+| **Reorder episodes**                        | Hard       | Consolidated files encode ordering implicitly via offsets; reordering means rewriting everything                      |
 
 ### 2.2. Episode Review
 
@@ -96,13 +94,13 @@ round-trip accounts for roughly 55% of total conversion time. See
 For 100 episodes of 30 seconds each (640x480, 30 FPS, 2 cameras), conversion
 takes approximately **90-100 minutes**. The breakdown:
 
-| Component | % of time | Notes |
-|-----------|----------|-------|
-| AV1 video encoding (SVT-AV1) | ~50% | Re-encodes every frame from PNG |
-| PNG writes + reads (round-trip) | ~30% | Forced by `add_frame()` API |
-| Source video decoding | ~13% | Our code, unavoidable |
-| Stats computation | ~5% | Subsampled image scan + trivial numerical scan |
-| Parquet + metadata | ~2% | Fast |
+| Component                       | % of time | Notes                                          |
+|---------------------------------|-----------|------------------------------------------------|
+| AV1 video encoding (SVT-AV1)    | ~50%      | Re-encodes every frame from PNG                |
+| PNG writes + reads (round-trip) | ~30%      | Forced by `add_frame()` API                    |
+| Source video decoding           | ~13%      | Our code, unavoidable                          |
+| Stats computation               | ~5%       | Subsampled image scan + trivial numerical scan |
+| Parquet + metadata              | ~2%       | Fast                                           |
 
 ### 2.4. Summary
 
@@ -148,14 +146,14 @@ ordered list of episode references.
 
 **Manipulation becomes trivial:**
 
-| Operation | How |
-|-----------|-----|
-| Delete an episode | `rm -rf episode_NNN/`, remove from manifest |
+| Operation           | How                                                                               |
+|---------------------|-----------------------------------------------------------------------------------|
+| Delete an episode   | `rm -rf episode_NNN/`, remove from manifest                                       |
 | Truncate an episode | Re-encode one small video, truncate one JSONL file, recompute one episode's stats |
-| Split dataset | Copy episode directories to separate roots, write new manifests |
-| Merge datasets | Copy episode directories together, merge manifests |
-| Review an episode | Open `episode_NNN/cam_overview.mp4` in any media player |
-| Tag/annotate | Add fields to manifest's episode entry or a per-episode metadata file |
+| Split dataset       | Copy episode directories to separate roots, write new manifests                   |
+| Merge datasets      | Copy episode directories together, merge manifests                                |
+| Review an episode   | Open `episode_NNN/cam_overview.mp4` in any media player                           |
+| Tag/annotate        | Add fields to manifest's episode entry or a per-episode metadata file             |
 
 ### 3.3. Per-Episode Stats for Cheap Global Aggregation
 
@@ -169,12 +167,12 @@ Each episode stores its own normalization statistics immediately after recording
 Global dataset stats are then **aggregated from per-episode stats in O(episodes)
 time** without touching any raw data:
 
-| Statistic | Aggregation method |
-|-----------|-------------------|
-| **mean** | Weighted average: `global_mean = sum(ep_mean * ep_count) / sum(ep_count)` |
-| **std** | Parallel variance algorithm (Welford-style): combines per-episode mean, variance, and count |
-| **min / max** | Element-wise min/max across all per-episode values |
-| **count** | Sum of all per-episode counts |
+| Statistic     | Aggregation method                                                                          |
+|---------------|---------------------------------------------------------------------------------------------|
+| **mean**      | Weighted average: `global_mean = sum(ep_mean * ep_count) / sum(ep_count)`                   |
+| **std**       | Parallel variance algorithm (Welford-style): combines per-episode mean, variance, and count |
+| **min / max** | Element-wise min/max across all per-episode values                                          |
+| **count**     | Sum of all per-episode counts                                                               |
 
 This means:
 - Adding a new episode: compute its stats (~200ms for numerical, ~2s for
@@ -187,12 +185,12 @@ This means:
 When training is requested, the platform converts the selected episodes into
 a LeRobot v3.0 dataset. Three levels of optimization are possible:
 
-#### Level 1: Current approach (functional, slow)
+#### Level 1: Naive approach (functional, slow)
 
-Use `RawVideoToLeRobotConverter` as-is, going through LeRobot's
-`add_frame()` / `save_episode()` / `finalize()` API. This works correctly
-but is slow (~1 minute per episode) due to the PNG round-trip and AV1
-re-encoding.
+Go through LeRobot's `add_frame()` / `save_episode()` / `finalize()` API,
+feeding it decoded frames from the episode-isolated source. This works
+correctly but is slow (~1 minute per episode) due to the PNG round-trip
+and AV1 re-encoding.
 
 #### Level 2: Bypass the PNG round-trip (significant speedup)
 
@@ -218,93 +216,93 @@ nearly free.
 
 ---
 
-## 4. Proposal: Building on the Existing Raw-Video Module
+## 4. Implementation Plan
 
-The `internal_datasets/raw_video/` package already implements most of what is
-needed for the episode-isolated primary storage layer. Here is a concrete
-mapping of existing components to the proposed architecture, and what would
-need to be added.
+### 4.1. Key Components
 
-### 4.1. What Already Exists
+To realize the architecture described in section 3, the following components
+are needed:
 
-| Component | File | Role in proposed architecture |
-|-----------|------|-------------------------------|
-| `DatasetManifest` | `manifest.py` | Dataset-level metadata schema. Already tracks FPS, dimensions, joint names, robot type, camera configs, episode list. Serves as the manifest for primary storage. |
-| `EpisodeEntry` | `manifest.py` | Per-episode reference (directory, data file, video files). Already episode-isolated. |
-| `CameraConfig` | `manifest.py` | Camera stream metadata. Reusable as-is. |
-| `load_manifest()` | `manifest.py` | Manifest loading with on-disk validation. Reusable as-is. |
-| `FrameIndex` | `frame_index.py` | O(1) global-to-episode frame lookup. Used by the adapter for training; would also support review/playback UIs. |
-| `WelfordAccumulator` | `stats.py` | Numerically-stable online mean/std/min/max. Core building block for per-episode stats computation. |
-| `DatasetStats` | `stats.py` | Aggregated stats container with JSON serialization. Serves as both per-episode and global stats format. |
-| `compute_stats()` | `stats.py` | Full-dataset stats computation (single-pass numerical + subsampled images). Currently computes global stats in one shot. |
-| `load_or_compute_stats()` | `stats.py` | Cache-aware stats loading with staleness detection via mtime. Already caches to `.cache/stats.json`. |
-| `RawVideoDatasetAdapter` | `adapter.py` | Training adapter implementing `getiaction.data.Dataset`. Loads scalars into memory, decodes video lazily, provides normalization parameters from cached stats. **This is the direct-training path** -- no LeRobot conversion needed. |
-| `decode_frame()` / `decode_frames()` | `video_decode.py` | Video frame decoding with torchcodec/pyav backends. Used by both the adapter and the converter. |
-| `LeRobotToRawVideoConverter` | `converters.py` | Converts LeRobot v3 → raw-video format. Enables importing existing LeRobot datasets into the episode-isolated format. |
-| `RawVideoToLeRobotConverter` | `converters.py` | Converts raw-video → LeRobot v3 format. The "compile for training" path when LeRobot format is required. |
+#### A. Manifest and Episode Models
 
-### 4.2. What Would Need to Be Added
+A Pydantic-based schema defining the dataset-level manifest and per-episode
+metadata. The manifest should capture:
 
-#### A. Per-episode stats computation and storage
+- Dataset-level: FPS, state/action dimensions, joint names, robot type,
+  camera configurations (name, resolution, codec)
+- Per-episode: directory path, data file reference, video file references
+  per camera, frame count, optional annotations/tags
 
-Currently `compute_stats()` does a single pass over the entire dataset. This
-should be refactored into two layers:
+A `load_manifest()` function validates the on-disk JSON and returns a typed
+model. All manipulation operations work through the manifest.
 
-1. **`compute_episode_stats(episode, dataset_root)`** -- computes stats for a
-   single episode. Uses `WelfordAccumulator` for numerical features, subsampled
-   video decoding for image features. Writes result to
-   `episode_NNN/stats.json`.
+#### B. Per-Episode Stats Computation and Aggregation
 
-2. **`aggregate_episode_stats(episode_stats_list)`** -- combines a list of
-   per-episode `DatasetStats` into a single global `DatasetStats` using the
-   parallel variance algorithm. This is O(episodes) and touches no raw data.
+Each episode stores its own normalization statistics immediately after
+recording or modification. Per-episode stats include:
 
-The existing `compute_stats()` and `load_or_compute_stats()` would be updated
-to use these building blocks internally. The `WelfordAccumulator` already
-supports the online merge pattern needed for aggregation.
+- `mean`, `std`, `min`, `max` for state and action vectors (element-wise)
+- `mean`, `std`, `min`, `max` for image features (per-channel)
+- `count` (number of frames in the episode)
 
-#### B. Episode manipulation operations
+An online accumulator (e.g., Welford's algorithm) computes these in a single
+pass. A separate aggregation function combines per-episode stats into global
+dataset stats in O(episodes) time without touching raw data, using the
+parallel variance algorithm.
+
+A cache-aware loader checks staleness (via mtime or content hash) and
+recomputes only when necessary.
+
+#### C. Frame Index
+
+An O(1) lookup structure that maps a global frame index to the corresponding
+episode and local frame offset. Built from episode frame counts in the
+manifest. Used by training adapters and any UI that needs random access by
+global index.
+
+#### D. Video Decoding
+
+Frame-level video decoding supporting at minimum torchcodec and pyav
+backends. Must support decoding single frames (for random access during
+training) and frame ranges (for episode review/export). Should handle both
+keyframe-seeking and sequential decoding efficiently.
+
+#### E. Training Adapter
+
+A dataset adapter implementing the platform's training `Dataset` interface.
+Loads scalar data (state, action) into memory from JSONL, decodes video
+frames lazily on `__getitem__`, applies temporal windowing (observation
+history, action chunking), and provides normalization parameters from the
+cached global stats. This is the **direct training path** -- no LeRobot
+conversion needed.
+
+#### F. Bidirectional Converters
+
+Two converters to bridge the episode-isolated format and LeRobot v3.0:
+
+1. **LeRobot → Episode-Isolated**: Imports existing LeRobot datasets into
+   the manipulation-friendly format. Extracts per-episode data from
+   consolidated Parquet/video files, preserves joint names and robot type.
+
+2. **Episode-Isolated → LeRobot**: Compiles the episode-isolated dataset
+   into LeRobot v3.0 for workflows that require it (e.g., using LeRobot's
+   training scripts, uploading to HuggingFace Hub).
+
+#### G. Episode Manipulation Helpers
 
 A small set of manifest-level operations:
 
-- **`remove_episode(manifest, episode_idx)`** -- removes an episode entry from
-  the manifest. Does not touch files (caller handles deletion). Re-aggregates
-  global stats from remaining per-episode stats.
-- **`add_episode(manifest, episode_entry)`** -- appends a new episode entry,
+- **`remove_episode(manifest, episode_idx)`** -- removes an episode entry.
+  Does not touch files (caller handles deletion). Re-aggregates global stats
+  from remaining per-episode stats.
+- **`add_episode(manifest, episode_entry)`** -- appends a new episode,
   computes its per-episode stats, re-aggregates global stats.
 - **`subset_manifest(manifest, episode_indices)`** -- creates a new manifest
   containing only the selected episodes. Useful for train/val splits.
 
-These are purely metadata operations. The episode directories and their files
-remain untouched.
+These are purely metadata operations. Episode directories remain untouched.
 
-#### C. Optimized LeRobot conversion (Level 2)
-
-A faster conversion path that bypasses LeRobot's `add_frame()` API:
-
-1. Write Parquet data files directly using PyArrow, reading from JSONL
-2. Remux episode videos into consolidated chunk files using ffmpeg's concat
-   demuxer (lossless, no re-encoding)
-3. Aggregate global stats from per-episode stats (already computed)
-4. Write `meta/info.json`, `meta/stats.json`, `meta/tasks.parquet`, and
-   episode metadata Parquet files following the v3.0 schema
-
-This eliminates the PNG round-trip entirely and avoids video re-encoding
-when the source codec is compatible, reducing conversion time from ~1 minute
-per episode to ~5-10 seconds per episode.
-
-#### D. Conversion cache with incremental updates (Level 3)
-
-A cache manager that:
-
-1. Maintains a `.cache/lerobot/` directory alongside the primary dataset
-2. Tracks which episodes have been converted (by content hash or mtime)
-3. On training request: converts only new/modified episodes, appends to
-   existing cached LeRobot output, re-aggregates stats
-4. Provides a `get_or_build_lerobot_path(manifest)` API that returns a
-   ready-to-use LeRobot dataset path
-
-### 4.3. Proposed Architecture Diagram
+### 4.2. Architecture Diagram
 
 ```
                         PRIMARY STORAGE (episode-isolated)
@@ -314,7 +312,7 @@ A cache manager that:
                           data.jsonl
                           cam_overview.mp4
                           cam_gripper.mp4
-                          stats.json  ← per-episode stats [NEW]
+                          stats.json  ← per-episode stats
                         episode_001/
                           ...
 
@@ -326,37 +324,39 @@ A cache manager that:
         │           │  │           │  │              │
         │ Play .mp4 │  │ rm -rf ep │  │ Path A:      │
         │ Thumbnail │  │ Truncate  │  │ Direct via   │
-        │ Annotate  │  │ Split     │  │ Adapter      │
-        │ Score     │  │ Merge     │  │ (no convert) │
-        └───────────┘  └─────┬─────┘  │              │
-                             │        │ Path B:      │
-                             ▼        │ Convert to   │
-                    Re-aggregate      │ LeRobot v3   │
-                    global stats      │ (cached,     │
-                    from per-ep       │  incremental) │
-                    stats (~1ms)      └──────┬───────┘
+        │ Annotate  │  │ Split     │  │ training     │
+        │ Score     │  │ Merge     │  │ adapter      │
+        └───────────┘  └─────┬─────┘  │ (no convert) │
+                             │        │              │
+                             ▼        │ Path B:      │
+                    Re-aggregate      │ Convert to   │
+                    global stats      │ LeRobot v3   │
+                    from per-ep       │ (cached,     │
+                    stats (~1ms)      │  incremental) │
+                                      └──────┬───────┘
                                              │
                                              ▼
                                     .cache/lerobot/
                                     (derived, disposable)
 ```
 
-**Training path A** (`RawVideoDatasetAdapter`) is already fully functional.
-It reads directly from the episode-isolated format, decodes video on demand,
-and provides normalization stats from the cached global stats file. This
-requires no conversion at all.
+**Training path A** (direct adapter) reads from the episode-isolated format,
+decodes video on demand, and provides normalization stats from the cached
+global stats. No conversion required.
 
-**Training path B** (`RawVideoToLeRobotConverter` → LeRobot DataLoader) is
-available for workflows that specifically need the LeRobot v3.0 format (e.g.,
-using LeRobot's own training scripts or uploading to HuggingFace Hub). The
-proposed optimizations (Levels 2 and 3) would make this path significantly
-faster.
+**Training path B** (LeRobot conversion) is available for workflows that
+specifically need the LeRobot v3.0 format. The optimizations described in
+section 3.4 (Levels 2 and 3) would make this path significantly faster.
 
-### 4.4. Priority Order
+### 4.3. Priority Order
 
-| Priority | Change | Effort | Impact |
-|----------|--------|--------|--------|
-| 1 | Add per-episode `stats.json` and refactor `compute_stats()` into per-episode + aggregate | Low | Enables O(1ms) re-aggregation after any dataset mutation |
-| 2 | Add episode manipulation helpers (remove, add, subset) | Low | Unlocks review/curation workflows |
-| 3 | Optimized LeRobot conversion (bypass PNG round-trip) | Medium | ~10x faster conversion for path B |
-| 4 | Conversion cache with incremental updates | Medium | Near-instant re-conversion for the common case |
+| Priority | Change                                               | Effort | Impact                                                   |
+|----------|------------------------------------------------------|--------|----------------------------------------------------------|
+| 1        | Manifest schema, episode models, manifest loading    | Low    | Foundation for everything else                           |
+| 2        | Per-episode stats computation + global aggregation   | Low    | Enables O(1ms) re-aggregation after any dataset mutation |
+| 3        | Frame index and video decoding                       | Low    | Required by training adapter and review workflows        |
+| 4        | Training adapter (direct path A)                     | Medium | Enables training without LeRobot conversion              |
+| 5        | Bidirectional converters (path B)                    | Medium | Interop with LeRobot ecosystem                           |
+| 6        | Episode manipulation helpers (remove, add, subset)   | Low    | Unlocks review/curation workflows                        |
+| 7        | Optimized LeRobot conversion (bypass PNG round-trip) | Medium | ~10x faster conversion for path B                        |
+| 8        | Conversion cache with incremental updates            | Medium | Near-instant re-conversion for the common case           |
