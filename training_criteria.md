@@ -168,14 +168,59 @@ the upstream `lerobot` library. The stats contain these values per feature:
 | `q90`   | 90th percentile (v3.0+)                            |
 | `q99`   | 99th percentile (v3.0+)                            |
 
-**Storage in v3.0:**
-- **Global (aggregated) stats**: `meta/stats.json` -- a JSON file with all features'
-  aggregated statistics. This is the primary source consumed during training.
-- **Per-episode stats**: Embedded in the episode metadata Parquet files at
-  `meta/episodes/chunk-NNN/file-NNN.parquet` as flattened columns with prefix
-  `stats/{feature_name}/{stat_name}` (e.g., `stats/observation.state/mean`).
-  These are stripped out during loading for performance and are only used for
-  incremental aggregation.
+#### What "element-wise" means
+
+"Element-wise" means each dimension of a feature vector is aggregated independently
+**across every frame in the entire dataset** (all episodes combined), producing an
+output tensor with the same shape as a single sample.
+
+For example, with `observation.state` of shape `(6,)` and 1187 total frames across
+all episodes:
+
+```
+mean[0] = average of shoulder_pan.pos  across all 1187 frames
+mean[1] = average of shoulder_lift.pos across all 1187 frames
+...
+mean[5] = average of gripper.pos       across all 1187 frames
+```
+
+The result is a tensor of shape `(6,)` -- one scalar per joint dimension. The same
+logic applies to `std`, `min`, `max`, and the quantiles: they are all computed
+per-dimension but aggregated over the full dataset, not per-episode.
+
+For image features, the same principle applies but stats are channel-wise: shape
+`(C, 1, 1)`. Each channel's mean/std/min/max is computed across all pixels of all
+frames of all episodes.
+
+#### Two-tier computation: per-episode then global aggregation
+
+LeRobot v3.0 uses a two-tier approach to compute these whole-dataset stats
+efficiently:
+
+1. **Per-episode stats** are computed when each episode is saved
+   (`dataset.save_episode()`). These are stored as flattened columns in the episode
+   Parquet files under `meta/episodes/chunk-NNN/file-NNN.parquet` with column names
+   like `stats/observation.state/mean`. Crucially, each per-episode stat also includes
+   `count` (the number of frames in that episode).
+
+2. **Global (aggregated) stats** are computed from the per-episode stats during
+   `dataset.finalize()` and written to `meta/stats.json`. This is the primary source
+   consumed during training.
+
+Because per-episode stats include `count`, the global stats can be derived without
+re-reading raw data:
+
+- **mean**: weighted average of per-episode means:
+  `global_mean = sum(ep_mean[i] * ep_count[i]) / sum(ep_count[i])`
+- **std**: parallel combination of per-episode moments (Welford-style aggregation
+  of per-episode mean, variance, and count)
+- **min / max**: element-wise min/max across all per-episode min/max values
+- **quantiles** (`q01`, `q99`, etc.): approximate -- quantiles are not trivially
+  composable from per-episode quantiles, so the aggregation is an approximation
+
+This two-tier design means per-episode stats are reusable building blocks: adding
+a new episode to an existing dataset only requires computing that episode's stats
+and re-aggregating, rather than re-scanning all frames.
 
 **Difference from v2.1:** In v2.1, per-episode stats were in a separate
 `meta/episodes_stats.jsonl` file. In v3.0, they are co-located in the episode
