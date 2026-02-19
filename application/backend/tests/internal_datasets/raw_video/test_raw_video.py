@@ -60,6 +60,8 @@ def _make_manifest_dict(
         "fps": fps,
         "state_dim": state_dim,
         "action_dim": action_dim,
+        "state_names": [f"state_{i}" for i in range(state_dim)],
+        "action_names": [f"action_{i}" for i in range(action_dim)],
         "cameras": cam_configs,
         "episodes": episodes,
     }
@@ -145,6 +147,8 @@ class TestDatasetManifest:
                 fps=30,
                 state_dim=6,
                 action_dim=6,
+                state_names=[f"state_{i}" for i in range(6)],
+                action_names=[f"action_{i}" for i in range(6)],
                 cameras=[CameraConfig(name="top")],
                 episodes=[
                     EpisodeEntry(
@@ -460,6 +464,8 @@ class TestRawVideoDatasetAdapter:
             fps=fps,
             state_dim=state_dim,
             action_dim=action_dim,
+            state_names=[f"joint_{i}.pos" for i in range(state_dim)],
+            action_names=[f"joint_{i}.pos" for i in range(action_dim)],
             cameras=cam_objs,
             episodes=episodes,
         )

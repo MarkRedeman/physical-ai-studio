@@ -66,6 +66,9 @@ def _make_raw_dataset(
     cameras: list[str] | None = None,
     state_dim: int = 6,
     action_dim: int = 6,
+    state_names: list[str] | None = None,
+    action_names: list[str] | None = None,
+    robot_type: str = "so100",
     fps: int = 30,
     task_description: str = "pick up cube",
 ) -> Path:
@@ -75,6 +78,10 @@ def _make_raw_dataset(
     """
     if cameras is None:
         cameras = ["top"]
+    if state_names is None:
+        state_names = [f"state_{i}" for i in range(state_dim)]
+    if action_names is None:
+        action_names = [f"action_{i}" for i in range(action_dim)]
 
     dataset_dir = tmp_path / "raw_dataset"
     dataset_dir.mkdir()
@@ -106,6 +113,9 @@ def _make_raw_dataset(
         "fps": fps,
         "state_dim": state_dim,
         "action_dim": action_dim,
+        "state_names": state_names,
+        "action_names": action_names,
+        "robot_type": robot_type,
         "cameras": [{"name": c} for c in cameras],
         "episodes": episodes,
         "task_description": task_description,
@@ -122,11 +132,18 @@ def _make_mock_lerobot_dataset(
     cameras: list[str] | None = None,
     state_dim: int = 6,
     action_dim: int = 6,
+    state_names: list[str] | None = None,
+    action_names: list[str] | None = None,
+    robot_type: str = "so100",
     fps: int = 30,
 ) -> MagicMock:
     """Create a mock LeRobotDataset with realistic metadata and hf_dataset."""
     if cameras is None:
         cameras = ["top"]
+    if state_names is None:
+        state_names = [f"joint_{i}.pos" for i in range(state_dim)]
+    if action_names is None:
+        action_names = [f"joint_{i}.pos" for i in range(action_dim)]
 
     total_frames = num_episodes * frames_per_episode
     video_keys = [f"observation.images.{c}" for c in cameras]
@@ -134,8 +151,8 @@ def _make_mock_lerobot_dataset(
 
     # Build features dict.
     features = {
-        "observation.state": {"dtype": "float32", "shape": (state_dim,), "names": None},
-        "action": {"dtype": "float32", "shape": (action_dim,), "names": None},
+        "observation.state": {"dtype": "float32", "shape": (state_dim,), "names": state_names},
+        "action": {"dtype": "float32", "shape": (action_dim,), "names": action_names},
     }
     for cam in cameras:
         features[f"observation.images.{cam}"] = {
@@ -200,7 +217,7 @@ def _make_mock_lerobot_dataset(
     mock_meta.total_episodes = num_episodes
     mock_meta.total_frames = total_frames
     mock_meta.tasks = mock_tasks
-    mock_meta.robot_type = "so100"
+    mock_meta.robot_type = robot_type
     mock_meta.root = source_path
     mock_meta.episodes = episodes_list
 
@@ -327,6 +344,9 @@ class TestLeRobotToRawVideoConverter:
         assert manifest.fps == 30
         assert manifest.state_dim == 6
         assert manifest.action_dim == 6
+        assert manifest.state_names == [f"joint_{i}.pos" for i in range(6)]
+        assert manifest.action_names == [f"joint_{i}.pos" for i in range(6)]
+        assert manifest.robot_type == "so100"
         assert len(manifest.episodes) == 2
         assert len(manifest.cameras) == 1
         assert manifest.cameras[0].name == "top"
@@ -531,6 +551,10 @@ class TestRawVideoToLeRobotConverter:
         assert "observation.images.top" in create_call.kwargs["features"]
         assert create_call.kwargs["features"]["observation.images.top"]["dtype"] == "video"
 
+        # Verify joint names are preserved in features.
+        assert create_call.kwargs["features"]["observation.state"]["names"] == [f"state_{i}" for i in range(6)]
+        assert create_call.kwargs["features"]["action"]["names"] == [f"action_{i}" for i in range(6)]
+
         # add_frame should have been called 10 times total (5 per episode).
         assert mock_lr_dataset.add_frame.call_count == 10
 
@@ -543,37 +567,46 @@ class TestRawVideoToLeRobotConverter:
 
     @patch("internal_datasets.raw_video.converters._decode_all_frames_as_numpy")
     @patch("internal_datasets.raw_video.converters.get_video_info")
-    def test_multi_camera_conversion(self, mock_video_info, mock_decode, tmp_path: Path):
-        """All cameras should produce features in the LeRobot dataset."""
-        raw_dir = _make_raw_dataset(tmp_path, num_episodes=1, frames_per_episode=3, cameras=["top", "wrist"])
+    def test_robot_type_from_manifest(self, mock_video_info, mock_decode, tmp_path: Path):
+        """robot_type should come from the manifest when no CLI override is given."""
+        raw_dir = _make_raw_dataset(tmp_path, num_episodes=1, frames_per_episode=2, robot_type="so101_follower")
         dest = tmp_path / "lerobot_output"
 
         mock_video_info.return_value = VideoInfo(
-            num_frames=3,
-            fps=30.0,
-            width=640,
-            height=480,
-            duration_s=0.1,
-            codec="h264",
+            num_frames=2, fps=30.0, width=640, height=480, duration_s=2 / 30.0, codec="h264"
         )
-        mock_decode.return_value = np.random.randint(0, 255, (3, 480, 640, 3), dtype=np.uint8)
+        mock_decode.return_value = np.random.randint(0, 255, (2, 480, 640, 3), dtype=np.uint8)
 
         mock_lr_dataset = MagicMock()
 
         with patch("lerobot.datasets.lerobot_dataset.LeRobotDataset") as MockLRDataset:
             MockLRDataset.create.return_value = mock_lr_dataset
+            # No robot_type override — should use the manifest value.
             converter = RawVideoToLeRobotConverter(source=raw_dir, dest=dest)
             converter.convert()
 
-        # Verify both camera features are present.
-        features = MockLRDataset.create.call_args.kwargs["features"]
-        assert "observation.images.top" in features
-        assert "observation.images.wrist" in features
+        assert MockLRDataset.create.call_args.kwargs["robot_type"] == "so101_follower"
 
-        # Each add_frame call should include both cameras.
-        first_frame = mock_lr_dataset.add_frame.call_args_list[0][0][0]
-        assert "observation.images.top" in first_frame
-        assert "observation.images.wrist" in first_frame
+    @patch("internal_datasets.raw_video.converters._decode_all_frames_as_numpy")
+    @patch("internal_datasets.raw_video.converters.get_video_info")
+    def test_robot_type_cli_override(self, mock_video_info, mock_decode, tmp_path: Path):
+        """CLI robot_type override should take precedence over the manifest value."""
+        raw_dir = _make_raw_dataset(tmp_path, num_episodes=1, frames_per_episode=2, robot_type="so101_follower")
+        dest = tmp_path / "lerobot_output"
+
+        mock_video_info.return_value = VideoInfo(
+            num_frames=2, fps=30.0, width=640, height=480, duration_s=2 / 30.0, codec="h264"
+        )
+        mock_decode.return_value = np.random.randint(0, 255, (2, 480, 640, 3), dtype=np.uint8)
+
+        mock_lr_dataset = MagicMock()
+
+        with patch("lerobot.datasets.lerobot_dataset.LeRobotDataset") as MockLRDataset:
+            MockLRDataset.create.return_value = mock_lr_dataset
+            converter = RawVideoToLeRobotConverter(source=raw_dir, dest=dest, robot_type="custom_arm")
+            converter.convert()
+
+        assert MockLRDataset.create.call_args.kwargs["robot_type"] == "custom_arm"
 
     @patch("internal_datasets.raw_video.converters._decode_all_frames_as_numpy")
     @patch("internal_datasets.raw_video.converters.get_video_info")

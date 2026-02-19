@@ -74,6 +74,14 @@ class DatasetManifest(BaseModel):
              resampling is applied.
         state_dim: Dimensionality of the state vector.
         action_dim: Dimensionality of the action vector.
+        state_names: Per-element names for the state vector (e.g.
+            ``["shoulder_pan.pos", "shoulder_lift.pos", ...]``).  Must
+            have exactly *state_dim* entries.
+        action_names: Per-element names for the action vector.  Must
+            have exactly *action_dim* entries.
+        robot_type: Robot type identifier (e.g. ``"so101_follower"``).
+            Defaults to ``"unknown"`` when the source dataset does not
+            provide robot type information.
         cameras: Camera configurations used across the dataset.
         episodes: Ordered list of episode entries.
         task_description: Optional human-readable description of the task.
@@ -83,9 +91,21 @@ class DatasetManifest(BaseModel):
     fps: int = Field(..., gt=0)
     state_dim: int = Field(..., gt=0)
     action_dim: int = Field(..., gt=0)
+    state_names: list[str]
+    action_names: list[str]
+    robot_type: str = "unknown"
     cameras: list[CameraConfig]
     episodes: list[EpisodeEntry]
     task_description: str = ""
+
+    @model_validator(mode="after")
+    def _validate_names_length(self) -> DatasetManifest:
+        """Ensure state_names and action_names match their respective dimensions."""
+        if len(self.state_names) != self.state_dim:
+            raise ValueError(f"state_names has {len(self.state_names)} entries but state_dim is {self.state_dim}")
+        if len(self.action_names) != self.action_dim:
+            raise ValueError(f"action_names has {len(self.action_names)} entries but action_dim is {self.action_dim}")
+        return self
 
     @model_validator(mode="after")
     def _validate_episode_camera_names(self) -> DatasetManifest:

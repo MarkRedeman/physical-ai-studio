@@ -73,6 +73,12 @@ class LeRobotToRawVideoConverter:
         state_dim = features["observation.state"]["shape"][0]
         action_dim = features["action"]["shape"][0]
 
+        # Preserve per-element joint names (e.g. ["shoulder_pan.pos", ...]).
+        state_names: list[str] = features["observation.state"].get("names") or [f"state_{i}" for i in range(state_dim)]
+        action_names: list[str] = features["action"].get("names") or [f"action_{i}" for i in range(action_dim)]
+
+        robot_type: str = getattr(dataset.meta, "robot_type", "unknown") or "unknown"
+
         camera_names: list[str] = []
         for key in sorted(dataset.meta.video_keys + dataset.meta.image_keys):
             # Strip "observation.images." prefix.
@@ -162,6 +168,9 @@ class LeRobotToRawVideoConverter:
             fps=fps,
             state_dim=state_dim,
             action_dim=action_dim,
+            state_names=state_names,
+            action_names=action_names,
+            robot_type=robot_type,
             cameras=[CameraConfig(name=c) for c in camera_names],
             episodes=episodes,
             task_description=task_description,
@@ -238,19 +247,21 @@ class RawVideoToLeRobotConverter:
         source: Path to the raw-video dataset root (must contain
             ``manifest.json``).
         dest: Path to write the LeRobot v3 dataset.  Must not exist yet.
-        robot_type: Value for the ``robot_type`` field in the LeRobot
-            metadata.  The raw-video format does not track robot type, so
-            this defaults to ``"unknown"``.
+        robot_type: Override for the ``robot_type`` field in the LeRobot
+            metadata.  If not provided (or ``None``), the value stored in
+            the manifest is used.  The CLI exposes this so you can
+            correct a missing/wrong robot type without editing the
+            manifest.
 
     Raises:
         FileNotFoundError: If *source* does not contain a ``manifest.json``.
         FileExistsError: If *dest* already exists.
     """
 
-    def __init__(self, source: Path, dest: Path, *, robot_type: str = "unknown") -> None:
+    def __init__(self, source: Path, dest: Path, *, robot_type: str | None = None) -> None:
         self._source = Path(source)
         self._dest = Path(dest)
-        self._robot_type = robot_type
+        self._robot_type_override = robot_type
 
     def convert(self) -> None:
         """Run the conversion."""
@@ -270,17 +281,17 @@ class RawVideoToLeRobotConverter:
             info = get_video_info(video_path)
             cam_shapes[cam.name] = (info.height, info.width, 3)  # (H, W, C) for LeRobot
 
-        # Build LeRobot features dict.
+        # Build LeRobot features dict, preserving per-element joint names.
         features: dict[str, dict] = {
             "observation.state": {
                 "dtype": "float32",
                 "shape": (manifest.state_dim,),
-                "names": None,
+                "names": manifest.state_names,
             },
             "action": {
                 "dtype": "float32",
                 "shape": (manifest.action_dim,),
-                "names": None,
+                "names": manifest.action_names,
             },
         }
         for cam in manifest.cameras:
@@ -291,13 +302,16 @@ class RawVideoToLeRobotConverter:
                 "names": ["height", "width", "channels"],
             }
 
+        # Use CLI override if provided, otherwise use the manifest value.
+        robot_type = self._robot_type_override or manifest.robot_type
+
         click.echo("Creating LeRobot dataset ...")
         lr_dataset = LeRobotDataset.create(
             repo_id=str(uuid4()),
             root=self._dest,
             fps=manifest.fps,
             features=features,
-            robot_type=self._robot_type,
+            robot_type=robot_type,
             use_videos=True,
             image_writer_threads=4,
         )

@@ -73,11 +73,10 @@ def convert_to_raw(from_path: Path, to_path: Path) -> None:
 )
 @click.option(
     "--robot-type",
-    default="unknown",
-    show_default=True,
-    help="Robot type for the LeRobot dataset metadata.",
+    default=None,
+    help="Robot type override (default: use value from manifest).",
 )
-def convert_to_lerobot(from_path: Path, to_path: Path, robot_type: str) -> None:
+def convert_to_lerobot(from_path: Path, to_path: Path, robot_type: str | None) -> None:
     """Convert a raw-video dataset to LeRobot v3 format."""
     from internal_datasets.raw_video.converters import RawVideoToLeRobotConverter
 
