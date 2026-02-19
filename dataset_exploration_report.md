@@ -559,3 +559,231 @@ the full provenance chain: `Model → Snapshot → list of episode directories
 | **Garbage collection**           | Manual cleanup of model dirs                                      | Automated: delete unreferenced episode dirs |
 | **Retraining on old snapshot**   | Not supported in current API                                      | Pass snapshot reference to training job     |
 | **Provenance**                   | Model → Snapshot (opaque copy)                                    | Model → Snapshot → exact episode list       |
+
+---
+
+## 6. Multi-Rate Sensor Alignment
+
+### 6.1. The Problem
+
+Real teleoperation setups often involve sensors running at different native
+rates. For example:
+
+| Source | Rate | Resolution |
+|--------|------|------------|
+| Camera 1 (overview) | 30 FPS | 1280x720 |
+| Camera 2 (gripper) | 60 FPS | 640x480 |
+| Robot A (leader) | 120 Hz | 6 joints |
+| Robot B (follower) | 200 Hz | 6 joints |
+
+These four streams are asynchronous. There is no guarantee that a camera
+frame and a robot state reading were captured at the same physical instant.
+The question is: how and when to align them into the synchronized,
+frame-indexed rows that training expects?
+
+### 6.2. Current Approach: Align at Recording Time
+
+The current teleoperation loop runs at a fixed 30 Hz. On each iteration it
+sequentially reads robot states, commands the follower, and grabs camera
+frames. All data from one loop iteration is passed to `add_frame()` as a
+single row, implicitly aligned by co-occurrence in the same loop cycle.
+
+This works when all sensors can keep up with the loop rate, but has
+fundamental limitations:
+
+| Limitation | Consequence |
+|------------|-------------|
+| **Hardcoded 30 Hz loop** | Cannot exploit a 60 FPS camera or a 200 Hz robot; their extra samples are discarded |
+| **No real timestamps** | Timestamps are synthetic (`frame_index / 30`), not measured wall-clock times. Jitter, delays, and dropped frames are invisible. |
+| **Sequential reads in one thread** | The camera grab blocks while the robot read completes and vice versa. At 30 Hz the time budget per iteration is 33 ms, which is tight for multiple USB reads + image capture. |
+| **Single global FPS** | LeRobot's format stores one `fps` value for the entire dataset. All modalities must be pre-aligned to this rate before storage. |
+
+The result is that high-rate data is thrown away at recording time, and there
+is no way to recover it later. If you later want to train a policy that
+benefits from 200 Hz action labels or 60 FPS gripper video, the data simply
+does not exist.
+
+### 6.3. Proposed Approach: Record Raw, Align at Training Time
+
+The episode-isolated architecture naturally supports a "record everything at
+native rates, align later" strategy. Each sensor stream is stored
+independently within the episode directory, at its own native rate, with
+real timestamps.
+
+#### 6.3.1. Storage: Per-Stream Files with Timestamps
+
+```
+episodes/
+  ep_000_abc1/
+    cam_overview.mp4         # 30 FPS, 1280x720
+    cam_gripper.mp4          # 60 FPS, 640x480
+    robot_a.jsonl            # 120 Hz, each line has wall-clock timestamp
+    robot_b.jsonl            # 200 Hz, each line has wall-clock timestamp
+    stream_info.json         # Per-stream metadata (rate, dimensions, etc.)
+    stats.json               # Per-episode stats (per-stream)
+```
+
+Each JSONL file stores one reading per line with a **wall-clock timestamp**
+(monotonic, relative to episode start):
+
+```json
+{"t": 0.0000, "state": [0.1, 0.2, ...], "action": [0.1, 0.2, ...]}
+{"t": 0.0083, "state": [0.1, 0.2, ...], "action": [0.1, 0.2, ...]}
+```
+
+Video files have implicit timestamps via their frame rate and can be
+cross-referenced via `frame_index / native_fps`.
+
+The `stream_info.json` file describes each stream:
+
+```json
+{
+  "streams": {
+    "cam_overview":  {"type": "video", "fps": 30, "width": 1280, "height": 720, "codec": "h264"},
+    "cam_gripper":   {"type": "video", "fps": 60, "width": 640,  "height": 480, "codec": "h264"},
+    "robot_a":       {"type": "scalar", "hz": 120, "state_dim": 6, "action_dim": 6,
+                      "state_names": ["shoulder_pan.pos", ...],
+                      "action_names": ["shoulder_pan.pos", ...]},
+    "robot_b":       {"type": "scalar", "hz": 200, "state_dim": 6, "action_dim": 6,
+                      "state_names": ["shoulder_pan.pos", ...],
+                      "action_names": ["shoulder_pan.pos", ...]}
+  }
+}
+```
+
+#### 6.3.2. Alignment: Resample at Training Time
+
+When the training adapter builds a sample, it must produce a single
+synchronized row from multiple asynchronous streams. This is done at
+`__getitem__` time by choosing a **reference timeline** and resampling all
+other streams to it.
+
+The reference timeline is typically the lowest-rate camera (since video
+frames are the most expensive to decode and interpolate). For the example
+setup, this would be `cam_overview` at 30 FPS:
+
+```
+Reference timeline (30 Hz):  t=0.000  t=0.033  t=0.067  t=0.100 ...
+
+cam_overview (30 FPS):       frame 0   frame 1   frame 2   frame 3
+cam_gripper  (60 FPS):       frame 0   frame 2   frame 4   frame 6
+robot_a      (120 Hz):       row 0     row 4     row 8     row 12
+robot_b      (200 Hz):       row 0     row 7     row 13    row 20
+```
+
+For each reference timestamp `t`:
+
+- **Video streams**: decode the frame nearest to `t` (or the frame
+  immediately at or before `t`). Video decode already supports timestamp-
+  based seeking.
+- **Scalar streams**: find the reading nearest to `t` via binary search on
+  the timestamp column. Optionally interpolate between the two nearest
+  readings for sub-sample accuracy, though nearest-neighbor is simpler and
+  usually sufficient for robot joint data at 120+ Hz.
+
+This is a lightweight operation: one binary search per stream per sample.
+The timestamp arrays can be loaded into memory at dataset initialization
+(a 10-minute episode at 200 Hz = 120,000 floats = ~1 MB).
+
+#### 6.3.3. Configurable Target Rate
+
+The training adapter should accept a configurable `target_fps` parameter
+(with a sensible default, e.g., the lowest camera FPS). This controls the
+reference timeline's tick rate and thus how many aligned samples exist per
+episode. Different policies may want different rates:
+
+- A visual policy (ACT, SmolVLA) might train at 30 Hz, matching the camera
+- A low-level joint controller might train at 120 Hz, matching the robot
+- A multi-rate policy could consume video at 30 Hz but action labels at
+  200 Hz within each chunk
+
+The `target_fps` also determines how `delta_indices` map to physical time:
+`delta_timestamp = delta_index / target_fps`. This is the same mechanism
+LeRobot uses today, just with an explicit choice of which rate to use.
+
+### 6.4. Impact on Stats Computation
+
+Per-episode stats must account for multi-rate data. Two approaches:
+
+**Option A: Stats at native rate per stream.** Compute mean/std/min/max
+from all readings in each stream independently. A 200 Hz robot stream
+contributes 200 readings per second to its stats, while a 30 FPS camera
+contributes 30. This is the simplest and preserves the most information.
+Global stats are then aggregated across episodes per stream, as described
+in section 3.3.
+
+**Option B: Stats at reference rate.** Resample everything to the reference
+timeline first, then compute stats on the aligned data. This matches what
+the training adapter will actually see, but discards high-rate information.
+
+Option A is recommended as the default -- it is cheaper to compute (no
+resampling needed), lossless, and the difference between "stats of all
+200 Hz readings" and "stats of every 6th reading" is negligible for
+normalization purposes in practice.
+
+### 6.5. Impact on Conversion to LeRobot
+
+LeRobot v3 requires a single global FPS with all modalities aligned row-by-
+row. Converting from multi-rate episode-isolated storage to LeRobot format
+requires choosing a target FPS and performing the same resampling described
+in section 6.3.2 -- but at conversion time rather than training time, writing
+the aligned data into Parquet rows and re-encoding (or remuxing) videos at
+the target rate.
+
+This is a lossy operation by nature (high-rate data is downsampled to the
+global FPS), which is another argument for keeping the episode-isolated
+format as the source of truth and only converting to LeRobot when that
+specific format is required.
+
+### 6.6. Impact on Snapshots and Manipulation
+
+Multi-rate storage does not complicate snapshots or episode manipulation:
+
+- **Snapshots**: the manifest and `stream_info.json` fully define the
+  dataset state. The same manifest-copy snapshot mechanism from section 5
+  applies without modification.
+- **Truncation**: trim each stream's file to the target time range. Video
+  files are cut by timestamp (ffmpeg `-ss`/`-to`); JSONL files are cut by
+  the `t` field. Each stream's cut point may fall at a different line/frame
+  number, but the timestamps keep everything consistent.
+- **Splitting**: same principle -- the split point is a timestamp, and each
+  stream is divided at the corresponding position in its own timeline.
+
+### 6.7. Recording Architecture
+
+To capture multi-rate data, the recording system should move from a single
+synchronous loop to **per-stream capture threads** (or async tasks) with a
+shared clock:
+
+```
+                     ┌─ Camera 1 thread ──→ cam_overview.mp4  (30 FPS)
+                     │
+Shared monotonic ────┼─ Camera 2 thread ──→ cam_gripper.mp4   (60 FPS)
+clock (t=0 at       │
+episode start)      ├─ Robot A thread  ──→ robot_a.jsonl     (120 Hz)
+                     │
+                     └─ Robot B thread  ──→ robot_b.jsonl     (200 Hz)
+```
+
+Each thread captures at its sensor's native rate and stamps each reading
+with the shared clock. There is no requirement for threads to synchronize
+with each other -- alignment happens later. This eliminates the current
+bottleneck where all sensors must be read within a single 33 ms loop
+iteration.
+
+The shared clock should be monotonic (e.g., `time.monotonic()`) and
+episode-relative (subtract the episode start time). Wall-clock absolute
+times are less useful and introduce drift/NTP issues.
+
+### 6.8. Comparison
+
+| Aspect               | Single-rate (current)                      | Multi-rate (proposed)                 |
+|----------------------|--------------------------------------------|---------------------------------------|
+| **Data captured**    | All sensors downsampled to 30 Hz           | Each sensor at native rate            |
+| **Camera at 60 FPS** | 50% of frames discarded at recording       | All frames preserved                  |
+| **Robot at 200 Hz**  | 85% of readings discarded at recording     | All readings preserved                |
+| **Timestamps**       | Synthetic (`frame_index / 30`)             | Real wall-clock, per-reading          |
+| **Recording loop**   | Single 33 ms budget for all sensors        | Per-sensor threads, no shared budget  |
+| **Alignment**        | Implicit (co-occurrence in loop iteration) | Explicit (timestamp-based resampling) |
+| **Flexibility**      | Locked to one rate forever                 | Choose target rate at training time   |
+| **LeRobot compat**   | Native (already single-rate)               | Requires conversion with chosen FPS   |
