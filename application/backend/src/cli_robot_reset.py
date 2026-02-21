@@ -19,6 +19,10 @@ Usage:
     uv run src/cli_robot_reset.py --robot-type SO101_Follower --serial-number ABC123 --mode full
     uv run src/cli_robot_reset.py --robot-type SO101_Leader --serial-number ABC123 --mode calibration
 
+
+    uv run src/cli_robot_reset.py --robot-type SO101_Leader --serial-number 5AAF270363 --mode full
+
+
 WARNING: The "full" mode sets ALL motor IDs to 1. After this, you cannot
 individually address motors until you run the motor setup flow again (which
 assigns IDs one motor at a time while only one is physically connected).
