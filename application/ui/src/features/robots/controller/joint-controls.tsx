@@ -5,7 +5,7 @@ import { ChevronDownSmallLight } from '@geti/ui/icons';
 import useWebSocket from 'react-use-websocket';
 import { degToRad, radToDeg } from 'three/src/math/MathUtils.js';
 
-import { useRobotModels } from '../robot-models-context';
+import { urdfPathForType, useRobotModels } from '../robot-models-context';
 import { useRobot, useRobotId } from '../use-robot';
 
 function removeSuffix(str: string, suffix: string): string {
@@ -105,7 +105,10 @@ type JointsState = Array<{
 const useJointState = () => {
     const [isControlled, setIsControlled] = useState(false);
     const [joints, setJoints] = useState<JointsState>([]);
-    const { models } = useRobotModels();
+    const { getModel } = useRobotModels();
+
+    const robot = useRobot();
+    const PATH = urdfPathForType(robot.type);
 
     // WebSocket message handler
     const handleMessage = useCallback(
@@ -115,13 +118,11 @@ const useJointState = () => {
 
                 if (payload['event'] === 'state_was_updated') {
                     const newJoints = payload['state'];
+                    const model = getModel(PATH);
 
                     Object.keys(newJoints).forEach((joint) => {
                         const name = removeSuffix(joint, '.pos');
-
-                        models.forEach((model) => {
-                            model.setJointValue(name, degToRad(newJoints[joint]));
-                        });
+                        model?.setJointValue(name, degToRad(newJoints[joint]));
                     });
 
                     const placeholderJoints = [
@@ -133,7 +134,7 @@ const useJointState = () => {
                         { name: 'J6', value: 84, rangeMin: -360, rangeMax: 360, decreaseKey: 'y', increaseKey: '6' },
                     ];
 
-                    const modelJoints = Object.values(models.at(0)?.joints) ?? [];
+                    const modelJoints = Object.values(model?.joints) ?? [];
 
                     const jointState = Object.keys(newJoints).map((joint_name, idx) => {
                         const joint = modelJoints.find(({ urdfName }) => urdfName === joint_name);
@@ -157,11 +158,10 @@ const useJointState = () => {
                 console.error('Failed to parse WebSocket message:', error);
             }
         },
-        [models]
+        [getModel, PATH]
     );
 
     const { project_id, robot_id } = useRobotId();
-    const robot = useRobot();
     console.log({ robot });
     //useWebSocket('ws://localhost:8008/api/cameras/ws', {
     const socket = useWebSocket(`/api/projects/${project_id}/robots/${robot_id}/ws`, {

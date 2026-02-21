@@ -8,6 +8,13 @@ import { useRobotModels } from '../../robot-models-context';
 const SO101_PATH = '/SO101/so101_new_calib.urdf';
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** URDF path for the SO101 model — this file is only used in the SO101 wizard. */
+const SO101_PATH = '/SO101/so101_new_calib.urdf';
+
+// ---------------------------------------------------------------------------
 // Shared easing function
 // ---------------------------------------------------------------------------
 
