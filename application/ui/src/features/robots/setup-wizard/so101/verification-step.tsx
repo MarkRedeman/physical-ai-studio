@@ -21,6 +21,9 @@ import classes from '../shared/setup-wizard.module.scss';
 // Hook: sync normalized joint state from the setup websocket to the URDF model
 // ---------------------------------------------------------------------------
 
+/** URDF path for the SO101 model — this file is only used in the SO101 wizard. */
+const SO101_PATH = '/SO101/so101_new_calib.urdf';
+
 /**
  * Syncs joint positions (from `state_was_updated` events) to the loaded URDF
  * model via the shared `RobotModelsProvider` context.
@@ -30,28 +33,27 @@ import classes from '../shared/setup-wizard.module.scss';
  * as degrees by the viewer — `degToRad()` maps them to the URDF's radian range.
  */
 const useSyncJointState = (jointState: Record<string, number> | null) => {
-    const { models } = useRobotModels();
+    const { getModel } = useRobotModels();
+    const model = getModel(SO101_PATH);
 
     useEffect(() => {
-        if (!jointState) {
+        if (!jointState || !model) {
             return;
         }
 
-        models.forEach((model) => {
-            for (const [key, value] of Object.entries(jointState)) {
-                const name = key.endsWith('.pos') ? key.slice(0, -4) : key;
+        for (const [key, value] of Object.entries(jointState)) {
+            const name = key.endsWith('.pos') ? key.slice(0, -4) : key;
 
-                if (name === 'gripper' && model.robotName === 'wxai') {
-                    model.setJointValue('left_carriage_joint', value);
-                    continue;
-                }
-
-                if (model.joints[name]) {
-                    model.setJointValue(name, degToRad(value));
-                }
+            if (name === 'gripper' && model.robotName === 'wxai') {
+                model.setJointValue('left_carriage_joint', value);
+                continue;
             }
-        });
-    }, [models, jointState]);
+
+            if (model.joints[name]) {
+                model.setJointValue(name, degToRad(value));
+            }
+        }
+    }, [model, jointState]);
 };
 
 // ---------------------------------------------------------------------------
