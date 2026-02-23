@@ -29,7 +29,7 @@ Notes: The analysis covers both backend (Python) and frontend (React/TypeScript)
 | **Motors** | 6 (Feetech STS3215) | 7 (Dynamixel-based) |
 | **Calibration** | Homing + range recording | None (hardcoded) |
 | **Setup steps** | 4 (Diagnostics, Motor Setup, Calibration, Verification) | 2 (Diagnostics, Verification) |
-| **Backend** | `SO101SetupWorker` (746 lines) | `TrossenSetupWorker` (371 lines) |
+| **Backend** | `SO101SetupWorker` (813 lines) | `TrossenSetupWorker` (368 lines) |
 
 Notes: SO101 is the "complex" path with per-motor setup. Trossen is the "simple" path — the SDK handles most configuration internally.
 
@@ -43,15 +43,14 @@ Notes: SO101 is the "complex" path with per-motor setup. Trossen is the "simple"
 
 Both workers extend `TransportWorker` and share:
 
-- **`run()` lifecycle**: connect &rarr; diagnostics &rarr; command loop &rarr; cleanup
+- **`run()` lifecycle**: `run_concurrent(broadcast_loop, command_loop)` with connect &rarr; diagnostics &rarr; dual loops &rarr; cleanup
 - **`_command_loop()`**: `while not _stop_requested: receive &rarr; dispatch`
+- **`_broadcast_loop()`**: Phase-driven streaming at fixed FPS with `time.perf_counter()` timing
 - **`_send_phase_status()`**: `{event, state, phase, message}`
 - **`_send_event()`**: `{event, **kwargs}`
-- **`_spawn_task()`**: Background task set management
-- **Streaming guard**: `if self._streaming: return`
 - **`ping`/`pong`** heartbeat
 
-Notes: These 7 items are character-for-character identical in both workers. They are prime candidates for extraction.
+Notes: These 6 items are character-for-character identical in both workers. They are prime candidates for extraction.
 
 -v-
 
@@ -76,10 +75,10 @@ Still duplicated across both wizards:
 
 - **WebSocket hooks** — `useState` + `useRef` boilerplate, `handleMessage` switch, URL construction
 - **Wizard providers** — dual-context pattern, navigation logic (`goToStep`, `goNext`, `goBack`)
-- **Verification steps** — `useSyncJointState` loop, mount/unmount streaming, save flow
+- **Verification steps** — `useSyncJointState` loop, save flow
 - **Layout components** — Grid structure, stepper rendering, viewer panel
 
-Notes: These represent ~310 lines of recoverable duplication across the frontend.
+Notes: These represent ~280 lines of recoverable duplication across the frontend.
 
 ---
 
@@ -94,26 +93,26 @@ Notes: These represent ~310 lines of recoverable duplication across the frontend
 | Backend lifecycle + helpers | ~120 | Low |
 | Frontend WS hooks | ~100 | Medium |
 | Wizard providers | ~80 | Medium |
-| Verification steps | ~80 | Very Low |
+| Verification steps | ~50 | Very Low |
 | Layout components | ~80 | Medium |
 | Diagnostics steps | ~40 | **Leave as-is** |
-| **Total recoverable** | **~470** | |
+| **Total recoverable** | **~440** | |
 
-Notes: ~310 lines can be extracted with low risk (Steps 1-4 of recommendations). The remaining ~160 lines need more careful design.
+Notes: ~250 lines can be extracted with low risk (Steps 1-2, 4 of recommendations). ~30 lines were already eliminated by the phase-driven broadcast refactoring (Step 3). The remaining ~160 lines need more careful design.
 
 -v-
 
 ### Backend — Setup Workers
 
 ```
-so101_setup_worker.py    ████████████████████████  746 lines
-                          ████ ~120 shared (~16%)
+so101_setup_worker.py    ████████████████████████  813 lines
+                          ████ ~120 shared (~15%)
 
-trossen_setup_worker.py  ████████████  371 lines
-                          ████ ~120 shared (~32%)
+trossen_setup_worker.py  ████████████  368 lines
+                          ████ ~120 shared (~33%)
 ```
 
-**Identical:** `_send_phase_status`, `_send_event`, `_spawn_task`, `_command_loop`, streaming guard, `run()` lifecycle
+**Identical:** `_send_phase_status`, `_send_event`, `_broadcast_loop`, `_command_loop`, `run_concurrent()` lifecycle
 
 **Robot-specific:** Diagnostics, calibration (SO101 only), motor setup (SO101 only), `_dispatch_command`
 
@@ -125,7 +124,7 @@ Notes: A BaseSetupWorker class could absorb 120 lines. The command loop is the b
 
 ```
 use-setup-websocket.ts          317 lines (11 state fields, 13 commands)
-use-trossen-setup-websocket.ts  166 lines ( 6 state fields,  4 commands)
+use-trossen-setup-websocket.ts  161 lines ( 6 state fields,  3 commands)
 ```
 
 **Shared:** `useState`+`useRef` boilerplate, `status`/`state_was_updated`/`error`/`pong` handlers, URL construction, `useWebSocket` config
@@ -140,18 +139,17 @@ Notes: A generic hook could absorb ~100 lines of boilerplate while letting each 
 
 ```
 so101  verification-step.tsx   ~180 lines
-trossen verification-step.tsx  ~140 lines
+trossen verification-step.tsx  ~171 lines
 ```
 
 **Character-for-character identical:**
 
 - `useSyncJointState` — iterate joints, strip `.pos`, map gripper, convert `degToRad()`
-- Mount effect — `streamPositions` on connect, `stopStream` on unmount
 - Save button + `isPending` + `isDisabled`
 
 **Different:** SO101 has 3-step save chain (create &rarr; save calibration &rarr; update); Trossen is 1-step
 
-Notes: useSyncJointState is the lowest-hanging fruit. It's ~20 lines, identical in both files, and trivial to extract.
+Notes: useSyncJointState is the lowest-hanging fruit. It's ~20 lines, identical in both files, and trivial to extract. Streaming is now phase-driven from the backend (no mount/unmount effect needed).
 
 ---
 
@@ -278,7 +276,7 @@ Notes: Aloha Mini further reinforces that the SO101 motor-level setup flow is th
 
 - SO101 pattern = motor probe &rarr; ID assignment &rarr; calibration &rarr; verification
 - Trossen pattern = IP ping &rarr; configure &rarr; verification
-- **Both** share: WebSocket lifecycle, command loop, verification streaming
+- **Both** share: WebSocket lifecycle, command loop, phase-driven broadcast loop
 
 Notes: The two setup "families" are clear. A base class that handles the shared infrastructure lets each family focus on its domain logic.
 
@@ -292,7 +290,7 @@ Notes: The two setup "families" are clear. A base class that handles the shared 
 
 | Pros | Cons |
 |---|---|
-| Eliminates ~470 lines of duplication | Premature if LeKiwi breaks assumptions |
+| Eliminates ~440 lines of duplication | Premature if LeKiwi breaks assumptions |
 | Establishes patterns before 3rd robot | Adds indirection to understand |
 | Reduces bug surface area | Current duplication is manageable |
 | Clear what's framework vs. robot-specific | Risk of over-engineering |
@@ -328,16 +326,16 @@ Notes: The key insight is that we don't need to create a grand unified abstracti
 ```python
 class BaseSetupWorker(TransportWorker):
     """Provides:
-    - run() lifecycle
+    - run() lifecycle with run_concurrent(broadcast_loop, command_loop)
     - _command_loop() with dispatch
-    - _send_phase_status(), _send_event(), _spawn_task()
-    - _streaming flag + _handle_stop_stream()
+    - _broadcast_loop() with phase-driven _broadcast_tick()
+    - _send_phase_status(), _send_event()
 
     Subclasses implement:
     - _run_diagnostics()
     - _dispatch_command(command, data)
     - _cleanup()
-    - _handle_stream_positions()
+    - _broadcast_tick() (reads positions based on current phase)
     """
 ```
 
@@ -361,16 +359,15 @@ Notes: The loop body is identical in both verification steps. SO101's hardcoded 
 
 -v-
 
-### Step 3: `useStreamOnMount` (Frontend)
+### ~~Step 3: `useStreamOnMount`~~ (No Longer Needed)
 
-Move to `shared/setup-wizard/use-stream-on-mount.ts`
+Streaming is now phase-driven from the backend. The `_broadcast_loop()` auto-streams
+positions when the worker enters `VERIFICATION` phase. No mount/unmount effect is
+needed on the frontend.
 
-- Accepts `{ streamPositions, stopStream }` + `isConnected`
-- Calls `streamPositions` on mount if connected
-- Calls `stopStream` on unmount
-- Uses `mountRef` pattern to avoid re-triggering
+**Lines saved by this refactoring:** ~30 (removed from both verification steps)
 
-**~30 lines saved** | Risk: **Very Low**
+**Replaced by:** `enterVerification` command sent when user navigates to verification step
 
 -v-
 
@@ -422,16 +419,18 @@ Notes: Knowing what NOT to abstract is as important as knowing what to abstract.
 |---|---|---|---|
 | 1. `BaseSetupWorker` | ~120 | Low | Do now |
 | 2. `useSyncJointState` | ~40 | Very Low | Do now |
-| 3. `useStreamOnMount` | ~30 | Very Low | Do now |
+| ~~3. `useStreamOnMount`~~ | ~~~30~~ | — | Done (removed by phase-driven refactoring) |
 | 4. Event timestamps | 0 | Very Low | Do now |
 | 5. Wizard navigation | ~100 | Medium | Wait for LeKiwi |
 | 6. Layout component | ~80 | Medium | Wait for LeKiwi |
 
-**Low-risk extractions: ~310 lines (Steps 1-4)**
+**Low-risk extractions: ~280 lines (Steps 1-2, 4)**
+
+**Already eliminated by refactoring: ~30 lines (Step 3 — streaming moved to backend)**
 
 **Deferred extractions: ~160 lines (Steps 5-6)**
 
-Notes: Steps 1-4 are independently committable and can be done incrementally. Steps 5-6 benefit from a third data point.
+Notes: Step 3 (useStreamOnMount) is no longer needed — the phase-driven broadcast loop eliminated frontend streaming management. Steps 1-2 and 4 are independently committable. Steps 5-6 benefit from a third data point.
 
 ---
 
