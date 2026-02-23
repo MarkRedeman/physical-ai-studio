@@ -40,6 +40,8 @@ interface TrossenSetupActions {
     goToStep: (step: TrossenWizardStep) => void;
     goNext: () => void;
     goBack: () => void;
+    /** Navigate back to the Robot Info step (unmounts the wizard provider). */
+    onBackToRobotInfo: () => void;
     markCompleted: (step: TrossenWizardStep) => void;
     canGoNext: boolean;
     canGoBack: boolean;
@@ -59,7 +61,13 @@ const TrossenSetupActionsContext = createContext<TrossenSetupActions | null>(nul
 // Provider
 // ---------------------------------------------------------------------------
 
-export const TrossenSetupWizardProvider = ({ children }: { children: ReactNode }) => {
+export const TrossenSetupWizardProvider = ({
+    children,
+    onBackToRobotInfo,
+}: {
+    children: ReactNode;
+    onBackToRobotInfo: () => void;
+}) => {
     const { project_id: projectId } = useProjectId();
     const robotForm = useRobotForm();
 
@@ -143,6 +151,7 @@ export const TrossenSetupWizardProvider = ({ children }: { children: ReactNode }
             goToStep,
             goNext,
             goBack,
+            onBackToRobotInfo,
             markCompleted,
             canGoNext: stepIndex < visibleSteps.length - 1,
             canGoBack: stepIndex > 0,
@@ -150,7 +159,7 @@ export const TrossenSetupWizardProvider = ({ children }: { children: ReactNode }
             visibleSteps,
             commands,
         }),
-        [goToStep, goNext, goBack, markCompleted, stepIndex, visibleSteps, commands]
+        [goToStep, goNext, goBack, onBackToRobotInfo, markCompleted, stepIndex, visibleSteps, commands]
     );
 
     return (

@@ -56,6 +56,8 @@ interface SetupActions {
     goToStep: (step: WizardStep) => void;
     goNext: () => void;
     goBack: () => void;
+    /** Navigate back to the Robot Info step (unmounts the wizard provider). */
+    onBackToRobotInfo: () => void;
     markCompleted: (step: WizardStep) => void;
     markSkipped: (step: WizardStep) => void;
     unmarkSkipped: (step: WizardStep) => void;
@@ -77,7 +79,13 @@ const SetupActionsContext = createContext<SetupActions | null>(null);
 // Provider
 // ---------------------------------------------------------------------------
 
-export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
+export const SetupWizardProvider = ({
+    children,
+    onBackToRobotInfo,
+}: {
+    children: ReactNode;
+    onBackToRobotInfo: () => void;
+}) => {
     const { project_id: projectId } = useProjectId();
     const robotForm = useRobotForm();
 
@@ -207,6 +215,7 @@ export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
             goToStep,
             goNext,
             goBack,
+            onBackToRobotInfo,
             markCompleted,
             markSkipped,
             unmarkSkipped,
@@ -218,7 +227,18 @@ export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
             setCalibrationPhase,
             setPreVerifyProbeResult,
         }),
-        [goToStep, goNext, goBack, markCompleted, markSkipped, unmarkSkipped, stepIndex, visibleSteps, commands]
+        [
+            goToStep,
+            goNext,
+            goBack,
+            onBackToRobotInfo,
+            markCompleted,
+            markSkipped,
+            unmarkSkipped,
+            stepIndex,
+            visibleSteps,
+            commands,
+        ]
     );
 
     return (

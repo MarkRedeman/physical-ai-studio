@@ -1,12 +1,13 @@
 import { Suspense, useState } from 'react';
 
-import { Button, Divider, Flex, Grid, Loading, View } from '@geti/ui';
+import { Button, Divider, Flex, Grid, Heading, Loading, View } from '@geti/ui';
 
+import { SchemaRobotType } from '../../api/openapi-spec';
 import { RobotForm } from '../../features/robots/robot-form/form';
-import { Preview } from '../../features/robots/robot-form/preview';
 import { RobotFormProvider, useRobotForm } from '../../features/robots/robot-form/provider';
 import { SubmitNewRobotButton } from '../../features/robots/robot-form/submit-new-robot-button';
 import { RobotModelsProvider } from '../../features/robots/robot-models-context';
+import { SetupRobotViewer } from '../../features/robots/shared/setup-wizard/setup-robot-viewer';
 import { Stepper } from '../../features/robots/shared/setup-wizard/stepper';
 import { SO101StepBody, SO101ViewerPanel } from '../../features/robots/so101/setup-wizard/setup-wizard';
 import {
@@ -114,7 +115,7 @@ const NewRobotSubmitButton = ({ onBeginSetup }: { onBeginSetup: () => void }) =>
 
 const SO101WizardView = ({ onBack }: { onBack: () => void }) => {
     return (
-        <SetupWizardProvider>
+        <SetupWizardProvider onBackToRobotInfo={onBack}>
             <SO101WizardInner onBack={onBack} />
         </SetupWizardProvider>
     );
@@ -173,7 +174,7 @@ const SO101WizardInner = ({ onBack }: { onBack: () => void }) => {
 
 const TrossenWizardView = ({ onBack }: { onBack: () => void }) => {
     return (
-        <TrossenSetupWizardProvider>
+        <TrossenSetupWizardProvider onBackToRobotInfo={onBack}>
             <TrossenWizardInner onBack={onBack} />
         </TrossenSetupWizardProvider>
     );
@@ -223,6 +224,56 @@ const TrossenWizardInner = ({ onBack }: { onBack: () => void }) => {
 };
 
 // ---------------------------------------------------------------------------
+// Robot Info viewer panel — SetupRobotViewer without a wizard provider
+// ---------------------------------------------------------------------------
+
+/**
+ * Viewer panel for the Robot Info step. Uses `SetupRobotViewer` (same 3D canvas
+ * as the wizard steps) with no highlights. Falls back to the dashed empty-state
+ * when no robot type is selected — identical to the pattern used by
+ * SO101ViewerPanel and TrossenViewerPanel.
+ */
+const RobotInfoViewerPanel = () => {
+    const robotForm = useRobotForm();
+    const robotType = robotForm.type || null;
+
+    if (!robotType) {
+        return (
+            <View
+                height='100%'
+                backgroundColor='gray-200'
+                UNSAFE_style={{
+                    borderRadius: 'var(--spectrum-alias-border-radius-regular)',
+                    borderColor: 'var(--spectrum-global-color-gray-700)',
+                    borderWidth: '1px',
+                    borderStyle: 'dashed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                }}
+            >
+                <Heading level={4} UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-500)' }}>
+                    Select a robot type to preview
+                </Heading>
+            </View>
+        );
+    }
+
+    return (
+        <View
+            height='100%'
+            backgroundColor='gray-200'
+            UNSAFE_style={{
+                borderRadius: 'var(--spectrum-alias-border-radius-regular)',
+                overflow: 'hidden',
+            }}
+        >
+            <SetupRobotViewer robotType={robotType as SchemaRobotType} highlights={[]} />
+        </View>
+    );
+};
+
+// ---------------------------------------------------------------------------
 // Inner page — requires RobotFormProvider to be mounted above
 // ---------------------------------------------------------------------------
 
@@ -254,41 +305,43 @@ const NewRobotPage = () => {
     }
 
     // -----------------------------------------------------------------------
-    // Robot Info view — the form + preview with stepper above
+    // Robot Info view — styled the same as the wizard steps
     // -----------------------------------------------------------------------
     const unifiedSteps = getUnifiedSteps(family);
     const unifiedLabels = getUnifiedLabels(family);
 
     return (
-        <Grid
-            areas={['stepper stepper', 'form viewer']}
-            columns={['size-6000', '1fr']}
-            rows={['auto', '1fr']}
-            gap='size-400'
-            height='100%'
-            UNSAFE_className={classes.wizardGrid}
-        >
-            <View gridArea='stepper' paddingX='size-400' paddingTop='size-400'>
-                <Stepper
-                    steps={unifiedSteps}
-                    currentStep={ROBOT_INFO_STEP}
-                    completedSteps={new Set<string>()}
-                    labels={unifiedLabels}
-                    onGoToStep={() => {
-                        /* robot_info is already current; other steps aren't reachable yet */
-                    }}
-                />
-                <Divider orientation='horizontal' size='S' marginTop='size-200' />
-            </View>
-            <View gridArea='form' backgroundColor='gray-100' padding='size-400'>
-                <Suspense fallback={<CenteredLoading />}>
-                    <RobotForm submitButton={<NewRobotSubmitButton onBeginSetup={beginSetup} />} />
-                </Suspense>
-            </View>
-            <View gridArea='viewer' backgroundColor='gray-50' padding='size-400'>
-                <Preview />
-            </View>
-        </Grid>
+        <View height='100%' backgroundColor='gray-100' padding='size-400' UNSAFE_style={{ overflow: 'hidden' }}>
+            <Grid
+                areas={['stepper stepper', 'form viewer']}
+                columns={['size-6000', '1fr']}
+                rows={['auto', '1fr']}
+                gap='size-400'
+                height='100%'
+                UNSAFE_className={classes.wizardGrid}
+            >
+                <View gridArea='stepper'>
+                    <Stepper
+                        steps={unifiedSteps}
+                        currentStep={ROBOT_INFO_STEP}
+                        completedSteps={new Set<string>()}
+                        labels={unifiedLabels}
+                        onGoToStep={() => {
+                            /* robot_info is already current; other steps aren't reachable yet */
+                        }}
+                    />
+                    <Divider orientation='horizontal' size='S' marginTop='size-200' />
+                </View>
+                <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
+                    <Suspense fallback={<CenteredLoading />}>
+                        <RobotForm submitButton={<NewRobotSubmitButton onBeginSetup={beginSetup} />} />
+                    </Suspense>
+                </View>
+                <View gridArea='viewer'>
+                    <RobotInfoViewerPanel />
+                </View>
+            </Grid>
+        </View>
     );
 };
 

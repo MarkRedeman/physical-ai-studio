@@ -11,7 +11,6 @@ import {
     Text,
 } from '@geti/ui';
 import { Refresh } from '@geti/ui/icons';
-import { useNavigate } from 'react-router';
 
 import { TrossenWizardStep, useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
@@ -26,8 +25,7 @@ import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
  */
 export const TrossenDiagnosticsStep = () => {
     const { wsState } = useTrossenSetupState();
-    const { goNext, markCompleted, commands } = useTrossenSetupActions();
-    const navigate = useNavigate();
+    const { goNext, markCompleted, onBackToRobotInfo, commands } = useTrossenSetupActions();
 
     const { diagnosticsResult, error } = wsState;
     const isLoading = !diagnosticsResult;
@@ -40,6 +38,11 @@ export const TrossenDiagnosticsStep = () => {
                         <strong>Connection Error:</strong> {error}
                     </Text>
                 </div>
+                <Flex gap='size-200'>
+                    <Button variant='secondary' onPress={onBackToRobotInfo}>
+                        Back
+                    </Button>
+                </Flex>
             </Flex>
         );
     }
@@ -157,7 +160,7 @@ export const TrossenDiagnosticsStep = () => {
 
             {/* Actions */}
             <Flex gap='size-200' justifyContent='space-between'>
-                <Button variant='secondary' onPress={() => navigate(-1)}>
+                <Button variant='secondary' onPress={onBackToRobotInfo}>
                     Back
                 </Button>
                 <Flex gap='size-200'>
