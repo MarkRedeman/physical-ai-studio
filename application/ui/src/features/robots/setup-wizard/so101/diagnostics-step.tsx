@@ -1,6 +1,5 @@
 import { ActionButton, Button, Flex, Heading, Icon, Loading, Text } from '@geti/ui';
 import { Refresh } from '@geti/ui/icons';
-import { useNavigate } from 'react-router';
 
 import { DiagnosticSection } from '../shared/diagnostic-section';
 import { InlineAlert } from '../shared/inline-alert';
@@ -16,8 +15,7 @@ import classes from '../shared/setup-wizard.module.scss';
  */
 export const DiagnosticsStep = () => {
     const { wsState } = useSetupState();
-    const { goNext, markCompleted, markSkipped, goToStep, commands } = useSetupActions();
-    const navigate = useNavigate();
+    const { goNext, markCompleted, markSkipped, goToStep, onBackToRobotInfo, commands } = useSetupActions();
 
     const { voltageResult, probeResult, error } = wsState;
     const isLoading = !voltageResult || !probeResult;
@@ -189,7 +187,7 @@ export const DiagnosticsStep = () => {
 
             {/* Actions */}
             <Flex gap='size-200' justifyContent='space-between'>
-                <Button variant='secondary' onPress={() => navigate(-1)}>
+                <Button variant='secondary' onPress={onBackToRobotInfo}>
                     Back
                 </Button>
                 <Flex gap='size-200'>
