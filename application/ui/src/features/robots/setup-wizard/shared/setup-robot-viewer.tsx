@@ -11,6 +11,7 @@ import { URDFRobot } from 'urdf-loader';
 
 import { SchemaRobotType } from '../../../../api/openapi-spec';
 import { useContainerSize } from '../../../../components/zoom/use-container-size';
+import { useBrightenDarkMaterials } from '../../controller/robot-viewer';
 import { urdfPathForType, useLoadModelMutation, useRobotModels } from '../../robot-models-context';
 import { JointHighlight, useJointHighlight } from './use-joint-highlight';
 
@@ -167,6 +168,9 @@ export const SetupRobotViewer = ({ robotType, highlights = [] }: SetupRobotViewe
     const size = useContainerSize(ref);
     const { getModel } = useRobotModels();
     const model = getModel(PATH);
+
+    const isTrossen = robotType.toLowerCase().includes('trossen');
+    useBrightenDarkMaterials(model, isTrossen);
 
     return (
         <div ref={ref} style={{ width: '100%', height: '100%' }}>
