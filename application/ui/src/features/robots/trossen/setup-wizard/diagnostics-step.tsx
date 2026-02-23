@@ -13,7 +13,7 @@ import {
 import { Refresh } from '@geti/ui/icons';
 import { useNavigate } from 'react-router';
 
-import { useTrossenSetupActions, useTrossenSetupState, TrossenWizardStep } from './wizard-provider';
+import { TrossenWizardStep, useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
 import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
 
@@ -97,8 +97,8 @@ export const TrossenDiagnosticsStep = () => {
                         ) : (
                             <div className={classes.errorBox}>
                                 <Text>
-                                    Cannot reach <strong>{connection_string}</strong>. Verify the robot is powered on and
-                                    connected to the same network, then re-check.
+                                    Cannot reach <strong>{connection_string}</strong>. Verify the robot is powered on
+                                    and connected to the same network, then re-check.
                                 </Text>
                             </div>
                         )}
@@ -145,7 +145,8 @@ export const TrossenDiagnosticsStep = () => {
                                 <div className={classes.errorBox}>
                                     <Text>
                                         {error_message ??
-                                            'Failed to configure the robot driver. Check that no other application is connected to the robot.'}
+                                            'Failed to configure the robot driver. ' +
+                                            'Check that no other application is connected to the robot.'}
                                     </Text>
                                 </div>
                             )}

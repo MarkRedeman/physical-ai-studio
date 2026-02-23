@@ -35,12 +35,7 @@ export interface ErrorEvent {
     message: string;
 }
 
-export type TrossenSetupEvent =
-    | DiagnosticsResult
-    | StatusEvent
-    | StateWasUpdatedEvent
-    | ErrorEvent
-    | { event: 'pong' };
+export type TrossenSetupEvent = DiagnosticsResult | StatusEvent | StateWasUpdatedEvent | ErrorEvent | { event: 'pong' };
 
 // ---------------------------------------------------------------------------
 // Hook
