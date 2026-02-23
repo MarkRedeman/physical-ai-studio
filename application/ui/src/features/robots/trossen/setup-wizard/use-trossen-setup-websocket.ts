@@ -126,17 +126,7 @@ export function useTrossenSetupWebSocket({
     const { sendJsonMessage, readyState } = useWebSocket(url, {
         onMessage: handleMessage,
         onOpen: () => setState((prev) => ({ ...prev, isConnected: true, error: null })),
-        onClose: () =>
-            setState((prev) => ({
-                ...prev,
-                isConnected: false,
-                // If the socket closed before diagnostics completed, surface an
-                // error so the UI doesn't stay on the loading spinner forever.
-                error:
-                    prev.diagnosticsResult === null
-                        ? (prev.error ?? 'Connection lost before diagnostics completed')
-                        : prev.error,
-            })),
+        onClose: () => setState((prev) => ({ ...prev, isConnected: false })),
         onError: () => setState((prev) => ({ ...prev, error: 'WebSocket connection error' })),
         shouldReconnect: () => false, // Don't auto-reconnect — user should retry explicitly
     });

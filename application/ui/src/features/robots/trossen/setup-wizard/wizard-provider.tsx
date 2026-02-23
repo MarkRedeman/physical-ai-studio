@@ -1,7 +1,10 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 
+import { useSearchParams } from 'react-router-dom';
+
 import { useProjectId } from '../../../projects/use-project';
 import { useRobotForm } from '../../robot-form/provider';
+import { TrossenDebugPanel, useMockTrossenSetupWebSocket } from './debug-panel';
 import { TrossenSetupWebSocketState, useTrossenSetupWebSocket } from './use-trossen-setup-websocket';
 
 // ---------------------------------------------------------------------------
@@ -44,7 +47,11 @@ interface TrossenSetupActions {
     canGoBack: boolean;
     stepIndex: number;
     visibleSteps: TrossenWizardStep[];
-    commands: ReturnType<typeof useTrossenSetupWebSocket>['commands'];
+    commands: {
+        reProbe: () => void;
+        enterVerification: () => void;
+        ping: () => void;
+    };
 }
 
 const TrossenSetupStateContext = createContext<TrossenSetupState | null>(null);
@@ -103,19 +110,28 @@ export const TrossenSetupWizardProvider = ({ children }: { children: ReactNode }
     }, []);
 
     // -----------------------------------------------------------------------
-    // WebSocket hook
+    // WebSocket hook — uses mock when ?debug=1 is present
     // -----------------------------------------------------------------------
+
+    const [searchParams] = useSearchParams();
+    const isDebug = searchParams.get('debug') === '1';
 
     const connectionString = robotForm.connection_string ?? '';
     const robotType = robotForm.type ?? '';
-    const wsEnabled = !!connectionString && !!robotType;
+    const wsEnabled = !isDebug && !!connectionString && !!robotType;
 
-    const { state: wsState, commands } = useTrossenSetupWebSocket({
+    // Both hooks are always called (rules of hooks) but only one is "active"
+    const realWs = useTrossenSetupWebSocket({
         projectId,
         robotType,
         connectionString,
         enabled: wsEnabled,
     });
+
+    const mockWs = useMockTrossenSetupWebSocket();
+
+    const wsState = isDebug ? mockWs.state : realWs.state;
+    const commands = isDebug ? mockWs.commands : realWs.commands;
 
     // -----------------------------------------------------------------------
     // Context values
@@ -144,7 +160,10 @@ export const TrossenSetupWizardProvider = ({ children }: { children: ReactNode }
 
     return (
         <TrossenSetupStateContext.Provider value={state}>
-            <TrossenSetupActionsContext.Provider value={actions}>{children}</TrossenSetupActionsContext.Provider>
+            <TrossenSetupActionsContext.Provider value={actions}>
+                {children}
+                {isDebug && <TrossenDebugPanel state={mockWs.state} setMockState={mockWs.setMockState} />}
+            </TrossenSetupActionsContext.Provider>
         </TrossenSetupStateContext.Provider>
     );
 };

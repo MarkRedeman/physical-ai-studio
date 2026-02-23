@@ -40,11 +40,6 @@ export const TrossenDiagnosticsStep = () => {
                         <strong>Connection Error:</strong> {error}
                     </Text>
                 </div>
-                <Flex gap='size-200'>
-                    <Button variant='secondary' onPress={() => navigate(-1)}>
-                        Back
-                    </Button>
-                </Flex>
             </Flex>
         );
     }
