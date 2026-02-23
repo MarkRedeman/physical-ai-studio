@@ -4,34 +4,63 @@
 
 *SO101 & Trossen WidowX AI*
 
-Notes: This presentation summarizes the refactoring analysis for the robot setup wizard feature. We'll cover common patterns, duplication, and concrete recommendations.
+Notes: This presentation summarizes the refactoring analysis for the robot setup wizard feature. We cover common patterns, duplication, the websocket future, and concrete recommendations.
 
 ---
 
 ## Agenda
 
-1. **Common Features** — What both wizards share
-2. **Duplication Analysis** — Where code is repeated
-3. **Can We Reuse RobotWorker/RobotClient?**
-4. **Messaging Protocol** — Consistency gaps
-5. **Upcoming Robots** — LeKiwi & Aloha Mini
-6. **Recommendations** — What to extract and when
+1. **Current Architecture** -- What we have today
+2. **Common Features** -- What both wizards share
+3. **Duplication Analysis** -- Where code is repeated
+4. **Can We Reuse RobotWorker/RobotClient?**
+5. **Messaging Protocol** -- Consistency gaps
+6. **The Websocket Future** -- SO101/LeKiwi/Aloha via websocket
+7. **Recommendations** -- What to extract and when
 
-Notes: The analysis covers both backend (Python) and frontend (React/TypeScript) code.
+Notes: The analysis covers backend (Python) and frontend (React/TypeScript). A key new consideration: future robots may connect via websocket, making motor setup and calibration optional.
 
 ---
 
-## The Two Wizards
+## Current Architecture
+
+-v-
+
+### Directory Structure
+
+```
+setup-wizard/
+  shared/       4 files,   ~666 lines
+  so101/        8 files, ~2,040 lines
+  trossen/      6 files, ~1,194 lines
+
+routes/robots/new.tsx     366 lines (unified page)
+
+workers/robots/
+  transport_worker.py      91 lines (base class)
+  so101_setup_worker.py   810 lines (9 phases, 10 commands)
+  trossen_setup_worker.py 424 lines (3 phases,  3 commands)
+
+api/robot_setup.py        101 lines (WS dispatcher)
+```
+
+**Total: 19 frontend files (~4,266 lines), 4 backend files (~1,426 lines)**
+
+Notes: All setup wizard code is colocated under `features/robots/setup-wizard/`. No BaseSetupWorker exists -- both workers extend TransportWorker directly. The route is unified: a single `/robots/new` page hosts both wizards.
+
+-v-
+
+### The Two Wizards
 
 | | SO101 | Trossen WidowX AI |
 |---|---|---|
 | **Connection** | USB Serial | IP Network |
 | **Motors** | 6 (Feetech STS3215) | 7 (Dynamixel-based) |
-| **Calibration** | Homing + range recording | None (hardcoded) |
+| **Calibration** | Homing + range recording | None (SDK handles it) |
 | **Setup steps** | 4 (Diagnostics, Motor Setup, Calibration, Verification) | 2 (Diagnostics, Verification) |
-| **Backend** | `SO101SetupWorker` (813 lines) | `TrossenSetupWorker` (368 lines) |
+| **Backend** | `SO101SetupWorker` (810 lines, 23 methods) | `TrossenSetupWorker` (424 lines, 13 methods) |
 
-Notes: SO101 is the "complex" path with per-motor setup. Trossen is the "simple" path — the SDK handles most configuration internally.
+Notes: SO101 is the "complex" path with per-motor setup. Trossen is the "simple" path -- the SDK handles most configuration internally.
 
 ---
 
@@ -39,46 +68,48 @@ Notes: SO101 is the "complex" path with per-motor setup. Trossen is the "simple"
 
 -v-
 
-### Backend — Identical Code
+### Backend -- Identical Code
 
 Both workers extend `TransportWorker` and share:
 
-- **`run()` lifecycle**: `run_concurrent(broadcast_loop, command_loop)` with connect &rarr; diagnostics &rarr; dual loops &rarr; cleanup
-- **`_command_loop()`**: `while not _stop_requested: receive &rarr; dispatch`
+- **`run()` lifecycle**: connect &rarr; diagnostics &rarr; `run_concurrent(broadcast_loop, command_loop)` &rarr; cleanup
+- **`_command_loop()`**: `while not _stop_requested: receive &rarr; dispatch` (identical except log message)
 - **`_broadcast_loop()`**: Phase-driven streaming at fixed FPS with `time.perf_counter()` timing
 - **`_send_phase_status()`**: `{event, state, phase, message}`
 - **`_send_event()`**: `{event, **kwargs}`
 - **`ping`/`pong`** heartbeat
 
-Notes: These 6 items are character-for-character identical in both workers. They are prime candidates for extraction.
+Notes: These 6 items are character-for-character identical (or near-identical) in both workers. They are prime candidates for extraction into a BaseSetupWorker.
 
 -v-
 
-### Frontend — Already Shared
+### Frontend -- Already Shared
 
-These components were extracted during development:
+These components live in `setup-wizard/shared/`:
 
-| Component | Location |
-|---|---|
-| `Stepper` | `shared/setup-wizard/stepper.tsx` |
-| `SetupRobotViewer` | `shared/setup-wizard/setup-robot-viewer.tsx` |
-| `useJointHighlight` | `shared/setup-wizard/use-joint-highlight.ts` |
-| SCSS styles | `shared/setup-wizard/setup-wizard.module.scss` |
+| Component | File | Lines |
+|---|---|---|
+| `Stepper` | `stepper.tsx` | 70 |
+| `SetupRobotViewer` | `setup-robot-viewer.tsx` | 203 |
+| `useJointHighlight` | `use-joint-highlight.ts` | 168 |
+| SCSS styles | `setup-wizard.module.scss` | 225 |
 
-Notes: The stepper was refactored from context-dependent to props-based so both wizards can use it.
+The outer layout (Grid + Stepper + Divider + Viewer Panel) is unified in `routes/robots/new.tsx`.
+
+Notes: The stepper is fully generic (props-based). The 3D viewer supports optional joint highlights. The outer layout is shared -- no duplication between wizards.
 
 -v-
 
-### Frontend — Duplicated Patterns
+### Frontend -- Still Duplicated
 
-Still duplicated across both wizards:
+| Pattern | SO101 | Trossen | Duplication |
+|---|---|---|---|
+| WebSocket hooks | 308 lines, 11 state fields, 10 cmds | 171 lines, 6 state fields, 3 cmds | ~100 lines |
+| Wizard providers | 265 lines, skip logic | 186 lines, no skip | ~80 lines |
+| `useSyncJointState` | Hardcoded path, no joint mapping | Dynamic path, joint mapping table | ~50 lines |
+| Diagnostics steps | 302 lines | 183 lines | ~40 lines (but domain differs) |
 
-- **WebSocket hooks** — `useState` + `useRef` boilerplate, `handleMessage` switch, URL construction
-- **Wizard providers** — dual-context pattern, navigation logic (`goToStep`, `goNext`, `goBack`)
-- **Verification steps** — `useSyncJointState` loop, save flow
-- **Layout components** — Grid structure, stepper rendering, viewer panel
-
-Notes: These represent ~280 lines of recoverable duplication across the frontend.
+Notes: These represent ~270 lines of recoverable duplication. The diagnostics steps share boilerplate but domain content differs too much to extract.
 
 ---
 
@@ -93,63 +124,69 @@ Notes: These represent ~280 lines of recoverable duplication across the frontend
 | Backend lifecycle + helpers | ~120 | Low |
 | Frontend WS hooks | ~100 | Medium |
 | Wizard providers | ~80 | Medium |
-| Verification steps | ~50 | Very Low |
-| Layout components | ~80 | Medium |
-| Diagnostics steps | ~40 | **Leave as-is** |
-| **Total recoverable** | **~440** | |
+| `useSyncJointState` | ~50 | Very Low |
+| Diagnostics boilerplate | ~40 | **Leave as-is** |
+| Layout switching | ~40 | Low |
+| **Total recoverable** | **~410** | |
 
-Notes: ~250 lines can be extracted with low risk (Steps 1-2, 4 of recommendations). ~30 lines were already eliminated by the phase-driven broadcast refactoring (Step 3). The remaining ~160 lines need more careful design.
+Notes: ~220 lines can be extracted with low risk (Steps 1-3). The remaining ~190 lines need more careful design or benefit from a third data point.
 
 -v-
 
-### Backend — Setup Workers
+### Backend -- Setup Workers
 
 ```
-so101_setup_worker.py    ████████████████████████  813 lines
+so101_setup_worker.py    ████████████████████████  810 lines
                           ████ ~120 shared (~15%)
 
-trossen_setup_worker.py  ████████████  368 lines
-                          ████ ~120 shared (~33%)
+trossen_setup_worker.py  ████████████  424 lines
+                          ████ ~120 shared (~28%)
 ```
 
-**Identical:** `_send_phase_status`, `_send_event`, `_broadcast_loop`, `_command_loop`, `run_concurrent()` lifecycle
+**Identical:** `_send_phase_status`, `_send_event`, `_command_loop`, `run()` lifecycle
 
-**Robot-specific:** Diagnostics, calibration (SO101 only), motor setup (SO101 only), `_dispatch_command`
+**Structurally similar:** `_broadcast_loop` (different FPS, tick args), `_broadcast_tick` (different phase dispatch)
 
-Notes: A BaseSetupWorker class could absorb 120 lines. The command loop is the biggest win — it's identical in both workers.
+**Robot-specific:** Diagnostics, calibration (SO101), motor setup (SO101), `_dispatch_command`, `_cleanup`
+
+Notes: A BaseSetupWorker class could absorb ~120 lines. The command loop is the biggest win -- it's identical except for one log message.
 
 -v-
 
-### Frontend — WebSocket Hooks
+### Frontend -- WebSocket Hooks
 
 ```
-use-setup-websocket.ts          317 lines (11 state fields, 13 commands)
-use-trossen-setup-websocket.ts  161 lines ( 6 state fields,  3 commands)
+use-setup-websocket.ts          308 lines (11 state fields, 10 commands)
+use-trossen-setup-websocket.ts  171 lines ( 6 state fields,  3 commands)
 ```
 
-**Shared:** `useState`+`useRef` boilerplate, `status`/`state_was_updated`/`error`/`pong` handlers, URL construction, `useWebSocket` config
+**Shared event handlers:** `status`, `state_was_updated`, `error`, `pong` -- identical
 
-**Different:** SO101 has 7 extra state fields, 9 extra commands, uses `serial_number`; Trossen uses `connection_string`
+**Shared commands:** `reProbe`, `enterVerification`, `ping`
 
-Notes: A generic hook could absorb ~100 lines of boilerplate while letting each robot define its own state shape and commands.
+**Shared boilerplate:** `useWebSocket` config, URL construction, `useState`+`useRef` pattern
+
+Notes: A generic hook could absorb ~100 lines of boilerplate. SO101 adds voltage/probe/motor/calibration state; Trossen adds diagnosticsResult. The state shapes are fundamentally different.
 
 -v-
 
-### Frontend — Verification Steps
+### Frontend -- Verification Steps
 
-```
-so101  verification-step.tsx   ~180 lines
-trossen verification-step.tsx  ~171 lines
-```
+**`useSyncJointState` -- ~90% identical in both files:**
 
-**Character-for-character identical:**
+- Iterate `jointState` entries, strip `.pos` suffix
+- Map `gripper` &rarr; `left_carriage_joint` for wxai robots
+- Convert all other joints with `degToRad()`
 
-- `useSyncJointState` — iterate joints, strip `.pos`, map gripper, convert `degToRad()`
-- Save button + `isPending` + `isDisabled`
+**Key differences:**
 
-**Different:** SO101 has 3-step save chain (create &rarr; save calibration &rarr; update); Trossen is 1-step
+| | SO101 | Trossen |
+|---|---|---|
+| URDF path | Hardcoded `SO101_PATH` | Dynamic `urdfPathForType()` |
+| Joint mapping | None (motor names == URDF) | `MOTOR_TO_URDF_JOINT` table |
+| Save flow | 3-step (create &rarr; save cal &rarr; update) | 1-step (create only) |
 
-Notes: useSyncJointState is the lowest-hanging fruit. It's ~20 lines, identical in both files, and trivial to extract. Streaming is now phase-driven from the backend (no mount/unmount effect needed).
+Notes: useSyncJointState is the lowest-hanging fruit. Extraction should be based on the Trossen version (more general). SO101 would pass `undefined` for the joint mapping.
 
 ---
 
@@ -166,43 +203,25 @@ Verification streaming looks like `RobotWorker._broadcast_loop()`:
 | Read positions | `client.read_state()` | `bus.sync_read()` / `driver.get_all_positions()` |
 | Dedup | `current != previous` | SO101: raw only |
 | Output | `state_was_updated` + timestamp | `state_was_updated` (no timestamp) |
-| Frequency | Configurable FPS (30Hz) | Hardcoded ~20Hz |
+| Frequency | Configurable FPS (30Hz) | Fixed FPS (SO101: 30Hz, Trossen: 20Hz) |
 
-Notes: On the surface, the verification streaming step looks like it could delegate to RobotClient. But there are practical blockers.
+Notes: On the surface, the verification step could delegate to RobotClient. But there are practical blockers.
 
 -v-
 
 ### Why Not
 
-1. **SO101 `RobotClient` requires a saved robot** — needs DB `id` + `active_calibration_id`, but setup avoids DB until "Save"
+1. **SO101 `RobotClient` requires a saved robot** -- needs DB `id` + `active_calibration_id`, but setup avoids DB until "Save"
 
-2. **SO101 setup manages `bus.calibration` manually** — `SO101Follower` client would trigger lerobot's interactive `input()` prompts
+2. **SO101 setup manages `bus.calibration` manually** -- `SO101Follower` client would trigger lerobot's interactive `input()` prompts
 
-3. **Trossen `configure()` homes the robot** — creating a new client would re-home unexpectedly
+3. **Trossen `configure()` homes the robot** -- creating a new client would re-home unexpectedly
 
-4. **Different lifecycle** — `RobotClient.connect()` is long-lived; setup workers are short-lived with multiple phases
+4. **Different lifecycle** -- `RobotClient.connect()` is long-lived; setup workers are short-lived with phases
 
 **Verdict: Not practical** without significant changes to `RobotClient`
 
-Notes: The setup workers' direct hardware access is intentional and correct. The workarounds needed to use RobotClient would be worse than the duplication.
-
--v-
-
-### What About `commands.py` Pydantic Models?
-
-Setup workers use `match/case` for 4-12 commands.
-Normal operation uses Pydantic discriminated unions for 8 commands.
-
-**Not worth it today:**
-
-- Only `ping` overlaps between the two command sets
-- Setup commands carry different payloads
-- `match/case` is clear for 4-12 commands
-- Setup commands aren't performance-critical
-
-*Revisit if setup commands grow to 20+.*
-
-Notes: The Pydantic models add type safety but also double the code for the same behavior at this scale.
+Notes: The setup workers' direct hardware access is intentional. The workarounds needed to use RobotClient would be worse than the duplication.
 
 ---
 
@@ -210,7 +229,7 @@ Notes: The Pydantic models add type safety but also double the code for the same
 
 -v-
 
-### Current Inconsistencies
+### Inconsistencies
 
 | Field | Normal Operation | Setup Workers |
 |---|---|---|
@@ -219,7 +238,7 @@ Notes: The Pydantic models add type safety but also double the code for the same
 | Error format | `{event, timestamp, message}` | `{event, message}` |
 | Status shape | Includes `config` key | No `config` key |
 
-Notes: These inconsistencies don't cause bugs today because the frontend hooks are completely separate code paths. But they create conceptual overhead.
+Notes: Not causing bugs today (separate code paths), but creates conceptual overhead.
 
 -v-
 
@@ -227,97 +246,102 @@ Notes: These inconsistencies don't cause bugs today because the frontend hooks a
 
 **Add `timestamp` to setup worker events.**
 
-- One-line change per event
+- One-line change per event (or in `BaseSetupWorker._send_event()`)
 - Makes protocol uniform
 - Frontend already ignores it (no breakage)
 
-**Do NOT add `is_controlled`** — meaningless during setup (robot is never teleoperated)
+**Do NOT add `is_controlled`** -- meaningless during setup
 
-Notes: This is a consistency improvement, not a bug fix. Low risk, low effort, good hygiene.
+Notes: Low risk, low effort, good hygiene.
 
 ---
 
-## Upcoming Robots
+## The Websocket Future
 
 -v-
 
-### LeKiwi
+### Today's Connection Model
 
-- **What:** Mobile base (differential drive) + SO101 arm on top
-- **Motors:** Feetech STS3215 (same as SO101) + wheel motors
-- **Calibration:** Same homing + range recording for arm joints
-- **Implication:** Would heavily reuse SO101 setup worker, possibly extend it with base motor steps
+| | SO101 | Trossen |
+|---|---|---|
+| **Connection** | USB Serial &rarr; `FeetechMotorsBus` | IP Network &rarr; `TrossenArmDriver` |
+| **Motor setup** | Required (per-motor ID assignment) | Not needed (SDK) |
+| **Calibration** | Required (homing + recording) | Not needed (SDK) |
+| **PID config** | Required (after calibration) | Not needed (SDK) |
 
-Notes: LeKiwi is the strongest argument for extracting a BaseSetupWorker. It would share ~90% of the SO101 setup flow.
+Setup complexity is determined by the **connection method**, not the robot type.
 
--v-
-
-### Aloha Mini
-
-- **What:** Bimanual robot with two SO101-like arms
-- **Motors:** Feetech STS3215 (12 motors across 2 arms)
-- **Connection:** Two USB serial connections
-- **Implication:** Would run the SO101 setup flow twice (sequentially or parallel)
-
-Notes: Aloha Mini further reinforces that the SO101 motor-level setup flow is the pattern that will be most reused.
+Notes: SO101 talks directly to the motor bus, so the wizard must handle everything. Trossen delegates to the SDK.
 
 -v-
 
-### What This Tells Us
+### What's Changing
 
+Future SO101, LeKiwi, and Aloha Mini robots may connect via **websocket**:
+
+- A **companion process** (on Pi or similar) manages the motor bus locally
+- Exposes a websocket API for position streaming, health checks, calibration
+- The setup wizard connects via websocket instead of serial port
+
+Notes: This fundamentally changes which setup steps are needed for these robots.
+
+-v-
+
+### Impact on Setup Steps
+
+| Capability | Serial Bus (today) | Websocket (future) |
+|---|---|---|
+| Motor ID assignment | **Required** | Not needed |
+| Calibration (homing) | **Required** | **Optional** |
+| Calibration (recording) | **Required** | **Optional** |
+| PID configuration | **Required** | Not needed |
+| Diagnostics | Voltage + probe | Health check via WS |
+| Position streaming | Direct bus read | Proxied through WS |
+
+**Motor setup and calibration become opt-in, not hard requirements.**
+
+Notes: A websocket-connected SO101 would follow a flow closer to Trossen's: diagnostics &rarr; optional calibration &rarr; verification.
+
+-v-
+
+### The "Complex" vs "Simple" Split Dissolves
+
+Today:
 ```
-                    BaseSetupWorker
-                    /              \
-           "Complex" path      "Simple" path
-         (motor-level setup)   (SDK-managed)
-              /     |    \              \
-          SO101  LeKiwi  Aloha Mini   Trossen
+     "Complex" (serial)          "Simple" (SDK)
+      SO101, LeKiwi, Aloha        Trossen
 ```
 
-- SO101 pattern = motor probe &rarr; ID assignment &rarr; calibration &rarr; verification
-- Trossen pattern = IP ping &rarr; configure &rarr; verification
-- **Both** share: WebSocket lifecycle, command loop, phase-driven broadcast loop
+Future:
+```
+     Serial-connected             Websocket/SDK-connected
+      SO101-serial                 SO101-ws
+      LeKiwi-serial                LeKiwi-ws
+      Aloha-serial                 Aloha-ws
+                                   Trossen
+```
 
-Notes: The two setup "families" are clear. A base class that handles the shared infrastructure lets each family focus on its domain logic.
+The distinction becomes **connection-method-dependent**, not robot-type-dependent. A single robot type may have both paths.
+
+Notes: This is the key architectural insight. The BaseSetupWorker should not assume a fixed phase set.
+
+-v-
+
+### Architecture Implications
+
+1. **`BaseSetupWorker` becomes essential** -- with 4+ robot types and 2 connection methods, shared lifecycle is critical
+
+2. **Phase sets must be flexible** -- variable steps, not hardcoded to 4 or 2. SO101's auto-skip logic is a precursor.
+
+3. **Motor setup & calibration become reusable modules** -- composable capabilities, not baked into one worker
+
+4. **Frontend navigation must support dynamic steps** -- show/hide based on what the companion reports as necessary
+
+Notes: The websocket future doesn't change the immediate extractions, but it changes the framing and raises the priority of flexible step management.
 
 ---
 
-## Pros & Cons of Abstracting Now
-
--v-
-
-### Option A: Extract Now
-
-| Pros | Cons |
-|---|---|
-| Eliminates ~440 lines of duplication | Premature if LeKiwi breaks assumptions |
-| Establishes patterns before 3rd robot | Adds indirection to understand |
-| Reduces bug surface area | Current duplication is manageable |
-| Clear what's framework vs. robot-specific | Risk of over-engineering |
-
--v-
-
-### Option B: Wait for LeKiwi
-
-| Pros | Cons |
-|---|---|
-| 3 data points &rarr; better abstractions | More copy-paste during LeKiwi integration |
-| No wasted effort if patterns change | 3rd copy makes codebase harder to maintain |
-| Current code works and is clear | Refactoring under time pressure |
-
--v-
-
-### Verdict: Option A, Scoped Conservatively
-
-Extract **only** what is character-for-character identical.
-
-**Do not** try to abstract over the differences.
-
-Notes: The key insight is that we don't need to create a grand unified abstraction. We just need to stop copying the same boilerplate.
-
----
-
-## Recommended Refactoring Steps
+## Recommendations
 
 -v-
 
@@ -326,60 +350,49 @@ Notes: The key insight is that we don't need to create a grand unified abstracti
 ```python
 class BaseSetupWorker(TransportWorker):
     """Provides:
-    - run() lifecycle with run_concurrent(broadcast_loop, command_loop)
+    - run() lifecycle
     - _command_loop() with dispatch
-    - _broadcast_loop() with phase-driven _broadcast_tick()
+    - _broadcast_loop() with _broadcast_tick()
     - _send_phase_status(), _send_event()
 
     Subclasses implement:
     - _run_diagnostics()
     - _dispatch_command(command, data)
     - _cleanup()
-    - _broadcast_tick() (reads positions based on current phase)
+    - _broadcast_tick()
     """
 ```
 
-**~120 lines saved** | Risk: **Low**
+**~120 lines saved** | Risk: **Low** | Websocket-ready: base class is connection-agnostic
 
-Notes: This is the highest-impact extraction. The command loop alone is ~20 lines of identical code.
+Notes: Highest-impact extraction. The command loop alone is ~17 lines of identical code. Future websocket workers would be another subclass.
 
 -v-
 
 ### Step 2: `useSyncJointState` (Frontend)
 
-Move to `shared/setup-wizard/use-sync-joint-state.ts`
+Move to `shared/use-sync-joint-state.ts`
 
 - Accepts `jointState` + `robotType`
 - Resolves URDF path via `urdfPathForType()`
-- Handles `gripper` &rarr; `left_carriage_joint` mapping for wxai
+- Supports optional `jointNameMapping` for robots where motor names differ from URDF joints
+- Based on Trossen version (more general)
 
-**~40 lines saved** | Risk: **Very Low**
+**~50 lines saved** | Risk: **Very Low**
 
-Notes: The loop body is identical in both verification steps. SO101's hardcoded path becomes urdfPathForType('SO101_Follower').
-
--v-
-
-### ~~Step 3: `useStreamOnMount`~~ (No Longer Needed)
-
-Streaming is now phase-driven from the backend. The `_broadcast_loop()` auto-streams
-positions when the worker enters `VERIFICATION` phase. No mount/unmount effect is
-needed on the frontend.
-
-**Lines saved by this refactoring:** ~30 (removed from both verification steps)
-
-**Replaced by:** `enterVerification` command sent when user navigates to verification step
+Notes: SO101 passes no mapping (motor names == URDF joints). Trossen passes `MOTOR_TO_URDF_JOINT`. Clean parameterization.
 
 -v-
 
-### Step 4: Add `timestamp` to Setup Events
+### Step 3: Add `timestamp` to Setup Events
 
-Extract `_create_event()` as standalone utility, or inline `datetime.now().timestamp()`.
+Add `datetime.now().timestamp()` to `BaseSetupWorker._send_event()` (or standalone utility).
 
 **0 lines saved** (consistency improvement) | Risk: **Very Low**
 
 -v-
 
-### Step 5: Shared Wizard Navigation (Frontend)
+### Step 4: Shared Wizard Navigation (Frontend)
 
 `createWizardNavigation<S>()` utility providing:
 
@@ -389,56 +402,73 @@ Extract `_create_event()` as standalone utility, or inline `datetime.now().times
 
 **~100 lines saved** | Risk: **Medium**
 
-Notes: The skip logic adds complexity. Needs careful design to keep the simple case (Trossen) simple.
+**Higher priority with websocket future** -- dynamic step sets needed for WS-connected robots
+
+Notes: The skip logic complexity is manageable if designed as opt-in. The simple case (Trossen) should remain simple.
 
 -v-
 
-### Step 6 (Optional): `SetupWizardLayout`
+### Step 5 (Optional): Inner Step Switching
 
-Shared Grid + Stepper + Divider + ViewerPanel with a `renderStep(step)` callback.
+A shared `renderStep(currentStep)` pattern for the step body components.
 
-**~80 lines saved** | Risk: **Medium**
+**~40 lines saved** | Risk: **Low**
 
-*SO101's step-specific animations complicate the viewer panel generalization.*
+*Outer layout already unified in `new.tsx`.*
 
 -v-
 
 ### What NOT to Extract
 
-- **Diagnostics steps** — domain content differs too much (~40 lines, high indirection cost)
-- **Pydantic models for setup commands** — not worth it for 4-12 commands
-- **Unified websocket hook** — state shapes differ too much; extract only the boilerplate
+- **Diagnostics steps** -- domain content differs too much
+- **Pydantic models for setup commands** -- not worth it for 3-10 commands
+- **Unified websocket hook** -- state shapes differ too much; extract only boilerplate
+- **Phase composition/mixin system** -- premature; wait for websocket architecture
 
-Notes: Knowing what NOT to abstract is as important as knowing what to abstract. The diagnostics steps are simple and readable as-is.
+Notes: Knowing what NOT to abstract is as important as knowing what to abstract.
 
 ---
 
 ## Summary
 
-| Step | Lines Saved | Risk | Priority |
+-v-
+
+### Extraction Priority
+
+| Step | Lines | Risk | Priority |
 |---|---|---|---|
-| 1. `BaseSetupWorker` | ~120 | Low | Do now |
-| 2. `useSyncJointState` | ~40 | Very Low | Do now |
-| ~~3. `useStreamOnMount`~~ | ~~~30~~ | — | Done (removed by phase-driven refactoring) |
-| 4. Event timestamps | 0 | Very Low | Do now |
-| 5. Wizard navigation | ~100 | Medium | Wait for LeKiwi |
-| 6. Layout component | ~80 | Medium | Wait for LeKiwi |
+| 1. `BaseSetupWorker` | ~120 | Low | **Do now** |
+| 2. `useSyncJointState` | ~50 | Very Low | **Do now** |
+| 3. Event timestamps | 0 | Very Low | **Do now** |
+| 4. Wizard navigation | ~100 | Medium | Do now or wait |
+| 5. Step switching | ~40 | Low | Optional |
 
-**Low-risk extractions: ~280 lines (Steps 1-2, 4)**
+**Low-risk extractions: ~220 lines (Steps 1-3)**
 
-**Already eliminated by refactoring: ~30 lines (Step 3 — streaming moved to backend)**
+**Deferred extractions: ~190 lines (Steps 4-5, WS boilerplate)**
 
-**Deferred extractions: ~160 lines (Steps 5-6)**
+-v-
 
-Notes: Step 3 (useStreamOnMount) is no longer needed — the phase-driven broadcast loop eliminated frontend streaming management. Steps 1-2 and 4 are independently committable. Steps 5-6 benefit from a third data point.
+### Websocket Impact
+
+| Step | Without WS consideration | With WS consideration |
+|---|---|---|
+| `BaseSetupWorker` | Nice deduplication | **Essential** -- new workers will multiply |
+| `useSyncJointState` | Low-hanging fruit | Same -- connection-agnostic |
+| Wizard navigation | Wait for 3rd robot | **Higher priority** -- dynamic steps needed |
+| Phase composition | Not considered | **Future work** -- after WS arch is clear |
+
+Notes: The BaseSetupWorker extraction is the highest-value change regardless of whether the websocket future materializes.
 
 ---
 
 ## Thank You
 
-### Key Takeaway
+### Key Takeaways
 
-> Extract what's identical. Leave what's different.
-> Let the third robot validate the abstraction.
+> 1. Extract what's identical. Leave what's different.
+> 2. The websocket future makes `BaseSetupWorker` essential, not optional.
+> 3. Motor setup and calibration should be opt-in capabilities.
+> 4. Let the third robot validate the higher-level abstractions.
 
 *Full report: `robot-setup-analysis.md`*
