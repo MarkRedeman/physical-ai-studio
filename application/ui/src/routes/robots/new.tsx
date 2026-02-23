@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useCallback, useRef, useState } from 'react';
 
 import { Button, Divider, Flex, Grid, Heading, Loading, View } from '@geti/ui';
 
@@ -9,7 +9,8 @@ import { SubmitNewRobotButton } from '../../features/robots/robot-form/submit-ne
 import { RobotModelsProvider } from '../../features/robots/robot-models-context';
 import { SetupRobotViewer } from '../../features/robots/shared/setup-wizard/setup-robot-viewer';
 import { Stepper } from '../../features/robots/shared/setup-wizard/stepper';
-import { SO101StepBody, SO101ViewerPanel } from '../../features/robots/so101/setup-wizard/setup-wizard';
+import { JointHighlight } from '../../features/robots/shared/setup-wizard/use-joint-highlight';
+import { SO101StepBody, SO101ViewerEffects } from '../../features/robots/so101/setup-wizard/setup-wizard';
 import {
     SetupWizardProvider,
     STEP_LABELS as SO101_STEP_LABELS,
@@ -19,7 +20,7 @@ import {
     WizardStep,
 } from '../../features/robots/so101/setup-wizard/wizard-provider';
 import { TrossenDebugProvider } from '../../features/robots/trossen/setup-wizard/debug-panel';
-import { TrossenStepBody, TrossenViewerPanel } from '../../features/robots/trossen/setup-wizard/setup-wizard';
+import { TrossenStepBody } from '../../features/robots/trossen/setup-wizard/setup-wizard';
 import {
     TROSSEN_STEP_LABELS,
     TROSSEN_WIZARD_STEPS,
@@ -30,17 +31,6 @@ import {
 } from '../../features/robots/trossen/setup-wizard/wizard-provider';
 
 import classes from '../../features/robots/shared/setup-wizard/setup-wizard.module.scss';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/**
- * The unified page always starts on 'robot_info'. Once the user clicks
- * "Begin Setup", we switch to 'wizard' which mounts the appropriate
- * wizard provider and delegates step management to it.
- */
-type PageView = 'robot_info' | 'wizard';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -86,8 +76,8 @@ function getUnifiedLabels(family: 'so101' | 'trossen' | null): Record<string, st
 
 /**
  * When no wizard applies (unknown type), fall back to the default POST button.
- * When SO101 or Trossen is selected, show "Begin Setup" which advances
- * the page view from 'robot_info' into the wizard.
+ * When SO101 or Trossen is selected, show "Begin Setup" which mounts the
+ * wizard provider and starts the setup flow.
  */
 const NewRobotSubmitButton = ({ onBeginSetup }: { onBeginSetup: () => void }) => {
     const robotForm = useRobotForm();
@@ -110,22 +100,62 @@ const NewRobotSubmitButton = ({ onBeginSetup }: { onBeginSetup: () => void }) =>
 };
 
 // ---------------------------------------------------------------------------
-// SO101 wizard wrapper — renders inside SetupWizardProvider
+// Robot Info — stepper + form (no wizard provider needed)
 // ---------------------------------------------------------------------------
 
-const SO101WizardView = ({ onBack }: { onBack: () => void }) => {
+/**
+ * Left-column content for the Robot Info step. Renders the static stepper
+ * and the robot form. These are Fragment children so Grid sees the
+ * gridArea Views as direct items.
+ */
+const RobotInfoContent = ({ onBeginSetup }: { onBeginSetup: () => void }) => {
+    const robotForm = useRobotForm();
+    const family = robotFamily(robotForm.type);
+
+    const unifiedSteps = getUnifiedSteps(family);
+    const unifiedLabels = getUnifiedLabels(family);
+
     return (
-        <SetupWizardProvider onBackToRobotInfo={onBack}>
-            <SO101WizardInner onBack={onBack} />
-        </SetupWizardProvider>
+        <>
+            <View gridArea='stepper'>
+                <Stepper
+                    steps={unifiedSteps}
+                    currentStep={ROBOT_INFO_STEP}
+                    completedSteps={new Set<string>()}
+                    labels={unifiedLabels}
+                    onGoToStep={() => {
+                        /* robot_info is already current; other steps aren't reachable yet */
+                    }}
+                />
+                <Divider orientation='horizontal' size='S' marginTop='size-200' />
+            </View>
+            <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
+                <Suspense fallback={<CenteredLoading />}>
+                    <RobotForm submitButton={<NewRobotSubmitButton onBeginSetup={onBeginSetup} />} />
+                </Suspense>
+            </View>
+        </>
     );
 };
 
+// ---------------------------------------------------------------------------
+// SO101 wizard — stepper + step body + highlight sync (inside provider)
+// ---------------------------------------------------------------------------
+
 /**
- * Must be a separate component so it can call SO101 wizard hooks
- * (which require SetupWizardProvider to be mounted above it).
+ * Left-column content for the SO101 wizard. Must be rendered inside
+ * `SetupWizardProvider` because it reads wizard state via hooks.
+ *
+ * Also renders `SO101ViewerEffects` which drives calibration animations
+ * and syncs highlights up to the parent via `onHighlightsChange`.
  */
-const SO101WizardInner = ({ onBack }: { onBack: () => void }) => {
+const SO101WizardContent = ({
+    onBack,
+    onHighlightsChange,
+}: {
+    onBack: () => void;
+    onHighlightsChange: (highlights: JointHighlight[]) => void;
+}) => {
     const { currentStep, completedSteps } = useSetupState();
     const { visibleSteps, goToStep } = useSetupActions();
 
@@ -134,14 +164,8 @@ const SO101WizardInner = ({ onBack }: { onBack: () => void }) => {
     const unifiedCompleted = new Set<string>([ROBOT_INFO_STEP, ...completedSteps]);
 
     return (
-        <Grid
-            areas={['stepper stepper', 'form viewer']}
-            columns={['size-6000', '1fr']}
-            rows={['auto', '1fr']}
-            gap='size-400'
-            height='100%'
-            UNSAFE_className={classes.wizardGrid}
-        >
+        <>
+            <SO101ViewerEffects onHighlightsChange={onHighlightsChange} />
             <View gridArea='stepper'>
                 <Stepper
                     steps={unifiedSteps}
@@ -161,26 +185,19 @@ const SO101WizardInner = ({ onBack }: { onBack: () => void }) => {
             <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
                 <SO101StepBody />
             </View>
-            <View gridArea='viewer'>
-                <SO101ViewerPanel />
-            </View>
-        </Grid>
+        </>
     );
 };
 
 // ---------------------------------------------------------------------------
-// Trossen wizard wrapper — renders inside TrossenSetupWizardProvider
+// Trossen wizard — stepper + step body (inside provider)
 // ---------------------------------------------------------------------------
 
-const TrossenWizardView = ({ onBack }: { onBack: () => void }) => {
-    return (
-        <TrossenSetupWizardProvider onBackToRobotInfo={onBack}>
-            <TrossenWizardInner onBack={onBack} />
-        </TrossenSetupWizardProvider>
-    );
-};
-
-const TrossenWizardInner = ({ onBack }: { onBack: () => void }) => {
+/**
+ * Left-column content for the Trossen wizard. Must be rendered inside
+ * `TrossenSetupWizardProvider` because it reads wizard state via hooks.
+ */
+const TrossenWizardContent = ({ onBack }: { onBack: () => void }) => {
     const { currentStep, completedSteps } = useTrossenSetupState();
     const { visibleSteps, goToStep } = useTrossenSetupActions();
 
@@ -189,14 +206,7 @@ const TrossenWizardInner = ({ onBack }: { onBack: () => void }) => {
     const unifiedCompleted = new Set<string>([ROBOT_INFO_STEP, ...completedSteps]);
 
     return (
-        <Grid
-            areas={['stepper stepper', 'form viewer']}
-            columns={['size-6000', '1fr']}
-            rows={['auto', '1fr']}
-            gap='size-400'
-            height='100%'
-            UNSAFE_className={classes.wizardGrid}
-        >
+        <>
             <View gridArea='stepper'>
                 <Stepper
                     steps={unifiedSteps}
@@ -216,24 +226,22 @@ const TrossenWizardInner = ({ onBack }: { onBack: () => void }) => {
             <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
                 <TrossenStepBody />
             </View>
-            <View gridArea='viewer'>
-                <TrossenViewerPanel />
-            </View>
-        </Grid>
+        </>
     );
 };
 
 // ---------------------------------------------------------------------------
-// Robot Info viewer panel — SetupRobotViewer without a wizard provider
+// Unified viewer panel — always rendered, never remounts
 // ---------------------------------------------------------------------------
 
 /**
- * Viewer panel for the Robot Info step. Uses `SetupRobotViewer` (same 3D canvas
- * as the wizard steps) with no highlights. Falls back to the dashed empty-state
- * when no robot type is selected — identical to the pattern used by
- * SO101ViewerPanel and TrossenViewerPanel.
+ * Right-column viewer. Rendered once in a stable tree position so the
+ * expensive three.js Canvas survives robot_info <-> wizard transitions.
+ *
+ * Shows the dashed empty-state when no robot type is selected, otherwise
+ * renders `SetupRobotViewer` with the given highlights.
  */
-const RobotInfoViewerPanel = () => {
+const UnifiedViewerPanel = ({ highlights }: { highlights: JointHighlight[] }) => {
     const robotForm = useRobotForm();
     const robotType = robotForm.type || null;
 
@@ -268,7 +276,7 @@ const RobotInfoViewerPanel = () => {
                 overflow: 'hidden',
             }}
         >
-            <SetupRobotViewer robotType={robotType as SchemaRobotType} highlights={[]} />
+            <SetupRobotViewer robotType={robotType as SchemaRobotType} highlights={highlights} />
         </View>
     );
 };
@@ -277,38 +285,35 @@ const RobotInfoViewerPanel = () => {
 // Inner page — requires RobotFormProvider to be mounted above
 // ---------------------------------------------------------------------------
 
+/**
+ * Single stable Grid shell. The viewer always occupies the same tree
+ * position so the three.js Canvas is never unmounted when switching
+ * between robot_info and wizard views. Only the left-column content
+ * (stepper + form/step body) changes — wrapped in the appropriate
+ * wizard provider when needed.
+ *
+ * `wizardStarted` controls whether the wizard provider is mounted.
+ * It stays `false` while the user fills in the robot form, deferring
+ * the websocket connection until the user clicks "Begin Setup".
+ */
 const NewRobotPage = () => {
-    const [pageView, setPageView] = useState<PageView>('robot_info');
+    const [wizardStarted, setWizardStarted] = useState(false);
+    const [highlights, setHighlights] = useState<JointHighlight[]>([]);
     const robotForm = useRobotForm();
     const family = robotFamily(robotForm.type);
 
-    const goBackToForm = () => setPageView('robot_info');
-    const beginSetup = () => setPageView('wizard');
+    // Stable callback ref so SO101ViewerEffects doesn't re-render when
+    // the parent re-renders for unrelated reasons.
+    const highlightsRef = useRef(setHighlights);
+    highlightsRef.current = setHighlights;
+    const onHighlightsChange = useCallback((h: JointHighlight[]) => highlightsRef.current(h), []);
 
-    // -----------------------------------------------------------------------
-    // Wizard view — conditionally mount the appropriate provider
-    // -----------------------------------------------------------------------
-    if (pageView === 'wizard' && family === 'so101') {
-        return (
-            <View height='100%' backgroundColor='gray-100' padding='size-400' UNSAFE_style={{ overflow: 'hidden' }}>
-                <SO101WizardView onBack={goBackToForm} />
-            </View>
-        );
-    }
+    const goBackToForm = useCallback(() => {
+        setWizardStarted(false);
+        setHighlights([]);
+    }, []);
 
-    if (pageView === 'wizard' && family === 'trossen') {
-        return (
-            <View height='100%' backgroundColor='gray-100' padding='size-400' UNSAFE_style={{ overflow: 'hidden' }}>
-                <TrossenWizardView onBack={goBackToForm} />
-            </View>
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // Robot Info view — styled the same as the wizard steps
-    // -----------------------------------------------------------------------
-    const unifiedSteps = getUnifiedSteps(family);
-    const unifiedLabels = getUnifiedLabels(family);
+    const beginSetup = useCallback(() => setWizardStarted(true), []);
 
     return (
         <View height='100%' backgroundColor='gray-100' padding='size-400' UNSAFE_style={{ overflow: 'hidden' }}>
@@ -320,25 +325,24 @@ const NewRobotPage = () => {
                 height='100%'
                 UNSAFE_className={classes.wizardGrid}
             >
-                <View gridArea='stepper'>
-                    <Stepper
-                        steps={unifiedSteps}
-                        currentStep={ROBOT_INFO_STEP}
-                        completedSteps={new Set<string>()}
-                        labels={unifiedLabels}
-                        onGoToStep={() => {
-                            /* robot_info is already current; other steps aren't reachable yet */
-                        }}
-                    />
-                    <Divider orientation='horizontal' size='S' marginTop='size-200' />
-                </View>
-                <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
-                    <Suspense fallback={<CenteredLoading />}>
-                        <RobotForm submitButton={<NewRobotSubmitButton onBeginSetup={beginSetup} />} />
-                    </Suspense>
-                </View>
+                {/* Left column: stepper + form/step body */}
+                {!wizardStarted && <RobotInfoContent onBeginSetup={beginSetup} />}
+
+                {wizardStarted && family === 'so101' && (
+                    <SetupWizardProvider onBackToRobotInfo={goBackToForm}>
+                        <SO101WizardContent onBack={goBackToForm} onHighlightsChange={onHighlightsChange} />
+                    </SetupWizardProvider>
+                )}
+
+                {wizardStarted && family === 'trossen' && (
+                    <TrossenSetupWizardProvider onBackToRobotInfo={goBackToForm}>
+                        <TrossenWizardContent onBack={goBackToForm} />
+                    </TrossenSetupWizardProvider>
+                )}
+
+                {/* Right column: viewer — always stable, never remounts */}
                 <View gridArea='viewer'>
-                    <RobotInfoViewerPanel />
+                    <UnifiedViewerPanel highlights={highlights} />
                 </View>
             </Grid>
         </View>
