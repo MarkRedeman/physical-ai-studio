@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button, Flex, Heading, Text } from '@geti/ui';
 import { useNavigate } from 'react-router';

@@ -146,7 +146,7 @@ export const TrossenDiagnosticsStep = () => {
                                     <Text>
                                         {error_message ??
                                             'Failed to configure the robot driver. ' +
-                                            'Check that no other application is connected to the robot.'}
+                                                'Check that no other application is connected to the robot.'}
                                     </Text>
                                 </div>
                             )}
