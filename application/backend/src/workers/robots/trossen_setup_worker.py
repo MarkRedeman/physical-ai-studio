@@ -49,6 +49,8 @@ MOTOR_NAMES = [
 
 CONFIGURE_TIMEOUT = 10  # seconds — generous for network latency
 FPS = 20  # Streaming rate for position reads (~20Hz, matching original Trossen rate)
+PING_RETRIES = 3  # Number of ping attempts before giving up
+PING_TIMEOUT = 2.0  # Per-attempt timeout in seconds
 
 
 def _end_effector_for_type(robot_type: str) -> trossen_arm.StandardEndEffector:
@@ -170,12 +172,20 @@ class TrossenSetupWorker(TransportWorker):
     # ------------------------------------------------------------------
 
     async def _run_diagnostics(self) -> None:
-        """Ping the IP and attempt to configure the Trossen driver."""
-        self.phase = TrossenSetupPhase.CONNECTING
-        await self._send_phase_status(f"Pinging {self.connection_string}...")
+        """Ping the IP and attempt to configure the Trossen driver.
 
-        # Step 1: IP reachability
-        ip_reachable = await IPDiscovery.ping(self.connection_string, ping_timeout=2.0)
+        Retries the ping up to ``PING_RETRIES`` times before giving up.
+        Each attempt sends a status update so the user sees progress.
+        """
+        self.phase = TrossenSetupPhase.CONNECTING
+
+        # Step 1: IP reachability — retry a few times
+        ip_reachable = False
+        for attempt in range(1, PING_RETRIES + 1):
+            await self._send_phase_status(f"Pinging {self.connection_string} (attempt {attempt}/{PING_RETRIES})...")
+            ip_reachable = await IPDiscovery.ping(self.connection_string, ping_timeout=PING_TIMEOUT)
+            if ip_reachable:
+                break
 
         if not ip_reachable:
             self.phase = TrossenSetupPhase.DIAGNOSTICS
@@ -187,7 +197,9 @@ class TrossenSetupWorker(TransportWorker):
                 "motor_names": [],
                 "robot_type": self.robot_type,
                 "connection_string": self.connection_string,
-                "error_message": f"IP address {self.connection_string} is not reachable",
+                "error_message": (
+                    f"IP address {self.connection_string} is not reachable after {PING_RETRIES} attempts"
+                ),
             }
             await self.transport.send_json(self.diagnostics_result)
             return
