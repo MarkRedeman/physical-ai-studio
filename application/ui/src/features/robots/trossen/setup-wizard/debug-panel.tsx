@@ -1,6 +1,7 @@
-import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
+import { createContext, Dispatch, ReactNode, SetStateAction, useCallback, useContext, useRef, useState } from 'react';
 
 import { ActionButton, Button, Checkbox, Flex, Heading, Slider, Switch, Text, TextField, View } from '@geti/ui';
+import { useSearchParams } from 'react-router-dom';
 
 import { DiagnosticsResult, TrossenSetupWebSocketState } from './use-trossen-setup-websocket';
 
@@ -22,31 +23,58 @@ const DEFAULT_STATE: TrossenSetupWebSocketState = {
 };
 
 // ---------------------------------------------------------------------------
-// Mock hook — drop-in replacement for useTrossenSetupWebSocket
+// Debug context — provides mock state to both the panel and the wizard
 // ---------------------------------------------------------------------------
 
-export interface MockTrossenSetupWebSocketReturn {
-    state: TrossenSetupWebSocketState;
+interface TrossenDebugContextValue {
+    /** Whether debug mode is active (?debug=1) */
+    isDebug: boolean;
+    /** The mock websocket state — only meaningful when isDebug is true */
+    mockState: TrossenSetupWebSocketState;
+    /** Direct setter for mock state */
+    setMockState: Dispatch<SetStateAction<TrossenSetupWebSocketState>>;
+    /** Mock command implementations */
     commands: {
         reProbe: () => void;
         enterVerification: () => void;
         ping: () => void;
     };
-    /** Setter exposed to the debug panel */
-    setMockState: Dispatch<SetStateAction<TrossenSetupWebSocketState>>;
 }
 
-export function useMockTrossenSetupWebSocket(): MockTrossenSetupWebSocketReturn {
-    const [state, setState] = useState<TrossenSetupWebSocketState>(DEFAULT_STATE);
+const TrossenDebugContext = createContext<TrossenDebugContextValue | null>(null);
+
+/**
+ * Reads the debug context. Returns `null` when the provider is not mounted
+ * (should never happen under NewRobotLayout, but keeps the wizard-provider
+ * safe if it's ever rendered outside).
+ */
+export const useTrossenDebug = (): TrossenDebugContextValue | null => {
+    return useContext(TrossenDebugContext);
+};
+
+// ---------------------------------------------------------------------------
+// Provider — lives at the NewRobotLayout level
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps the "new robot" route tree. When `?debug=1` is in the URL it owns
+ * the mock websocket state and renders the floating debug panel. When debug
+ * is off this is essentially a no-op passthrough.
+ */
+export const TrossenDebugProvider = ({ children }: { children: ReactNode }) => {
+    const [searchParams] = useSearchParams();
+    const isDebug = searchParams.get('debug') === '1';
+
+    const [mockState, setMockState] = useState<TrossenSetupWebSocketState>(DEFAULT_STATE);
 
     const reProbe = useCallback(() => {
         console.info('[TrossenDebug] reProbe called');
-        setState((prev) => ({ ...prev, diagnosticsResult: null, error: null }));
+        setMockState((prev) => ({ ...prev, diagnosticsResult: null, error: null }));
     }, []);
 
     const enterVerification = useCallback(() => {
         console.info('[TrossenDebug] enterVerification called');
-        setState((prev) => ({
+        setMockState((prev) => ({
             ...prev,
             phase: 'VERIFICATION',
             statusMessage: 'Entering verification phase',
@@ -57,11 +85,23 @@ export function useMockTrossenSetupWebSocket(): MockTrossenSetupWebSocketReturn 
         console.info('[TrossenDebug] ping called');
     }, []);
 
-    return { state, commands: { reProbe, enterVerification, ping }, setMockState: setState };
-}
+    const value: TrossenDebugContextValue = {
+        isDebug,
+        mockState,
+        setMockState,
+        commands: { reProbe, enterVerification, ping },
+    };
+
+    return (
+        <TrossenDebugContext.Provider value={value}>
+            {children}
+            {isDebug && <TrossenDebugPanel state={mockState} setMockState={setMockState} />}
+        </TrossenDebugContext.Provider>
+    );
+};
 
 // ---------------------------------------------------------------------------
-// Draggable floating panel
+// Draggable floating panel — styles
 // ---------------------------------------------------------------------------
 
 const PANEL_STYLE: React.CSSProperties = {
@@ -331,7 +371,7 @@ interface TrossenDebugPanelProps {
     setMockState: Dispatch<SetStateAction<TrossenSetupWebSocketState>>;
 }
 
-export const TrossenDebugPanel = ({ state, setMockState }: TrossenDebugPanelProps) => {
+const TrossenDebugPanel = ({ state, setMockState }: TrossenDebugPanelProps) => {
     const [collapsed, setCollapsed] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const dragRef = useRef<{ startX: number; startY: number; posX: number; posY: number } | null>(null);
