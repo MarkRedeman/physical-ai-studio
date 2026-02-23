@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from frame_source import FrameSourceFactory
 from loguru import logger
 
 from core.logging import setup_logging, setup_uvicorn_logging
@@ -13,8 +14,6 @@ from workers.camera_worker_registry import CameraWorkerRegistry
 from workers.robot_worker_registry import RobotWorkerRegistry
 
 from .scheduler import Scheduler
-
-from frame_source import FrameSourceFactory
 
 FrameSourceFactory.register_capture_type("websocket", WebSocketCapture)
 
