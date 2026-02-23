@@ -30,7 +30,7 @@ const TROSSEN_REPLACEMENT_COLOR = new THREE.Color('#585858');
  * mutating it in-place ensures all meshes (even nested deep in the tree) pick
  * up the change.  Originals are restored on cleanup.
  */
-const useBrightenDarkMaterials = (model: URDFRobot | undefined, enabled: boolean) => {
+export const useBrightenDarkMaterials = (model: URDFRobot | undefined, enabled: boolean) => {
     useEffect(() => {
         if (!model || !enabled) return;
 
