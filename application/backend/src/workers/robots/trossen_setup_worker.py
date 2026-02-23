@@ -9,10 +9,18 @@ This worker performs:
      the robot to its zero position as a side effect
   3. Joint position streaming for 3D preview verification
 
-All steps are driven by websocket commands from the frontend.
+Architecture mirrors ``RobotWorker``: two concurrent asyncio tasks —
+a *broadcast loop* that reads the driver and pushes events to the client,
+and a *command loop* that receives commands from the client.
+
+Streaming behaviour is controlled entirely by ``self.phase``:
+  - ``VERIFICATION`` → stream positions + velocities as ``state_was_updated``
+    events (degrees for body joints, meters for gripper).
+  - All other phases → no streaming (the loop idles).
 """
 
 import asyncio
+import time
 from enum import StrEnum
 from typing import Any
 
@@ -40,6 +48,7 @@ MOTOR_NAMES = [
 ]
 
 CONFIGURE_TIMEOUT = 10  # seconds — generous for network latency
+FPS = 20  # Streaming rate for position reads (~20Hz, matching original Trossen rate)
 
 
 def _end_effector_for_type(robot_type: str) -> trossen_arm.StandardEndEffector:
@@ -55,13 +64,17 @@ def _end_effector_for_type(robot_type: str) -> trossen_arm.StandardEndEffector:
 
 
 class TrossenSetupPhase(StrEnum):
-    """Phases of the Trossen setup wizard state machine."""
+    """Phases of the Trossen setup wizard state machine.
+
+    The broadcast loop uses this to decide what to stream:
+      - VERIFICATION → positions + velocities (degrees for body, meters for
+        gripper) via ``state_was_updated`` events.
+      - Everything else → no streaming (idle sleep).
+    """
 
     CONNECTING = "connecting"
     DIAGNOSTICS = "diagnostics"
-    STREAMING = "streaming"
-    COMPLETE = "complete"
-    ERROR = "error"
+    VERIFICATION = "verification"
 
 
 # ---------------------------------------------------------------------------
@@ -75,13 +88,13 @@ class TrossenSetupWorker(TransportWorker):
     Protocol overview (client sends commands, server sends events):
 
     After connection the worker immediately runs IP ping + driver configuration
-    and sends a diagnostics_result event. Then it waits for commands:
+    and sends a diagnostics_result event. Then it starts two concurrent tasks:
+    a broadcast loop (phase-driven streaming) and a command loop.
 
     Commands:
         {"command": "ping"}
-        {"command": "re_probe"}          — re-run ping + configure check
-        {"command": "stream_positions"}  — start streaming joint positions (~20Hz)
-        {"command": "stop_stream"}       — stop streaming
+        {"command": "re_probe"}           — re-run ping + configure check
+        {"command": "enter_verification"} — transition to VERIFICATION phase
 
     Events sent to client:
         {"event": "status", "state": ..., "phase": ..., "message": ...}
@@ -108,12 +121,6 @@ class TrossenSetupWorker(TransportWorker):
         # Diagnostics results
         self.diagnostics_result: dict[str, Any] | None = None
 
-        # Position streaming state
-        self._streaming = False
-
-        # Background tasks (prevent GC of fire-and-forget asyncio tasks)
-        self._background_tasks: set[asyncio.Task[None]] = set()
-
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -124,18 +131,18 @@ class TrossenSetupWorker(TransportWorker):
             raise RuntimeError("Trossen driver is not configured")
         return self.driver
 
-    def _spawn_task(self, coro: Any) -> None:
-        """Create a background task and prevent it from being garbage-collected."""
-        task: asyncio.Task[None] = asyncio.create_task(coro)
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
-
     # ------------------------------------------------------------------
     # Main run loop
     # ------------------------------------------------------------------
 
     async def run(self) -> None:
-        """Main worker lifecycle."""
+        """Main worker lifecycle.
+
+        Connects to the driver, runs initial diagnostics (IP ping +
+        configure), then starts two concurrent tasks:
+          - ``_broadcast_loop`` — reads the driver and pushes events
+          - ``_command_loop`` — receives and dispatches frontend commands
+        """
         try:
             await self.transport.connect()
             self.state = WorkerState.RUNNING
@@ -143,12 +150,14 @@ class TrossenSetupWorker(TransportWorker):
             # Run diagnostics (ping + configure)
             await self._run_diagnostics()
 
-            # Wait for commands from the frontend
-            await self._command_loop()
+            # Two concurrent tasks — mirrors RobotWorker architecture
+            await self.run_concurrent(
+                asyncio.create_task(self._broadcast_loop()),
+                asyncio.create_task(self._command_loop()),
+            )
 
         except Exception as e:
             self.state = WorkerState.ERROR
-            self.phase = TrossenSetupPhase.ERROR
             self.error_message = str(e)
             logger.exception(f"Trossen setup worker error: {e}")
             await self._send_event("error", message=str(e))
@@ -247,24 +256,105 @@ class TrossenSetupWorker(TransportWorker):
             await self._send_phase_status("Diagnostics complete — robot is ready")
 
     # ------------------------------------------------------------------
+    # Phase: Verification
+    # ------------------------------------------------------------------
+
+    async def _enter_verification(self) -> None:
+        """Enter VERIFICATION phase — the broadcast loop auto-starts streaming."""
+        self.phase = TrossenSetupPhase.VERIFICATION
+
+    # ------------------------------------------------------------------
+    # Broadcast loop — phase-driven streaming
+    # ------------------------------------------------------------------
+
+    async def _broadcast_loop(self) -> None:
+        """Read the Trossen driver and push events to the client.
+
+        Behaviour depends on the current phase:
+
+          - ``VERIFICATION`` — stream positions + velocities as
+            ``state_was_updated`` events (degrees for body joints,
+            meters for gripper).
+          - All other phases — idle (no driver reads).
+        """
+        read_interval = 1.0 / FPS
+
+        try:
+            while not self._stop_requested:
+                start_time = time.perf_counter()
+
+                try:
+                    await self._broadcast_tick()
+                except Exception as e:
+                    logger.warning(f"Broadcast loop error: {e}")
+
+                elapsed = time.perf_counter() - start_time
+                await asyncio.sleep(max(0.001, read_interval - elapsed))
+        except asyncio.CancelledError:
+            pass
+
+    async def _broadcast_tick(self) -> None:
+        """Single iteration of the broadcast loop, dispatched by phase."""
+        match self.phase:
+            case TrossenSetupPhase.VERIFICATION:
+                await self._broadcast_normalized_positions()
+            case _:
+                # No streaming needed — the sleep in _broadcast_loop
+                # keeps us from busy-spinning.
+                pass
+
+    async def _broadcast_normalized_positions(self) -> None:
+        """Read positions + velocities and send a ``state_was_updated`` event.
+
+        Positions are in degrees (gripper in meters) — same format as the
+        Trossen robot client's ``read_state()``.  Uses the same event format
+        as ``RobotWorker._broadcast_loop`` so the frontend can reuse its
+        joint-sync logic.
+        """
+        driver = self._require_driver()
+
+        positions = await asyncio.to_thread(driver.get_all_positions)
+        velocities = await asyncio.to_thread(driver.get_all_velocities)
+
+        state: dict[str, float] = {}
+        for index, name in enumerate(MOTOR_NAMES):
+            if index < len(positions):
+                # Convert radians to degrees for body joints; gripper stays in meters
+                state[f"{name}.pos"] = (
+                    float(np.rad2deg(positions[index])) if "gripper" not in name else float(positions[index])
+                )
+            if index < len(velocities):
+                state[f"{name}.vel"] = float(velocities[index])
+
+        await self.transport.send_json(
+            {
+                "event": "state_was_updated",
+                "state": state,
+            }
+        )
+
+    # ------------------------------------------------------------------
     # Command loop
     # ------------------------------------------------------------------
 
     async def _command_loop(self) -> None:
         """Wait for and handle commands from the frontend."""
-        while not self._stop_requested:
-            data = await self.transport.receive_command()
-            if data is None:
-                continue
+        try:
+            while not self._stop_requested:
+                data = await self.transport.receive_command()
+                if data is None:
+                    continue
 
-            command = data.get("command", "")
-            logger.debug(f"Trossen setup worker received command: {command}")
+                command = data.get("command", "")
+                logger.debug(f"Trossen setup worker received command: {command}")
 
-            try:
-                await self._dispatch_command(command, data)
-            except Exception as e:
-                logger.exception(f"Error handling command '{command}': {e}")
-                await self._send_event("error", message=str(e))
+                try:
+                    await self._dispatch_command(command, data)
+                except Exception as e:
+                    logger.exception(f"Error handling command '{command}': {e}")
+                    await self._send_event("error", message=str(e))
+        except asyncio.CancelledError:
+            pass
 
     async def _dispatch_command(self, command: str, data: dict[str, Any]) -> None:  # noqa: ARG002
         """Dispatch a single command received from the frontend."""
@@ -273,63 +363,15 @@ class TrossenSetupWorker(TransportWorker):
                 await self.transport.send_json({"event": "pong"})
 
             case "re_probe":
-                # Stop any active stream first
-                self._streaming = False
-                await asyncio.sleep(0.1)
+                # Idle the broadcast loop while re-running diagnostics
+                self.phase = TrossenSetupPhase.CONNECTING
                 await self._run_diagnostics()
 
-            case "stream_positions":
-                self._spawn_task(self._handle_stream_positions())
-
-            case "stop_stream":
-                self._streaming = False
+            case "enter_verification":
+                await self._enter_verification()
 
             case _:
                 await self._send_event("error", message=f"Unknown command: {command}")
-
-    # ------------------------------------------------------------------
-    # Position streaming (for 3D preview in verification step)
-    # ------------------------------------------------------------------
-
-    async def _handle_stream_positions(self) -> None:
-        """Stream joint positions for 3D preview.
-
-        Sends 'state_was_updated' events in the same format as the Trossen
-        robot client's read_state(), so the frontend can reuse the same joint
-        sync logic. Positions are in degrees (gripper in meters).
-        """
-        driver = self._require_driver()
-
-        # Don't start a second stream
-        if self._streaming:
-            return
-        self._streaming = True
-
-        while self._streaming and not self._stop_requested:
-            try:
-                positions = await asyncio.to_thread(driver.get_all_positions)
-                velocities = await asyncio.to_thread(driver.get_all_velocities)
-
-                state: dict[str, float] = {}
-                for index, name in enumerate(MOTOR_NAMES):
-                    if index < len(positions):
-                        # Convert radians to degrees for body joints; gripper stays in meters
-                        state[f"{name}.pos"] = (
-                            float(np.rad2deg(positions[index])) if "gripper" not in name else float(positions[index])
-                        )
-                    if index < len(velocities):
-                        state[f"{name}.vel"] = float(velocities[index])
-
-                await self.transport.send_json(
-                    {
-                        "event": "state_was_updated",
-                        "state": state,
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Trossen position stream read error: {e}")
-
-            await asyncio.sleep(0.05)  # ~20Hz
 
     # ------------------------------------------------------------------
     # Helpers
@@ -352,7 +394,6 @@ class TrossenSetupWorker(TransportWorker):
 
     async def _cleanup(self) -> None:
         """Disconnect the Trossen driver."""
-        self._streaming = False
         if self.driver is not None:
             try:
                 # Home to zeros before disconnecting
