@@ -1,21 +1,17 @@
 import { useMemo } from 'react';
 
-import { Divider, Grid, Heading, View } from '@geti/ui';
+import { Heading, View } from '@geti/ui';
 
 import { SchemaRobotType } from '../../../../api/openapi-spec';
 import { useRobotForm } from '../../robot-form/provider';
 import { SetupRobotViewer } from '../shared/setup-robot-viewer';
-import { Stepper } from '../shared/stepper';
 import { JointHighlight } from '../shared/use-joint-highlight';
 import { CalibrationStep } from './calibration-step';
 import { DiagnosticsStep } from './diagnostics-step';
 import { MotorSetupStep } from './motor-setup-step';
 import { useCenteringAnimation, useRangeOfMotionAnimation } from './use-calibration-animations';
-// Lazy import to avoid circular dependency (VerificationStep imports from wizard-provider)
 import { VerificationStep } from './verification-step';
-import { STEP_LABELS, useSetupActions, useSetupState, WizardStep } from './wizard-provider';
-
-import classes from '../shared/setup-wizard.module.scss';
+import { useSetupState, WizardStep } from './wizard-provider';
 
 // ---------------------------------------------------------------------------
 // Motor setup order (gripper first) — matches lerobot's setup flow
@@ -83,7 +79,7 @@ function useHighlights(): JointHighlight[] {
  * - CALIBRATION + recording phase: range-of-motion animation
  * - VERIFICATION: live-synced viewer (sync is driven by VerificationStep)
  */
-const ViewerPanel = () => {
+export const SO101ViewerPanel = () => {
     const robotForm = useRobotForm();
     const { currentStep, calibrationPhase } = useSetupState();
     const highlights = useHighlights();
@@ -140,57 +136,22 @@ const ViewerPanel = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Main wizard content
+// Step body — renders the current step's form content (no stepper, no viewer)
 // ---------------------------------------------------------------------------
 
 /**
- * Main wizard content — two-column layout.
- * Left: stepper + current step form/content.
- * Right: 3D robot viewer with contextual animations.
- *
- * All setup state is provided by the SetupWizardProvider context —
- * this component simply renders the layout and switches between steps.
+ * Renders the form/content for the current SO101 wizard step.
+ * Used by the unified /robots/new page which owns the stepper and layout.
  */
-export const SetupWizardContent = () => {
-    const { currentStep, completedSteps } = useSetupState();
-    const { visibleSteps, goToStep } = useSetupActions();
+export const SO101StepBody = () => {
+    const { currentStep } = useSetupState();
 
     return (
-        <Grid
-            areas={['stepper stepper', 'form viewer']}
-            columns={['size-6000', '1fr']}
-            rows={['auto', '1fr']}
-            gap='size-400'
-            height='100%'
-            UNSAFE_className={classes.wizardGrid}
-        >
-            {/* Top row: stepper spans full width */}
-            <View gridArea='stepper'>
-                <Stepper
-                    steps={visibleSteps}
-                    currentStep={currentStep}
-                    completedSteps={completedSteps}
-                    labels={STEP_LABELS}
-                    onGoToStep={goToStep}
-                />
-                <Divider orientation='horizontal' size='S' marginTop='size-200' />
-            </View>
-
-            {/* Left column: current step content */}
-            <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
-                {currentStep === WizardStep.DIAGNOSTICS && <DiagnosticsStep />}
-
-                {currentStep === WizardStep.MOTOR_SETUP && <MotorSetupStep />}
-
-                {currentStep === WizardStep.CALIBRATION && <CalibrationStep />}
-
-                {currentStep === WizardStep.VERIFICATION && <VerificationStep />}
-            </View>
-
-            {/* Right column: 3D robot viewer */}
-            <View gridArea='viewer'>
-                <ViewerPanel />
-            </View>
-        </Grid>
+        <>
+            {currentStep === WizardStep.DIAGNOSTICS && <DiagnosticsStep />}
+            {currentStep === WizardStep.MOTOR_SETUP && <MotorSetupStep />}
+            {currentStep === WizardStep.CALIBRATION && <CalibrationStep />}
+            {currentStep === WizardStep.VERIFICATION && <VerificationStep />}
+        </>
     );
 };

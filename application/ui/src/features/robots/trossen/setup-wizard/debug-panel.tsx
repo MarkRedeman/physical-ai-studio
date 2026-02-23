@@ -45,15 +45,15 @@ const TrossenDebugContext = createContext<TrossenDebugContextValue | null>(null)
 
 /**
  * Reads the debug context. Returns `null` when the provider is not mounted
- * (should never happen under NewRobotLayout, but keeps the wizard-provider
- * safe if it's ever rendered outside).
+ * (should never happen under the unified /robots/new page, but keeps the
+ * wizard-provider safe if it's ever rendered outside).
  */
 export const useTrossenDebug = (): TrossenDebugContextValue | null => {
     return useContext(TrossenDebugContext);
 };
 
 // ---------------------------------------------------------------------------
-// Provider — lives at the NewRobotLayout level
+// Provider — lives at the top of the unified /robots/new page
 // ---------------------------------------------------------------------------
 
 /**
@@ -62,7 +62,7 @@ export const useTrossenDebug = (): TrossenDebugContextValue | null => {
  * is off this is essentially a no-op passthrough.
  */
 export const TrossenDebugProvider = ({ children }: { children: ReactNode }) => {
-    const [searchParams] = useSearchParams();
+    const [_searchParams] = useSearchParams();
     const isDebug = true; //searchParams.get('debug') === '1';
 
     const [mockState, setMockState] = useState<TrossenSetupWebSocketState>(DEFAULT_STATE);
