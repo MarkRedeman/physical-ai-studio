@@ -63,7 +63,7 @@ export const useTrossenDebug = (): TrossenDebugContextValue | null => {
  */
 export const TrossenDebugProvider = ({ children }: { children: ReactNode }) => {
     const [searchParams] = useSearchParams();
-    const isDebug = searchParams.get('debug') === '1';
+    const isDebug = true; //searchParams.get('debug') === '1';
 
     const [mockState, setMockState] = useState<TrossenSetupWebSocketState>(DEFAULT_STATE);
 
