@@ -1,21 +1,14 @@
 import asyncio
 import threading
 import time
-from typing import Any, Optional
+from typing import Any
 
 import cv2
 import numpy as np
 import websockets
-from loguru import logger
-from tenacity import (
-    RetryError,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
 from frame_source import VideoCaptureBase
+from loguru import logger
+from tenacity import RetryError, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Constants
 MAX_RECONNECT_ATTEMPTS = 3
@@ -29,7 +22,6 @@ DEFAULT_FPS = 30
 class WebSocketFrameError(Exception):
     """Raised when an invalid or empty frame is received from WebSocket."""
 
-    pass
 
 
 class WebSocketCapture(VideoCaptureBase):
@@ -59,12 +51,12 @@ class WebSocketCapture(VideoCaptureBase):
         self._fps = fps
         self._target_frame_time = 1.0 / fps
         self._last_read_time: float = 0.0
-        self._frame_queue: Optional[asyncio.Queue] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event: Optional[threading.Event] = None
-        self._connected_event: Optional[threading.Event] = None
-        self._last_frame: Optional[np.ndarray] = None
+        self._frame_queue: asyncio.Queue | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._stop_event: threading.Event | None = None
+        self._connected_event: threading.Event | None = None
+        self._last_frame: np.ndarray | None = None
         self._is_connected = False
 
     @property
@@ -209,7 +201,7 @@ class WebSocketCapture(VideoCaptureBase):
                     # Decode JPEG bytes to numpy array
                     self._decode_and_store_frame(frame_bytes)
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Timeout is expected - allows us to check stop_event
                     continue
                 except WebSocketFrameError as e:
@@ -256,7 +248,7 @@ class WebSocketCapture(VideoCaptureBase):
         except Exception as e:
             logger.error("Unexpected error decoding frame: {}", e)
 
-    def _read_implementation(self) -> tuple[bool, Optional[np.ndarray]]:  # type: ignore[override]
+    def _read_implementation(self) -> tuple[bool, np.ndarray | None]:  # type: ignore[override]
         """
         Read decoded frame from the WebSocket connection.
 
@@ -292,7 +284,7 @@ class WebSocketCapture(VideoCaptureBase):
         self._exposure = value
         return False
 
-    def get_exposure(self) -> Optional[float]:
+    def get_exposure(self) -> float | None:
         """Get exposure."""
         return self._exposure
 
@@ -302,7 +294,7 @@ class WebSocketCapture(VideoCaptureBase):
         self._gain = value
         return False
 
-    def get_gain(self) -> Optional[float]:
+    def get_gain(self) -> float | None:
         """Get gain."""
         return self._gain
 
@@ -316,7 +308,7 @@ class WebSocketCapture(VideoCaptureBase):
         logger.warning("Frame size control not supported for WebSocket streams")
         return False
 
-    def get_frame_size(self) -> Optional[tuple[int, int]]:
+    def get_frame_size(self) -> tuple[int, int] | None:
         """
         Get frame size from last decoded frame.
 
@@ -362,6 +354,6 @@ class WebSocketCapture(VideoCaptureBase):
             ],
         }
 
-    def get_supported_formats(self) -> Optional[list[dict]]:
+    def get_supported_formats(self) -> list[dict] | None:
         """Get supported formats (JPEG for WebSocket)."""
         return [{"format": "JPEG", "description": "JPEG frames received and decoded"}]
