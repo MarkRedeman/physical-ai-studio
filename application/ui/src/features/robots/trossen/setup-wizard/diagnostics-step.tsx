@@ -166,6 +166,7 @@ export const TrossenDiagnosticsStep = () => {
                             variant='accent'
                             onPress={() => {
                                 markCompleted(TrossenWizardStep.DIAGNOSTICS);
+                                commands.enterVerification();
                                 goNext();
                             }}
                         >

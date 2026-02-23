@@ -141,12 +141,8 @@ export function useTrossenSetupWebSocket({
         sendJsonMessage({ command: 're_probe' });
     }, [sendJsonMessage]);
 
-    const streamPositions = useCallback(() => {
-        sendJsonMessage({ command: 'stream_positions' });
-    }, [sendJsonMessage]);
-
-    const stopStream = useCallback(() => {
-        sendJsonMessage({ command: 'stop_stream' });
+    const enterVerification = useCallback(() => {
+        sendJsonMessage({ command: 'enter_verification' });
     }, [sendJsonMessage]);
 
     const ping = useCallback(() => {
@@ -158,8 +154,7 @@ export function useTrossenSetupWebSocket({
         readyState,
         commands: {
             reProbe,
-            streamPositions,
-            stopStream,
+            enterVerification,
             ping,
         },
     };

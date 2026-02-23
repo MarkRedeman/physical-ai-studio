@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { Button, Flex, Heading, Text } from '@geti/ui';
 import { useNavigate } from 'react-router';
@@ -58,9 +58,10 @@ const useSyncJointState = (jointState: Record<string, number> | null, robotType:
 // ---------------------------------------------------------------------------
 
 /**
- * Trossen verification step — streams live joint positions and syncs them
- * to the 3D URDF model so the user can visually verify the robot moves
- * correctly. Shows "Save Robot" button that persists the robot to the DB.
+ * Trossen verification step — the backend broadcast loop auto-streams live
+ * joint positions during the VERIFICATION phase and syncs them to the 3D
+ * URDF model so the user can visually verify the robot moves correctly.
+ * Shows "Save Robot" button that persists the robot to the DB.
  *
  * Unlike SO101, Trossen has no calibration to save — just the robot itself.
  * `is_calibrated` is hardcoded to `true` by the Trossen SDK.
@@ -68,7 +69,7 @@ const useSyncJointState = (jointState: Record<string, number> | null, robotType:
 export const TrossenVerificationStep = () => {
     const navigate = useNavigate();
     const { project_id } = useProjectId();
-    const { goBack, commands } = useTrossenSetupActions();
+    const { goBack } = useTrossenSetupActions();
     const { wsState } = useTrossenSetupState();
     const robotForm = useRobotForm();
 
@@ -81,20 +82,6 @@ export const TrossenVerificationStep = () => {
 
     // Sync live joint positions to the 3D model
     useSyncJointState(wsState.jointState, robotType);
-
-    // Start streaming when the step mounts, stop when it unmounts.
-    const mountRef = useRef({ commands, isConnected: wsState.isConnected });
-    mountRef.current = { commands, isConnected: wsState.isConnected };
-
-    useEffect(() => {
-        if (mountRef.current.isConnected) {
-            mountRef.current.commands.streamPositions();
-        }
-
-        return () => {
-            mountRef.current.commands.stopStream();
-        };
-    }, []);
 
     const addRobotMutation = $api.useMutation('post', '/api/projects/{project_id}/robots');
 
@@ -119,9 +106,6 @@ export const TrossenVerificationStep = () => {
         setSaveError(null);
 
         try {
-            // Stop streaming before saving
-            commands.stopStream();
-
             // Create the robot (no calibration save for Trossen)
             const createdRobot = await addRobotMutation.mutateAsync({
                 params: { path: { project_id } },
