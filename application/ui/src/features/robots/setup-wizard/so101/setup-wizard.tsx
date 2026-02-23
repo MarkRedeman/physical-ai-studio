@@ -1,10 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
-import { Heading, View } from '@geti/ui';
-
-import { SchemaRobotType } from '../../../../api/openapi-spec';
-import { useRobotForm } from '../../robot-form/provider';
-import { SetupRobotViewer } from '../shared/setup-robot-viewer';
 import { JointHighlight } from '../shared/use-joint-highlight';
 import { CalibrationStep } from './calibration-step';
 import { DiagnosticsStep } from './diagnostics-step';
@@ -68,23 +63,26 @@ function useHighlights(): JointHighlight[] {
 }
 
 // ---------------------------------------------------------------------------
-// Right-column viewer panel
+// Viewer effects — drives animations and syncs highlights to the parent
 // ---------------------------------------------------------------------------
 
 /**
- * Right column: shows the 3D URDF viewer with contextual animations.
+ * Renderless component that must live inside `SetupWizardProvider`.
+ * It derives viewer highlights from wizard state, drives calibration
+ * animations, and pushes the current highlights up to the parent
+ * (which owns the viewer) via the `onHighlightsChange` callback.
  *
- * - DIAGNOSTICS / MOTOR_SETUP: idle viewer (with highlights during motor setup)
- * - CALIBRATION + homing phase: centering animation
- * - CALIBRATION + recording phase: range-of-motion animation
- * - VERIFICATION: live-synced viewer (sync is driven by VerificationStep)
+ * This allows the viewer to live outside the wizard provider (preventing
+ * expensive Canvas remounts on page view transitions) while still
+ * receiving highlight data from inside the provider.
  */
-export const SO101ViewerPanel = () => {
-    const robotForm = useRobotForm();
+export const SO101ViewerEffects = ({
+    onHighlightsChange,
+}: {
+    onHighlightsChange: (highlights: JointHighlight[]) => void;
+}) => {
     const { currentStep, calibrationPhase } = useSetupState();
     const highlights = useHighlights();
-
-    const robotType = robotForm.type || null;
 
     const isCentering =
         currentStep === WizardStep.CALIBRATION &&
@@ -96,43 +94,28 @@ export const SO101ViewerPanel = () => {
     useCenteringAnimation(isCentering);
     useRangeOfMotionAnimation(isRangeDemo);
 
-    if (!robotType) {
-        return (
-            <View
-                height='100%'
-                backgroundColor='gray-200'
-                UNSAFE_style={{
-                    borderRadius: 'var(--spectrum-alias-border-radius-regular)',
-                    borderColor: 'var(--spectrum-global-color-gray-700)',
-                    borderWidth: '1px',
-                    borderStyle: 'dashed',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                }}
-            >
-                <Heading level={4} UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-500)' }}>
-                    Select a robot type to preview
-                </Heading>
-            </View>
-        );
-    }
+    // Sync highlights to the parent. Only fire when the derived highlights
+    // actually change (keyed on the serialized value to avoid spurious calls
+    // from new-but-equal array references).
+    const highlightsKey = highlights.map((h) => `${h.joint}:${h.color}`).join(',');
+    const prevKeyRef = useRef(highlightsKey);
+    const callbackRef = useRef(onHighlightsChange);
+    callbackRef.current = onHighlightsChange;
 
-    return (
-        <View
-            height='100%'
-            backgroundColor='gray-200'
-            UNSAFE_style={{
-                borderRadius: 'var(--spectrum-alias-border-radius-regular)',
-                overflow: 'hidden',
-            }}
-        >
-            <SetupRobotViewer
-                robotType={robotType as SchemaRobotType}
-                highlights={currentStep === WizardStep.MOTOR_SETUP ? highlights : []}
-            />
-        </View>
-    );
+    // Sync on mount and whenever the derived highlights change
+    useEffect(() => {
+        callbackRef.current(highlights);
+        prevKeyRef.current = highlightsKey;
+    }, [highlightsKey, highlights]);
+
+    // Clear highlights on unmount (wizard provider being torn down)
+    useEffect(() => {
+        return () => {
+            callbackRef.current([]);
+        };
+    }, []);
+
+    return null;
 };
 
 // ---------------------------------------------------------------------------
