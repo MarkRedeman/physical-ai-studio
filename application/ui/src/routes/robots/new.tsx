@@ -20,8 +20,9 @@ const CenteredLoading = () => {
 
 /**
  * Submit button that adapts to the selected robot type:
- * - SO101 types: navigates to the setup wizard (sibling route under same layout)
- * - Other types (Trossen): directly creates the robot via POST (default behavior)
+ * - SO101 types: navigates to the SO101 setup wizard
+ * - Trossen types: navigates to the Trossen setup wizard
+ * - Other types: directly creates the robot via POST (default behavior)
  */
 const NewRobotSubmitButton = () => {
     const robotForm = useRobotForm();
@@ -29,19 +30,37 @@ const NewRobotSubmitButton = () => {
     const { project_id } = useProjectId();
 
     const isSO101 = robotForm.type?.toLowerCase().startsWith('so101') ?? false;
+    const isTrossen = robotForm.type?.toLowerCase().includes('trossen') ?? false;
 
-    if (!isSO101) {
+    if (!isSO101 && !isTrossen) {
         return <SubmitNewRobotButton />;
     }
 
-    const isDisabled = !robotForm.name || !robotForm.type || !robotForm.serial_number;
+    if (isSO101) {
+        const isDisabled = !robotForm.name || !robotForm.type || !robotForm.serial_number;
+
+        return (
+            <Button
+                variant='accent'
+                isDisabled={isDisabled}
+                onPress={() => {
+                    navigate(paths.project.robots.so101Setup({ project_id }));
+                }}
+            >
+                Begin Setup
+            </Button>
+        );
+    }
+
+    // Trossen
+    const isDisabled = !robotForm.name || !robotForm.type || !robotForm.connection_string;
 
     return (
         <Button
             variant='accent'
             isDisabled={isDisabled}
             onPress={() => {
-                navigate(paths.project.robots.so101Setup({ project_id }));
+                navigate(paths.project.robots.trossenSetup({ project_id }));
             }}
         >
             Begin Setup
