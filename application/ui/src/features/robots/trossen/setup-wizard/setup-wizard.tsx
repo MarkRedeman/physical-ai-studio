@@ -1,19 +1,11 @@
-import { Divider, Grid, Heading, View } from '@geti/ui';
+import { Heading, View } from '@geti/ui';
 
 import { SchemaRobotType } from '../../../../api/openapi-spec';
 import { useRobotForm } from '../../robot-form/provider';
 import { SetupRobotViewer } from '../../shared/setup-wizard/setup-robot-viewer';
-import { Stepper } from '../../shared/setup-wizard/stepper';
 import { TrossenDiagnosticsStep } from './diagnostics-step';
 import { TrossenVerificationStep } from './verification-step';
-import {
-    TROSSEN_STEP_LABELS,
-    TrossenWizardStep,
-    useTrossenSetupActions,
-    useTrossenSetupState,
-} from './wizard-provider';
-
-import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
+import { TrossenWizardStep, useTrossenSetupState } from './wizard-provider';
 
 // ---------------------------------------------------------------------------
 // Right-column viewer panel
@@ -23,7 +15,7 @@ import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
  * Right column: shows the 3D URDF viewer.
  * No animations for Trossen — just the static/live-synced model.
  */
-const ViewerPanel = () => {
+export const TrossenViewerPanel = () => {
     const robotForm = useRobotForm();
     const robotType = robotForm.type || null;
 
@@ -64,51 +56,20 @@ const ViewerPanel = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Main wizard content
+// Step body — renders the current step's form content (no stepper, no viewer)
 // ---------------------------------------------------------------------------
 
 /**
- * Trossen setup wizard — two-column layout (same structure as SO101).
- * Left: stepper + current step content.
- * Right: 3D robot viewer (no highlights or animations for Trossen).
- *
- * Only 2 steps: DIAGNOSTICS → VERIFICATION.
+ * Renders the form/content for the current Trossen wizard step.
+ * Used by the unified /robots/new page which owns the stepper and layout.
  */
-export const TrossenSetupWizardContent = () => {
-    const { currentStep, completedSteps } = useTrossenSetupState();
-    const { visibleSteps, goToStep } = useTrossenSetupActions();
+export const TrossenStepBody = () => {
+    const { currentStep } = useTrossenSetupState();
 
     return (
-        <Grid
-            areas={['stepper stepper', 'form viewer']}
-            columns={['size-6000', '1fr']}
-            rows={['auto', '1fr']}
-            gap='size-400'
-            height='100%'
-            UNSAFE_className={classes.wizardGrid}
-        >
-            {/* Top row: stepper spans full width */}
-            <View gridArea='stepper'>
-                <Stepper
-                    steps={visibleSteps}
-                    currentStep={currentStep}
-                    completedSteps={completedSteps}
-                    labels={TROSSEN_STEP_LABELS}
-                    onGoToStep={goToStep}
-                />
-                <Divider orientation='horizontal' size='S' marginTop='size-200' />
-            </View>
-
-            {/* Left column: current step content */}
-            <View gridArea='form' UNSAFE_style={{ overflowY: 'auto' }} paddingBottom='size-400' minWidth={0}>
-                {currentStep === TrossenWizardStep.DIAGNOSTICS && <TrossenDiagnosticsStep />}
-                {currentStep === TrossenWizardStep.VERIFICATION && <TrossenVerificationStep />}
-            </View>
-
-            {/* Right column: 3D robot viewer */}
-            <View gridArea='viewer'>
-                <ViewerPanel />
-            </View>
-        </Grid>
+        <>
+            {currentStep === TrossenWizardStep.DIAGNOSTICS && <TrossenDiagnosticsStep />}
+            {currentStep === TrossenWizardStep.VERIFICATION && <TrossenVerificationStep />}
+        </>
     );
 };

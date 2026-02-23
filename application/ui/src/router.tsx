@@ -26,11 +26,8 @@ import { ProjectLayout } from './routes/projects/project.layout';
 import { Edit as RobotEdit } from './routes/robots/edit';
 import { Layout as RobotsLayout } from './routes/robots/layout';
 import { New as RobotsNew } from './routes/robots/new';
-import { NewRobotLayout } from './routes/robots/new-layout';
 import { Robot } from './routes/robots/robot';
-import { SO101Setup } from './routes/robots/so101-setup';
 import { TabNavigation as RobotsTabNavigation } from './routes/robots/tab-navigation';
-import { TrossenSetup } from './routes/robots/trossen-setup';
 
 const root = path('/');
 const projects = root.path('/projects');
@@ -60,8 +57,6 @@ export const paths = {
         robots: {
             index: robots,
             new: robots.path('new'),
-            so101Setup: robots.path('new/so101-setup'),
-            trossenSetup: robots.path('new/trossen-setup'),
             edit: robot.path('edit'),
             show: robot,
         },
@@ -192,21 +187,7 @@ export const router = createBrowserRouter([
                             // Robots
                             {
                                 path: paths.project.robots.new.pattern,
-                                element: <NewRobotLayout />,
-                                children: [
-                                    {
-                                        index: true,
-                                        element: <RobotsNew />,
-                                    },
-                                    {
-                                        path: 'so101-setup',
-                                        element: <SO101Setup />,
-                                    },
-                                    {
-                                        path: 'trossen-setup',
-                                        element: <TrossenSetup />,
-                                    },
-                                ],
+                                element: <RobotsNew />,
                             },
                             {
                                 path: paths.project.robots.edit.pattern,
