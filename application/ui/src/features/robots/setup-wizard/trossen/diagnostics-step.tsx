@@ -14,7 +14,7 @@ import { Refresh } from '@geti/ui/icons';
 
 import { TrossenWizardStep, useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
-import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
+import classes from '../shared/setup-wizard.module.scss';
 
 /**
  * Trossen diagnostics step — shows IP reachability and driver configure status.

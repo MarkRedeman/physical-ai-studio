@@ -7,10 +7,10 @@ import { RobotForm } from '../../features/robots/robot-form/form';
 import { RobotFormProvider, useRobotForm } from '../../features/robots/robot-form/provider';
 import { SubmitNewRobotButton } from '../../features/robots/robot-form/submit-new-robot-button';
 import { RobotModelsProvider } from '../../features/robots/robot-models-context';
-import { SetupRobotViewer } from '../../features/robots/shared/setup-wizard/setup-robot-viewer';
-import { Stepper } from '../../features/robots/shared/setup-wizard/stepper';
-import { JointHighlight } from '../../features/robots/shared/setup-wizard/use-joint-highlight';
-import { SO101StepBody, SO101ViewerEffects } from '../../features/robots/so101/setup-wizard/setup-wizard';
+import { SetupRobotViewer } from '../../features/robots/setup-wizard/shared/setup-robot-viewer';
+import { Stepper } from '../../features/robots/setup-wizard/shared/stepper';
+import { JointHighlight } from '../../features/robots/setup-wizard/shared/use-joint-highlight';
+import { SO101StepBody, SO101ViewerEffects } from '../../features/robots/setup-wizard/so101/setup-wizard';
 import {
     SetupWizardProvider,
     STEP_LABELS as SO101_STEP_LABELS,
@@ -18,9 +18,9 @@ import {
     useSetupActions,
     useSetupState,
     WizardStep,
-} from '../../features/robots/so101/setup-wizard/wizard-provider';
-import { TrossenDebugProvider } from '../../features/robots/trossen/setup-wizard/debug-panel';
-import { TrossenStepBody } from '../../features/robots/trossen/setup-wizard/setup-wizard';
+} from '../../features/robots/setup-wizard/so101/wizard-provider';
+import { TrossenDebugProvider } from '../../features/robots/setup-wizard/trossen/debug-panel';
+import { TrossenStepBody } from '../../features/robots/setup-wizard/trossen/setup-wizard';
 import {
     TROSSEN_STEP_LABELS,
     TROSSEN_WIZARD_STEPS,
@@ -28,9 +28,9 @@ import {
     TrossenWizardStep,
     useTrossenSetupActions,
     useTrossenSetupState,
-} from '../../features/robots/trossen/setup-wizard/wizard-provider';
+} from '../../features/robots/setup-wizard/trossen/wizard-provider';
 
-import classes from '../../features/robots/shared/setup-wizard/setup-wizard.module.scss';
+import classes from '../../features/robots/setup-wizard/shared/setup-wizard.module.scss';
 
 // ---------------------------------------------------------------------------
 // Helpers

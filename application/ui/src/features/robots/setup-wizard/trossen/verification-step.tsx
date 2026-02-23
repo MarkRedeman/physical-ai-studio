@@ -13,7 +13,7 @@ import { useRobotForm } from '../../robot-form/provider';
 import { urdfPathForType, useRobotModels } from '../../robot-models-context';
 import { useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
-import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
+import classes from '../shared/setup-wizard.module.scss';
 
 // ---------------------------------------------------------------------------
 // Hook: sync joint state from the setup websocket to the URDF model
