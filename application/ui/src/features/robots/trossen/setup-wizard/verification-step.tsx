@@ -20,6 +20,24 @@ import classes from '../../shared/setup-wizard/setup-wizard.module.scss';
 // ---------------------------------------------------------------------------
 
 /**
+ * Maps backend motor names to wxai URDF joint names.
+ *
+ * The backend sends positions keyed by semantic motor name
+ * (e.g. `shoulder_pan.pos`, `shoulder_lift.pos`) but the wxai URDF uses
+ * positional names (`joint_0` … `joint_5`) for the six revolute joints
+ * and `left_carriage_joint` for the prismatic gripper.
+ */
+const MOTOR_TO_URDF_JOINT: Record<string, string> = {
+    shoulder_pan: 'joint_0',
+    shoulder_lift: 'joint_1',
+    elbow_flex: 'joint_2',
+    wrist_flex: 'joint_3',
+    wrist_yaw: 'joint_4',
+    wrist_roll: 'joint_5',
+    gripper: 'gripper',
+};
+
+/**
  * Syncs joint positions (from `state_was_updated` events) to the loaded URDF
  * model. Trossen positions are in degrees (gripper in meters) — same format
  * as the Trossen robot client's `read_state()`.
@@ -40,14 +58,16 @@ const useSyncJointState = (jointState: Record<string, number> | null, robotType:
         for (const [key, value] of Object.entries(jointState)) {
             const name = key.endsWith('.pos') ? key.slice(0, -4) : key;
 
+            console.log(jointState, name, model.joints);
+
             // wxai URDF maps the gripper to a prismatic joint (meters, no conversion)
             if (name === 'gripper' && model.robotName === 'wxai') {
                 model.setJointValue('left_carriage_joint', value);
                 continue;
             }
 
-            if (model.joints[name]) {
-                model.setJointValue(name, degToRad(value));
+            if (model.joints[MOTOR_TO_URDF_JOINT[name]]) {
+                model.setJointValue(MOTOR_TO_URDF_JOINT[name], degToRad(value));
             }
         }
     }, [model, jointState]);
