@@ -1,0 +1,20 @@
+index:
+  title: "Robot Setup Wizard — Refactoring Analysis"
+
+slides:
+  theme: "dracula"
+  separator: "^---$"
+  separator_vertical: "^-v-$"
+  separator_notes: "^Notes:"
+  highlight_theme: "monokai"
+
+revealjs:
+  width: 1920
+  height: 1080
+  transition: "slide"
+  hash: true
+  slideNumber: true
+  controls: true
+  progress: true
+  center: true
+  history: true
