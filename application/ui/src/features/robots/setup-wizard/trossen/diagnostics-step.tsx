@@ -12,6 +12,7 @@ import {
 } from '@geti/ui';
 import { Refresh } from '@geti/ui/icons';
 
+import { InlineAlert } from '../shared/inline-alert';
 import { TrossenWizardStep, useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
 import classes from '../shared/setup-wizard.module.scss';
@@ -33,11 +34,9 @@ export const TrossenDiagnosticsStep = () => {
     if (error) {
         return (
             <Flex direction='column' gap='size-200'>
-                <div className={classes.errorBox}>
-                    <Text>
-                        <strong>Connection Error:</strong> {error}
-                    </Text>
-                </div>
+                <InlineAlert variant='error'>
+                    <strong>Connection Error:</strong> {error}
+                </InlineAlert>
                 <Flex gap='size-200'>
                     <Button variant='secondary' onPress={onBackToRobotInfo}>
                         Back
@@ -92,18 +91,14 @@ export const TrossenDiagnosticsStep = () => {
                 <DisclosurePanel>
                     <Flex direction='column' gap='size-100' marginTop='size-100'>
                         {ip_reachable ? (
-                            <div className={classes.successBox}>
-                                <Text>
-                                    Robot at <strong>{connection_string}</strong> is reachable on the network.
-                                </Text>
-                            </div>
+                            <InlineAlert variant='success'>
+                                Robot at <strong>{connection_string}</strong> is reachable on the network.
+                            </InlineAlert>
                         ) : (
-                            <div className={classes.errorBox}>
-                                <Text>
-                                    Cannot reach <strong>{connection_string}</strong>. Verify the robot is powered on
-                                    and connected to the same network, then re-check.
-                                </Text>
-                            </div>
+                            <InlineAlert variant='error'>
+                                Cannot reach <strong>{connection_string}</strong>. Verify the robot is powered on and
+                                connected to the same network, then re-check.
+                            </InlineAlert>
                         )}
                     </Flex>
                 </DisclosurePanel>
@@ -132,26 +127,20 @@ export const TrossenDiagnosticsStep = () => {
                         <Flex direction='column' gap='size-100' marginTop='size-100'>
                             {configure_ok ? (
                                 <>
-                                    <div className={classes.successBox}>
-                                        <Text>
-                                            Driver configured successfully. All {motor_count} motors are responding.
-                                        </Text>
-                                    </div>
-                                    <div className={classes.infoBox}>
-                                        <Text>
-                                            The robot has been homed to its zero position as part of the connection
-                                            process. This is normal for Trossen robots.
-                                        </Text>
-                                    </div>
+                                    <InlineAlert variant='success'>
+                                        Driver configured successfully. All {motor_count} motors are responding.
+                                    </InlineAlert>
+                                    <InlineAlert variant='info'>
+                                        The robot has been homed to its zero position as part of the connection process.
+                                        This is normal for Trossen robots.
+                                    </InlineAlert>
                                 </>
                             ) : (
-                                <div className={classes.errorBox}>
-                                    <Text>
-                                        {error_message ??
-                                            'Failed to configure the robot driver. ' +
-                                                'Check that no other application is connected to the robot.'}
-                                    </Text>
-                                </div>
+                                <InlineAlert variant='error'>
+                                    {error_message ??
+                                        'Failed to configure the robot driver. ' +
+                                            'Check that no other application is connected to the robot.'}
+                                </InlineAlert>
                             )}
                         </Flex>
                     </DisclosurePanel>
