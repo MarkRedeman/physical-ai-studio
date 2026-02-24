@@ -102,7 +102,7 @@ type JointsState = Array<{
     decreaseKey: string;
     increaseKey: string;
 }>;
-const useJointState = () => {
+const useJointState = (isEnabled: boolean) => {
     const [isControlled, setIsControlled] = useState(false);
     const [joints, setJoints] = useState<JointsState>([]);
     const { models } = useRobotModels();
@@ -161,17 +161,8 @@ const useJointState = () => {
     );
 
     const { project_id, robot_id } = useRobotId();
-    const robot = useRobot();
-    console.log({ robot });
-    //useWebSocket('ws://localhost:8008/api/cameras/ws', {
     const socket = useWebSocket(`/api/projects/${project_id}/robots/${robot_id}/ws`, {
-        //const socket = useWebSocket(`ws://localhost:8008/api/robot/ws`, {
         queryParams: {
-            driver: 'feetech',
-            //serial_id: robot.payload.serial_id,
-            // normalize: true,
-            // TODO ...
-            // fps: 120,
             fps: 30,
         },
         shouldReconnect: () => true,
@@ -309,9 +300,55 @@ const CompoundMovements = () => {
     );
 };
 
-export const JointControls = () => {
-    const [collapsed, setCollapsed] = useState(false);
-    const [joints, isControlled, setJoint, socket] = useJointState();
+const Internal = () => {
+    const [joints, isControlled, setJoint, socket] = useJointState(true);
+    const [expanded, setExpanded] = useState(true);
+
+    return (
+        <>
+            <Flex justifyContent={'space-between'}>
+                <ActionButton onPress={() => setExpanded((c) => !c)}>
+                    <Heading level={4} marginX='size-100'>
+                        <Flex alignItems='center' gap='size-100'>
+                            <ChevronDownSmallLight
+                                fill='white'
+                                style={{
+                                    transform: expanded ? 'rotate(180deg)' : '',
+                                    animation: 'transform ease-in-out 0.1s',
+                                }}
+                            />
+                            Joint state
+                        </Flex>
+                    </Heading>
+                </ActionButton>
+
+                <Switch
+                    isSelected={isControlled}
+                    onChange={(value) => {
+                        if (value === true) {
+                            socket.sendJsonMessage({ command: 'enable_torque' });
+                        } else {
+                            socket.sendJsonMessage({ command: 'disable_torque' });
+                        }
+                    }}
+                >
+                    Take control
+                </Switch>
+            </Flex>
+            {expanded && (
+                <>
+                    <Joints joints={joints} isDisabled={isControlled === false} setJoint={setJoint} />
+                    <CompoundMovements />
+                </>
+            )}
+        </>
+    );
+};
+
+export const JointControls = ({ isConnected }: { isConnected: boolean }) => {
+    if (!isConnected) {
+        return null;
+    }
 
     return (
         <View
@@ -325,41 +362,7 @@ export const JointControls = () => {
             }}
         >
             <Flex direction='column' gap='size-50'>
-                <Flex justifyContent={'space-between'}>
-                    <ActionButton onPress={() => setCollapsed((c) => !c)}>
-                        <Heading level={4} marginX='size-100'>
-                            <Flex alignItems='center' gap='size-100'>
-                                <ChevronDownSmallLight
-                                    fill='white'
-                                    style={{
-                                        transform: collapsed ? '' : 'rotate(180deg)',
-                                        animation: 'transform ease-in-out 0.1s',
-                                    }}
-                                />
-                                Joint state
-                            </Flex>
-                        </Heading>
-                    </ActionButton>
-
-                    <Switch
-                        isSelected={isControlled}
-                        onChange={(value) => {
-                            if (value === true) {
-                                socket.sendJsonMessage({ command: 'enable_torque' });
-                            } else {
-                                socket.sendJsonMessage({ command: 'disable_torque' });
-                            }
-                        }}
-                    >
-                        Take control
-                    </Switch>
-                </Flex>
-                {collapsed === false && (
-                    <>
-                        <Joints joints={joints} isDisabled={isControlled === false} setJoint={setJoint} />
-                        <CompoundMovements />
-                    </>
-                )}
+                {isConnected && <Internal />}
             </Flex>
         </View>
     );

@@ -1,4 +1,6 @@
-import { Button, ButtonGroup, Flex, Grid, View } from '@geti/ui';
+import { useState } from 'react';
+
+import { Button, ButtonGroup, Flex, Grid, Switch, ToggleButton, View } from '@geti/ui';
 
 import { $api } from '../../api/client';
 import { JointControls } from '../../features/robots/controller/joint-controls';
@@ -17,6 +19,10 @@ export const Robot = () => {
               identifyMutation.mutate({ body: robot });
           };
 
+    const [isConnected, setIsConnected] = useState(false);
+    // TODO: add connect switch
+    // TODO: add an idle state
+
     return (
         <View padding='size-400' height='100%' minHeight='0'>
             <RobotModelsProvider>
@@ -33,6 +39,9 @@ export const Robot = () => {
                 >
                     <View gridArea='actions'>
                         <Flex justifyContent={'end'}>
+                            <Switch isSelected={isConnected} onChange={setIsConnected}>
+                                Connect
+                            </Switch>
                             <ButtonGroup>
                                 <Button variant='secondary' onPress={onIdentify}>
                                     Identify
@@ -40,10 +49,22 @@ export const Robot = () => {
                             </ButtonGroup>
                         </Flex>
                     </View>
-                    <View gridArea='robot-viewer' overflow='auto' minHeight={0}>
+                    <View
+                        gridArea='robot-viewer'
+                        overflow='auto'
+                        minHeight={0}
+                        UNSAFE_style={
+                            isConnected
+                                ? undefined
+                                : {
+                                      filter: 'grayscale(0.8)',
+                                      opacity: 0.5,
+                                  }
+                        }
+                    >
                         <RobotViewer robot={robot} />
                     </View>
-                    <JointControls />
+                    <JointControls isConnected={isConnected} />
                 </Grid>
             </RobotModelsProvider>
         </View>
