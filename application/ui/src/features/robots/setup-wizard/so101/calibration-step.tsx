@@ -11,6 +11,111 @@ import classes from '../shared/setup-wizard.module.scss';
 
 const MOTOR_NAMES = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
 
+// ---------------------------------------------------------------------------
+// Parse helpers — "parse don't validate" on the frontend side too
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse and validate a raw JSON value into a typed calibration record.
+ * Returns the validated calibration on success, or throws an Error
+ * with a human-readable message on failure.
+ */
+function parseCalibrationFile(parsed: unknown): CalibrationResult['calibration'] {
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('File must contain a JSON object with motor calibration data.');
+    }
+
+    const record = parsed as Record<string, unknown>;
+    const requiredFields = ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'] as const;
+
+    // Validate each motor entry has all required numeric fields
+    for (const [motorName, values] of Object.entries(record)) {
+        if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+            throw new Error(`Motor "${motorName}" must be an object with calibration fields.`);
+        }
+        const motor = values as Record<string, unknown>;
+        for (const field of requiredFields) {
+            if (typeof motor[field] !== 'number') {
+                throw new Error(`Motor "${motorName}" is missing or has invalid "${field}" (expected a number).`);
+            }
+        }
+    }
+
+    // Validate motor names match expected set
+    const provided = Object.keys(record).sort();
+    const expected = [...MOTOR_NAMES].sort();
+    if (provided.join(',') !== expected.join(',')) {
+        const missing = expected.filter((m) => !provided.includes(m));
+        const extra = provided.filter((m) => !expected.includes(m));
+        const parts: string[] = [];
+        if (missing.length) {
+            parts.push(`missing: ${missing.join(', ')}`);
+        }
+        if (extra.length) {
+            parts.push(`unexpected: ${extra.join(', ')}`);
+        }
+        throw new Error(`Motor name mismatch — ${parts.join('; ')}.`);
+    }
+
+    return record as CalibrationResult['calibration'];
+}
+
+// ---------------------------------------------------------------------------
+// Upload calibration file button + error display
+// ---------------------------------------------------------------------------
+
+interface UploadCalibrationFileProps {
+    onApply: (calibration: CalibrationResult['calibration']) => void;
+}
+
+const UploadCalibrationFile = ({ onApply }: UploadCalibrationFileProps) => {
+    const [error, setError] = useState<string | null>(null);
+
+    const handleSelect = useCallback(
+        (files: FileList | null) => {
+            const file = files?.[0];
+            if (!file) {
+                return;
+            }
+
+            setError(null);
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const parsed: unknown = JSON.parse(reader.result as string);
+                    const calibration = parseCalibrationFile(parsed);
+                    onApply(calibration);
+                } catch (err) {
+                    setError(
+                        err instanceof Error
+                            ? err.message
+                            : 'Failed to parse file as JSON. Please select a valid calibration JSON file.'
+                    );
+                }
+            };
+            reader.onerror = () => {
+                setError('Failed to read the selected file.');
+            };
+            reader.readAsText(file);
+        },
+        [onApply]
+    );
+
+    return (
+        <Flex direction='column' alignItems='end' gap='size-100'>
+            {error && <InlineAlert variant='error'>{error}</InlineAlert>}
+            <FileTrigger acceptedFileTypes={['.json']} onSelect={handleSelect}>
+                <Button variant='secondary'>Upload Calibration File</Button>
+            </FileTrigger>
+        </Flex>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// Main calibration step
+// ---------------------------------------------------------------------------
+
 /**
  * Calibration step:
  * 1. Ask user to center the robot, then apply homing offsets
@@ -77,67 +182,10 @@ export const CalibrationStep = () => {
         changePhase('done');
     };
 
-    // Upload calibration file handling
-    const [uploadError, setUploadError] = useState<string | null>(null);
-
-    const handleCalibrationUpload = useCallback(
-        (files: FileList | null) => {
-            const file = files?.[0];
-            if (!file) return;
-
-            setUploadError(null);
-
-            const reader = new FileReader();
-            reader.onload = () => {
-                try {
-                    const parsed: unknown = JSON.parse(reader.result as string);
-                    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-                        setUploadError('File must contain a JSON object with motor calibration data.');
-                        return;
-                    }
-
-                    const calibration = parsed as Record<string, Record<string, unknown>>;
-                    const requiredFields = ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'] as const;
-
-                    // Validate each motor entry has all required numeric fields
-                    for (const [motorName, values] of Object.entries(calibration)) {
-                        if (typeof values !== 'object' || values === null || Array.isArray(values)) {
-                            setUploadError(`Motor "${motorName}" must be an object with calibration fields.`);
-                            return;
-                        }
-                        for (const field of requiredFields) {
-                            if (typeof values[field] !== 'number') {
-                                setUploadError(
-                                    `Motor "${motorName}" is missing or has invalid "${field}" (expected a number).`
-                                );
-                                return;
-                            }
-                        }
-                    }
-
-                    // Validate motor names match expected set
-                    const provided = Object.keys(calibration).sort();
-                    const expected = [...MOTOR_NAMES].sort();
-                    if (provided.join(',') !== expected.join(',')) {
-                        const missing = expected.filter((m) => !provided.includes(m));
-                        const extra = provided.filter((m) => !expected.includes(m));
-                        const parts: string[] = [];
-                        if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
-                        if (extra.length) parts.push(`unexpected: ${extra.join(', ')}`);
-                        setUploadError(`Motor name mismatch — ${parts.join('; ')}.`);
-                        return;
-                    }
-
-                    commands.applyCalibration(calibration as CalibrationResult['calibration']);
-                    changePhase('done');
-                } catch {
-                    setUploadError('Failed to parse file as JSON. Please select a valid calibration JSON file.');
-                }
-            };
-            reader.onerror = () => {
-                setUploadError('Failed to read the selected file.');
-            };
-            reader.readAsText(file);
+    const handleCalibrationApply = useCallback(
+        (calibration: CalibrationResult['calibration']) => {
+            commands.applyCalibration(calibration);
+            changePhase('done');
         },
         [commands, changePhase]
     );
@@ -198,16 +246,12 @@ export const CalibrationStep = () => {
                         should be able to move the joints freely by hand while the live positions update above.
                     </InlineAlert>
 
-                    {uploadError && <InlineAlert variant='error'>{uploadError}</InlineAlert>}
-
                     <Flex justifyContent='space-between'>
                         <Button variant='secondary' onPress={goBack}>
                             Back
                         </Button>
-                        <Flex gap='size-100'>
-                            <FileTrigger acceptedFileTypes={['.json']} onSelect={handleCalibrationUpload}>
-                                <Button variant='secondary'>Upload Calibration File</Button>
-                            </FileTrigger>
+                        <Flex gap='size-100' alignItems='end'>
+                            <UploadCalibrationFile onApply={handleCalibrationApply} />
                             <Button variant='accent' onPress={handleApplyHoming}>
                                 Apply Homing Offsets
                             </Button>

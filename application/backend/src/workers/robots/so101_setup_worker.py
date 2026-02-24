@@ -524,21 +524,24 @@ class SO101SetupWorker(TransportWorker):
         # normalized streaming on the next iteration.
         await self._enter_verification()
 
-    async def _handle_apply_calibration(self, data: dict[str, Any]) -> None:
-        """Apply an uploaded calibration file to the motors.
+    def _parse_calibration_payload(self, data: dict[str, Any]) -> dict[str, MotorCalibration]:
+        """Parse and validate an uploaded calibration payload.
 
-        Accepts pre-computed calibration values (homing offsets + ranges),
-        writes them to motor EEPROM, configures the motors, and transitions
-        to verification — the same outcome as the manual record-and-stop flow.
+        Returns a validated ``dict[str, MotorCalibration]`` ready to be
+        written to motor EEPROM.  Raises ``ValueError`` with a
+        human-readable message if the payload is malformed.
+
+        This follows the *parse-don't-validate* pattern: the caller gets
+        back a fully-typed result or an exception — no need to check
+        intermediate error flags.
         """
         cal_data = data.get("calibration")
         if not cal_data or not isinstance(cal_data, dict):
-            await self._send_event("error", message="Missing or invalid 'calibration' payload.")
-            return
+            raise ValueError("Missing or invalid 'calibration' payload.")
 
         bus = self._require_bus()
 
-        # Validate motor names match the connected bus
+        # Motor names must match the connected bus exactly
         expected = set(bus.motors.keys())
         provided = set(cal_data.keys())
         if provided != expected:
@@ -549,19 +552,14 @@ class SO101SetupWorker(TransportWorker):
                 parts.append(f"missing: {sorted(missing)}")
             if extra:
                 parts.append(f"unexpected: {sorted(extra)}")
-            await self._send_event("error", message=f"Motor name mismatch — {', '.join(parts)}.")
-            return
+            raise ValueError(f"Motor name mismatch — {', '.join(parts)}.")
 
-        # Parse into MotorCalibration objects
+        # Each motor entry must have all required fields with int-compatible values
         required_fields = {"id", "drive_mode", "homing_offset", "range_min", "range_max"}
         calibration: dict[str, MotorCalibration] = {}
         for motor_name, values in cal_data.items():
             if not isinstance(values, dict) or not required_fields.issubset(values.keys()):
-                await self._send_event(
-                    "error",
-                    message=f"Motor '{motor_name}' is missing required fields: {sorted(required_fields)}.",
-                )
-                return
+                raise ValueError(f"Motor '{motor_name}' is missing required fields: {sorted(required_fields)}.")
             calibration[motor_name] = MotorCalibration(
                 id=values["id"],
                 drive_mode=values["drive_mode"],
@@ -570,6 +568,22 @@ class SO101SetupWorker(TransportWorker):
                 range_max=values["range_max"],
             )
 
+        return calibration
+
+    async def _handle_apply_calibration(self, data: dict[str, Any]) -> None:
+        """Apply an uploaded calibration file to the motors.
+
+        Accepts pre-computed calibration values (homing offsets + ranges),
+        writes them to motor EEPROM, configures the motors, and transitions
+        to verification — the same outcome as the manual record-and-stop flow.
+        """
+        try:
+            calibration = self._parse_calibration_payload(data)
+        except ValueError as exc:
+            await self._send_event("error", message=str(exc))
+            return
+
+        bus = self._require_bus()
         self.phase = SetupPhase.CONFIGURE
 
         async with self._bus_lock:
