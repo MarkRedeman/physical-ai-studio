@@ -34,6 +34,9 @@ export const USBCameraFormFields = () => {
                 onSelect={({ fingerprint, name }) => {
                     updateField('fingerprint', fingerprint);
                     updateField('hardware_name', name);
+
+                    // TODO: this is a nice UX improvement
+                    // updatePayload({ fps: 30, width: 640, height: 480 });
                 }}
             />
             <ResolutionPicker
