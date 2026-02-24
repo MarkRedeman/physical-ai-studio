@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 
-import { Button, Flex, Heading, Loading, Text } from '@geti/ui';
+import { Button, FileTrigger, Flex, Heading, Loading, Text } from '@geti/ui';
 
 import { InlineAlert } from '../shared/inline-alert';
 import { StatusBadge } from '../shared/status-badge';
+import type { CalibrationResult } from './use-setup-websocket';
 import { CalibrationPhase, useSetupActions, useSetupState, WizardStep } from './wizard-provider';
 
 import classes from '../shared/setup-wizard.module.scss';
@@ -76,6 +77,71 @@ export const CalibrationStep = () => {
         changePhase('done');
     };
 
+    // Upload calibration file handling
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    const handleCalibrationUpload = useCallback(
+        (files: FileList | null) => {
+            const file = files?.[0];
+            if (!file) return;
+
+            setUploadError(null);
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const parsed: unknown = JSON.parse(reader.result as string);
+                    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                        setUploadError('File must contain a JSON object with motor calibration data.');
+                        return;
+                    }
+
+                    const calibration = parsed as Record<string, Record<string, unknown>>;
+                    const requiredFields = ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'] as const;
+
+                    // Validate each motor entry has all required numeric fields
+                    for (const [motorName, values] of Object.entries(calibration)) {
+                        if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+                            setUploadError(`Motor "${motorName}" must be an object with calibration fields.`);
+                            return;
+                        }
+                        for (const field of requiredFields) {
+                            if (typeof values[field] !== 'number') {
+                                setUploadError(
+                                    `Motor "${motorName}" is missing or has invalid "${field}" (expected a number).`
+                                );
+                                return;
+                            }
+                        }
+                    }
+
+                    // Validate motor names match expected set
+                    const provided = Object.keys(calibration).sort();
+                    const expected = [...MOTOR_NAMES].sort();
+                    if (provided.join(',') !== expected.join(',')) {
+                        const missing = expected.filter((m) => !provided.includes(m));
+                        const extra = provided.filter((m) => !expected.includes(m));
+                        const parts: string[] = [];
+                        if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
+                        if (extra.length) parts.push(`unexpected: ${extra.join(', ')}`);
+                        setUploadError(`Motor name mismatch — ${parts.join('; ')}.`);
+                        return;
+                    }
+
+                    commands.applyCalibration(calibration as CalibrationResult['calibration']);
+                    changePhase('done');
+                } catch {
+                    setUploadError('Failed to parse file as JSON. Please select a valid calibration JSON file.');
+                }
+            };
+            reader.onerror = () => {
+                setUploadError('Failed to read the selected file.');
+            };
+            reader.readAsText(file);
+        },
+        [commands, changePhase]
+    );
+
     if (error && phase !== 'done') {
         return (
             <Flex direction='column' gap='size-200'>
@@ -132,13 +198,20 @@ export const CalibrationStep = () => {
                         should be able to move the joints freely by hand while the live positions update above.
                     </InlineAlert>
 
+                    {uploadError && <InlineAlert variant='error'>{uploadError}</InlineAlert>}
+
                     <Flex justifyContent='space-between'>
                         <Button variant='secondary' onPress={goBack}>
                             Back
                         </Button>
-                        <Button variant='accent' onPress={handleApplyHoming}>
-                            Apply Homing Offsets
-                        </Button>
+                        <Flex gap='size-100'>
+                            <FileTrigger acceptedFileTypes={['.json']} onSelect={handleCalibrationUpload}>
+                                <Button variant='secondary'>Upload Calibration File</Button>
+                            </FileTrigger>
+                            <Button variant='accent' onPress={handleApplyHoming}>
+                                Apply Homing Offsets
+                            </Button>
+                        </Flex>
                     </Flex>
                 </>
             )}

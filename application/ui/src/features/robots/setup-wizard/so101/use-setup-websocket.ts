@@ -285,6 +285,13 @@ export function useSetupWebSocket({ projectId, robotType, serialNumber, enabled 
         sendJsonMessage({ command: 'enter_calibration' });
     }, [sendJsonMessage]);
 
+    const applyCalibration = useCallback(
+        (calibration: CalibrationResult['calibration']) => {
+            sendJsonMessage({ command: 'apply_calibration', calibration });
+        },
+        [sendJsonMessage]
+    );
+
     const ping = useCallback(() => {
         sendJsonMessage({ command: 'ping' });
     }, [sendJsonMessage]);
@@ -299,6 +306,7 @@ export function useSetupWebSocket({ projectId, robotType, serialNumber, enabled 
             startHoming,
             startRecording,
             stopRecording,
+            applyCalibration,
             reProbe,
             enterVerification,
             enterCalibration,

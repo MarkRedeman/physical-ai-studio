@@ -524,6 +524,79 @@ class SO101SetupWorker(TransportWorker):
         # normalized streaming on the next iteration.
         await self._enter_verification()
 
+    async def _handle_apply_calibration(self, data: dict[str, Any]) -> None:
+        """Apply an uploaded calibration file to the motors.
+
+        Accepts pre-computed calibration values (homing offsets + ranges),
+        writes them to motor EEPROM, configures the motors, and transitions
+        to verification — the same outcome as the manual record-and-stop flow.
+        """
+        cal_data = data.get("calibration")
+        if not cal_data or not isinstance(cal_data, dict):
+            await self._send_event("error", message="Missing or invalid 'calibration' payload.")
+            return
+
+        bus = self._require_bus()
+
+        # Validate motor names match the connected bus
+        expected = set(bus.motors.keys())
+        provided = set(cal_data.keys())
+        if provided != expected:
+            missing = expected - provided
+            extra = provided - expected
+            parts: list[str] = []
+            if missing:
+                parts.append(f"missing: {sorted(missing)}")
+            if extra:
+                parts.append(f"unexpected: {sorted(extra)}")
+            await self._send_event("error", message=f"Motor name mismatch — {', '.join(parts)}.")
+            return
+
+        # Parse into MotorCalibration objects
+        required_fields = {"id", "drive_mode", "homing_offset", "range_min", "range_max"}
+        calibration: dict[str, MotorCalibration] = {}
+        for motor_name, values in cal_data.items():
+            if not isinstance(values, dict) or not required_fields.issubset(values.keys()):
+                await self._send_event(
+                    "error",
+                    message=f"Motor '{motor_name}' is missing required fields: {sorted(required_fields)}.",
+                )
+                return
+            calibration[motor_name] = MotorCalibration(
+                id=values["id"],
+                drive_mode=values["drive_mode"],
+                homing_offset=values["homing_offset"],
+                range_min=values["range_min"],
+                range_max=values["range_max"],
+            )
+
+        self.phase = SetupPhase.CONFIGURE
+
+        async with self._bus_lock:
+            await asyncio.to_thread(bus.disable_torque)
+            await asyncio.to_thread(bus.write_calibration, calibration)
+
+        await self._configure_motors()
+        await self._send_phase_status("Calibration complete")
+
+        await self.transport.send_json(
+            {
+                "event": "calibration_result",
+                "calibration": {
+                    name: {
+                        "id": cal.id,
+                        "drive_mode": cal.drive_mode,
+                        "homing_offset": cal.homing_offset,
+                        "range_min": cal.range_min,
+                        "range_max": cal.range_max,
+                    }
+                    for name, cal in calibration.items()
+                },
+            }
+        )
+
+        await self._enter_verification()
+
     async def _enter_verification(self) -> None:
         """Enter VERIFICATION phase, ensuring calibration is loaded on the bus.
 
@@ -766,6 +839,9 @@ class SO101SetupWorker(TransportWorker):
 
             case "stop_recording":
                 await self._handle_stop_recording()
+
+            case "apply_calibration":
+                await self._handle_apply_calibration(data)
 
             case "enter_verification":
                 await self._enter_verification()
