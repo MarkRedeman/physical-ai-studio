@@ -13,6 +13,7 @@ import { GenicamFormFields } from './drivers/genicam';
 import { IpCamFormFields } from './drivers/ipcam';
 import { RealsenseFormFields } from './drivers/realsense';
 import { USBCameraFormFields } from './drivers/usb-camera';
+import { WebsocketFormFields } from './drivers/websocket';
 import { CameraDriver, useCameraForm, useSetCameraForm } from './provider';
 import { SubmitNewCameraButton } from './submit-new-camera-button';
 import { UpdateCameraButton } from './update-camera-button';
@@ -86,6 +87,13 @@ const CameraFormFields = () => {
             content: <IpCamFormFields />,
             visible: true, // Always allow IP cameras
         },
+        {
+            label: 'Websocket',
+            value: 'websocket' as const,
+            icon: <CameraIcon type='websocket' width={'24px'} />,
+            content: <WebsocketFormFields />,
+            visible: true, // Always allow websocket cameras
+        },
     ].filter((item) => item.visible);
 
     return (
@@ -111,6 +119,8 @@ const EditCameraFormFields = () => {
             return <BaslerFormFields />;
         case 'genicam':
             return <GenicamFormFields />;
+        case 'websocket':
+            return <WebsocketFormFields />;
     }
 };
 

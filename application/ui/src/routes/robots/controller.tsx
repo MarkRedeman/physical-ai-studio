@@ -13,13 +13,19 @@ export const Controller = () => {
             <Grid
                 gap='size-200'
                 UNSAFE_style={{ padding: 'var(--spectrum-global-dimension-size-100)' }}
-                areas={['controller controller', 'controls controls']}
-                rows={['auto', 'min-content']}
+                areas={['controls controller', 'controls controller']}
+                columns={['30rem', '1fr']}
+                //rows={['min-content', 'auto']}
                 height='100%'
                 minHeight={0}
             >
                 <View gridArea='controller'>
-                    <RobotViewer robot={robot} />
+                    <RobotViewer
+                        robot={{
+                            ...robot,
+                            type: robot.id === 'ab1e9694-a8af-4d51-abfb-b0743eebd6f6' ? 'lekiwi' : robot.type,
+                        }}
+                    />
                 </View>
                 <JointControls />
             </Grid>

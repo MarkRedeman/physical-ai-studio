@@ -1,34 +1,34 @@
 import { Flex, TextField } from '@geti/ui';
 
-import { SchemaIpCameraInput } from '../../../../api/openapi-spec';
+import { SchemaWebsocketCameraInput } from '../../../../api/openapi-spec';
 import { NameField } from '../components/name-field';
 import { useCameraFormFields } from '../components/use-camera-form-fields';
 import { DriverFormSchema } from '../provider';
 
-export const initialIpCamState: DriverFormSchema<'ipcam'> = {
-    driver: 'ipcam',
+export const initialWebsocketState: DriverFormSchema<'websocket'> = {
+    driver: 'websocket',
     hardware_name: null,
     payload: {
         fps: 30,
         width: 640,
         height: 480,
-        stream_url: '',
+        websocket_url: '',
     },
 };
 
-export const validateIpCam = (formData: DriverFormSchema<'ipcam'>): formData is SchemaIpCameraInput => {
+export const validateWebsocket = (formData: DriverFormSchema<'websocket'>): formData is SchemaWebsocketCameraInput => {
     return (
         !!formData.name &&
         !!formData.fingerprint &&
         !!formData.payload?.width &&
         !!formData.payload?.height &&
         !!formData.payload?.fps &&
-        !!formData.payload?.stream_url
+        !!formData.payload?.websocket_url
     );
 };
 
-export const IpCamFormFields = () => {
-    const { formData, updateField, updatePayload } = useCameraFormFields('ipcam');
+export const WebsocketFormFields = () => {
+    const { formData, updateField, updatePayload } = useCameraFormFields('websocket');
 
     return (
         <Flex gap='size-100' alignItems='end' direction='column'>
@@ -40,7 +40,7 @@ export const IpCamFormFields = () => {
                 value={formData.fingerprint ?? ''}
                 onChange={(url) => {
                     updateField('fingerprint', url);
-                    updatePayload({ stream_url: url });
+                    updatePayload({ websocket_url: url });
                 }}
             />
         </Flex>

@@ -22,10 +22,10 @@ const CenteredLoading = () => {
 
 export const Edit = () => {
     const environment = useEnvironment();
-
     const environmentForm: EnvironmentFormState = {
+        id: environment.id,
         name: environment.name,
-        camera_ids: environment.cameras?.map(({ id }) => id!) ?? [],
+        camera_ids: environment.cameras?.map(({ id }) => id) ?? [],
         robots:
             environment.robots?.map((robot): RobotConfiguration => {
                 return {
@@ -49,7 +49,7 @@ export const Edit = () => {
                         <EnvironmentForm heading='Update environment' submitButton={<UpdateEnvironmentButton />} />
                     </Suspense>
                 </View>
-                <View gridArea='controls' backgroundColor={'gray-50'}>
+                <View gridArea='controls' backgroundColor={'gray-50'} padding='size-400'>
                     <Preview />
                 </View>
             </Grid>
