@@ -1,22 +1,9 @@
-import {
-    ActionButton,
-    Button,
-    Disclosure,
-    DisclosurePanel,
-    DisclosureTitle,
-    Flex,
-    Heading,
-    Icon,
-    Loading,
-    Text,
-} from '@geti/ui';
+import { ActionButton, Button, Flex, Heading, Icon, Loading, Text } from '@geti/ui';
 import { Refresh } from '@geti/ui/icons';
 
+import { DiagnosticSection } from '../shared/diagnostic-section';
 import { InlineAlert } from '../shared/inline-alert';
-import { StatusBadge } from '../shared/status-badge';
 import { TrossenWizardStep, useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
-
-import classes from '../shared/setup-wizard.module.scss';
 
 /**
  * Trossen diagnostics step — shows IP reachability and driver configure status.
@@ -74,72 +61,60 @@ export const TrossenDiagnosticsStep = () => {
             </Flex>
 
             {/* IP Reachability section */}
-            <Disclosure defaultExpanded={!ip_reachable} isQuiet>
-                <DisclosureTitle UNSAFE_className={classes.disclosureHeader}>
-                    <Flex alignItems='center' gap='size-100' width='100%'>
-                        <Text UNSAFE_style={{ fontWeight: 600, fontSize: 14 }}>IP Reachability</Text>
-                        <Flex flex alignItems='center' justifyContent='end'>
-                            {ip_reachable ? (
-                                <StatusBadge variant='ok'>{connection_string} reachable</StatusBadge>
-                            ) : (
-                                <StatusBadge variant='error'>Not reachable</StatusBadge>
-                            )}
-                        </Flex>
-                    </Flex>
-                </DisclosureTitle>
-                <DisclosurePanel>
-                    <Flex direction='column' gap='size-100' marginTop='size-100'>
-                        {ip_reachable ? (
-                            <InlineAlert variant='success'>
-                                Robot at <strong>{connection_string}</strong> is reachable on the network.
-                            </InlineAlert>
-                        ) : (
-                            <InlineAlert variant='error'>
-                                Cannot reach <strong>{connection_string}</strong>. Verify the robot is powered on and
-                                connected to the same network, then re-check.
-                            </InlineAlert>
-                        )}
-                    </Flex>
-                </DisclosurePanel>
-            </Disclosure>
+            <DiagnosticSection
+                title='IP Reachability'
+                badge={
+                    ip_reachable
+                        ? { label: `${connection_string} reachable`, variant: 'ok' }
+                        : { label: 'Not reachable', variant: 'error' }
+                }
+                defaultExpanded={!ip_reachable}
+            >
+                <Flex direction='column' gap='size-100' marginTop='size-100'>
+                    {ip_reachable ? (
+                        <InlineAlert variant='success'>
+                            Robot at <strong>{connection_string}</strong> is reachable on the network.
+                        </InlineAlert>
+                    ) : (
+                        <InlineAlert variant='error'>
+                            Cannot reach <strong>{connection_string}</strong>. Verify the robot is powered on and
+                            connected to the same network, then re-check.
+                        </InlineAlert>
+                    )}
+                </Flex>
+            </DiagnosticSection>
 
             {/* Driver Configuration section — only shown when IP is reachable */}
             {ip_reachable && (
-                <Disclosure defaultExpanded={!configure_ok} isQuiet>
-                    <DisclosureTitle UNSAFE_className={classes.disclosureHeader}>
-                        <Flex alignItems='center' gap='size-100' width='100%'>
-                            <Text UNSAFE_style={{ fontWeight: 600, fontSize: 14 }}>Robot Connection</Text>
-                            <Flex flex alignItems='center' justifyContent='end'>
-                                {configure_ok ? (
-                                    <StatusBadge variant='ok'>{motor_count} motors OK</StatusBadge>
-                                ) : (
-                                    <StatusBadge variant='error'>Configuration failed</StatusBadge>
-                                )}
-                            </Flex>
-                        </Flex>
-                    </DisclosureTitle>
-                    <DisclosurePanel>
-                        <Flex direction='column' gap='size-100' marginTop='size-100'>
-                            {configure_ok ? (
-                                <>
-                                    <InlineAlert variant='success'>
-                                        Driver configured successfully. All {motor_count} motors are responding.
-                                    </InlineAlert>
-                                    <InlineAlert variant='info'>
-                                        The robot has been homed to its zero position as part of the connection process.
-                                        This is normal for Trossen robots.
-                                    </InlineAlert>
-                                </>
-                            ) : (
-                                <InlineAlert variant='error'>
-                                    {error_message ??
-                                        'Failed to configure the robot driver. ' +
-                                            'Check that no other application is connected to the robot.'}
+                <DiagnosticSection
+                    title='Robot Connection'
+                    badge={
+                        configure_ok
+                            ? { label: `${motor_count} motors OK`, variant: 'ok' }
+                            : { label: 'Configuration failed', variant: 'error' }
+                    }
+                    defaultExpanded={!configure_ok}
+                >
+                    <Flex direction='column' gap='size-100' marginTop='size-100'>
+                        {configure_ok ? (
+                            <>
+                                <InlineAlert variant='success'>
+                                    Driver configured successfully. All {motor_count} motors are responding.
                                 </InlineAlert>
-                            )}
-                        </Flex>
-                    </DisclosurePanel>
-                </Disclosure>
+                                <InlineAlert variant='info'>
+                                    The robot has been homed to its zero position as part of the connection process.
+                                    This is normal for Trossen robots.
+                                </InlineAlert>
+                            </>
+                        ) : (
+                            <InlineAlert variant='error'>
+                                {error_message ??
+                                    'Failed to configure the robot driver. ' +
+                                        'Check that no other application is connected to the robot.'}
+                            </InlineAlert>
+                        )}
+                    </Flex>
+                </DiagnosticSection>
             )}
 
             {/* Actions */}
