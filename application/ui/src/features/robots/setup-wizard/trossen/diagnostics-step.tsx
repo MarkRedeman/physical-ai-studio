@@ -13,6 +13,7 @@ import {
 import { Refresh } from '@geti/ui/icons';
 
 import { InlineAlert } from '../shared/inline-alert';
+import { StatusBadge } from '../shared/status-badge';
 import { TrossenWizardStep, useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
 import classes from '../shared/setup-wizard.module.scss';
@@ -79,11 +80,9 @@ export const TrossenDiagnosticsStep = () => {
                         <Text UNSAFE_style={{ fontWeight: 600, fontSize: 14 }}>IP Reachability</Text>
                         <Flex flex alignItems='center' justifyContent='end'>
                             {ip_reachable ? (
-                                <span className={`${classes.statusBadge} ${classes.statusOk}`}>
-                                    {connection_string} reachable
-                                </span>
+                                <StatusBadge variant='ok'>{connection_string} reachable</StatusBadge>
                             ) : (
-                                <span className={`${classes.statusBadge} ${classes.statusError}`}>Not reachable</span>
+                                <StatusBadge variant='error'>Not reachable</StatusBadge>
                             )}
                         </Flex>
                     </Flex>
@@ -112,13 +111,9 @@ export const TrossenDiagnosticsStep = () => {
                             <Text UNSAFE_style={{ fontWeight: 600, fontSize: 14 }}>Robot Connection</Text>
                             <Flex flex alignItems='center' justifyContent='end'>
                                 {configure_ok ? (
-                                    <span className={`${classes.statusBadge} ${classes.statusOk}`}>
-                                        {motor_count} motors OK
-                                    </span>
+                                    <StatusBadge variant='ok'>{motor_count} motors OK</StatusBadge>
                                 ) : (
-                                    <span className={`${classes.statusBadge} ${classes.statusError}`}>
-                                        Configuration failed
-                                    </span>
+                                    <StatusBadge variant='error'>Configuration failed</StatusBadge>
                                 )}
                             </Flex>
                         </Flex>
