@@ -2,7 +2,6 @@ import { createContext, ReactNode, useCallback, useContext, useMemo, useState } 
 
 import { useProjectId } from '../../../projects/use-project';
 import { useRobotForm } from '../../robot-form/provider';
-import { useTrossenDebug } from './debug-panel';
 import { TrossenSetupWebSocketState, useTrossenSetupWebSocket } from './use-trossen-setup-websocket';
 
 // ---------------------------------------------------------------------------
@@ -115,16 +114,9 @@ export const TrossenSetupWizardProvider = ({
         });
     }, []);
 
-    // -----------------------------------------------------------------------
-    // WebSocket hook — uses mock state from TrossenDebugProvider when active
-    // -----------------------------------------------------------------------
-
-    const debug = useTrossenDebug();
-    const isDebug = debug?.isDebug ?? false;
-
     const connectionString = robotForm.connection_string ?? '';
     const robotType = robotForm.type ?? '';
-    const wsEnabled = !isDebug && !!connectionString && !!robotType;
+    const wsEnabled = !!connectionString && !!robotType;
 
     const realWs = useTrossenSetupWebSocket({
         projectId,
@@ -133,8 +125,8 @@ export const TrossenSetupWizardProvider = ({
         enabled: wsEnabled,
     });
 
-    const wsState = isDebug && debug ? debug.mockState : realWs.state;
-    const commands = isDebug && debug ? debug.commands : realWs.commands;
+    const wsState = realWs.state;
+    const commands = realWs.commands;
 
     // -----------------------------------------------------------------------
     // Context values
@@ -175,12 +167,16 @@ export const TrossenSetupWizardProvider = ({
 
 export const useTrossenSetupState = () => {
     const ctx = useContext(TrossenSetupStateContext);
-    if (ctx === null) throw new Error('useTrossenSetupState must be used within TrossenSetupWizardProvider');
+    if (ctx === null) {
+        throw new Error('useTrossenSetupState must be used within TrossenSetupWizardProvider');
+    }
     return ctx;
 };
 
 export const useTrossenSetupActions = () => {
     const ctx = useContext(TrossenSetupActionsContext);
-    if (ctx === null) throw new Error('useTrossenSetupActions must be used within TrossenSetupWizardProvider');
+    if (ctx === null) {
+        throw new Error('useTrossenSetupActions must be used within TrossenSetupWizardProvider');
+    }
     return ctx;
 };

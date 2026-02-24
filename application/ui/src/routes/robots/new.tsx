@@ -19,7 +19,6 @@ import {
     useSetupState,
     WizardStep,
 } from '../../features/robots/setup-wizard/so101/wizard-provider';
-import { TrossenDebugProvider } from '../../features/robots/setup-wizard/trossen/debug-panel';
 import { TrossenStepBody } from '../../features/robots/setup-wizard/trossen/setup-wizard';
 import {
     TROSSEN_STEP_LABELS,
@@ -357,9 +356,7 @@ export const New = () => {
     return (
         <RobotModelsProvider>
             <RobotFormProvider>
-                <TrossenDebugProvider>
-                    <NewRobotPage />
-                </TrossenDebugProvider>
+                <NewRobotPage />
             </RobotFormProvider>
         </RobotModelsProvider>
     );
