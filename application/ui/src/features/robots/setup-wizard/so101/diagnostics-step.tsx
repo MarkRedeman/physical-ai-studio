@@ -15,7 +15,7 @@ import classes from '../shared/setup-wizard.module.scss';
  */
 export const DiagnosticsStep = () => {
     const { wsState } = useSetupState();
-    const { goNext, markCompleted, markSkipped, goToStep, onBackToRobotInfo, commands } = useSetupActions();
+    const { goNext, markCompleted, goToStep, onBackToRobotInfo, commands } = useSetupActions();
 
     const { voltageResult, probeResult, error } = wsState;
     const isLoading = !voltageResult || !probeResult;
@@ -229,7 +229,6 @@ export const DiagnosticsStep = () => {
                                 variant='accent'
                                 onPress={() => {
                                     markCompleted(WizardStep.DIAGNOSTICS);
-                                    markSkipped(WizardStep.CALIBRATION);
                                     commands.enterVerification();
                                     goToStep(WizardStep.VERIFICATION);
                                 }}
