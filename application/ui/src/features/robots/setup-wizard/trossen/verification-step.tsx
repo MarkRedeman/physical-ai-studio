@@ -11,6 +11,7 @@ import { paths } from '../../../../router';
 import { useProjectId } from '../../../projects/use-project';
 import { useRobotForm } from '../../robot-form/provider';
 import { urdfPathForType, useRobotModels } from '../../robot-models-context';
+import { InlineAlert } from '../shared/inline-alert';
 import { useTrossenSetupActions, useTrossenSetupState } from './wizard-provider';
 
 import classes from '../shared/setup-wizard.module.scss';
@@ -143,17 +144,13 @@ export const TrossenVerificationStep = () => {
 
     return (
         <Flex direction='column' gap='size-300'>
-            <div className={classes.successBox}>
-                <Text>
-                    Robot is connected and ready. Move the robot arm to verify that the 3D visualization matches the
-                    physical robot, then save.
-                </Text>
-            </div>
+            <InlineAlert variant='success'>
+                Robot is connected and ready. Move the robot arm to verify that the 3D visualization matches the
+                physical robot, then save.
+            </InlineAlert>
 
             {!wsState.isConnected && (
-                <div className={classes.warningBox}>
-                    <Text>WebSocket disconnected — 3D preview is not updating.</Text>
-                </div>
+                <InlineAlert variant='warning'>WebSocket disconnected — 3D preview is not updating.</InlineAlert>
             )}
 
             <div className={classes.sectionCard}>
@@ -173,11 +170,7 @@ export const TrossenVerificationStep = () => {
                 </Flex>
             </div>
 
-            {(wsState.error || saveError) && (
-                <div className={classes.warningBox}>
-                    <Text>{saveError ?? wsState.error}</Text>
-                </div>
-            )}
+            {(wsState.error || saveError) && <InlineAlert variant='warning'>{saveError ?? wsState.error}</InlineAlert>}
 
             <Flex gap='size-200' justifyContent='space-between'>
                 <Button variant='secondary' onPress={goBack}>
