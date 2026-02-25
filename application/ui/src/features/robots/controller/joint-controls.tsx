@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ActionButton, Flex, Grid, Heading, minmax, repeat, Slider, Switch, View } from '@geti/ui';
 import { ChevronDownSmallLight } from '@geti/ui/icons';
-import useWebSocket from 'react-use-websocket';
-import { degToRad, radToDeg } from 'three/src/math/MathUtils.js';
+import { radToDeg } from 'three/src/math/MathUtils.js';
 
 import { urdfPathForType, useRobotModels } from '../robot-models-context';
+import { useJointState, useSynchronizeModelJoints } from '../use-joint-state';
 import { useRobot, useRobotId } from '../use-robot';
-
-function removeSuffix(str: string, suffix: string): string {
-    return str.endsWith(suffix) ? str.slice(0, -suffix.length) : str;
-}
 
 const Joint = ({
     name,
@@ -40,14 +36,7 @@ const Joint = ({
 
     return (
         <li>
-            <View
-                backgroundColor={'gray-50'}
-                padding='size-115'
-                UNSAFE_style={{
-                    //border: '1px solid var(--spectrum-global-color-gray-200)',
-                    borderRadius: '4px',
-                }}
-            >
+            <View backgroundColor={'gray-50'} padding='size-115' UNSAFE_style={{ borderRadius: '4px' }}>
                 <Grid areas={['name value', 'slider slider']} gap='size-100'>
                     <div style={{ gridArea: 'name' }}>
                         <span>{name}</span>
@@ -104,69 +93,31 @@ type JointsState = Array<{
     decreaseKey: string;
     increaseKey: string;
 }>;
-const useJointState = (isEnabled: boolean) => {
+const useJointStateOld = (isEnabled: boolean) => {
     const robot = useRobot();
     const PATH = urdfPathForType(robot.type);
     const { getModel } = useRobotModels();
     const model = getModel(PATH);
 
     const [isControlled, setIsControlled] = useState(false);
-    const [joints, setJoints] = useState<JointsState>([]);
-
-    // WebSocket message handler
-    const handleMessage = useCallback(
-        (event: WebSocketEventMap['message']) => {
-            try {
-                const payload = JSON.parse(event.data);
-
-                if (payload['event'] === 'state_was_updated') {
-                    const newJoints = payload['state'];
-
-                    // Update the URDF model
-                    Object.keys(newJoints).forEach((joint) => {
-                        const name = removeSuffix(joint, '.pos');
-                        model?.setJointValue(name, degToRad(newJoints[joint]));
-                    });
-
-                    const modelJoints = Object.values(model?.joints ?? {});
-
-                    const jointState = Object.keys(newJoints).map((joint_name) => {
-                        const joint = modelJoints.find(({ urdfName }) => urdfName === joint_name);
-
-                        const rangeMax = joint === undefined ? 180 : radToDeg(joint.limit.upper);
-                        const rangeMin = joint === undefined ? -180 : radToDeg(joint.limit.lower);
-
-                        return {
-                            name: removeSuffix(joint_name, '.pos'),
-                            value: Number(newJoints[joint_name]),
-                            rangeMax,
-                            rangeMin,
-                            decreaseKey: '',
-                            increaseKey: '',
-                        };
-                    });
-
-                    setJoints(jointState);
-                    setIsControlled(payload['is_controlled']);
-                }
-            } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
-            }
-        },
-        [model]
-    );
 
     const { project_id, robot_id } = useRobotId();
-    const socket = useWebSocket(`/api/projects/${project_id}/robots/${robot_id}/ws`, {
-        queryParams: {
-            fps: 30,
-        },
-        shouldReconnect: () => true,
-        reconnectAttempts: 5,
-        reconnectInterval: 3000,
-        onMessage: handleMessage,
-        onError: (error) => console.error('WebSocket error:', error),
-        onClose: () => console.info('WebSocket closed'),
+    const { joints, socket } = useJointState(project_id, robot_id);
+    const modelJoints = Object.values(model?.joints ?? {});
+
+    useSynchronizeModelJoints(joints, PATH);
+    const jointsWithRanges: JointsState = joints.map((joint) => {
+        const modelJoint = modelJoints.find(({ urdfName }) => urdfName === joint.name);
+        const rangeMax = modelJoint === undefined ? 180 : radToDeg(modelJoint.limit.upper);
+        const rangeMin = modelJoint === undefined ? -180 : radToDeg(modelJoint.limit.lower);
+
+        return {
+            ...joint,
+            rangeMin,
+            rangeMax,
+            decreaseKey: '',
+            increaseKey: '',
+        };
     });
 
     const setJoint = (name: string, value: number) => {
@@ -178,7 +129,7 @@ const useJointState = (isEnabled: boolean) => {
         });
     };
 
-    return [joints, isControlled, setJoint, socket] as const;
+    return [jointsWithRanges, isControlled, setJoint, socket] as const;
 };
 
 const Joints = ({
@@ -297,7 +248,7 @@ const CompoundMovements = () => {
 };
 
 const Internal = () => {
-    const [joints, isControlled, setJoint, socket] = useJointState(true);
+    const [joints, isControlled, setJoint, socket] = useJointStateOld(true);
     const [expanded, setExpanded] = useState(true);
 
     return (
@@ -317,6 +268,19 @@ const Internal = () => {
                         </Flex>
                     </Heading>
                 </ActionButton>
+
+                <Switch
+                    isSelected={isControlled}
+                    onChange={(value) => {
+                        if (value === true) {
+                            socket.sendJsonMessage({ command: 'enable_torque' });
+                        } else {
+                            socket.sendJsonMessage({ command: 'disable_torque' });
+                        }
+                    }}
+                >
+                    Take control
+                </Switch>
             </Flex>
             {expanded && (
                 <>
@@ -328,14 +292,77 @@ const Internal = () => {
     );
 };
 
+const DisabledJointsControls = () => {
+    const [expanded, setExpanded] = useState(true);
+    const isControlled = false;
+
+    const robot = useRobot();
+    const PATH = urdfPathForType(robot.type);
+    const { getModel } = useRobotModels();
+    const model = getModel(PATH);
+    const modelJoints = Object.values(model?.joints ?? {});
+    const joints: JointsState = modelJoints
+        .filter((joint) => joint.jointType !== 'fixed')
+        .map((joint) => {
+            const rangeMax = radToDeg(joint.limit.upper);
+            const rangeMin = radToDeg(joint.limit.lower);
+
+            return {
+                name: joint.name,
+                value: 0,
+                decreaseKey: '',
+                increaseKey: '',
+                rangeMin,
+                rangeMax,
+            };
+        })
+        .toReversed();
+
+    return (
+        <>
+            <Flex justifyContent={'space-between'}>
+                <ActionButton onPress={() => setExpanded((c) => !c)}>
+                    <Heading level={4} marginX='size-100'>
+                        <Flex alignItems='center' gap='size-100'>
+                            <ChevronDownSmallLight
+                                fill='white'
+                                style={{
+                                    transform: expanded ? 'rotate(180deg)' : '',
+                                    animation: 'transform ease-in-out 0.1s',
+                                }}
+                            />
+                            Joint state
+                        </Flex>
+                    </Heading>
+                </ActionButton>
+
+                <Switch isSelected={isControlled} isDisabled>
+                    Take control
+                </Switch>
+            </Flex>
+            {expanded && (
+                <>
+                    <Joints
+                        joints={joints}
+                        isDisabled={isControlled === false}
+                        setJoint={() => {
+                            console.info('nono');
+                        }}
+                    />
+                    <CompoundMovements />
+                </>
+            )}
+        </>
+    );
+};
+
 export const JointControls = ({ isConnected }: { isConnected: boolean }) => {
     if (!isConnected) {
-        return null;
+        //return null;
     }
 
     return (
         <View
-            isHidden
             gridArea='controls'
             backgroundColor={'gray-100'}
             padding='size-100'
@@ -345,7 +372,7 @@ export const JointControls = ({ isConnected }: { isConnected: boolean }) => {
             }}
         >
             <Flex direction='column' gap='size-50'>
-                {isConnected && <Internal />}
+                {isConnected ? <Internal /> : <DisabledJointsControls />}
             </Flex>
         </View>
     );
