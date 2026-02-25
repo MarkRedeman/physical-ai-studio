@@ -5,7 +5,7 @@ import { ChevronDownSmallLight } from '@geti/ui/icons';
 import useWebSocket from 'react-use-websocket';
 import { degToRad, radToDeg } from 'three/src/math/MathUtils.js';
 
-import { useRobotModels } from '../robot-models-context';
+import { urdfPathForType, useRobotModels } from '../robot-models-context';
 import { useRobot, useRobotId } from '../use-robot';
 
 function removeSuffix(str: string, suffix: string): string {
@@ -57,6 +57,7 @@ const Joint = ({
                     </div>
                     <Flex gridArea='slider' gap='size-200'>
                         <View
+                            isHidden
                             backgroundColor={'gray-100'}
                             paddingY='size-50'
                             paddingX='size-150'
@@ -78,6 +79,7 @@ const Joint = ({
                             onChange={setState}
                         />
                         <View
+                            isHidden
                             backgroundColor={'gray-100'}
                             paddingY='size-50'
                             paddingX='size-150'
@@ -103,9 +105,13 @@ type JointsState = Array<{
     increaseKey: string;
 }>;
 const useJointState = (isEnabled: boolean) => {
+    const robot = useRobot();
+    const PATH = urdfPathForType(robot.type);
+    const { getModel } = useRobotModels();
+    const model = getModel(PATH);
+
     const [isControlled, setIsControlled] = useState(false);
     const [joints, setJoints] = useState<JointsState>([]);
-    const { models } = useRobotModels();
 
     // WebSocket message handler
     const handleMessage = useCallback(
@@ -116,37 +122,27 @@ const useJointState = (isEnabled: boolean) => {
                 if (payload['event'] === 'state_was_updated') {
                     const newJoints = payload['state'];
 
+                    // Update the URDF model
                     Object.keys(newJoints).forEach((joint) => {
                         const name = removeSuffix(joint, '.pos');
-
-                        models.forEach((model) => {
-                            model.setJointValue(name, degToRad(newJoints[joint]));
-                        });
+                        model?.setJointValue(name, degToRad(newJoints[joint]));
                     });
 
-                    const placeholderJoints = [
-                        { name: 'J1', value: 70, rangeMin: -360, rangeMax: 360, decreaseKey: 'q', increaseKey: '1' },
-                        { name: 'J2', value: 20, rangeMin: -360, rangeMax: 360, decreaseKey: '2', increaseKey: '2' },
-                        { name: 'J3', value: 80, rangeMin: -360, rangeMax: 360, decreaseKey: 'e', increaseKey: '3' },
-                        { name: 'J4', value: 60, rangeMin: -360, rangeMax: 360, decreaseKey: 'r', increaseKey: '4' },
-                        { name: 'J5', value: 10, rangeMin: -360, rangeMax: 360, decreaseKey: 't', increaseKey: '5' },
-                        { name: 'J6', value: 84, rangeMin: -360, rangeMax: 360, decreaseKey: 'y', increaseKey: '6' },
-                    ];
+                    const modelJoints = Object.values(model?.joints ?? {});
 
-                    const modelJoints = Object.values(models.at(0)?.joints) ?? [];
-
-                    const jointState = Object.keys(newJoints).map((joint_name, idx) => {
+                    const jointState = Object.keys(newJoints).map((joint_name) => {
                         const joint = modelJoints.find(({ urdfName }) => urdfName === joint_name);
 
                         const rangeMax = joint === undefined ? 180 : radToDeg(joint.limit.upper);
                         const rangeMin = joint === undefined ? -180 : radToDeg(joint.limit.lower);
 
                         return {
-                            ...placeholderJoints[idx],
-                            name: joint_name,
+                            name: removeSuffix(joint_name, '.pos'),
                             value: Number(newJoints[joint_name]),
                             rangeMax,
                             rangeMin,
+                            decreaseKey: '',
+                            increaseKey: '',
                         };
                     });
 
@@ -157,7 +153,7 @@ const useJointState = (isEnabled: boolean) => {
                 console.error('Failed to parse WebSocket message:', error);
             }
         },
-        [models]
+        [model]
     );
 
     const { project_id, robot_id } = useRobotId();
@@ -321,19 +317,6 @@ const Internal = () => {
                         </Flex>
                     </Heading>
                 </ActionButton>
-
-                <Switch
-                    isSelected={isControlled}
-                    onChange={(value) => {
-                        if (value === true) {
-                            socket.sendJsonMessage({ command: 'enable_torque' });
-                        } else {
-                            socket.sendJsonMessage({ command: 'disable_torque' });
-                        }
-                    }}
-                >
-                    Take control
-                </Switch>
             </Flex>
             {expanded && (
                 <>
