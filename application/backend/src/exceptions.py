@@ -89,3 +89,44 @@ class ResourceAlreadyExistsError(BaseException):
             error_code=f"{resource_name}_already_exists",
             http_status=http.HTTPStatus.CONFLICT,
         )
+
+
+class ImportValidationError(BaseException):
+    """Exception raised when a model import archive fails validation.
+
+    Covers bad zip files, unrecognized formats, missing required files,
+    invalid config content, and unsupported policy types.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="import_validation_error",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
+class ImportConversionError(BaseException):
+    """Exception raised when HuggingFace model conversion fails.
+
+    Covers errors during model loading (from_pretrained) or export
+    to the Physical AI inference format.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="import_conversion_error",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
+class ImportDependencyError(BaseException):
+    """Exception raised when a required library for model import is unavailable."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="import_dependency_error",
+            http_status=http.HTTPStatus.INTERNAL_SERVER_ERROR,
+        )

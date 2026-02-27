@@ -12,6 +12,7 @@ from services import (
     DatasetService,
     EpisodeThumbnailService,
     ModelDownloadService,
+    ModelImportService,
     ModelService,
     ProjectCameraService,
     ProjectService,
@@ -120,6 +121,19 @@ def get_model_download_service() -> ModelDownloadService:
 def get_snapshot_service() -> SnapshotService:
     """Provides a SnapshotService instance for managing snapshots."""
     return SnapshotService()
+
+
+def get_model_import_service(
+    model_service: Annotated[ModelService, Depends(get_model_service)],
+    dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
+    snapshot_service: Annotated[SnapshotService, Depends(get_snapshot_service)],
+) -> ModelImportService:
+    """Provides a ModelImportService instance for importing models."""
+    return ModelImportService(
+        model_service=model_service,
+        dataset_service=dataset_service,
+        snapshot_service=snapshot_service,
+    )
 
 
 @lru_cache

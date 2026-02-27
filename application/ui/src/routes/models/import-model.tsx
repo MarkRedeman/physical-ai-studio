@@ -13,8 +13,11 @@ export const ImportModelModal = (close: (model: SchemaModel | undefined) => void
     const [error, setError] = useState<string | null>(null);
 
     const importMutation = $api.useMutation('post', '/api/models:import', {
-        onError: (err) => {
-            setError(err instanceof Error ? err.message : 'Import failed');
+        onError: (err: unknown) => {
+            const body = err as Record<string, unknown> | undefined;
+            // Custom exceptions return { message }, HTTPException returns { detail }
+            const message = body?.message ?? body?.detail;
+            setError(typeof message === 'string' ? message : 'Import failed');
         },
     });
 
@@ -63,7 +66,7 @@ export const ImportModelModal = (close: (model: SchemaModel | undefined) => void
             <Content>
                 <Flex direction='column' gap='size-200'>
                     <Flex direction='column' gap='size-100'>
-                        <Text>Select a previously exported model archive (.zip):</Text>
+                        <Text>Select a model archive (.zip). Supports Physical AI Studio exports and HuggingFace model archives.</Text>
                         <Flex alignItems='center' gap='size-150'>
                             <FileTrigger acceptedFileTypes={['.zip']} onSelect={onFileSelect}>
                                 <Button variant='secondary'>Browse</Button>
