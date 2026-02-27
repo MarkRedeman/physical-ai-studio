@@ -15,7 +15,7 @@ interface InferenceSetupProps {
 export const InferenceSetup = ({ model_id, onDone }: InferenceSetupProps) => {
     const { project_id } = useProjectId();
     const { data: model } = $api.useSuspenseQuery('get', '/api/models/{model_id}', {
-        params: { query: { uuid: model_id } },
+        params: { path: { model_id } },
     });
     const { data: environments } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/environments', {
         params: { path: { project_id } },
