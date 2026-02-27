@@ -200,9 +200,9 @@ class ModelDB(Base):
     properties: Mapped[JSON] = mapped_column(JSON(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
-    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id"))
+    dataset_id: Mapped[str | None] = mapped_column(ForeignKey("datasets.id"), nullable=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
-    snapshot_id: Mapped[str] = mapped_column(ForeignKey("snapshots.id"))
+    snapshot_id: Mapped[str | None] = mapped_column(ForeignKey("snapshots.id"), nullable=True)
     parent_model_id: Mapped[str | None] = mapped_column(
         ForeignKey("models.id", ondelete="SET NULL"), nullable=True, default=None
     )
@@ -211,8 +211,8 @@ class ModelDB(Base):
         ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, default=None
     )
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="models")
-    dataset: Mapped["DatasetDB"] = relationship("DatasetDB", back_populates="models")
-    snapshot: Mapped["DatasetDB"] = relationship("SnapshotDB", back_populates="models")
+    dataset: Mapped["DatasetDB | None"] = relationship("DatasetDB", back_populates="models")
+    snapshot: Mapped["SnapshotDB | None"] = relationship("SnapshotDB", back_populates="models")
 
 
 class JobDB(Base):
