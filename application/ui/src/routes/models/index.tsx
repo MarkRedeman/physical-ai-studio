@@ -43,7 +43,7 @@ const ModelList = ({
     const deleteModelMutation = $api.useMutation('delete', '/api/models');
 
     const deleteModel = (model: SchemaModel) => {
-        deleteModelMutation.mutate({ params: { query: { uuid: model.id! } } });
+        deleteModelMutation.mutate({ params: { query: { model_id: model.id! } } });
     };
 
     return (

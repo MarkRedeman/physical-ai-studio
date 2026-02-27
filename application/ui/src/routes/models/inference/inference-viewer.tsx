@@ -20,10 +20,10 @@ export const InferenceViewer = ({ config }: InferenceViewerProps) => {
     const { project_id, model_id } = useInferenceParams();
 
     const { data: model } = $api.useSuspenseQuery('get', '/api/models/{model_id}', {
-        params: { query: { uuid: model_id } },
+        params: { path: { model_id } },
     });
     const { data: tasks } = $api.useSuspenseQuery('get', '/api/models/{model_id}/tasks', {
-        params: { query: { uuid: model_id } },
+        params: { path: { model_id } },
     });
     const [task, setTask] = useState<string>(tasks[0] ?? '');
 
