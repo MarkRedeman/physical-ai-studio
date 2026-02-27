@@ -43,6 +43,12 @@ export const ModelRow = ({
         if (action === 'logs') {
             onViewLogs?.();
         }
+        if (action === 'download') {
+            const link = document.createElement('a');
+            link.href = `/api/models/${model.id}:export`;
+            link.download = `${model.name}.zip`;
+            link.click();
+        }
     };
 
     const disabledKeys: string[] = [];
@@ -76,6 +82,7 @@ export const ModelRow = ({
                     <Menu onAction={onAction} disabledKeys={disabledKeys}>
                         <Item key='logs'>Logs</Item>
                         <Item key='retrain'>Retrain</Item>
+                        <Item key='download'>Download</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>
                 </MenuTrigger>
