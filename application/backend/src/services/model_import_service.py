@@ -30,6 +30,7 @@ POLICY_CLASS_MAP: dict[str, str] = {
     "physicalai.policies.act.policy.ACT": "act",
     "physicalai.policies.pi0.policy.Pi0": "pi0",
     "physicalai.policies.smolvla.policy.SmolVLA": "smolvla",
+    "physicalai.policies.lerobot.universal.LeRobotPolicy": "lerobot",
 }
 
 # Supported HuggingFace/LeRobot policy types for import
@@ -334,30 +335,86 @@ class ModelImportService:
     def _convert_hf_model(self, source_dir: Path, export_dir: Path, policy_type: str) -> None:
         """Load a HuggingFace model and export it to physicalai format.
 
+        Uses LeRobotPolicy.from_pretrained() to load the model, then manually
+        replicates the Export.to_torch() logic to produce the checkpoint and
+        metadata files. This is necessary because:
+        - Base physicalai policy classes have Export but no from_pretrained()
+        - LeRobot wrapper classes have from_pretrained() but no Export mixin
+        So we bridge the gap by loading via LeRobot and exporting manually.
+
         Args:
             source_dir: Directory containing config.json and model.safetensors.
             export_dir: Target directory for exports (e.g., model_dir/exports).
             policy_type: The policy type string (e.g., "act", "smolvla").
         """
         try:
-            from physicalai.policies import get_physicalai_policy_class
+            from physicalai.policies.lerobot import LeRobotPolicy
         except ImportError as e:
             raise ImportDependencyError(
                 "The physicalai-train library is not available. Cannot convert HuggingFace models without it."
             ) from e
 
+        # Load the HuggingFace model via LeRobotPolicy.from_pretrained()
         try:
-            policy_cls = get_physicalai_policy_class(policy_type)
-            policy = policy_cls.from_pretrained(str(source_dir))
+            policy = LeRobotPolicy.from_pretrained(str(source_dir))
         except ImportError as e:
             raise ImportDependencyError(f"Failed to load HuggingFace model: missing dependency. {e}") from e
         except Exception as e:
             raise ImportConversionError(f"Failed to load HuggingFace model: {e}") from e
 
+        # Manually replicate Export.to_torch() + _create_metadata()
+        # The loaded policy has state_dict() and hparams but no export() method.
         try:
+            import lightning
+            import torch
+            import yaml
+
+            from physicalai.train import __version__
+
             for backend in self._settings.supported_backends:
+                if backend != "torch":
+                    logger.warning("Skipping unsupported backend '%s' for HuggingFace import.", backend)
+                    continue
+
                 backend_dir = export_dir / backend
-                policy.export(backend_dir, backend=backend)
+                backend_dir.mkdir(parents=True, exist_ok=True)
+
+                # Use policy.policy_name for the filename (e.g., "act", "smolvla")
+                policy_name = getattr(policy, "policy_name", policy_type)
+                model_path = backend_dir / f"{policy_name}.pt"
+
+                # Build checkpoint matching Export.to_torch() structure
+                checkpoint = {
+                    "state_dict": policy.state_dict(),
+                    "epoch": 0,
+                    "global_step": 0,
+                    "pytorch-lightning_version": lightning.__version__,
+                    "loops": {},
+                    "hparams_name": "kwargs",
+                    "hyper_parameters": dict(policy.hparams),
+                }
+
+                # nosemgrep: trailofbits.python.pickles-in-pytorch.pickles-in-pytorch
+                torch.save(checkpoint, str(model_path))  # nosec B614
+
+                # Write metadata.yaml matching Export._create_metadata() structure
+                metadata = {
+                    "physicalai_train_version": __version__,
+                    "policy_class": f"{policy.__class__.__module__}.{policy.__class__.__name__}",
+                    "backend": backend,
+                }
+                metadata_path = backend_dir / "metadata.yaml"
+                with metadata_path.open("w") as f:
+                    yaml.dump(metadata, f, default_flow_style=False)
+
+                logger.info(
+                    "Converted HuggingFace %s model to %s format: %s",
+                    policy_type,
+                    backend,
+                    model_path,
+                )
+        except (ImportDependencyError, ImportConversionError):
+            raise
         except Exception as e:
             raise ImportConversionError(f"Failed to convert model to inference format: {e}") from e
 
