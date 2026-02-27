@@ -22,6 +22,7 @@ from services.event_processor import EventProcessor
 from services.job_service import JobService
 from services.log_service import LogService
 from services.robot_calibration_service import RobotCalibrationService
+from services.snapshot_service import SnapshotService
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
@@ -114,6 +115,11 @@ def get_model_service() -> ModelService:
 def get_model_download_service() -> ModelDownloadService:
     """Provides a ModelDownloadService instance for model exports."""
     return ModelDownloadService()
+
+@lru_cache
+def get_snapshot_service() -> SnapshotService:
+    """Provides a SnapshotService instance for managing snapshots."""
+    return SnapshotService()
 
 
 @lru_cache
