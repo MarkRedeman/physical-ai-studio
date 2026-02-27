@@ -52,6 +52,11 @@ export const ModelRow = ({
         }
         if (action === 'download') {
             setDownloadDialogOpen(true);
+
+            // const link = document.createElement('a');
+            // link.href = `/api/models/${model.id}:export`;
+            // link.download = `${model.name}.zip`;
+            // link.click();
         }
     };
 
@@ -93,6 +98,7 @@ export const ModelRow = ({
                         <Item key='logs'>Logs</Item>
                         <Item key='download'>Download</Item>
                         <Item key='retrain'>Retrain</Item>
+                        <Item key='download'>Download</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>
                 </MenuTrigger>
