@@ -10,7 +10,7 @@ import yaml
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 
-from api.dependencies import get_dataset_service, get_model_service, get_snapshot_service, validate_uuid
+from api.dependencies import get_dataset_service, get_model_id, get_model_service, get_snapshot_service
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
 from schemas import Model
@@ -29,7 +29,7 @@ _POLICY_CLASS_MAP: dict[str, str] = {
 
 @router.get("/{model_id}")
 async def get_model_by_id(
-    model_id: Annotated[UUID, Depends(validate_uuid)],
+    model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
 ) -> Model:
     """Get model by id."""
@@ -38,7 +38,7 @@ async def get_model_by_id(
 
 @router.get("/{model_id}/tasks")
 async def get_tasks_of_model(
-    model_id: Annotated[UUID, Depends(validate_uuid)],
+    model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
     dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
 ) -> list[str]:
@@ -50,9 +50,9 @@ async def get_tasks_of_model(
     return get_internal_dataset(dataset).get_tasks()
 
 
-@router.get("/{model_id}:export")
+@router.get("/{model_id}/export")
 async def export_model(
-    model_id: Annotated[UUID, Depends(validate_uuid)],
+    model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
 ) -> StreamingResponse:
     """Export a model as a zip archive containing the model's export artifacts.
@@ -250,7 +250,7 @@ async def import_model(
 
 @router.delete("")
 async def remove_model(
-    model_id: Annotated[UUID, Depends(validate_uuid)],
+    model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
 ) -> None:
     """Fetch all projects."""
