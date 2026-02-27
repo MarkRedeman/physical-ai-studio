@@ -27,12 +27,14 @@ export const ModelRow = ({
     onDelete,
     onRetrain,
     onViewLogs,
+    onExport,
 }: {
     model: SchemaModel;
     trainingJob?: SchemaJob;
     onDelete: () => void;
     onRetrain: () => void;
     onViewLogs?: () => void;
+    onExport: () => void;
 }) => {
     const trainJobId = model.train_job_id;
     const isHuggingFaceImport = model.properties?.source === 'huggingface';
@@ -49,16 +51,7 @@ export const ModelRow = ({
             onViewLogs?.();
         }
         if (action === 'download') {
-            fetch(`/api/models/${model.id}/export`).then(async (res) => {
-                if (!res.ok) return;
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${model.name}.zip`;
-                link.click();
-                URL.revokeObjectURL(url);
-            });
+            onExport();
         }
     };
 

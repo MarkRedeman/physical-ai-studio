@@ -56,6 +56,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
         }
 
         const payload: SchemaTrainJobPayload = {
+            type: 'training',
             dataset_id,
             project_id: projectId,
             model_name: name,

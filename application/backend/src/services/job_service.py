@@ -7,7 +7,7 @@ from db import get_async_db_session_ctx
 from exceptions import DuplicateJobException, ModelNotRetrainableError, ResourceNotFoundError, ResourceType
 from repositories import JobRepository
 from schemas import Job
-from schemas.job import JobStatus, JobType, TrainJobPayload
+from schemas.job import ExportJobPayload, ImportJobPayload, JobStatus, JobType, TrainJobPayload
 from services.model_service import ModelService
 
 
@@ -56,6 +56,42 @@ class JobService:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             return await repo.get_pending_job_by_type(JobType.TRAINING)
+
+    @staticmethod
+    async def submit_import_job(payload: ImportJobPayload) -> Job:
+        async with get_async_db_session_ctx() as session:
+            repo = JobRepository(session)
+            try:
+                job = Job(
+                    project_id=payload.project_id,
+                    type=JobType.IMPORT,
+                    payload=payload.model_dump(),
+                    message="Import job submitted",
+                )
+                return await repo.save(job)
+            except IntegrityError:
+                raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
+
+    @staticmethod
+    async def submit_export_job(payload: ExportJobPayload) -> Job:
+        async with get_async_db_session_ctx() as session:
+            repo = JobRepository(session)
+            try:
+                job = Job(
+                    project_id=payload.project_id,
+                    type=JobType.EXPORT,
+                    payload=payload.model_dump(),
+                    message="Export job submitted",
+                )
+                return await repo.save(job)
+            except IntegrityError:
+                raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
+
+    @staticmethod
+    async def get_pending_import_export_job() -> Job | None:
+        async with get_async_db_session_ctx() as session:
+            repo = JobRepository(session)
+            return await repo.get_pending_job_by_types([JobType.IMPORT, JobType.EXPORT])
 
     @staticmethod
     async def update_job_status(
