@@ -3,10 +3,11 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 
 from db import get_async_db_session_ctx
-from exceptions import DuplicateJobException, ResourceNotFoundError, ResourceType
+from exceptions import DuplicateJobException, ModelNotRetrainableError, ResourceNotFoundError, ResourceType
 from repositories import JobRepository
 from schemas import Job
 from schemas.job import JobStatus, JobType, TrainJobPayload
+from services.model_service import ModelService
 
 
 class JobService:
@@ -27,6 +28,12 @@ class JobService:
 
     @staticmethod
     async def submit_train_job(payload: TrainJobPayload) -> Job:
+        # Validate that the base model (if any) supports retraining.
+        if payload.base_model_id is not None:
+            base_model = await ModelService.get_model_by_id(payload.base_model_id)
+            if base_model.properties.get("source") == "huggingface":
+                raise ModelNotRetrainableError(base_model.name)
+
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             if await repo.is_job_duplicate(project_id=payload.project_id, payload=payload):
