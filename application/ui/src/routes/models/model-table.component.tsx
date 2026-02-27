@@ -35,6 +35,7 @@ export const ModelRow = ({
     onViewLogs?: () => void;
 }) => {
     const trainJobId = model.train_job_id;
+    const isHuggingFaceImport = model.properties?.source === 'huggingface';
 
     const onAction = (key: Key) => {
         const action = key.toString();
@@ -66,7 +67,7 @@ export const ModelRow = ({
             ? durationBetween(trainingJob.start_time, trainingJob.end_time)
             : null;
 
-    const disabledKeys: string[] = [];
+    const disabledKeys = isHuggingFaceImport ? ['retrain'] : [];
     if (!trainJobId) disabledKeys.push('logs');
 
     const version = model.version ?? 1;
@@ -77,6 +78,11 @@ export const ModelRow = ({
                 <Text>{model.name}</Text>
                 {version > 1 && (
                     <Text UNSAFE_style={{ color: 'var(--spectrum-gray-600)', fontSize: '0.85em' }}>v{version}</Text>
+                )}
+                {isHuggingFaceImport && (
+                    <Text UNSAFE_style={{ color: 'var(--spectrum-gray-500)', fontSize: '0.8em', fontStyle: 'italic' }}>
+                        HF
+                    </Text>
                 )}
             </Flex>
             <Text>{new Date(model.created_at!).toLocaleString()}</Text>
