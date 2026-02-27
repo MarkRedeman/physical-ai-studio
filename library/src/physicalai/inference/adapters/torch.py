@@ -118,13 +118,16 @@ class TorchAdapter(RuntimeAdapter):
         """
         if isinstance(torch_outputs, torch.Tensor):
             # Single output
-            return {self._output_names[0]: torch_outputs.numpy()}
+            return {self._output_names[0]: torch_outputs.detach().cpu().numpy()}
         if isinstance(torch_outputs, dict):
             # Dict output
-            return {k: v.numpy() if isinstance(v, torch.Tensor) else v for k, v in torch_outputs.items()}
+            return {k: v.detach().cpu().numpy() if isinstance(v, torch.Tensor) else v for k, v in torch_outputs.items()}
         if isinstance(torch_outputs, (list, tuple)):
             # Multiple outputs as list/tuple
-            return {name: output.numpy() for name, output in zip(self._output_names, torch_outputs, strict=True)}
+            return {
+                name: output.detach().cpu().numpy()
+                for name, output in zip(self._output_names, torch_outputs, strict=True)
+            }
 
         # Unexpected output type
         msg = f"Unexpected output type: {type(torch_outputs)}"

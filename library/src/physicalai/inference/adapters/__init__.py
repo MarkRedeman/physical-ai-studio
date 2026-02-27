@@ -26,12 +26,12 @@ __all__ = [
 ]
 
 
-def get_adapter(backend: ExportBackend | str, **kwargs: Any) -> RuntimeAdapter:  # noqa: ARG001, ANN401
+def get_adapter(backend: ExportBackend | str, **kwargs: Any) -> RuntimeAdapter:  # noqa: ANN401
     """Get the appropriate adapter for a given backend.
 
     Args:
         backend: The export backend (ExportBackend enum or string)
-        **kwargs: Additional adapter configuration (currently unused but accepted for compatibility)
+        **kwargs: Additional adapter configuration (e.g. device="xpu" for TorchAdapter)
 
     Returns:
         Instantiated adapter for the backend
@@ -63,4 +63,4 @@ def get_adapter(backend: ExportBackend | str, **kwargs: Any) -> RuntimeAdapter: 
         msg = f"No adapter available for backend: {backend}"
         raise ValueError(msg)
 
-    return adapter_map[backend]()
+    return adapter_map[backend](**kwargs)
