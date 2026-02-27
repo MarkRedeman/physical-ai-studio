@@ -1,5 +1,6 @@
 import { Button, Flex, Grid, ProgressBar, Text, View } from '@geti/ui';
 
+import { SchemaJob } from '../../api/openapi-spec';
 import { GRID_COLUMNS } from './constants';
 import { SingleBadge, SplitBadge } from './split-badge.component';
 import { SchemaTrainJob } from './train-model-dialog';
@@ -77,6 +78,51 @@ export const TrainingRow = ({ trainJob, onInterrupt }: { trainJob: SchemaTrainJo
             {trainJob.status === 'running' && (
                 <ProgressBar size='S' UNSAFE_className={classes.progressBar} width={'100%'} value={trainJob.progress} />
             )}
+        </View>
+    );
+};
+
+export const ImportExportRow = ({ job, onInterrupt, onDownload }: {
+    job: SchemaJob;
+    onInterrupt: () => void;
+    onDownload?: () => void;
+}) => {
+    const payload = job.payload as { model_name?: string; type?: string };
+    const jobLabel = job.type === 'export' ? 'Export' : 'Import';
+
+    return (
+        <View>
+            <Grid columns={GRID_COLUMNS} alignItems={'center'} width={'100%'} UNSAFE_className={classes.modelRow}>
+                <View>
+                    <Flex gap={'size-100'}>
+                        <Text UNSAFE_style={{ fontWeight: 500 }}>{payload.model_name ?? 'Model'}</Text>
+                        {job.status === 'running' ? (
+                            <SplitBadge first={job.status} second={job.message} />
+                        ) : (
+                            <SingleBadge
+                                color={job.status === 'failed' ? 'var(--spectrum-negative-visual-color)' : 'var(--energy-blue)'}
+                                text={job.status}
+                            />
+                        )}
+                    </Flex>
+                </View>
+                <Text>{jobLabel}</Text>
+                <div />
+                <View>
+                    <Flex gap='size-100'>
+                        {job.status === 'completed' && job.type === 'export' && onDownload && (
+                            <Button variant='accent' onPress={onDownload}>
+                                Download
+                            </Button>
+                        )}
+                        {(job.status === 'running' || job.status === 'pending') && (
+                            <Button variant='secondary' onPress={onInterrupt}>
+                                Cancel
+                            </Button>
+                        )}
+                    </Flex>
+                </View>
+            </Grid>
         </View>
     );
 };

@@ -44,3 +44,11 @@ class JobRepository(BaseRepository):
             order_by=self.schema.created_at,
             ascending=True,
         )
+
+    async def get_pending_job_by_types(self, job_types: list[JobType]) -> Job | None:
+        return await self.get_one(
+            extra_filters={"status": JobStatus.PENDING},
+            expressions=[JobDB.type.in_(job_types)],
+            order_by=self.schema.created_at,
+            ascending=True,
+        )
