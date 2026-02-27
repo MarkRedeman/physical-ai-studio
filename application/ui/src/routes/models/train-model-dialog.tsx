@@ -69,6 +69,7 @@ export const TrainModelDialog = ({
         }
 
         const payload: SchemaTrainJobPayload = {
+            type: 'training',
             dataset_id,
             project_id: projectId,
             model_name: name,

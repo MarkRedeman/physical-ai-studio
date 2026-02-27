@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import psutil
 from loguru import logger
 
-from workers import TrainingWorker
+from workers import ImportExportWorker, TrainingWorker
 
 if TYPE_CHECKING:
     import threading
@@ -33,7 +33,15 @@ class Scheduler:
         )
         training_proc.daemon = False
         training_proc.start()
-        self.processes.extend([training_proc])
+
+        import_export_proc = ImportExportWorker(
+            stop_event=self.mp_stop_event,
+            event_queue=self.event_queue,
+        )
+        import_export_proc.daemon = False
+        import_export_proc.start()
+
+        self.processes.extend([training_proc, import_export_proc])
 
     def shutdown(self) -> None:
         """Shutdown all processes gracefully"""

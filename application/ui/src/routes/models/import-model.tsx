@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { Button, ButtonGroup, Content, Dialog, Divider, FileTrigger, Flex, Heading, Text, TextField } from '@geti/ui';
 
 import { $api } from '../../api/client';
-import { SchemaModel } from '../../api/openapi-spec';
+import { SchemaJob } from '../../api/openapi-spec';
 import { useProject } from '../../features/projects/use-project';
 
-export const ImportModelModal = (close: (model: SchemaModel | undefined) => void) => {
+export const ImportModelModal = (close: (job: SchemaJob | undefined) => void) => {
     const { id: project_id } = useProject();
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [name, setName] = useState<string>('');
@@ -55,7 +55,7 @@ export const ImportModelModal = (close: (model: SchemaModel | undefined) => void
                 bodySerializer: (body: unknown) => body as unknown as BodyInit,
             } as never,
         ).then((response) => {
-            close(response as SchemaModel | undefined);
+            close(response as SchemaJob | undefined);
         });
     };
 
@@ -98,7 +98,7 @@ export const ImportModelModal = (close: (model: SchemaModel | undefined) => void
                     onPress={submit}
                     isDisabled={!selectedFile || !name.trim() || importMutation.isPending}
                 >
-                    {importMutation.isPending ? 'Importing...' : 'Import'}
+                    {importMutation.isPending ? 'Submitting...' : 'Import'}
                 </Button>
             </ButtonGroup>
         </Dialog>

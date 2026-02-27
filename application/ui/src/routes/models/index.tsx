@@ -21,20 +21,22 @@ import { SchemaJob, SchemaModel } from '../../api/openapi-spec';
 import { LogsDialog } from '../../features/logs/show-logs.component';
 import { useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
-import { TrainingHeader, TrainingRow } from './job-table.component';
+import { ImportModelModal } from './import-model';
+import { ImportExportRow, TrainingHeader, TrainingRow } from './job-table.component';
 import { ModelHeader, ModelRow } from './model-table.component';
 import { RetrainModelModal } from './retrain-model';
 import { SchemaTrainJob, TrainModelModal } from './train-model';
-import { ImportModelModal } from './import-model';
 
 const ModelList = ({
     models,
     onRetrain,
     onViewLogs,
+    onExport,
 }: {
     models: SchemaModel[];
     onRetrain: (model: SchemaModel) => void;
     onViewLogs: (model: SchemaModel) => void;
+    onExport: (model: SchemaModel) => void;
 }) => {
     const sortedModels = models.toSorted(
         (a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime()
@@ -56,19 +58,20 @@ const ModelList = ({
                     onDelete={() => deleteModel(model)}
                     onRetrain={() => onRetrain(model)}
                     onViewLogs={() => onViewLogs(model)}
+                    onExport={() => onExport(model)}
                 />
             ))}
         </View>
     );
 };
 
-const JobList = ({ jobs }: { jobs: SchemaTrainJob[] }) => {
+const JobList = ({ jobs, onDownload }: { jobs: SchemaJob[]; onDownload: (job: SchemaJob) => void }) => {
     const sortedJobs = jobs
-        .filter((m) => m.status !== 'completed')
+        .filter((m) => m.status !== 'completed' || m.type === 'export')
         .toSorted((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime());
 
     const interruptMutation = $api.useMutation('post', '/api/jobs/{job_id}:interrupt');
-    const onInterrupt = (job: SchemaTrainJob) => {
+    const onInterrupt = (job: SchemaJob) => {
         if (job.id !== undefined) {
             interruptMutation.mutate({
                 params: {
@@ -80,15 +83,32 @@ const JobList = ({ jobs }: { jobs: SchemaTrainJob[] }) => {
         }
     };
 
+    const trainingJobs = sortedJobs.filter((j) => j.type === 'training') as SchemaTrainJob[];
+    const importExportJobs = sortedJobs.filter((j) => j.type === 'import' || j.type === 'export');
+
+    if (sortedJobs.length === 0) return null;
+
     return (
         <View marginBottom={'size-600'}>
             <Heading level={4} marginBottom={'size-100'}>
-                Current Training
+                Jobs
             </Heading>
 
-            <TrainingHeader />
-            {sortedJobs.map((job) => (
-                <TrainingRow key={job.id} trainJob={job} onInterrupt={() => onInterrupt(job)} />
+            {trainingJobs.length > 0 && (
+                <>
+                    <TrainingHeader />
+                    {trainingJobs.map((job) => (
+                        <TrainingRow key={job.id} trainJob={job} onInterrupt={() => onInterrupt(job)} />
+                    ))}
+                </>
+            )}
+            {importExportJobs.map((job) => (
+                <ImportExportRow
+                    key={job.id}
+                    job={job}
+                    onInterrupt={() => onInterrupt(job)}
+                    onDownload={() => onDownload(job)}
+                />
             ))}
         </View>
     );
@@ -114,6 +134,31 @@ export const Index = () => {
         if (model.train_job_id) {
             setLogsSourceId(`job-training-${model.train_job_id}`);
         }
+    };
+
+    const exportMutation = $api.useMutation('post', '/api/models/{model_id}:export');
+
+    const handleExport = (model: SchemaModel) => {
+        exportMutation.mutate(
+            { params: { path: { model_id: model.id! } } },
+            { onSuccess: (job) => addJob(job as SchemaJob) }
+        );
+    };
+
+    const handleDownload = (job: SchemaJob) => {
+        const payload = job.payload as { model_id?: string; model_name?: string };
+        if (!payload.model_id) return;
+
+        fetch(`/api/models/${payload.model_id}/export/download`).then(async (res) => {
+            if (!res.ok) return;
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${payload.model_name ?? 'model'}.zip`;
+            link.click();
+            URL.revokeObjectURL(url);
+        });
     };
 
     const {} = useWebSocket(fetchClient.PATH('/api/jobs/ws'), {
@@ -142,10 +187,13 @@ export const Index = () => {
                 return;
             }
 
-            updateJob(message.data as SchemaTrainJob);
+            updateJob(message.data);
             if (message.data.status === 'completed') {
                 client.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}/models'] });
             }
+        }
+        if (message_data.event === 'MODEL_UPDATE') {
+            client.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}/models'] });
         }
     };
 
@@ -174,10 +222,8 @@ export const Index = () => {
                                     <DialogTrigger>
                                         <Button variant='secondary'>Import model</Button>
                                         {(close) =>
-                                            ImportModelModal((model) => {
-                                                if (model) {
-                                                    client.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}/models'] });
-                                                }
+                                            ImportModelModal((job) => {
+                                                if (job) addJob(job);
                                                 close();
                                             })
                                         }
@@ -192,10 +238,8 @@ export const Index = () => {
                             <DialogTrigger>
                                 <Button variant='secondary'>Import model</Button>
                                 {(close) =>
-                                    ImportModelModal((model) => {
-                                        if (model) {
-                                            client.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}/models'] });
-                                        }
+                                    ImportModelModal((job) => {
+                                        if (job) addJob(job);
                                         close();
                                     })
                                 }
@@ -210,9 +254,17 @@ export const Index = () => {
                                 }
                             </DialogTrigger>
                         </Flex>
-                        <JobList jobs={jobs.filter((m) => m.type === 'training') as SchemaTrainJob[]} />
+                        <JobList
+                            jobs={jobs.filter((m) => m.type === 'training') as SchemaTrainJob[]}
+                            nDownload={handleDownload}
+                        />
                         {hasModels && (
-                            <ModelList models={models} onRetrain={setRetrainModel} onViewLogs={handleViewLogs} />
+                            <ModelList
+                                models={models}
+                                onRetrain={setRetrainModel}
+                                onViewLogs={handleViewLogs}
+                                onExport={handleExport}
+                            />
                         )}
                     </View>
                 )}
