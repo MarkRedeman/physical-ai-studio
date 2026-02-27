@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer
@@ -10,6 +10,8 @@ from schemas.base import BaseIDModel
 
 class JobType(StrEnum):
     TRAINING = "training"
+    IMPORT = "import"
+    EXPORT = "export"
 
 
 class JobStatus(StrEnum):
@@ -25,6 +27,7 @@ class Job(BaseIDModel):
     type: JobType = JobType.TRAINING
     progress: int = Field(default=0, ge=0, le=100, description="Progress percentage from 0 to 100")
     status: JobStatus = JobStatus.PENDING
+    # TODO: define based on discriminated union
     payload: dict
     extra_info: dict | None = None
     message: str = "Job created"
@@ -42,6 +45,7 @@ class JobList(BaseModel):
 
 
 class TrainJobPayload(BaseModel):
+    type: Literal["training"] = "training"
     project_id: UUID
     dataset_id: UUID
     policy: str
@@ -65,3 +69,36 @@ class TrainJobPayload(BaseModel):
     @field_serializer("base_model_id")
     def serialize_base_model_id(self, base_model_id: UUID | None, _info: Any) -> str | None:
         return str(base_model_id) if base_model_id else None
+
+
+class ImportJobPayload(BaseModel):
+    type: Literal["import"] = "import"
+    project_id: UUID
+    model_name: str
+    upload_file_path: str
+    original_filename: str
+
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
+        return str(project_id)
+
+
+class ExportJobPayload(BaseModel):
+    type: Literal["export"] = "export"
+    project_id: UUID
+    model_id: UUID
+    model_name: str
+
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
+        return str(project_id)
+
+    @field_serializer("model_id")
+    def serialize_model_id(self, model_id: UUID, _info: Any) -> str:
+        return str(model_id)
+
+
+JobPayload = Annotated[
+    TrainJobPayload | ImportJobPayload | ExportJobPayload,
+    Field(discriminator="type"),
+]

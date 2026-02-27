@@ -30,12 +30,14 @@ export const ModelRow = ({
     onDelete,
     onRetrain,
     onViewLogs,
+    onExport,
 }: {
     model: SchemaModel;
     trainingJob?: SchemaJob;
     onDelete: () => void;
     onRetrain: () => void;
     onViewLogs?: () => void;
+    onExport: () => void;
 }) => {
     const [isDownloadDialogOpen, setDownloadDialogOpen] = useState(false);
     const isHuggingFaceImport = model.properties?.source === 'huggingface';
@@ -54,6 +56,10 @@ export const ModelRow = ({
         if (action === 'download') {
             setDownloadDialogOpen(true);
 
+            // Old way
+            //onExport();
+
+            // Things that should be removed
             // const link = document.createElement('a');
             // link.href = `/api/models/${model.id}:export`;
             // link.download = `${model.name}.zip`;
