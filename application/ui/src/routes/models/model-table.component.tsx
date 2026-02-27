@@ -38,6 +38,7 @@ export const ModelRow = ({
     onViewLogs?: () => void;
 }) => {
     const [isDownloadDialogOpen, setDownloadDialogOpen] = useState(false);
+    const isHuggingFaceImport = model.properties?.source === 'huggingface';
 
     const onAction = (key: Key) => {
         const action = key.toString();
@@ -79,6 +80,10 @@ export const ModelRow = ({
     // Disable logs if we don't know the training job
     const disabledKeys = !model.train_job_id ? ['logs'] : [];
 
+    if (isHuggingFaceImport) {
+        disabledKeys.push('retrain');
+    }
+
     const version = model.version ?? 1;
 
     return (
@@ -87,6 +92,11 @@ export const ModelRow = ({
                 <Text>{model.name}</Text>
                 {version > 1 && (
                     <Text UNSAFE_style={{ color: 'var(--spectrum-gray-600)', fontSize: '0.85em' }}>v{version}</Text>
+                )}
+                {isHuggingFaceImport && (
+                    <Text UNSAFE_style={{ color: 'var(--spectrum-gray-500)', fontSize: '0.8em', fontStyle: 'italic' }}>
+                        HF
+                    </Text>
                 )}
             </Flex>
             <Text>{new Date(model.created_at!).toLocaleString()}</Text>
