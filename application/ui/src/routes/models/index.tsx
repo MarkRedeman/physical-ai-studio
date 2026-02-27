@@ -21,6 +21,7 @@ import { SchemaJob, SchemaModel } from '../../api/openapi-spec';
 import { LogsDialog } from '../../features/logs/show-logs.component';
 import { useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
+import { ImportModelModal } from './import-model';
 import { TrainingHeader, TrainingRow } from './job-table.component';
 import { ModelHeader, ModelRow } from './model-table.component';
 import { SchemaTrainJob, TrainModelDialog } from './train-model-dialog';
@@ -173,16 +174,44 @@ export const Index = () => {
                             <Text>If you&apos;ve recorded a dataset it&apos;s time to begin training your model. </Text>
                             <Heading>No trained models</Heading>
                             <View margin={'size-100'}>
-                                <DialogTrigger>
-                                    <Button variant='accent'>Train model</Button>
-                                    {(close) => <TrainModelDialog close={close} />}
-                                </DialogTrigger>
+                                <Flex gap='size-100'>
+                                    <DialogTrigger>
+                                        <Button variant='accent'>Train model</Button>
+                                        {(close) => <TrainModelDialog close={close} />}
+                                    </DialogTrigger>
+                                    <DialogTrigger>
+                                        <Button variant='secondary'>Import model</Button>
+                                        {(close) =>
+                                            ImportModelModal((model) => {
+                                                if (model) {
+                                                    client.invalidateQueries({
+                                                        queryKey: ['get', '/api/projects/{project_id}/models'],
+                                                    });
+                                                }
+                                                close();
+                                            })
+                                        }
+                                    </DialogTrigger>
+                                </Flex>
                             </View>
                         </IllustratedMessage>
                     </Well>
                 ) : (
                     <View margin={'size-300'}>
-                        <Flex justifyContent={'end'} marginBottom='size-300'>
+                        <Flex justifyContent={'end'} marginBottom='size-300' gap='size-100'>
+                            <DialogTrigger>
+                                <Button variant='secondary'>Import model</Button>
+                                {(close) =>
+                                    ImportModelModal((model) => {
+                                        if (model) {
+                                            client.invalidateQueries({
+                                                queryKey: ['get', '/api/projects/{project_id}/models'],
+                                            });
+                                        }
+                                        close();
+                                    })
+                                }
+                            </DialogTrigger>
                             <DialogTrigger>
                                 <Button variant='secondary'>Train model</Button>
                                 {(close) => (
