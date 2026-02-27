@@ -40,6 +40,12 @@ export const ModelRow = ({
         if (action === 'retrain') {
             onRetrain();
         }
+        if (action === 'download') {
+            const link = document.createElement('a');
+            link.href = `/api/models/${model.id}:export`;
+            link.download = `${model.name}.zip`;
+            link.click();
+        }
     };
 
     const duration =
@@ -75,6 +81,7 @@ export const ModelRow = ({
                     </ActionButton>
                     <Menu onAction={onAction}>
                         <Item key='retrain'>Retrain</Item>
+                        <Item key='download'>Download</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>
                 </MenuTrigger>
