@@ -32,6 +32,8 @@ export const ModelRow = ({
     onDelete: () => void;
     onRetrain: () => void;
 }) => {
+    const isHuggingFaceImport = model.properties?.source === 'huggingface';
+
     const onAction = (key: Key) => {
         const action = key.toString();
         if (action === 'delete') {
@@ -58,6 +60,7 @@ export const ModelRow = ({
         trainingJob?.start_time && trainingJob?.end_time
             ? durationBetween(trainingJob.start_time, trainingJob.end_time)
             : null;
+    const disabledKeys = isHuggingFaceImport ? ['retrain'] : [];
 
     const version = model.version ?? 1;
 
@@ -67,6 +70,11 @@ export const ModelRow = ({
                 <Text>{model.name}</Text>
                 {version > 1 && (
                     <Text UNSAFE_style={{ color: 'var(--spectrum-gray-600)', fontSize: '0.85em' }}>v{version}</Text>
+                )}
+                {isHuggingFaceImport && (
+                    <Text UNSAFE_style={{ color: 'var(--spectrum-gray-500)', fontSize: '0.8em', fontStyle: 'italic' }}>
+                        HF
+                    </Text>
                 )}
             </Flex>
             <Text>{new Date(model.created_at!).toLocaleString()}</Text>
@@ -85,7 +93,7 @@ export const ModelRow = ({
                     <ActionButton isQuiet UNSAFE_style={{ fill: 'var(--spectrum-gray-900)' }} aria-label='options'>
                         <MoreMenu />
                     </ActionButton>
-                    <Menu onAction={onAction}>
+                    <Menu onAction={onAction} disabledKeys={disabledKeys}>
                         <Item key='retrain'>Retrain</Item>
                         <Item key='download'>Download</Item>
                         <Item key='delete'>Delete</Item>

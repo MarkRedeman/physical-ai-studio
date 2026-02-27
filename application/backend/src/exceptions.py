@@ -91,6 +91,25 @@ class ResourceAlreadyExistsError(BaseException):
         )
 
 
+class ModelNotRetrainableError(BaseException):
+    """Exception raised when attempting to retrain a model that does not support it.
+
+    HuggingFace-imported models cannot be retrained because their checkpoint
+    format (state_dict key structure) is incompatible with the native policy
+    classes used for training.  See ``retrainable-imported-models.md`` for details.
+    """
+
+    def __init__(self, model_name: str) -> None:
+        super().__init__(
+            message=(
+                f"Model '{model_name}' cannot be retrained. "
+                "Models imported from HuggingFace are inference-only and do not support retraining."
+            ),
+            error_code="model_not_retrainable",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
 class ImportValidationError(BaseException):
     """Exception raised when a model import archive fails validation.
 
