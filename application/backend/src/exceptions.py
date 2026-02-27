@@ -12,6 +12,7 @@ class ResourceType(StrEnum):
     CAMERA = "Camera"
     ENVIRONMENT = "Environment"
     DATASET = "Dataset"
+    SNAPSHOT = "Snapshot"
     MODEL = "Model"
     JOB = "JOB"
     JOB_FILE = "JOB_FILE"
@@ -109,4 +110,64 @@ class DuplicateImportSourceError(BaseException):
             message=f"{resource_kind} with original source UUID `{source_uuid}` was already imported.",
             error_code="duplicate_import_source",
             http_status=http.HTTPStatus.CONFLICT,
+        )
+
+
+class ModelNotRetrainableError(BaseException):
+    """Exception raised when attempting to retrain a model that does not support it.
+
+    HuggingFace-imported models cannot be retrained because their checkpoint
+    format (state_dict key structure) is incompatible with the native policy
+    classes used for training.  See ``retrainable-imported-models.md`` for details.
+    """
+
+    def __init__(self, model_name: str) -> None:
+        super().__init__(
+            message=(
+                f"Model '{model_name}' cannot be retrained. "
+                "Models imported from HuggingFace are inference-only and do not support retraining."
+            ),
+            error_code="model_not_retrainable",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
+class ImportValidationError(BaseException):
+    """Exception raised when a model import archive fails validation.
+
+    Covers bad zip files, unrecognized formats, missing required files,
+    invalid config content, and unsupported policy types.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="import_validation_error",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
+class ImportConversionError(BaseException):
+    """Exception raised when HuggingFace model conversion fails.
+
+    Covers errors during model loading (from_pretrained) or export
+    to the Physical AI inference format.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="import_conversion_error",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
+class ImportDependencyError(BaseException):
+    """Exception raised when a required library for model import is unavailable."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="import_dependency_error",
+            http_status=http.HTTPStatus.INTERNAL_SERVER_ERROR,
         )
