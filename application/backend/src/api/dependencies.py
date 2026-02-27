@@ -11,6 +11,7 @@ from services import DatasetService, JobService, ModelService, ProjectCameraServ
 from services.environment_service import EnvironmentService
 from services.event_processor import EventProcessor
 from services.robot_calibration_service import RobotCalibrationService
+from services.snapshot_service import SnapshotService
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
@@ -85,6 +86,12 @@ def get_dataset_service() -> DatasetService:
 def get_model_service() -> ModelService:
     """Provides a ModelService instance for managing models."""
     return ModelService()
+
+
+@lru_cache
+def get_snapshot_service() -> SnapshotService:
+    """Provides a SnapshotService instance for managing snapshots."""
+    return SnapshotService()
 
 
 @lru_cache
