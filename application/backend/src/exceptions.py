@@ -12,6 +12,7 @@ class ResourceType(StrEnum):
     CAMERA = "Camera"
     ENVIRONMENT = "Environment"
     DATASET = "Dataset"
+    SNAPSHOT = "Snapshot"
     MODEL = "Model"
     JOB = "JOB"
     JOB_FILE = "JOB_FILE"
