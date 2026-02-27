@@ -1,7 +1,7 @@
 """Make model dataset_id and snapshot_id nullable
 
 Revision ID: c3e4e04cc003
-Revises: aa0f562acb23
+Revises: c3a8f1e2b456
 Create Date: 2026-02-27 16:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c3e4e04cc003"
-down_revision: str | Sequence[str] | None = "aa0f562acb23"
+down_revision: str | Sequence[str] | None = "c3a8f1e2b456"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
