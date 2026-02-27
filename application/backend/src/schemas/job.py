@@ -1,14 +1,14 @@
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, TypeAdapter, field_serializer
 
 from schemas.base_job import BaseJob, JobType
 from schemas.import_job import DatasetImportJobPayload
 
-
-class JobList(BaseModel):
-    jobs: list["Job"]
+# ---------------------------------------------------------------------------
+# Payload models (no ``type`` discriminator – the parent Job carries it)
+# ---------------------------------------------------------------------------
 
 
 class TrainJobPayload(BaseModel):
@@ -37,6 +37,36 @@ class TrainJobPayload(BaseModel):
         return str(base_model_id) if base_model_id else None
 
 
+class ImportJobPayload(BaseModel):
+    project_id: UUID
+    model_name: str
+    upload_file_path: str
+    original_filename: str
+
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
+        return str(project_id)
+
+
+class ExportJobPayload(BaseModel):
+    project_id: UUID
+    model_id: UUID
+    model_name: str
+
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
+        return str(project_id)
+
+    @field_serializer("model_id")
+    def serialize_model_id(self, model_id: UUID, _info: Any) -> str:
+        return str(model_id)
+
+
+# ---------------------------------------------------------------------------
+# Concrete Job variants (discriminated on ``type``)
+# ---------------------------------------------------------------------------
+
+
 class TrainJob(BaseJob):
     type: Literal[JobType.TRAINING] = JobType.TRAINING  # type: ignore[valid-type]
     payload: TrainJobPayload
@@ -47,16 +77,25 @@ class DatasetImportJob(BaseJob):
     payload: DatasetImportJobPayload
 
 
-class ModelImportJob(BaseJob):
-    type: Literal[JobType.MODEL_IMPORT] = JobType.MODEL_IMPORT
-    payload: ModelImportJobPayload
+class ImportJob(BaseJob):
+    type: Literal[JobType.IMPORT] = JobType.IMPORT
+    payload: ImportJobPayload
 
 
-JobPayload = TrainJobPayload | DatasetImportJobPayload | ModelImportJobPayload
+class ExportJob(BaseJob):
+    type: Literal[JobType.EXPORT] = JobType.EXPORT
+    payload: ExportJobPayload
+
 
 Job = Annotated[
-    TrainJob | DatasetImportJob | ModelImportJob,
+    TrainJob | DatasetImportJob | ImportJob | ExportJob,
     Field(discriminator="type"),
 ]
 
-JobList.model_rebuild()
+JobPayload = TrainJobPayload | DatasetImportJobPayload | ImportJobPayload | ExportJobPayload
+
+JOB_ADAPTER = TypeAdapter(Job)
+
+
+class JobList(BaseModel):
+    jobs: list[Job]

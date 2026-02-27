@@ -30,14 +30,17 @@ export const ModelRow = ({
     onDelete,
     onRetrain,
     onViewLogs,
+    onExport,
 }: {
     model: SchemaModel;
     trainingJob?: SchemaTrainJob;
     onDelete: () => void;
     onRetrain: () => void;
     onViewLogs?: () => void;
+    onExport: () => void;
 }) => {
     const [isDownloadDialogOpen, setDownloadDialogOpen] = useState(false);
+    const isHuggingFaceImport = model.properties?.source === 'huggingface';
 
     const onAction = (key: Key) => {
         const action = key.toString();
@@ -52,6 +55,26 @@ export const ModelRow = ({
         }
         if (action === 'download') {
             setDownloadDialogOpen(true);
+
+            // Old way
+            //onExport();
+
+            // Things that should be removed
+            // const link = document.createElement('a');
+            // link.href = `/api/models/${model.id}:export`;
+            // link.download = `${model.name}.zip`;
+            // link.click();
+
+            // fetch(`/api/models/${model.id}:export`).then(async (res) => {
+            //     if (!res.ok) return;
+            //     const blob = await res.blob();
+            //     const url = URL.createObjectURL(blob);
+            //     const link = document.createElement('a');
+            //     link.href = url;
+            //     link.download = `${model.name}.zip`;
+            //     link.click();
+            //     URL.revokeObjectURL(url);
+            // });
         }
     };
 
@@ -63,6 +86,10 @@ export const ModelRow = ({
     // Disable logs if we don't know the training job
     const disabledKeys = !model.train_job_id ? ['logs'] : [];
 
+    if (isHuggingFaceImport) {
+        disabledKeys.push('retrain');
+    }
+
     const version = model.version ?? 1;
 
     return (
@@ -71,6 +98,11 @@ export const ModelRow = ({
                 <Text>{model.name}</Text>
                 {version > 1 && (
                     <Text UNSAFE_style={{ color: 'var(--spectrum-gray-600)', fontSize: '0.85em' }}>v{version}</Text>
+                )}
+                {isHuggingFaceImport && (
+                    <Text UNSAFE_style={{ color: 'var(--spectrum-gray-500)', fontSize: '0.8em', fontStyle: 'italic' }}>
+                        HF
+                    </Text>
                 )}
             </Flex>
             <Text>{new Date(model.created_at!).toLocaleString()}</Text>
@@ -93,6 +125,7 @@ export const ModelRow = ({
                         <Item key='logs'>Logs</Item>
                         <Item key='download'>Download</Item>
                         <Item key='retrain'>Retrain</Item>
+                        <Item key='download'>Download</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>
                 </MenuTrigger>

@@ -11,7 +11,9 @@ from schemas.base import BaseIDModel
 class JobType(StrEnum):
     TRAINING = "training"
     DATASET_IMPORT = "dataset_import"
-    MODEL_IMPORT = "model_import"
+    MODEL_IMPORT = "model_import"  # not used
+    IMPORT = "import"  # model
+    EXPORT = "export"  # model
 
 
 class JobStatus(StrEnum):

@@ -5,9 +5,11 @@ from .dataset_import_service import DatasetImportService
 from .dataset_service import DatasetService
 from .episode_thumbnail_service import EpisodeThumbnailService
 from .model_download_service import ModelDownloadService
+from .model_import_service import ModelImportService
 from .model_service import ModelService
 from .project_camera_service import ProjectCameraService
 from .project_service import ProjectService
+from .snapshot_service import SnapshotService
 
 __all__ = [
     "DatasetDownloadService",
@@ -15,8 +17,10 @@ __all__ = [
     "DatasetService",
     "EpisodeThumbnailService",
     "ModelDownloadService",
+    "ModelImportService",
     "ModelService",
     "ProjectCameraService",
     "ProjectService",
     "RobotService",
+    "SnapshotService",
 ]
