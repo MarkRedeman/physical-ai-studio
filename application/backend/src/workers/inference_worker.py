@@ -215,7 +215,7 @@ class InferenceWorker(BaseThreadWorker):
             "event": "error",
             "data": str(error),
         }
-        logger.error(f"error: {data}")
+        logger.exception(f"error: {data}")
         self.queue.put(data)
 
     def _report_trajectory(self, trajectory: list[dict]):
