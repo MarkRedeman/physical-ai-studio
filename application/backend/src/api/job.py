@@ -8,7 +8,7 @@ from loguru import logger
 from api.dependencies import get_event_processor_ws, get_job_service, get_scheduler, validate_uuid
 from core.scheduler import Scheduler
 from schemas import Job
-from schemas.job import JobStatus, TrainJobPayload
+from schemas.job import JobStatus, JobType, TrainJobPayload
 from services import JobService
 from services.event_processor import EventProcessor, EventType
 
@@ -41,7 +41,7 @@ async def interrupt_job(
     """Endpoint to interrupt job"""
     job = await job_service.get_job_by_id(job_id)
     if job is not None:
-        if job.status == JobStatus.RUNNING:
+        if job.status == JobStatus.RUNNING and job.type == JobType.TRAINING:
             scheduler.training_interrupt_event.set()
         await job_service.update_job_status(job_id, status=JobStatus.CANCELED)
 
@@ -69,7 +69,7 @@ async def jobs_websocket(
             }
         )
 
-    event_processor.subscribe([EventType.JOB_UPDATE], send_data)
+    event_processor.subscribe([EventType.JOB_UPDATE, EventType.MODEL_UPDATE], send_data)
 
     try:
         while True:
@@ -80,5 +80,5 @@ async def jobs_websocket(
     except WebSocketDisconnect:
         logger.info("Except: disconnected!")
 
-    event_processor.unsubscribe([EventType.JOB_UPDATE], send_data)
+    event_processor.unsubscribe([EventType.JOB_UPDATE, EventType.MODEL_UPDATE], send_data)
     logger.info("Jobs Websocket handling done...")
