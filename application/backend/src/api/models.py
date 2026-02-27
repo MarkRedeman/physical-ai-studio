@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 
 from api.dependencies import get_dataset_service, get_model_download_service, get_snapshot_service, get_model_id, get_model_service, validate_uuid
 from api.utils import safe_archive_name
+from api.dependencies import get_dataset_service, get_model_id, get_model_service, get_snapshot_service
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
 from schemas import Model
@@ -86,7 +87,7 @@ async def model_download_endpoint(
 
 @router.get("/{model_id}:export")
 async def export_model(
-    model_id: Annotated[UUID, Depends(validate_uuid)],
+    model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
 ) -> StreamingResponse:
     """Export a model as a zip archive containing the model's export artifacts.
