@@ -16,6 +16,7 @@ Source types:
 import asyncio
 import os
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
 from typing import Literal
 
 import anyio
@@ -23,7 +24,11 @@ from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
-from core.logging.utils import VALID_SESSION_TYPES, _validate_uuid, get_job_logs_path, get_session_logs_path
+from core.logging.utils import (
+    VALID_SESSION_TYPES,
+    get_job_logs_path,
+    get_session_logs_path,
+)
 from schemas.logs import LogSource
 from settings import get_settings
 
@@ -85,14 +90,15 @@ def _resolve_source_path(source_id: str) -> str | None:
             except ValueError:
                 return None
 
-    # Job source (format: "job-{uuid}")
+    # Job source (format: "job-{type}-{uuid}")
     if source_id.startswith("job-"):
-        job_id = source_id[4:]
-        try:
-            _validate_uuid(job_id)
-        except ValueError:
-            return None
-        return get_job_logs_path(job_id)
+        parts = source_id.split("-", 2)  # ["job", type, uuid]
+        if len(parts) == 3:
+            job_type, job_id = parts[1], parts[2]
+            try:
+                return get_job_logs_path(job_id, job_type)
+            except ValueError:
+                return None
 
     return None
 
@@ -100,6 +106,22 @@ def _resolve_source_path(source_id: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Discovery helpers
 # ---------------------------------------------------------------------------
+
+
+def _get_file_created_at(path: str) -> datetime | None:
+    """Return the creation time of a file as a UTC datetime, or None on error."""
+    try:
+        stat = os.stat(path)
+        # Use birth time if available (Linux 4.11+ with statx), fall back to mtime.
+        ts = getattr(stat, "st_birthtime", None) or stat.st_mtime
+        return datetime.fromtimestamp(ts, tz=timezone.utc)
+    except OSError:
+        return None
+
+
+def _short_id(uuid_str: str) -> str:
+    """Return the first 8 characters of a UUID string for display."""
+    return uuid_str[:8]
 
 
 def _discover_session_sources() -> list[LogSource]:
@@ -119,28 +141,67 @@ def _discover_session_sources() -> list[LogSource]:
             if not filename.endswith(".log"):
                 continue
             worker_id = filename.removesuffix(".log")
+            file_path = os.path.join(type_dir, filename)
             sources.append(
                 LogSource(
                     id=f"session-{worker_type}-{worker_id}",
-                    name=f"{label}: {worker_id}",
+                    name=f"{label}: {_short_id(worker_id)}",
                     type="session",
+                    created_at=_get_file_created_at(file_path),
                 )
             )
     return sources
 
 
 def _discover_job_sources() -> list[LogSource]:
-    """List per-job log files on disk and return them as LogSource entries."""
+    """List per-job log files on disk and return them as LogSource entries.
+
+    Job log files are named ``{type}_{job_id}.log`` (e.g. ``training_abc123.log``).
+    """
     settings = get_settings()
     jobs_dir = os.path.join(settings.log_dir, "jobs")
     sources: list[LogSource] = []
     if not os.path.isdir(jobs_dir):
         return sources
+
+    # Human-readable labels for job types.
+    _JOB_TYPE_LABELS: dict[str, str] = {
+        "training": "Train",
+        "import": "Import",
+        "export": "Export",
+    }
+
     for filename in sorted(os.listdir(jobs_dir)):
         if not filename.endswith(".log"):
             continue
-        job_id = filename.removesuffix(".log")
-        sources.append(LogSource(id=f"job-{job_id}", name=f"Job: {job_id}", type="job"))
+        file_path = os.path.join(jobs_dir, filename)
+        created_at = _get_file_created_at(file_path)
+        stem = filename.removesuffix(".log")
+        # Expected format: {type}_{uuid}
+        sep_idx = stem.find("_")
+        if sep_idx == -1:
+            # Legacy filename without type prefix — fall back gracefully
+            job_id = stem
+            sources.append(
+                LogSource(
+                    id=f"job-unknown-{job_id}",
+                    name=f"Job: {_short_id(job_id)}",
+                    type="job",
+                    created_at=created_at,
+                )
+            )
+            continue
+        job_type = stem[:sep_idx]
+        job_id = stem[sep_idx + 1 :]
+        label = _JOB_TYPE_LABELS.get(job_type, job_type.title())
+        sources.append(
+            LogSource(
+                id=f"job-{job_type}-{job_id}",
+                name=f"{label}: {_short_id(job_id)}",
+                type="job",
+                created_at=created_at,
+            )
+        )
     return sources
 
 

@@ -85,4 +85,6 @@ export interface LogSource {
     id: string;
     name: string;
     type: 'application' | 'worker' | 'session' | 'job';
+    /** ISO-8601 creation timestamp of the log file, if available. */
+    created_at: string | null;
 }

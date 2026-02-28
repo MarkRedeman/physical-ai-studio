@@ -208,6 +208,9 @@ class ModelDB(Base):
         ForeignKey("models.id", ondelete="SET NULL"), nullable=True, default=None
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    train_job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, default=None
+    )
     project: Mapped["ProjectDB"] = relationship("ProjectDB", back_populates="models")
     dataset: Mapped["DatasetDB"] = relationship("DatasetDB", back_populates="models")
     snapshot: Mapped["SnapshotDB"] = relationship("SnapshotDB", back_populates="models")
