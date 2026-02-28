@@ -30,6 +30,30 @@ import { LogViewer } from './log-viewer.component';
 
 import styles from './log-viewer.module.scss';
 
+// ---- Formatting helpers ----
+
+/** Format an ISO-8601 timestamp into a short locale string (date + time). */
+const formatCreatedAt = (iso: string | null): string | null => {
+    if (!iso) return null;
+    try {
+        const date = new Date(iso);
+        return date.toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return null;
+    }
+};
+
+/** Build the display label for a log source, appending a timestamp when available. */
+const formatSourceLabel = (source: LogSource): string => {
+    const ts = formatCreatedAt(source.created_at);
+    return ts ? `${source.name} — ${ts}` : source.name;
+};
+
 // ---- Sources query ----
 
 const useLogSources = () => {
@@ -79,9 +103,9 @@ const LogStreamViewer = ({ sourceId }: { sourceId: string }) => {
 
 // ---- Dialog content ----
 
-const LogsDialogContent = ({ close }: { close: () => void }) => {
+const LogsDialogContent = ({ close, initialSourceId }: { close: () => void; initialSourceId?: string }) => {
     const { data: sources, isLoading: sourcesLoading } = useLogSources();
-    const [selectedSourceId, setSelectedSourceId] = useState<string>('app');
+    const [selectedSourceId, setSelectedSourceId] = useState<string>(initialSourceId ?? 'app');
 
     // Reset to 'app' if the current selection is no longer available
     useEffect(() => {
@@ -123,12 +147,14 @@ const LogsDialogContent = ({ close }: { close: () => void }) => {
                                 selectedKey={selectedSourceId}
                                 onSelectionChange={(key) => setSelectedSourceId(String(key))}
                                 isDisabled={sourcesLoading}
-                                width='size-3000'
+                                width='size-6000'
                             >
                                 {pickerSections.map((section) => (
                                     <Section key={section.title} title={section.title}>
                                         {section.items.map((s) => (
-                                            <Item key={s.id}>{s.name}</Item>
+                                            <Item key={s.id} textValue={formatSourceLabel(s)}>
+                                                {formatSourceLabel(s)}
+                                            </Item>
                                         ))}
                                     </Section>
                                 ))}
@@ -148,6 +174,12 @@ const LogsDialogContent = ({ close }: { close: () => void }) => {
             </ButtonGroup>
         </Dialog>
     );
+};
+
+// ---- Standalone dialog (for use with DialogContainer from other pages) ----
+
+export const LogsDialog = ({ close, initialSourceId }: { close: () => void; initialSourceId?: string }) => {
+    return <LogsDialogContent close={close} initialSourceId={initialSourceId} />;
 };
 
 // ---- Exported trigger button ----
