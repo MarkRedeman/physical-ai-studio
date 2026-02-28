@@ -7,8 +7,15 @@ from pydantic import BaseModel
 
 
 class LogSource(BaseModel):
-    """Describes an available log source (worker log file or per-job log file)."""
+    """Describes an available log source.
+
+    Types:
+        - application: The main app log (catch-all for non-worker logs)
+        - worker: Per-class worker logs (training, inference, etc.)
+        - session: Per-session logs for websocket workers (camera, robot, setup)
+        - job: Per-job logs created during training/import/export runs
+    """
 
     id: str
     name: str
-    type: Literal["worker", "job"]
+    type: Literal["application", "worker", "session", "job"]

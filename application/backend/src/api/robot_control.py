@@ -13,6 +13,7 @@ from api.dependencies import (
     get_robot_id,
     get_robot_service,
 )
+from core.logging.utils import session_logging_ctx
 from services import RobotService
 from workers.robots.robot_worker import RobotWorker
 from workers.transport.websocket_transport import WebSocketTransport
@@ -61,40 +62,41 @@ async def robot_websocket(  # noqa: PLR0913
 
     worker_id = uuid4()
 
-    try:
-        # Create worker
-        worker = RobotWorker(
-            robot,
-            WebSocketTransport(websocket),
-            # Manager and calibration service are used to create robot config
-            robot_manager,
-            calibration_service,
-            # Read configuration
-            fps,
-            normalize,
-        )
-
-        # Register worker
-        await registry.create_and_register(worker_id, worker)
-
-        # Run worker (blocks until complete)
-        await worker.run()
-
-    except ValueError as e:
-        logger.error(f"Failed to register worker: {e}")
+    async with session_logging_ctx("robot", worker_id):
         try:
-            await websocket.send_json({"event": "error", "message": str(e)})
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        except Exception as close_err:
-            logger.error(f"Could not close websocket after ValueError: {close_err}")
+            # Create worker
+            worker = RobotWorker(
+                robot,
+                WebSocketTransport(websocket),
+                # Manager and calibration service are used to create robot config
+                robot_manager,
+                calibration_service,
+                # Read configuration
+                fps,
+                normalize,
+            )
 
-    except Exception as e:
-        logger.exception(f"Unexpected error in robot websocket: {e}")
-        try:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-        except Exception as close_err:
-            logger.error(f"Could not close websocket after Exception: {close_err}")
+            # Register worker
+            await registry.create_and_register(worker_id, worker)
 
-    finally:
-        # Unregister worker
-        await registry.unregister(worker_id)
+            # Run worker (blocks until complete)
+            await worker.run()
+
+        except ValueError as e:
+            logger.error(f"Failed to register worker: {e}")
+            try:
+                await websocket.send_json({"event": "error", "message": str(e)})
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            except Exception as close_err:
+                logger.error(f"Could not close websocket after ValueError: {close_err}")
+
+        except Exception as e:
+            logger.exception(f"Unexpected error in robot websocket: {e}")
+            try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            except Exception as close_err:
+                logger.error(f"Could not close websocket after Exception: {close_err}")
+
+        finally:
+            # Unregister worker
+            await registry.unregister(worker_id)
