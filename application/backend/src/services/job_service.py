@@ -5,20 +5,20 @@ from sqlalchemy.exc import IntegrityError
 from db import get_async_db_session_ctx
 from exceptions import DuplicateJobException, ModelNotRetrainableError, ResourceNotFoundError, ResourceType
 from repositories import JobRepository
-from schemas import Job
+from schemas import ExportJob, ImportJob, Job, TrainJob
 from schemas.job import ExportJobPayload, ImportJobPayload, JobStatus, JobType, TrainJobPayload
 from services.model_service import ModelService
 
 
 class JobService:
     @staticmethod
-    async def get_job_list(extra_filters: dict | None = None) -> list[Job]:
+    async def get_job_list(extra_filters: dict | None = None) -> list[TrainJob | ImportJob | ExportJob]:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             return await repo.get_all(extra_filters=extra_filters)
 
     @staticmethod
-    async def get_job_by_id(job_id: UUID) -> Job:
+    async def get_job_by_id(job_id: UUID) -> TrainJob | ImportJob | ExportJob:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             job = await repo.get_by_id(job_id)
@@ -27,7 +27,7 @@ class JobService:
             return job
 
     @staticmethod
-    async def submit_train_job(payload: TrainJobPayload) -> Job:
+    async def submit_train_job(payload: TrainJobPayload) -> TrainJob:
         # Validate that the base model (if any) supports retraining.
         if payload.base_model_id is not None:
             base_model = await ModelService.get_model_by_id(payload.base_model_id)
@@ -40,10 +40,9 @@ class JobService:
                 raise DuplicateJobException
 
             try:
-                job = Job(
+                job = TrainJob(
                     project_id=payload.project_id,
-                    type=JobType.TRAINING,
-                    payload=payload.model_dump(),
+                    payload=payload,
                     message="Training job submitted",
                 )
                 return await repo.save(job)
@@ -51,20 +50,19 @@ class JobService:
                 raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
 
     @staticmethod
-    async def get_pending_train_job() -> Job | None:
+    async def get_pending_train_job() -> TrainJob | ImportJob | ExportJob | None:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             return await repo.get_pending_job_by_type(JobType.TRAINING)
 
     @staticmethod
-    async def submit_import_job(payload: ImportJobPayload) -> Job:
+    async def submit_import_job(payload: ImportJobPayload) -> ImportJob:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             try:
-                job = Job(
+                job = ImportJob(
                     project_id=payload.project_id,
-                    type=JobType.IMPORT,
-                    payload=payload.model_dump(),
+                    payload=payload,
                     message="Import job submitted",
                 )
                 return await repo.save(job)
@@ -72,14 +70,13 @@ class JobService:
                 raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
 
     @staticmethod
-    async def submit_export_job(payload: ExportJobPayload) -> Job:
+    async def submit_export_job(payload: ExportJobPayload) -> ExportJob:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             try:
-                job = Job(
+                job = ExportJob(
                     project_id=payload.project_id,
-                    type=JobType.EXPORT,
-                    payload=payload.model_dump(),
+                    payload=payload,
                     message="Export job submitted",
                 )
                 return await repo.save(job)
@@ -87,7 +84,7 @@ class JobService:
                 raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
 
     @staticmethod
-    async def get_pending_import_export_job() -> Job | None:
+    async def get_pending_import_export_job() -> TrainJob | ImportJob | ExportJob | None:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             return await repo.get_pending_job_by_types([JobType.IMPORT, JobType.EXPORT])
@@ -99,7 +96,7 @@ class JobService:
         message: str | None = None,
         progress: int | None = None,
         extra_info: dict | None = None,
-    ) -> Job:
+    ) -> TrainJob | ImportJob | ExportJob:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             job = await repo.get_by_id(job_id)
