@@ -27,8 +27,8 @@ import { RetrainModelModal } from './retrain-model';
 import { SchemaTrainJob, TrainModelDialog } from './train-model-dialog';
 
 const ModelList = ({
-    models,
     jobs,
+    models,
     onRetrain,
     onExport,
 }: {
