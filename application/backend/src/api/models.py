@@ -1,4 +1,3 @@
-import logging
 import tempfile
 from pathlib import Path
 from typing import Annotated
@@ -6,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, UploadFile, status
 from fastapi.responses import FileResponse
+from loguru import logger
 
 from api.dependencies import get_dataset_service, get_job_service, get_model_id, get_model_service
 from exceptions import ResourceNotFoundError, ResourceType
@@ -13,8 +13,6 @@ from internal_datasets.utils import get_internal_dataset
 from schemas import Model
 from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload
 from services import DatasetService, JobService, ModelService
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/models", tags=["Models"])
 

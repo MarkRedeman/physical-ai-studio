@@ -6,13 +6,13 @@ Studio exports are zip files containing:
 """
 
 import json
-import logging
 import shutil
 import zipfile
 from pathlib import Path
 from uuid import UUID
 
 import yaml
+from loguru import logger
 
 from exceptions import ImportValidationError
 from schemas import Model
@@ -21,8 +21,6 @@ from services.import_strategies.base import ImportStrategy
 from services.model_service import ModelService
 from services.snapshot_service import SnapshotService
 from settings import Settings
-
-logger = logging.getLogger(__name__)
 
 # Known policy class paths mapped to short policy names
 POLICY_CLASS_MAP: dict[str, str] = {
