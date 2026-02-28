@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { Flex, Grid, Item, Link, Loading, TabList, Tabs, View } from '@geti/ui';
 import { Outlet, useLocation } from 'react-router';
 
+import { ShowLogs } from '../../features/logs/show-logs.component';
 import { ProjectsListPanel } from '../../features/projects/menu/projects-list-panel.component';
 import { useProjectId } from '../../features/projects/use-project';
 import { paths } from '../../router';
@@ -51,7 +52,8 @@ const Header = ({ project_id }: { project_id: string }) => {
                         </Flex>
                     </Item>
                 </TabList>
-                <Flex alignItems={'center'} height={'100%'} marginStart='auto'>
+                <Flex alignItems={'center'} height={'100%'} marginStart='auto' gap='size-100'>
+                    <ShowLogs />
                     <ProjectsListPanel />
                 </Flex>
             </Flex>
