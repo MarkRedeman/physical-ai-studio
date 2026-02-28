@@ -7,8 +7,7 @@ from loguru import logger
 
 from api.dependencies import get_event_processor_ws, get_job_service, get_scheduler, validate_uuid
 from core.scheduler import Scheduler
-from schemas import Job
-from schemas.job import JobStatus, JobType, TrainJobPayload
+from schemas.job import ExportJob, ImportJob, JobStatus, JobType, TrainJob, TrainJobPayload
 from services import JobService
 from services.event_processor import EventProcessor, EventType
 
@@ -18,7 +17,7 @@ router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 @router.get("")
 async def list_jobs(
     job_service: Annotated[JobService, Depends(get_job_service)],
-) -> list[Job]:
+) -> list[TrainJob | ImportJob | ExportJob]:
     """Fetch all jobs."""
     return await job_service.get_job_list()
 
@@ -27,7 +26,7 @@ async def list_jobs(
 async def submit_train_job(
     job_service: Annotated[JobService, Depends(get_job_service)],
     payload: Annotated[TrainJobPayload, Body()],
-) -> Job:
+) -> TrainJob:
     """Endpoint to submit a training job"""
     return await job_service.submit_train_job(payload=payload)
 
@@ -60,7 +59,7 @@ async def jobs_websocket(
     """Robot control websocket."""
     await websocket.accept()
 
-    async def send_data(event: EventType, payload: Job):
+    async def send_data(event: EventType, payload: TrainJob | ImportJob | ExportJob):
         """Pass job update through to websocket."""
         await websocket.send_json(
             {

@@ -10,8 +10,8 @@ from fastapi.responses import FileResponse
 from api.dependencies import get_dataset_service, get_job_service, get_model_id, get_model_service
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
-from schemas import Job, Model
-from schemas.job import ExportJobPayload, ImportJobPayload
+from schemas import Model
+from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload
 from services import DatasetService, JobService, ModelService
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ async def export_model(
     model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
     job_service: Annotated[JobService, Depends(get_job_service)],
-) -> Job:
+) -> ExportJob:
     """Submit an export job for a model.
 
     The export runs as a background job. When completed, the zip archive
@@ -114,7 +114,7 @@ async def import_model(
     project_id: Annotated[str, Form()],
     name: Annotated[str, Form()],
     job_service: Annotated[JobService, Depends(get_job_service)],
-) -> Job:
+) -> ImportJob:
     """Submit a model import job.
 
     The uploaded file is saved to a temporary location and processed
