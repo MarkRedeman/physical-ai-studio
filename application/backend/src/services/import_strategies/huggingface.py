@@ -11,20 +11,19 @@ converted to the Physical AI Studio inference format (exports/torch/{policy}.pt
 """
 
 import json
-import logging
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path
 from uuid import UUID
 
+from loguru import logger
+
 from exceptions import ImportConversionError, ImportDependencyError, ImportValidationError
 from schemas import Model
 from services.import_strategies.base import ImportStrategy
 from services.model_service import ModelService
 from settings import Settings
-
-logger = logging.getLogger(__name__)
 
 # Supported HuggingFace/LeRobot policy types for import
 SUPPORTED_HF_POLICY_TYPES: set[str] = {"act", "smolvla"}

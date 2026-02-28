@@ -5,15 +5,14 @@ All validation uses zipfile metadata (infolist()) — no extraction is performed
 during the security scan.
 """
 
-import logging
 import stat
 import zipfile
+
+from loguru import logger
 
 from exceptions import ImportValidationError
 from schemas import Model
 from services.import_strategies.base import ImportStrategy
-
-logger = logging.getLogger(__name__)
 
 # Characters that should never appear in zip entry filenames.
 _CONTROL_CHARS = set(range(0x00, 0x20)) - {ord("\n"), ord("\r")}

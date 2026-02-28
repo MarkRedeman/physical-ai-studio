@@ -6,9 +6,10 @@ Detects the archive format and delegates to the appropriate import strategy:
 """
 
 import io
-import logging
 import zipfile
 from pathlib import Path
+
+from loguru import logger
 
 from exceptions import ImportValidationError
 from schemas import Model
@@ -22,8 +23,6 @@ from services.import_strategies.base import ImportStrategy
 from services.model_service import ModelService
 from services.snapshot_service import SnapshotService
 from settings import Settings, get_settings
-
-logger = logging.getLogger(__name__)
 
 
 class ModelImportService:
