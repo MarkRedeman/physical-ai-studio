@@ -27,14 +27,17 @@ export const ModelRow = ({
     onDelete,
     onRetrain,
     onExport,
+    onViewLogs,
 }: {
     model: SchemaModel;
     trainingJob?: SchemaJob;
     onDelete: () => void;
     onRetrain: () => void;
     onExport: () => void;
+    onViewLogs?: () => void;
 }) => {
     const isHuggingFaceImport = model.properties?.source === 'huggingface';
+    const trainJobId = model.train_job_id;
 
     const onAction = (key: Key) => {
         const action = key.toString();
@@ -47,13 +50,19 @@ export const ModelRow = ({
         if (action === 'download') {
             onExport();
         }
+        if (action === 'logs') {
+            onViewLogs?.();
+        }
     };
 
     const duration =
         trainingJob?.start_time && trainingJob?.end_time
             ? durationBetween(trainingJob.start_time, trainingJob.end_time)
             : null;
+
     const disabledKeys = isHuggingFaceImport ? ['retrain'] : [];
+    if (isHuggingFaceImport) disabledKeys.push('retrain');
+    if (!trainJobId) disabledKeys.push('logs');
 
     const version = model.version ?? 1;
 
@@ -87,6 +96,7 @@ export const ModelRow = ({
                         <MoreMenu />
                     </ActionButton>
                     <Menu onAction={onAction} disabledKeys={disabledKeys}>
+                        <Item key='logs'>Logs</Item>
                         <Item key='retrain'>Retrain</Item>
                         <Item key='download'>Download</Item>
                         <Item key='delete'>Delete</Item>

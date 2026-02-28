@@ -33,7 +33,7 @@ class ImportExportWorker(BaseProcessWorker):
         while not self.should_stop():
             job = await job_service.get_pending_import_export_job()
             if job is not None:
-                with job_logging_ctx(job_id=str(job.id)):
+                with job_logging_ctx(job_id=str(job.id), job_type=job.type):
                     if job.type == JobType.IMPORT:
                         await self._handle_import(job)
                     elif job.type == JobType.EXPORT:

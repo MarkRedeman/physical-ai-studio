@@ -37,52 +37,60 @@ _validate_job_id = _validate_uuid
 
 
 # ---------------------------------------------------------------------------
-# Job logs  (logs/jobs/{job_id}.log)
+# Job logs  (logs/jobs/{type}_{job_id}.log)
 # ---------------------------------------------------------------------------
 
+# Allowed job type prefixes — keeps the directory structure predictable.
+VALID_JOB_TYPES = frozenset({"training", "import", "export"})
 
-def get_job_logs_path(job_id: str | UUID) -> str:
+
+def get_job_logs_path(job_id: str | UUID, job_type: str) -> str:
     """Get the path to the log file for a specific job.
 
     Args:
         job_id: Unique identifier for the job
+        job_type: The job type (e.g. "training", "import", "export")
 
     Returns:
-        str: Path to the job's log file (e.g. logs/jobs/{job_id}.log)
+        str: Path to the job's log file (e.g. logs/jobs/{type}_{job_id}.log)
 
     Raises:
-        ValueError: If job_id contains invalid characters
+        ValueError: If job_id contains invalid characters or job_type is unknown
     """
+    if job_type not in VALID_JOB_TYPES:
+        raise ValueError(f"Unknown job type '{job_type}'. Must be one of {sorted(VALID_JOB_TYPES)}")
     job_id = _validate_uuid(job_id)
     jobs_folder = os.path.join(global_log_config.log_folder, "jobs")
     try:
         os.makedirs(jobs_folder, exist_ok=True)
     except OSError as e:
         raise RuntimeError(f"Failed to create jobs log directory: {e}") from e
-    return os.path.join(jobs_folder, f"{job_id}.log")
+    return os.path.join(jobs_folder, f"{job_type}_{job_id}.log")
 
 
 @contextmanager
-def job_logging_ctx(job_id: str | UUID) -> Generator[str]:
+def job_logging_ctx(job_id: str | UUID, job_type: str) -> Generator[str]:
     """Add a temporary log sink for a specific job.
 
-    Captures all logs emitted during the context to logs/jobs/{job_id}.log.
-    The sink is automatically removed on exit, but the log file persists.
-    Logs also continue to go to other configured sinks.
+    Captures all logs emitted during the context to
+    logs/jobs/{type}_{job_id}.log.  The sink is automatically removed on
+    exit, but the log file persists.  Logs also continue to go to other
+    configured sinks.
 
     Args:
         job_id: Unique identifier for the job, used as the log filename
+        job_type: The job type (e.g. "training", "import", "export")
 
     Yields:
-        str: Path to the created log file (e.g. logs/jobs/{job_id}.log)
+        str: Path to the created log file (e.g. logs/jobs/{type}_{job_id}.log)
 
     Raises:
-        ValueError: If job_id contains invalid characters
+        ValueError: If job_id contains invalid characters or job_type is unknown
         RuntimeError: If log directory creation or sink addition fails
     """
     job_id = _validate_uuid(job_id)
 
-    log_file = get_job_logs_path(job_id)
+    log_file = get_job_logs_path(job_id, job_type)
 
     try:
         sink_id = logger.add(

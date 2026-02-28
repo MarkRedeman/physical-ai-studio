@@ -53,7 +53,6 @@ const Header = ({ project_id }: { project_id: string }) => {
                     </Item>
                 </TabList>
                 <Flex alignItems={'center'} height={'100%'} marginStart='auto' gap='size-100'>
-                    <ShowLogs />
                     <ProjectsListPanel />
                 </Flex>
             </Flex>
@@ -75,6 +74,22 @@ const getMainPageInProjectUrl = (pathname: string) => {
     }
 };
 
+const Footer = () => {
+    return (
+        <View
+            backgroundColor={'gray-50'}
+            gridArea={'footer'}
+            borderTopColor={'gray-100'}
+            borderTopWidth='thin'
+            padding='size-50'
+        >
+            <Flex height='100%' alignItems={'center'} marginX='1rem' gap='size-200'>
+                <ShowLogs />
+            </Flex>
+        </View>
+    );
+};
+
 export const ProjectLayout = () => {
     const { project_id } = useProjectId();
     const { pathname } = useLocation();
@@ -84,19 +99,20 @@ export const ProjectLayout = () => {
     return (
         <Tabs aria-label='Header navigation' selectedKey={pageName} UNSAFE_style={{ height: '100%', minHeight: 0 }}>
             <Grid
-                areas={['header', 'subheader', 'content']}
+                areas={['header', 'subheader', 'content', 'footer']}
                 UNSAFE_style={{
-                    gridTemplateRows: 'var(--spectrum-global-dimension-size-800, 4rem) min-content auto',
+                    gridTemplateRows: 'var(--spectrum-global-dimension-size-800, 4rem) min-content 1fr min-content',
                 }}
                 minHeight={0}
                 height={'100%'}
             >
                 <Header project_id={project_id} />
-                <View gridArea={'content'} maxHeight={'100vh'} minHeight={0} height='100%'>
+                <View gridArea={'content'} maxHeight={'100vh'} minHeight={0} height='100%' overflow={'auto'}>
                     <Suspense fallback={<Loading mode='overlay' />}>
                         <Outlet />
                     </Suspense>
                 </View>
+                <Footer />
             </Grid>
         </Tabs>
     );
