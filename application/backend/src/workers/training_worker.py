@@ -52,7 +52,7 @@ class TrainingWorker(BaseProcessWorker):
             job = await job_service.get_pending_train_job()
             if job is not None:
                 with job_logging_ctx(job_id=str(job.id)):
-                    payload = TrainJobPayload.model_validate(job.payload)
+                    payload = job.payload
                     id = uuid4()
 
                     base_model = None
@@ -77,6 +77,7 @@ class TrainingWorker(BaseProcessWorker):
                         parent_model_id=payload.base_model_id,
                         version=base_model.version + 1 if base_model else 1,
                         created_at=None,
+                        train_job_id=job.id,
                     )
 
                     self.interrupt_event.clear()

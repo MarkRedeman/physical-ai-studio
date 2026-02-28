@@ -23,11 +23,15 @@ export const ModelRow = ({
     model,
     onDelete,
     onRetrain,
+    onViewLogs,
 }: {
     model: SchemaModel;
     onDelete: () => void;
     onRetrain: () => void;
+    onViewLogs?: () => void;
 }) => {
+    const trainJobId = model.train_job_id;
+
     const onAction = (key: Key) => {
         const action = key.toString();
         if (action === 'delete') {
@@ -36,7 +40,13 @@ export const ModelRow = ({
         if (action === 'retrain') {
             onRetrain();
         }
+        if (action === 'logs') {
+            onViewLogs?.();
+        }
     };
+
+    const disabledKeys: string[] = [];
+    if (!trainJobId) disabledKeys.push('logs');
 
     const version = model.version ?? 1;
 
@@ -63,7 +73,8 @@ export const ModelRow = ({
                     <ActionButton isQuiet UNSAFE_style={{ fill: 'var(--spectrum-gray-900)' }} aria-label='options'>
                         <MoreMenu />
                     </ActionButton>
-                    <Menu onAction={onAction}>
+                    <Menu onAction={onAction} disabledKeys={disabledKeys}>
+                        <Item key='logs'>Logs</Item>
                         <Item key='retrain'>Retrain</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>

@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -19,3 +20,4 @@ class LogSource(BaseModel):
     id: str
     name: str
     type: Literal["application", "worker", "session", "job"]
+    created_at: datetime | None = None

@@ -18,6 +18,7 @@ import useWebSocket from 'react-use-websocket';
 
 import { $api, fetchClient } from '../../api/client';
 import { SchemaJob, SchemaModel } from '../../api/openapi-spec';
+import { LogsDialog } from '../../features/logs/show-logs.component';
 import { useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
 import { TrainingHeader, TrainingRow } from './job-table.component';
@@ -25,7 +26,15 @@ import { ModelHeader, ModelRow } from './model-table.component';
 import { RetrainModelModal } from './retrain-model';
 import { SchemaTrainJob, TrainModelModal } from './train-model';
 
-const ModelList = ({ models, onRetrain }: { models: SchemaModel[]; onRetrain: (model: SchemaModel) => void }) => {
+const ModelList = ({
+    models,
+    onRetrain,
+    onViewLogs,
+}: {
+    models: SchemaModel[];
+    onRetrain: (model: SchemaModel) => void;
+    onViewLogs: (model: SchemaModel) => void;
+}) => {
     const sortedModels = models.toSorted(
         (a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime()
     );
@@ -45,6 +54,7 @@ const ModelList = ({ models, onRetrain }: { models: SchemaModel[]; onRetrain: (m
                     model={model}
                     onDelete={() => deleteModel(model)}
                     onRetrain={() => onRetrain(model)}
+                    onViewLogs={() => onViewLogs(model)}
                 />
             ))}
         </View>
@@ -97,6 +107,13 @@ export const Index = () => {
 
     const jobs = useProjectJobs(project_id);
     const [retrainModel, setRetrainModel] = useState<SchemaModel | null>(null);
+    const [logsSourceId, setLogsSourceId] = useState<string | undefined>();
+
+    const handleViewLogs = (model: SchemaModel) => {
+        if (model.train_job_id) {
+            setLogsSourceId(`job-training-${model.train_job_id}`);
+        }
+    };
 
     const {} = useWebSocket(fetchClient.PATH('/api/jobs/ws'), {
         shouldReconnect: () => true,
@@ -169,7 +186,9 @@ export const Index = () => {
                             </DialogTrigger>
                         </Flex>
                         <JobList jobs={jobs.filter((m) => m.type === 'training') as SchemaTrainJob[]} />
-                        {hasModels && <ModelList models={models} onRetrain={setRetrainModel} />}
+                        {hasModels && (
+                            <ModelList models={models} onRetrain={setRetrainModel} onViewLogs={handleViewLogs} />
+                        )}
                     </View>
                 )}
             </Flex>
@@ -182,6 +201,11 @@ export const Index = () => {
                             setRetrainModel(null);
                         }}
                     />
+                )}
+            </DialogContainer>
+            <DialogContainer type='fullscreen' onDismiss={() => setLogsSourceId(undefined)}>
+                {logsSourceId != null && (
+                    <LogsDialog close={() => setLogsSourceId(undefined)} initialSourceId={logsSourceId} />
                 )}
             </DialogContainer>
         </Flex>
