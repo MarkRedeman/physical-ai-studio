@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import traceback
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
 
 from loguru import logger
 
+from core.logging.utils import job_logging_ctx
 from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload, JobStatus, JobType
 from services import JobService, ModelService
 from services.event_processor import EventType
@@ -33,10 +33,11 @@ class ImportExportWorker(BaseProcessWorker):
         while not self.should_stop():
             job = await job_service.get_pending_import_export_job()
             if job is not None:
-                if job.type == JobType.IMPORT:
-                    await self._handle_import(job)
-                elif job.type == JobType.EXPORT:
-                    await self._handle_export(job)
+                with job_logging_ctx(job_id=str(job.id)):
+                    if job.type == JobType.IMPORT:
+                        await self._handle_import(job)
+                    elif job.type == JobType.EXPORT:
+                        await self._handle_export(job)
             await asyncio.sleep(0.5)
 
     def setup(self) -> None:
@@ -126,8 +127,7 @@ class ImportExportWorker(BaseProcessWorker):
                 logger.warning(f"Failed to clean up temp file: {file_path}")
 
         except Exception as e:
-            logger.error(f"Import failed: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Import failed: {e}")
             updated_job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.FAILED, message=f"Import failed: {e}"
             )
@@ -192,8 +192,7 @@ class ImportExportWorker(BaseProcessWorker):
                 extra_info={"zip_path": str(zip_path)},
             )
         except Exception as e:
-            logger.error(f"Export failed: {e}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Export failed: {e}")
             updated_job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.FAILED, message=f"Export failed: {e}"
             )
