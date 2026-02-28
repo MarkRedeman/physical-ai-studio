@@ -93,8 +93,21 @@ const LogsDialogContent = ({ close }: { close: () => void }) => {
         }
     }, [sources, selectedSourceId]);
 
+    const applicationSources = useMemo(() => (sources ?? []).filter((s) => s.type === 'application'), [sources]);
     const workerSources = useMemo(() => (sources ?? []).filter((s) => s.type === 'worker'), [sources]);
+    const sessionSources = useMemo(() => (sources ?? []).filter((s) => s.type === 'session'), [sources]);
     const jobSources = useMemo(() => (sources ?? []).filter((s) => s.type === 'job'), [sources]);
+
+    // Build picker items — Spectrum Picker requires a flat array of Item/Section children.
+    // We only render sections that have items.
+    const pickerSections = useMemo(() => {
+        const sections: { title: string; items: LogSource[] }[] = [];
+        if (applicationSources.length > 0) sections.push({ title: 'Application', items: applicationSources });
+        if (workerSources.length > 0) sections.push({ title: 'Workers', items: workerSources });
+        if (sessionSources.length > 0) sections.push({ title: 'Sessions', items: sessionSources });
+        if (jobSources.length > 0) sections.push({ title: 'Jobs', items: jobSources });
+        return sections;
+    }, [applicationSources, workerSources, sessionSources, jobSources]);
 
     return (
         <Dialog>
@@ -112,24 +125,13 @@ const LogsDialogContent = ({ close }: { close: () => void }) => {
                                 isDisabled={sourcesLoading}
                                 width='size-3000'
                             >
-                                {workerSources.length > 0 ? (
-                                    <Section title='Workers'>
-                                        {workerSources.map((s) => (
+                                {pickerSections.map((section) => (
+                                    <Section key={section.title} title={section.title}>
+                                        {section.items.map((s) => (
                                             <Item key={s.id}>{s.name}</Item>
                                         ))}
                                     </Section>
-                                ) : (
-                                    <></>
-                                )}
-                                {jobSources.length > 0 ? (
-                                    <Section title='Jobs'>
-                                        {jobSources.map((s) => (
-                                            <Item key={s.id}>{s.name}</Item>
-                                        ))}
-                                    </Section>
-                                ) : (
-                                    <></>
-                                )}
+                                ))}
                             </Picker>
                         </Flex>
                     </View>

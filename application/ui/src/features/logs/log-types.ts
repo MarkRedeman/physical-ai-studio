@@ -84,5 +84,5 @@ export const DEFAULT_LOG_FILTERS: LogFilters = {
 export interface LogSource {
     id: string;
     name: string;
-    type: 'worker' | 'job';
+    type: 'application' | 'worker' | 'session' | 'job';
 }

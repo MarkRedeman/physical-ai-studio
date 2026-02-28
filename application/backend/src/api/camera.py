@@ -8,6 +8,7 @@ from frame_source import FrameSourceFactory
 from loguru import logger
 
 from api.dependencies import CameraRegistryDep
+from core.logging.utils import session_logging_ctx
 from schemas.camera import SupportedCameraFormat
 from schemas.project_camera import Camera as ProjectCamera
 from schemas.project_camera import CameraAdapter
@@ -86,26 +87,27 @@ async def camera_websocket(
     transport = WebSocketTransport(websocket)
     worker = CameraWorker(camera, transport)
 
-    try:
-        await registry.create_and_register(worker_id, worker)
-        await worker.run()
-    except ValueError as e:
-        logger.error(f"Failed to register worker: {e}")
+    async with session_logging_ctx("camera", worker_id):
         try:
-            await websocket.send_json(
-                {
-                    "event": "error",
-                    "message": str(e),
-                }
-            )
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        except Exception:
-            logger.error(f"Could not close websocket: {e}")
-    except Exception as e:
-        logger.exception(f"Unexpected error in camera websocket: {e}")
-        try:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            await registry.create_and_register(worker_id, worker)
+            await worker.run()
+        except ValueError as e:
+            logger.error(f"Failed to register worker: {e}")
+            try:
+                await websocket.send_json(
+                    {
+                        "event": "error",
+                        "message": str(e),
+                    }
+                )
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            except Exception:
+                logger.error(f"Could not close websocket: {e}")
         except Exception as e:
-            logger.error(f"Could not close websocket: {e}")
-    finally:
-        await registry.unregister(worker_id)
+            logger.exception(f"Unexpected error in camera websocket: {e}")
+            try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            except Exception as e:
+                logger.error(f"Could not close websocket: {e}")
+        finally:
+            await registry.unregister(worker_id)
