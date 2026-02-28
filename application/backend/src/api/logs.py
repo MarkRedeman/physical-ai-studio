@@ -5,42 +5,128 @@
 
 Provides endpoints to discover available log sources and to stream log file
 contents in real-time via Server-Sent Events.
+
+Source types:
+    - application: The main app log (catch-all for non-worker logs)
+    - worker: Per-class worker logs (training, inference, etc.)
+    - session: Per-session logs for websocket workers (camera, robot, setup)
+    - job: Per-job logs created during training/import/export runs
 """
 
 import asyncio
 import os
 from collections.abc import AsyncGenerator
+from typing import Literal
 
 import anyio
 from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
-from core.logging.log_config import LogConfig
-from core.logging.utils import get_job_logs_path, _validate_job_id
+from core.logging.utils import VALID_SESSION_TYPES, _validate_uuid, get_job_logs_path, get_session_logs_path
 from schemas.logs import LogSource
 from settings import get_settings
 
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
 
-# Static mapping from source id to (display name, log filename).
-# The log filename is relative to settings.log_dir.
-_WORKER_SOURCES: dict[str, tuple[str, str]] = {
-    "app": ("Application", "app.log"),
-    "training": ("Training", "training.log"),
-    "import_export": ("Import / Export", "import_export.log"),
-    "inference": ("Inference", "inference.log"),
-    "teleoperate": ("Teleoperate", "teleoperate.log"),
+# ---------------------------------------------------------------------------
+# Static source definitions
+# ---------------------------------------------------------------------------
+
+# Source id → (display name, log filename relative to log_dir, source type)
+_LogSourceType = Literal["application", "worker", "session", "job"]
+_STATIC_SOURCES: dict[str, tuple[str, str, _LogSourceType]] = {
+    "app": ("Application", "app.log", "application"),
+    "training": ("Training", "training.log", "worker"),
+    "import_export": ("Import / Export", "import_export.log", "worker"),
+    "inference": ("Inference", "inference.log", "worker"),
+    "teleoperate": ("Teleoperate", "teleoperate.log", "worker"),
+}
+
+# Human-readable labels for session worker types.
+_SESSION_TYPE_LABELS: dict[str, str] = {
+    "camera": "Camera",
+    "robot": "Robot",
+    "setup": "Setup",
 }
 
 
-def _get_worker_log_path(source_id: str) -> str | None:
-    """Resolve a worker source id to an absolute log file path."""
-    entry = _WORKER_SOURCES.get(source_id)
+# ---------------------------------------------------------------------------
+# Path resolution helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_static_log_path(source_id: str) -> str | None:
+    """Resolve a static source id to an absolute log file path."""
+    entry = _STATIC_SOURCES.get(source_id)
     if entry is None:
         return None
     settings = get_settings()
     return os.path.join(settings.log_dir, entry[1])
+
+
+def _resolve_source_path(source_id: str) -> str | None:
+    """Resolve any source id to an absolute log file path.
+
+    Returns None if the source id is not recognized.
+    """
+    # Static source (application + workers)
+    path = _get_static_log_path(source_id)
+    if path is not None:
+        return path
+
+    # Session source (format: "session-{type}-{uuid}")
+    if source_id.startswith("session-"):
+        parts = source_id.split("-", 2)  # ["session", type, uuid]
+        if len(parts) == 3:
+            worker_type, worker_id = parts[1], parts[2]
+            try:
+                return get_session_logs_path(worker_type, worker_id)
+            except ValueError:
+                return None
+
+    # Job source (format: "job-{uuid}")
+    if source_id.startswith("job-"):
+        job_id = source_id[4:]
+        try:
+            _validate_uuid(job_id)
+        except ValueError:
+            return None
+        return get_job_logs_path(job_id)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Discovery helpers
+# ---------------------------------------------------------------------------
+
+
+def _discover_session_sources() -> list[LogSource]:
+    """List per-session log files on disk and return them as LogSource entries."""
+    settings = get_settings()
+    sessions_dir = os.path.join(settings.log_dir, "sessions")
+    sources: list[LogSource] = []
+    if not os.path.isdir(sessions_dir):
+        return sources
+
+    for worker_type in sorted(VALID_SESSION_TYPES):
+        type_dir = os.path.join(sessions_dir, worker_type)
+        if not os.path.isdir(type_dir):
+            continue
+        label = _SESSION_TYPE_LABELS.get(worker_type, worker_type.title())
+        for filename in sorted(os.listdir(type_dir)):
+            if not filename.endswith(".log"):
+                continue
+            worker_id = filename.removesuffix(".log")
+            sources.append(
+                LogSource(
+                    id=f"session-{worker_type}-{worker_id}",
+                    name=f"{label}: {worker_id}",
+                    type="session",
+                )
+            )
+    return sources
 
 
 def _discover_job_sources() -> list[LogSource]:
@@ -58,26 +144,9 @@ def _discover_job_sources() -> list[LogSource]:
     return sources
 
 
-def _resolve_source_path(source_id: str) -> str | None:
-    """Resolve any source id (worker or job) to an absolute log file path.
-
-    Returns None if the source id is not recognized.
-    """
-    # Worker source
-    path = _get_worker_log_path(source_id)
-    if path is not None:
-        return path
-
-    # Job source (format: "job-<uuid>")
-    if source_id.startswith("job-"):
-        job_id = source_id[4:]
-        try:
-            _validate_job_id(job_id)
-        except ValueError:
-            return None
-        return get_job_logs_path(job_id)
-
-    return None
+# ---------------------------------------------------------------------------
+# SSE streaming
+# ---------------------------------------------------------------------------
 
 
 async def _tail_log_file(path: str) -> AsyncGenerator[ServerSentEvent]:
@@ -102,13 +171,29 @@ async def _tail_log_file(path: str) -> AsyncGenerator[ServerSentEvent]:
         logger.debug(f"SSE log stream closed for {path}")
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
 @router.get("/sources")
 async def get_log_sources() -> list[LogSource]:
-    """Return all available log sources (worker logs + per-job logs)."""
+    """Return all available log sources.
+
+    Sources are grouped by type: application, worker, session, job.
+    """
     sources: list[LogSource] = []
-    for source_id, (name, _filename) in _WORKER_SOURCES.items():
-        sources.append(LogSource(id=source_id, name=name, type="worker"))
+
+    # Static sources (application + workers)
+    for source_id, (name, _filename, source_type) in _STATIC_SOURCES.items():
+        sources.append(LogSource(id=source_id, name=name, type=source_type))
+
+    # Dynamic: per-session logs
+    sources.extend(_discover_session_sources())
+
+    # Dynamic: per-job logs
     sources.extend(_discover_job_sources())
+
     return sources
 
 
