@@ -24,8 +24,8 @@ from loguru import logger
 from physicalai.data import DataModule, LeRobotDataModule
 from physicalai.train import Trainer
 
-from schemas import Job, Model, Snapshot
-from schemas.job import JobStatus, TrainJobPayload
+from schemas import Model, Snapshot
+from schemas.job import JobStatus, TrainJob, TrainJobPayload
 from services import DatasetService, JobService, ModelService
 from services.event_processor import EventType
 from services.training_service import TrainingService, TrainingTrackingCallback, TrainingTrackingDispatcher
@@ -52,6 +52,7 @@ class TrainingWorker(BaseProcessWorker):
             job = await job_service.get_pending_train_job()
             if job is not None:
                 with job_logging_ctx(job_id=str(job.id)):
+                    assert isinstance(job, TrainJob)
                     payload = job.payload
                     id = uuid4()
 
@@ -132,7 +133,7 @@ class TrainingWorker(BaseProcessWorker):
 
     async def _train_model(
         self,
-        job: Job,
+        job: TrainJob,
         model: Model,
         snapshot: Snapshot,
         payload: TrainJobPayload,
