@@ -18,6 +18,7 @@ import useWebSocket from 'react-use-websocket';
 
 import { $api, fetchClient } from '../../api/client';
 import { SchemaJob, SchemaModel } from '../../api/openapi-spec';
+import { LogsDialog } from '../../features/logs/show-logs.component';
 import { useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
 import { ImportModelModal } from './import-model';
@@ -31,11 +32,13 @@ const ModelList = ({
     models,
     onRetrain,
     onExport,
+    onViewLogs,
 }: {
     models: SchemaModel[];
     jobs: SchemaJob[];
     onRetrain: (model: SchemaModel) => void;
     onExport: (model: SchemaModel) => void;
+    onViewLogs: (model: SchemaModel) => void;
 }) => {
     const sortedModels = models.toSorted(
         (a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime()
@@ -60,6 +63,7 @@ const ModelList = ({
                     onDelete={() => deleteModel(model)}
                     onRetrain={() => onRetrain(model)}
                     onExport={() => onExport(model)}
+                    onViewLogs={() => onViewLogs(model)}
                 />
             ))}
         </View>
@@ -131,6 +135,7 @@ export const Index = () => {
 
     const jobs = useProjectJobs(project_id);
     const [retrainModel, setRetrainModel] = useState<SchemaModel | null>(null);
+    const [logsSourceId, setLogsSourceId] = useState<string | undefined>();
 
     const exportMutation = $api.useMutation('post', '/api/models/{model_id}:export');
 
@@ -139,6 +144,12 @@ export const Index = () => {
             { params: { path: { model_id: model.id! } } },
             { onSuccess: (job) => addJob(job as SchemaJob) }
         );
+    };
+
+    const handleViewLogs = (model: SchemaModel) => {
+        if (model.train_job_id) {
+            setLogsSourceId(`job-training-${model.train_job_id}`);
+        }
     };
 
     const handleDownload = (job: SchemaJob) => {
@@ -259,6 +270,7 @@ export const Index = () => {
                                 jobs={jobs}
                                 onRetrain={setRetrainModel}
                                 onExport={handleExport}
+                                onViewLogs={handleViewLogs}
                             />
                         )}
                     </View>
@@ -273,6 +285,11 @@ export const Index = () => {
                             setRetrainModel(null);
                         }}
                     />
+                )}
+            </DialogContainer>
+            <DialogContainer type='fullscreen' onDismiss={() => setLogsSourceId(undefined)}>
+                {logsSourceId != null && (
+                    <LogsDialog close={() => setLogsSourceId(undefined)} initialSourceId={logsSourceId} />
                 )}
             </DialogContainer>
         </Flex>
