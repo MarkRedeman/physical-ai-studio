@@ -22,30 +22,12 @@ class JobStatus(StrEnum):
     CANCELED = "canceled"
 
 
-class Job(BaseIDModel):
-    project_id: UUID
-    type: JobType = JobType.TRAINING
-    progress: int = Field(default=0, ge=0, le=100, description="Progress percentage from 0 to 100")
-    status: JobStatus = JobStatus.PENDING
-    # TODO: define based on discriminated union
-    payload: dict
-    extra_info: dict | None = None
-    message: str = "Job created"
-    start_time: datetime | None = None
-    end_time: datetime | None = None
-    created_at: datetime | None = Field(None)
-
-    @field_serializer("project_id")
-    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
-        return str(project_id)
-
-
-class JobList(BaseModel):
-    jobs: list[Job]
+# ---------------------------------------------------------------------------
+# Payload models (no ``type`` discriminator – the parent Job carries it)
+# ---------------------------------------------------------------------------
 
 
 class TrainJobPayload(BaseModel):
-    type: Literal["training"] = "training"
     project_id: UUID
     dataset_id: UUID
     policy: str
@@ -68,7 +50,6 @@ class TrainJobPayload(BaseModel):
 
 
 class ImportJobPayload(BaseModel):
-    type: Literal["import"] = "import"
     project_id: UUID
     model_name: str
     upload_file_path: str
@@ -80,7 +61,6 @@ class ImportJobPayload(BaseModel):
 
 
 class ExportJobPayload(BaseModel):
-    type: Literal["export"] = "export"
     project_id: UUID
     model_id: UUID
     model_name: str
@@ -94,7 +74,48 @@ class ExportJobPayload(BaseModel):
         return str(model_id)
 
 
-JobPayload = Annotated[
-    TrainJobPayload | ImportJobPayload | ExportJobPayload,
+# ---------------------------------------------------------------------------
+# Concrete Job variants (discriminated on ``type``)
+# ---------------------------------------------------------------------------
+
+
+class _JobBase(BaseIDModel):
+    """Shared fields for every job variant."""
+
+    project_id: UUID
+    progress: int = Field(default=0, ge=0, le=100, description="Progress percentage from 0 to 100")
+    status: JobStatus = JobStatus.PENDING
+    extra_info: dict | None = None
+    message: str = "Job created"
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    created_at: datetime | None = Field(None)
+
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
+        return str(project_id)
+
+
+class TrainJob(_JobBase):
+    type: Literal["training"] = "training"
+    payload: TrainJobPayload
+
+
+class ImportJob(_JobBase):
+    type: Literal["import"] = "import"
+    payload: ImportJobPayload
+
+
+class ExportJob(_JobBase):
+    type: Literal["export"] = "export"
+    payload: ExportJobPayload
+
+
+Job = Annotated[
+    TrainJob | ImportJob | ExportJob,
     Field(discriminator="type"),
 ]
+
+
+class JobList(BaseModel):
+    jobs: list[Job]
