@@ -1,11 +1,13 @@
 """WebSocket endpoint for the SO101 robot setup wizard."""
 
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, WebSocket, status
 from loguru import logger
 
 from api.dependencies import get_project_id
+from core.logging.utils import session_logging_ctx
 from schemas.robot import RobotType
 from workers.robots.so101_setup_worker import SO101SetupWorker
 from workers.transport.websocket_transport import WebSocketTransport
@@ -51,18 +53,21 @@ async def robot_setup_websocket(
 
     await websocket.accept()
 
-    try:
-        worker = SO101SetupWorker(
-            transport=WebSocketTransport(websocket),
-            robot_type=robot_type,
-            serial_number=serial_number,
-        )
+    worker_id = uuid4()
 
-        await worker.run()
-
-    except Exception as e:
-        logger.exception(f"Unexpected error in robot setup websocket: {e}")
+    async with session_logging_ctx("setup", worker_id):
         try:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-        except Exception as close_err:
-            logger.error(f"Could not close websocket after error: {close_err}")
+            worker = SO101SetupWorker(
+                transport=WebSocketTransport(websocket),
+                robot_type=robot_type,
+                serial_number=serial_number,
+            )
+
+            await worker.run()
+
+        except Exception as e:
+            logger.exception(f"Unexpected error in robot setup websocket: {e}")
+            try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            except Exception as close_err:
+                logger.error(f"Could not close websocket after error: {close_err}")
