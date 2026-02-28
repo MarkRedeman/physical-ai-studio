@@ -82,7 +82,11 @@ export const TrainingRow = ({ trainJob, onInterrupt }: { trainJob: SchemaTrainJo
     );
 };
 
-export const ImportExportRow = ({ job, onInterrupt, onDownload }: {
+export const ImportExportRow = ({
+    job,
+    onInterrupt,
+    onDownload,
+}: {
     job: SchemaJob;
     onInterrupt: () => void;
     onDownload?: () => void;
@@ -100,7 +104,11 @@ export const ImportExportRow = ({ job, onInterrupt, onDownload }: {
                             <SplitBadge first={job.status} second={job.message} />
                         ) : (
                             <SingleBadge
-                                color={job.status === 'failed' ? 'var(--spectrum-negative-visual-color)' : 'var(--energy-blue)'}
+                                color={
+                                    job.status === 'failed'
+                                        ? 'var(--spectrum-negative-visual-color)'
+                                        : 'var(--energy-blue)'
+                                }
                                 text={job.status}
                             />
                         )}

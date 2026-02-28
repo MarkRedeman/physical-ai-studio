@@ -49,14 +49,14 @@ export const ImportModelModal = (close: (job: SchemaJob | undefined) => void) =>
         formData.append('project_id', project_id);
         formData.append('name', name.trim());
 
-        importMutation.mutateAsync(
-            {
+        importMutation
+            .mutateAsync({
                 body: formData as never,
                 bodySerializer: (body: unknown) => body as unknown as BodyInit,
-            } as never,
-        ).then((response) => {
-            close(response as SchemaJob | undefined);
-        });
+            } as never)
+            .then((response) => {
+                close(response as SchemaJob | undefined);
+            });
     };
 
     return (
@@ -66,7 +66,10 @@ export const ImportModelModal = (close: (job: SchemaJob | undefined) => void) =>
             <Content>
                 <Flex direction='column' gap='size-200'>
                     <Flex direction='column' gap='size-100'>
-                        <Text>Select a model archive (.zip). Supports Physical AI Studio exports and HuggingFace model archives.</Text>
+                        <Text>
+                            Select a model archive (.zip). Supports Physical AI Studio exports and HuggingFace model
+                            archives.
+                        </Text>
                         <Flex alignItems='center' gap='size-150'>
                             <FileTrigger acceptedFileTypes={['.zip']} onSelect={onFileSelect}>
                                 <Button variant='secondary'>Browse</Button>
@@ -76,17 +79,8 @@ export const ImportModelModal = (close: (job: SchemaJob | undefined) => void) =>
                             </Text>
                         </Flex>
                     </Flex>
-                    <TextField
-                        label='Model name'
-                        value={name}
-                        onChange={setName}
-                        isRequired
-                    />
-                    {error && (
-                        <Text UNSAFE_style={{ color: 'var(--spectrum-negative-color-900)' }}>
-                            {error}
-                        </Text>
-                    )}
+                    <TextField label='Model name' value={name} onChange={setName} isRequired />
+                    {error && <Text UNSAFE_style={{ color: 'var(--spectrum-negative-color-900)' }}>{error}</Text>}
                 </Flex>
             </Content>
             <ButtonGroup>
