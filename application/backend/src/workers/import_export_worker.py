@@ -14,8 +14,7 @@ if TYPE_CHECKING:
 
 from loguru import logger
 
-from schemas import Job
-from schemas.job import ExportJobPayload, ImportJobPayload, JobStatus, JobType
+from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload, JobStatus, JobType
 from services import JobService, ModelService
 from services.event_processor import EventType
 from workers.base import BaseProcessWorker
@@ -79,13 +78,15 @@ class ImportExportWorker(BaseProcessWorker):
                         },
                     )
 
-    async def _handle_import(self, job: Job) -> None:
+    async def _handle_import(self, job: ImportJob) -> None:
         """Handle a model import job."""
-        job = await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Importing model...")
-        self.queue.put((EventType.JOB_UPDATE, job))
+        updated_job = await JobService.update_job_status(
+            job_id=job.id, status=JobStatus.RUNNING, message="Importing model..."
+        )
+        self.queue.put((EventType.JOB_UPDATE, updated_job))
 
         try:
-            payload = ImportJobPayload.model_validate(job.payload)
+            payload = job.payload
 
             # Read the uploaded file from disk
             file_path = Path(payload.upload_file_path)
@@ -113,7 +114,7 @@ class ImportExportWorker(BaseProcessWorker):
                 project_id=str(payload.project_id),
             )
 
-            job = await JobService.update_job_status(
+            updated_job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.COMPLETED, message="Import finished"
             )
             self.queue.put((EventType.MODEL_UPDATE, model))
@@ -127,19 +128,21 @@ class ImportExportWorker(BaseProcessWorker):
         except Exception as e:
             logger.error(f"Import failed: {e}")
             logger.error(traceback.format_exc())
-            job = await JobService.update_job_status(
+            updated_job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.FAILED, message=f"Import failed: {e}"
             )
 
-        self.queue.put((EventType.JOB_UPDATE, job))
+        self.queue.put((EventType.JOB_UPDATE, updated_job))
 
-    async def _handle_export(self, job: Job) -> None:
+    async def _handle_export(self, job: ExportJob) -> None:
         """Handle a model export job."""
-        job = await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Exporting model...")
-        self.queue.put((EventType.JOB_UPDATE, job))
+        updated_job = await JobService.update_job_status(
+            job_id=job.id, status=JobStatus.RUNNING, message="Exporting model..."
+        )
+        self.queue.put((EventType.JOB_UPDATE, updated_job))
 
         try:
-            payload = ExportJobPayload.model_validate(job.payload)
+            payload = job.payload
 
             model = await ModelService.get_model_by_id(payload.model_id)
             model_path = Path(model.path).expanduser()
@@ -182,7 +185,7 @@ class ImportExportWorker(BaseProcessWorker):
                         arcname = str(Path(model.name) / file_path.relative_to(model_path))
                         zf.write(file_path, arcname)
 
-            job = await JobService.update_job_status(
+            updated_job = await JobService.update_job_status(
                 job_id=job.id,
                 status=JobStatus.COMPLETED,
                 message="Export finished",
@@ -191,8 +194,8 @@ class ImportExportWorker(BaseProcessWorker):
         except Exception as e:
             logger.error(f"Export failed: {e}")
             logger.error(traceback.format_exc())
-            job = await JobService.update_job_status(
+            updated_job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.FAILED, message=f"Export failed: {e}"
             )
 
-        self.queue.put((EventType.JOB_UPDATE, job))
+        self.queue.put((EventType.JOB_UPDATE, updated_job))
