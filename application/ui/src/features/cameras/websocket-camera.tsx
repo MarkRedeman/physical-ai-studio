@@ -81,15 +81,20 @@ const CameraCanvas = ({ camera, width, height }: { camera: SchemaProjectCamera; 
         [processFrame]
     );
 
-    const url = camera.driver === 'ipcam' ? camera.fingerprint : CAMERA_WS_URL;
+    //const url = camera.driver === 'ipcam' || camera.driver === 'websocket' ? camera.fingerprint : CAMERA_WS_URL;
+    const url = 'ws://localhost:8000/api/cameras/ws';
+
+    // ws://localhost:8000/api/cameras/ws?camera={%22driver%22:%22usb_camera%22,%22fingerprint%22:%220%22,%22width%22:640,%22height%22:480,%22fps%22:30}
+    console.log({ url });
 
     useWebSocket(url, {
         queryParams: {
-            camera: JSON.stringify({
-                ...camera,
-                // Prevent the stream from resetting anytime the user changes the camera name
-                name: camera.hardware_name ?? '_',
-            }),
+            camera: JSON.stringify({ driver: 'usb_camera', fingerprint: '0', width: 640, height: 480, fps: 30 }),
+            // camera: JSON.stringify({
+            //     ...camera,
+            //     // Prevent the stream from resetting anytime the user changes the camera name
+            //     name: camera.hardware_name ?? '_',
+            // }),
         },
         shouldReconnect: () => true,
         reconnectAttempts: 5,
