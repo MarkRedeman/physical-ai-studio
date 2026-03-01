@@ -101,6 +101,10 @@ class SO101Leader(RobotClient):
         try:
             async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
                 state = await asyncio.to_thread(self.robot.get_action)
+                #state = self.robot.get_action()
+                #action = self.robot.bus.sync_read("Present_Position", normalize=False)
+                #state = {f"{motor}.pos": val for motor, val in action.items()}
+
             return self._create_event(
                 "state_was_updated",
                 state=state,

@@ -65,22 +65,25 @@ export const WebsocketCamera = ({ camera }: { camera: SchemaProjectCamera }) => 
     );
 
     const isRemote = camera.driver === 'ipcam' || camera.driver === 'websocket';
-    const url = isRemote ? 'ws://localhost:8000/api/cameras/ws' : CAMERA_WS_URL;
+    //const url = isRemote ?  'ws://localhost:8000/api/cameras/ws' : CAMERA_WS_URL;
+    const url = isRemote ? camera.fingerprint : CAMERA_WS_URL;
     //const url = 'ws://localhost:8000/api/cameras/ws';
 
     // ws://localhost:8000/api/cameras/ws?camera={%22driver%22:%22usb_camera%22,%22fingerprint%22:%220%22,%22width%22:640,%22height%22:480,%22fps%22:30}
     console.log({ url });
 
     useWebSocket(url, {
-        queryParams: {
-            camera: isRemote
-                ? JSON.stringify({ driver: 'usb_camera', fingerprint: '0', width: 640, height: 480, fps: 30 })
-                : JSON.stringify({
-                      ...camera,
-                      // Prevent the stream from resetting anytime the user changes the camera name
-                      name: camera.hardware_name ?? '_',
-                  }),
-        },
+        queryParams: isRemote
+            ? undefined
+            : {
+                  camera: isRemote
+                      ? '' //JSON.stringify({ driver: 'usb_camera', fingerprint: '0', width: 640, height: 480, fps: 30 })
+                      : JSON.stringify({
+                            ...camera,
+                            // Prevent the stream from resetting anytime the user changes the camera name
+                            name: camera.hardware_name ?? '_',
+                        }),
+              },
         shouldReconnect: () => true,
         reconnectAttempts: 5,
         reconnectInterval: 3000,
