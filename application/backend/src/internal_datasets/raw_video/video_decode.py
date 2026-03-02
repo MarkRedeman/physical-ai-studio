@@ -5,14 +5,13 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 _HAS_TORCHCODEC = False
 _HAS_PYAV = False
