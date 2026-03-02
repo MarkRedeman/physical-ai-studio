@@ -15,7 +15,6 @@ that subsequent loads are near-instantaneous.
 from __future__ import annotations
 
 import json
-import logging
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -26,7 +25,7 @@ from .frame_index import FrameIndex
 from .manifest import DatasetManifest
 from .video_decode import decode_frames
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 # ---------------------------------------------------------------------------
