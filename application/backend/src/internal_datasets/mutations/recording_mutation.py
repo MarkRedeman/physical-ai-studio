@@ -27,14 +27,15 @@ class RecordingMutation:
     def add_frame(self, obs: dict, act: dict, task: str) -> None:
         self.cache_dataset.add_frame(obs, act, task)
 
-    def save_episode(self) -> None:
+    def save_episode(self, task: str) -> Episode:
         """Save current recording buffer as episode."""
         self.has_mutation = True
-        self.cache_dataset.save_episode()
+        return self.cache_dataset.save_episode(task)
 
     def discard_buffer(self) -> None:
-        """Discard current recording buffer."""
+        """Discard current recording buffer and prepare for next."""
         self.cache_dataset.discard_buffer()
+        self.cache_dataset.prepare_for_writing()
 
     def teardown(self) -> None:
         """If mutation exists apply and then remove cache."""
