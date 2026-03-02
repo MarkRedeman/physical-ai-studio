@@ -10,6 +10,8 @@ from typing import Literal
 from loguru import logger
 from pydantic import BaseModel
 
+from utils.raw_video_dataset import build_raw_video_manifest_args
+from application.backend.src.internal_datasets.raw_video.raw_video_dataset_client import RawVideoDatasetClient
 from control.environment_integration import EnvironmentIntegration
 from control.sync_mixed_model_integration import SyncMixedModelIntegration
 from internal_datasets.dataset_client import DatasetClient
@@ -85,7 +87,7 @@ class RobotControlWorker(BaseThreadWorker):
         self._report_state()
 
     def load_dataset(self, dataset: Dataset) -> None:
-        self.dataset = InternalLeRobotDataset(Path(dataset.path))
+        self.dataset = RawVideoDatasetClient(Path(dataset.path))
         self.events.start_recording_mutation.set()
 
     def start_recording(self, task: str) -> None:
@@ -261,7 +263,9 @@ class RobotControlWorker(BaseThreadWorker):
             and self.events.start_recording_mutation.is_set()
         ):
             self.events.start_recording_mutation.clear()
-            features = self.environment_integration.build_lerobot_dataset_features()
+
+            # TODO
+            features = await build_raw_video_manifest_args(self.environment_integration.environment, self.robot_client_factory)
 
             self.recording_mutation = self.dataset.start_recording_mutation(
                 fps=self.fps,
