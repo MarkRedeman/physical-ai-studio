@@ -66,7 +66,8 @@ interface EpisodeViewerProps {
 export const EpisodeViewer = ({ episode, dataset }: EpisodeViewerProps) => {
     const player = usePlayer(episode);
     const frameIndex = Math.floor(player.time * episode.fps);
-    const cameras = Object.keys(episode.videos).map((m) => m.replace('observation.images.', ''));
+    const videoKeys = Object.keys(episode.videos);
+    const cameras = videoKeys.map((m) => m.replace('observation.images.', ''));
 
     const { project_id } = useProjectId();
 
@@ -89,14 +90,14 @@ export const EpisodeViewer = ({ episode, dataset }: EpisodeViewerProps) => {
                 </Flex>
                 <Flex direction={'row'} flex gap={'size-100'}>
                     <Flex direction={'column'} alignContent={'start'} flex gap={'size-30'}>
-                        {cameras.map((camera) => (
+                        {cameras.map((camera, idx) => (
                             <VideoView
                                 key={camera}
                                 dataset_id={dataset.id!}
                                 aspectRatio={640 / 480}
                                 cameraName={camera}
                                 time={player.time}
-                                episodeVideo={episode.videos[`observation.images.${camera}`]}
+                                episodeVideo={episode.videos[videoKeys[idx]]}
                             />
                         ))}
                     </Flex>
