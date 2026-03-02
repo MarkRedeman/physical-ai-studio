@@ -35,7 +35,7 @@ interface TrainModelDialogProps {
     defaultDatasetId?: Key | null;
     defaultMaxSteps?: number;
     extraPayload?: Partial<SchemaTrainJobPayload>;
-    policyField: ReactNode;
+    policyField?: ReactNode;
     getPolicy: () => string | undefined;
     close: (job: SchemaTrainJob | undefined) => void;
 }
