@@ -22,6 +22,27 @@ from pydantic import ValidationError
 from internal_datasets.raw_video.frame_index import EpisodeBoundary, FrameIndex, _nearest_neighbor_resample
 from internal_datasets.raw_video.manifest import CameraConfig, DatasetManifest, EpisodeEntry, load_manifest
 from internal_datasets.raw_video.stats import DatasetStats, WelfordAccumulator
+from internal_datasets.raw_video.frame_index import (
+    EpisodeBoundary,
+    FrameIndex,
+    _nearest_neighbor_resample,
+)
+from internal_datasets.raw_video.manifest import (
+    CameraConfig,
+    DatasetManifest,
+    EpisodeEntry,
+    load_manifest,
+)
+from internal_datasets.raw_video.stats import (
+    DatasetStats,
+    EpisodeAccumulatorState,
+    WelfordAccumulator,
+    _load_episode_stats,
+    _save_episode_stats,
+    compute_episode_stats_background,
+    compute_stats,
+    load_or_compute_stats,
+)
 from internal_datasets.raw_video.video_decode import VideoInfo
 
 # ============================================================================
@@ -653,7 +674,6 @@ class TestRawVideoDatasetAdapter:
     def test_adapter_is_dataset_subclass(self):
         adapter, *_ = self._build_adapter()
 
-
         from physicalai.data.dataset import Dataset
         from torch.utils.data import Dataset as TorchDataset
 
@@ -705,3 +725,495 @@ class TestRawVideoDatasetAdapter:
         assert "top" in obs.images
         # The decoded tensor should be passed through unchanged.
         assert obs.images["top"].shape == (3, 480, 640)
+
+
+# ============================================================================
+# stats.py tests — Group 1: WelfordAccumulator merge, serialization, batch
+# ============================================================================
+
+
+class TestWelfordAccumulatorExtended:
+    """Additional tests for WelfordAccumulator: merge, serialization, incremental."""
+
+    def test_merge_two_accumulators(self):
+        """Merging two accumulators gives the same result as one accumulator over all data."""
+        data_a = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        data_b = np.array([[7.0, 8.0], [9.0, 10.0]])
+
+        acc_a = WelfordAccumulator(2)
+        acc_a.update_batch(data_a)
+        acc_b = WelfordAccumulator(2)
+        acc_b.update_batch(data_b)
+
+        acc_a.merge(acc_b)
+
+        # Compare with single accumulator over all data.
+        all_data = np.vstack([data_a, data_b])
+        acc_all = WelfordAccumulator(2)
+        acc_all.update_batch(all_data)
+
+        assert acc_a.count == acc_all.count
+        np.testing.assert_allclose(acc_a.mean, acc_all.mean, atol=1e-12)
+        np.testing.assert_allclose(acc_a.std, acc_all.std, atol=1e-12)
+        np.testing.assert_allclose(acc_a.min, acc_all.min)
+        np.testing.assert_allclose(acc_a.max, acc_all.max)
+
+    def test_merge_into_empty(self):
+        """Merging a populated accumulator into an empty one copies its state."""
+        data = np.array([[1.0, 2.0], [3.0, 4.0]])
+        acc_src = WelfordAccumulator(2)
+        acc_src.update_batch(data)
+
+        acc_dst = WelfordAccumulator(2)
+        assert acc_dst.count == 0
+        acc_dst.merge(acc_src)
+
+        assert acc_dst.count == acc_src.count
+        np.testing.assert_allclose(acc_dst.mean, acc_src.mean)
+        np.testing.assert_allclose(acc_dst.std, acc_src.std)
+        np.testing.assert_allclose(acc_dst.min, acc_src.min)
+        np.testing.assert_allclose(acc_dst.max, acc_src.max)
+
+    def test_merge_empty_into_populated_is_noop(self):
+        """Merging an empty accumulator into a populated one changes nothing."""
+        data = np.array([[1.0, 2.0], [3.0, 4.0]])
+        acc = WelfordAccumulator(2)
+        acc.update_batch(data)
+
+        mean_before = acc.mean.copy()
+        std_before = acc.std.copy()
+
+        acc.merge(WelfordAccumulator(2))
+
+        np.testing.assert_array_equal(acc.mean, mean_before)
+        np.testing.assert_array_equal(acc.std, std_before)
+
+    def test_serialization_roundtrip(self):
+        """to_dict / from_dict preserves accumulator state."""
+        acc = WelfordAccumulator(3)
+        data = np.random.randn(50, 3)
+        acc.update_batch(data)
+
+        d = acc.to_dict()
+        restored = WelfordAccumulator.from_dict(d)
+
+        assert restored.count == acc.count
+        np.testing.assert_allclose(restored.mean, acc.mean)
+        np.testing.assert_allclose(restored.std, acc.std)
+        np.testing.assert_allclose(restored.min, acc.min)
+        np.testing.assert_allclose(restored.max, acc.max)
+
+    def test_serialization_empty_accumulator(self):
+        """Serializing and restoring an empty accumulator works."""
+        acc = WelfordAccumulator(4)
+        d = acc.to_dict()
+        restored = WelfordAccumulator.from_dict(d)
+        assert restored.count == 0
+        np.testing.assert_array_equal(restored.mean, np.zeros(4))
+
+    def test_incremental_batch_matches_single_updates(self):
+        """Multiple small batches give the same result as single-sample updates."""
+        rng = np.random.default_rng(42)
+        data = rng.standard_normal((100, 5))
+
+        acc_single = WelfordAccumulator(5)
+        for row in data:
+            acc_single.update(row)
+
+        acc_batch = WelfordAccumulator(5)
+        for start in range(0, 100, 10):
+            acc_batch.update_batch(data[start : start + 10])
+
+        assert acc_single.count == acc_batch.count
+        np.testing.assert_allclose(acc_single.mean, acc_batch.mean, atol=1e-12)
+        np.testing.assert_allclose(acc_single.std, acc_batch.std, atol=1e-10)
+        np.testing.assert_allclose(acc_single.min, acc_batch.min)
+        np.testing.assert_allclose(acc_single.max, acc_batch.max)
+
+    def test_batch_update_empty_is_noop(self):
+        """update_batch with zero rows does not change state."""
+        acc = WelfordAccumulator(3)
+        acc.update(np.array([1.0, 2.0, 3.0]))
+        count_before = acc.count
+        mean_before = acc.mean.copy()
+
+        acc.update_batch(np.zeros((0, 3)))
+        assert acc.count == count_before
+        np.testing.assert_array_equal(acc.mean, mean_before)
+
+
+# ============================================================================
+# stats.py tests — Group 2: EpisodeAccumulatorState roundtrip
+# ============================================================================
+
+
+class TestEpisodeAccumulatorState:
+    def test_json_roundtrip(self):
+        """EpisodeAccumulatorState survives JSON serialization."""
+        acc = WelfordAccumulator(2)
+        acc.update_batch(np.array([[1.0, 2.0], [3.0, 4.0]]))
+        img_acc = WelfordAccumulator(3)
+        img_acc.update_batch(np.random.rand(10, 3))
+
+        state = EpisodeAccumulatorState(
+            state=acc.to_dict(),
+            action=acc.to_dict(),
+            images={"top": img_acc.to_dict()},
+            num_frames=20,
+            image_samples=10,
+        )
+
+        json_str = state.to_json()
+        restored = EpisodeAccumulatorState.from_json(json_str)
+
+        assert restored.num_frames == 20
+        assert restored.image_samples == 10
+        assert restored.state == state.state
+        assert restored.action == state.action
+        assert "top" in restored.images
+        assert restored.images["top"]["n"] == img_acc.count
+
+    def test_roundtrip_no_images(self):
+        """Roundtrip works with empty image dict."""
+        acc = WelfordAccumulator(1)
+        acc.update(np.array([5.0]))
+        state = EpisodeAccumulatorState(
+            state=acc.to_dict(),
+            action=acc.to_dict(),
+            images={},
+            num_frames=1,
+            image_samples=0,
+        )
+        restored = EpisodeAccumulatorState.from_json(state.to_json())
+        assert restored.images == {}
+        assert restored.num_frames == 1
+
+
+# ============================================================================
+# stats.py tests — Group 3: Per-episode stats I/O
+# ============================================================================
+
+
+class TestPerEpisodeStatsIO:
+    def test_save_and_load(self, tmp_path: Path):
+        """_save_episode_stats / _load_episode_stats roundtrip."""
+        acc = WelfordAccumulator(2)
+        acc.update_batch(np.array([[1.0, 2.0], [3.0, 4.0]]))
+        ep_state = EpisodeAccumulatorState(
+            state=acc.to_dict(),
+            action=acc.to_dict(),
+            images={},
+            num_frames=2,
+            image_samples=0,
+        )
+        ep_dir = tmp_path / "ep_000"
+        ep_dir.mkdir()
+        _save_episode_stats(ep_dir, ep_state)
+
+        loaded = _load_episode_stats(ep_dir)
+        assert loaded is not None
+        assert loaded.num_frames == 2
+        assert loaded.state == ep_state.state
+
+    def test_load_missing_returns_none(self, tmp_path: Path):
+        """_load_episode_stats returns None when stats.json doesn't exist."""
+        ep_dir = tmp_path / "ep_000"
+        ep_dir.mkdir()
+        assert _load_episode_stats(ep_dir) is None
+
+    def test_load_corrupt_returns_none(self, tmp_path: Path):
+        """_load_episode_stats returns None for corrupt JSON."""
+        ep_dir = tmp_path / "ep_000"
+        ep_dir.mkdir()
+        (ep_dir / "stats.json").write_text("NOT VALID JSON {{{", encoding="utf-8")
+        assert _load_episode_stats(ep_dir) is None
+
+
+# ============================================================================
+# stats.py tests — Group 4: compute_stats with source write-back
+# ============================================================================
+
+
+class TestComputeStatsWriteBack:
+    """Tests for compute_stats() source_dataset_root write-back behavior."""
+
+    def _make_dataset(self, root: Path, num_episodes: int = 2, frames: int = 5) -> DatasetManifest:
+        """Create a minimal dataset and return its manifest."""
+        from internal_datasets.raw_video.manifest import CameraConfig, DatasetManifest, EpisodeEntry, save_manifest
+
+        episodes = []
+        for i in range(num_episodes):
+            ep_dir_name = f"episode_{i:03d}"
+            ep_dir = root / ep_dir_name
+            ep_dir.mkdir(parents=True, exist_ok=True)
+            rows = [
+                {"timestamp": t / 30.0, "state": [float(t)] * 2, "action": [float(t) * 0.1] * 2} for t in range(frames)
+            ]
+            _write_jsonl(ep_dir / "data.jsonl", rows)
+            (ep_dir / "cam_top.mp4").touch()
+            episodes.append(
+                EpisodeEntry(episode_dir=ep_dir_name, data_file="data.jsonl", video_files={"top": "cam_top.mp4"})
+            )
+        manifest = DatasetManifest(
+            name="test",
+            fps=30,
+            state_dim=2,
+            action_dim=2,
+            state_names=["s0", "s1"],
+            action_names=["a0", "a1"],
+            cameras=[CameraConfig(name="top")],
+            episodes=episodes,
+        )
+        save_manifest(root, manifest)
+        return manifest
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_compute_stats_writes_per_episode_cache(self, mock_info, mock_decode, tmp_path):
+        """compute_stats writes stats.json to each episode dir."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        manifest = self._make_dataset(tmp_path)
+        compute_stats(manifest, tmp_path, image_sample_count=5)
+
+        for ep in manifest.episodes:
+            assert (tmp_path / ep.episode_dir / "stats.json").is_file()
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_compute_stats_writes_back_to_source(self, mock_info, mock_decode, tmp_path):
+        """compute_stats with source_dataset_root writes stats to source too."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        source = tmp_path / "source"
+        snapshot = tmp_path / "snapshot"
+        manifest = self._make_dataset(source)
+        # Copy to snapshot (simulating snapshot creation).
+        import shutil
+
+        shutil.copytree(source, snapshot)
+
+        compute_stats(manifest, snapshot, source_dataset_root=source, image_sample_count=5)
+
+        # Both snapshot and source should have per-episode stats.
+        for ep in manifest.episodes:
+            assert (snapshot / ep.episode_dir / "stats.json").is_file()
+            assert (source / ep.episode_dir / "stats.json").is_file()
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_compute_stats_reads_from_source_cache(self, mock_info, mock_decode, tmp_path):
+        """compute_stats reads cached stats from source when local is missing."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        source = tmp_path / "source"
+        manifest = self._make_dataset(source)
+
+        # Pre-compute stats for source so episodes have caches.
+        compute_stats(manifest, source, image_sample_count=5)
+
+        # Create a snapshot without per-episode stats.
+        snapshot = tmp_path / "snapshot"
+        import shutil
+
+        shutil.copytree(source, snapshot)
+        # Remove stats from snapshot only.
+        for ep in manifest.episodes:
+            stats_file = snapshot / ep.episode_dir / "stats.json"
+            if stats_file.is_file():
+                stats_file.unlink()
+
+        # decode_frames should NOT be called because source has cached stats.
+        mock_decode.reset_mock()
+        compute_stats(manifest, snapshot, source_dataset_root=source, image_sample_count=5)
+
+        # decode_frames should not have been called (all from cache).
+        mock_decode.assert_not_called()
+
+        # Stats should now also be copied into snapshot.
+        for ep in manifest.episodes:
+            assert (snapshot / ep.episode_dir / "stats.json").is_file()
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_compute_stats_no_writeback_when_source_none(self, mock_info, mock_decode, tmp_path):
+        """Without source_dataset_root, no write-back occurs."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        manifest = self._make_dataset(tmp_path)
+        compute_stats(manifest, tmp_path, image_sample_count=5)
+
+        # Stats should only be in local, not in some other location.
+        for ep in manifest.episodes:
+            assert (tmp_path / ep.episode_dir / "stats.json").is_file()
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_compute_stats_uses_local_cache_first(self, mock_info, mock_decode, tmp_path):
+        """When local cache exists, source is not checked and decode is skipped."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        source = tmp_path / "source"
+        manifest = self._make_dataset(source)
+
+        # Pre-compute local cache.
+        compute_stats(manifest, source, image_sample_count=5)
+
+        mock_decode.reset_mock()
+        # Run again — should use local cache, no decoding.
+        compute_stats(manifest, source, image_sample_count=5)
+        mock_decode.assert_not_called()
+
+
+# ============================================================================
+# stats.py tests — Group 5: load_or_compute_stats cache behavior
+# ============================================================================
+
+
+class TestLoadOrComputeStats:
+    """Tests for load_or_compute_stats cache freshness and passthrough."""
+
+    def _make_dataset(self, root: Path, frames: int = 5) -> DatasetManifest:
+        """Create a minimal 1-episode dataset."""
+        from internal_datasets.raw_video.manifest import CameraConfig, DatasetManifest, EpisodeEntry, save_manifest
+
+        ep_dir = root / "episode_000"
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        rows = [{"timestamp": t / 30.0, "state": [float(t)] * 2, "action": [float(t) * 0.1] * 2} for t in range(frames)]
+        _write_jsonl(ep_dir / "data.jsonl", rows)
+        (ep_dir / "cam_top.mp4").touch()
+        manifest = DatasetManifest(
+            name="test",
+            fps=30,
+            state_dim=2,
+            action_dim=2,
+            state_names=["s0", "s1"],
+            action_names=["a0", "a1"],
+            cameras=[CameraConfig(name="top")],
+            episodes=[
+                EpisodeEntry(episode_dir="episode_000", data_file="data.jsonl", video_files={"top": "cam_top.mp4"})
+            ],
+        )
+        save_manifest(root, manifest)
+        return manifest
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_creates_merged_cache(self, mock_info, mock_decode, tmp_path):
+        """load_or_compute_stats creates .cache/stats.json."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        manifest = self._make_dataset(tmp_path)
+        load_or_compute_stats(manifest, tmp_path)
+
+        assert (tmp_path / ".cache" / "stats.json").is_file()
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_returns_cached_on_second_call(self, mock_info, mock_decode, tmp_path):
+        """Second call returns from merged cache without recomputation."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        manifest = self._make_dataset(tmp_path)
+        stats1 = load_or_compute_stats(manifest, tmp_path)
+        mock_decode.reset_mock()
+        stats2 = load_or_compute_stats(manifest, tmp_path)
+
+        # No video decoding on second call.
+        mock_decode.assert_not_called()
+        assert stats1.state == stats2.state
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_passes_source_dataset_root_through(self, mock_info, mock_decode, tmp_path):
+        """load_or_compute_stats passes source_dataset_root to compute_stats."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        source = tmp_path / "source"
+        snapshot = tmp_path / "snapshot"
+        manifest = self._make_dataset(source)
+        import shutil
+
+        shutil.copytree(source, snapshot)
+
+        load_or_compute_stats(manifest, snapshot, source_dataset_root=source)
+
+        # Source should have per-episode stats written back.
+        assert (source / "episode_000" / "stats.json").is_file()
+
+
+# ============================================================================
+# stats.py tests — Group 6: Background computation
+# ============================================================================
+
+
+class TestComputeEpisodeStatsBackground:
+    """Tests for compute_episode_stats_background."""
+
+    def _make_dataset(self, root: Path, frames: int = 5) -> tuple[DatasetManifest, EpisodeEntry]:
+        """Create a 1-episode dataset, return (manifest, episode)."""
+        from internal_datasets.raw_video.manifest import CameraConfig, DatasetManifest, EpisodeEntry, save_manifest
+
+        ep_dir = root / "episode_000"
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        rows = [{"timestamp": t / 30.0, "state": [float(t)] * 2, "action": [float(t) * 0.1] * 2} for t in range(frames)]
+        _write_jsonl(ep_dir / "data.jsonl", rows)
+        (ep_dir / "cam_top.mp4").touch()
+        episode = EpisodeEntry(episode_dir="episode_000", data_file="data.jsonl", video_files={"top": "cam_top.mp4"})
+        manifest = DatasetManifest(
+            name="test",
+            fps=30,
+            state_dim=2,
+            action_dim=2,
+            state_names=["s0", "s1"],
+            action_names=["a0", "a1"],
+            cameras=[CameraConfig(name="top")],
+            episodes=[episode],
+        )
+        save_manifest(root, manifest)
+        return manifest, episode
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_background_writes_to_both_paths(self, mock_info, mock_decode, tmp_path):
+        """Background computation writes stats to both cache and source."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        cache_root = tmp_path / "cache"
+        source_root = tmp_path / "source"
+        manifest, episode = self._make_dataset(cache_root)
+        # Also create the episode dir in source.
+        source_ep_dir = source_root / "episode_000"
+        source_ep_dir.mkdir(parents=True, exist_ok=True)
+
+        compute_episode_stats_background(manifest, episode, cache_root, source_dataset_root=source_root)
+
+        assert (cache_root / "episode_000" / "stats.json").is_file()
+        assert (source_ep_dir / "stats.json").is_file()
+
+    @patch("internal_datasets.raw_video.stats.decode_frames")
+    @patch("internal_datasets.raw_video.stats.get_video_info")
+    def test_background_noop_when_cached(self, mock_info, mock_decode, tmp_path):
+        """Background is a no-op when stats are already cached locally."""
+        mock_info.return_value = _make_video_info(num_frames=5)
+        mock_decode.return_value = torch.rand(5, 3, 4, 4)
+
+        manifest, episode = self._make_dataset(tmp_path)
+
+        # Pre-compute stats.
+        compute_episode_stats_background(manifest, episode, tmp_path)
+        assert (tmp_path / "episode_000" / "stats.json").is_file()
+
+        # Second call should not decode anything.
+        mock_decode.reset_mock()
+        compute_episode_stats_background(manifest, episode, tmp_path)
+        mock_decode.assert_not_called()

@@ -1125,3 +1125,143 @@ class TestBuildRawVideoManifestArgs:
 
         with pytest.raises(ValueError, match="missing width/height"):
             asyncio.run(build_raw_video_manifest_args(env, robot_factory))
+
+
+# ============================================================================
+# Tests: Stats pipeline integration (Group 7)
+# ============================================================================
+
+
+class TestSaveEpisodeBackgroundStats:
+    """Tests verifying save_episode() spawns a background thread for stats."""
+
+    def _setup_and_record(self, tmp_path: Path) -> tuple[RawVideoDatasetClient, None]:
+        """Create a client, record frames (but don't save yet), and return (client, None)."""
+        ds_path = tmp_path / "ds"
+        client = RawVideoDatasetClient(ds_path)
+        features = _make_features(cameras=[{"name": "top", "width": 64, "height": 48}])
+        client.create(fps=30, features=features, robot_type="test_robot")
+        client.prepare_for_writing()
+        for i in range(3):
+            frame = np.random.randint(0, 255, (48, 64, 3), dtype=np.uint8)
+            obs = {"top": frame, "joint_0": float(i), "joint_1": float(i + 1), "joint_2": float(i + 2)}
+            act = {"joint_0": float(i + 0.1), "joint_1": float(i + 1.1), "joint_2": float(i + 2.1)}
+            client.add_frame(obs, act, "pick block")
+        return client, None  # episode returned by save_episode
+
+    def test_save_episode_spawns_background_stats_thread(self, tmp_path: Path) -> None:
+        """save_episode() starts a daemon thread targeting compute_episode_stats_background."""
+        client, _ = self._setup_and_record(tmp_path)
+
+        with patch("internal_datasets.raw_video.raw_video_dataset_client.threading") as mock_threading:
+            mock_thread = MagicMock()
+            mock_threading.Thread.return_value = mock_thread
+
+            episode = client.save_episode("pick block")
+
+            # Verify Thread was constructed with correct target and kwargs
+            mock_threading.Thread.assert_called_once()
+            call_kwargs = mock_threading.Thread.call_args
+            assert call_kwargs.kwargs.get("target") is not None or call_kwargs[1].get("target") is not None
+            # Check the kwargs dict passed to the thread includes source_dataset_root
+            thread_kwargs = call_kwargs.kwargs.get("kwargs") or call_kwargs[1].get("kwargs", {})
+            assert "source_dataset_root" in thread_kwargs
+            assert call_kwargs.kwargs.get("daemon") is True or call_kwargs[1].get("daemon") is True
+            mock_thread.start.assert_called_once()
+
+    def test_save_episode_passes_source_dataset_root_to_thread(self, tmp_path: Path) -> None:
+        """When _source_dataset_root is set, save_episode passes it to the background thread."""
+        client, _ = self._setup_and_record(tmp_path)
+        source_path = tmp_path / "original_source"
+        source_path.mkdir()
+        client._source_dataset_root = source_path
+
+        with patch("internal_datasets.raw_video.raw_video_dataset_client.threading") as mock_threading:
+            mock_thread = MagicMock()
+            mock_threading.Thread.return_value = mock_thread
+
+            episode = client.save_episode("pick block")
+
+            call_kwargs = mock_threading.Thread.call_args
+            thread_kwargs = call_kwargs.kwargs.get("kwargs") or call_kwargs[1].get("kwargs", {})
+            assert thread_kwargs["source_dataset_root"] == source_path
+
+
+class TestFinalizePreservesPerEpisodeStats:
+    """Tests verifying finalize() deletes .cache/stats.json but NOT <ep_dir>/stats.json."""
+
+    def test_finalize_preserves_per_episode_stats(self, tmp_path: Path) -> None:
+        """finalize() removes .cache/stats.json but keeps per-episode stats.json files."""
+        manifest = _make_manifest(num_episodes=2)
+        _create_dataset_on_disk(tmp_path, manifest)
+
+        # Write per-episode stats.json inside each episode directory
+        for ep in manifest.episodes:
+            ep_stats = tmp_path / ep.episode_dir / "stats.json"
+            ep_stats.write_text('{"test": "per_episode_stats"}')
+
+        # Write the global stats cache
+        cache_dir = tmp_path / ".cache"
+        cache_dir.mkdir(exist_ok=True)
+        global_stats = cache_dir / "stats.json"
+        global_stats.write_text('{"test": "global_stats"}')
+
+        client = RawVideoDatasetClient(tmp_path)
+        client.finalize()
+
+        # Global stats cache should be gone
+        assert not global_stats.is_file()
+
+        # Per-episode stats should still exist
+        for ep in manifest.episodes:
+            ep_stats = tmp_path / ep.episode_dir / "stats.json"
+            assert ep_stats.is_file(), f"Per-episode stats.json was incorrectly deleted: {ep_stats}"
+
+
+class TestDeleteEpisodesCarriesOverStats:
+    """Tests verifying delete_episodes() copies stats.json alongside episode data."""
+
+    def test_delete_episodes_carries_over_stats_json(self, tmp_path: Path) -> None:
+        """delete_episodes() preserves per-episode stats.json via shutil.copytree."""
+        manifest = _make_manifest(num_episodes=3)
+        src = tmp_path / "src"
+        _create_dataset_on_disk(src, manifest, num_frames=5)
+
+        # Write per-episode stats.json for episodes 0 and 2
+        for idx in [0, 2]:
+            ep_stats = src / manifest.episodes[idx].episode_dir / "stats.json"
+            ep_stats.write_text(json.dumps({"episode": idx, "n": 5}))
+
+        client = RawVideoDatasetClient(src)
+        dst = tmp_path / "dst"
+        new_client = client.delete_episodes([1], dst)
+
+        # Remaining episodes (0 and 2) should have their stats.json carried over
+        new_manifest = load_manifest(dst)
+        assert len(new_manifest.episodes) == 2
+        for ep in new_manifest.episodes:
+            ep_stats = dst / ep.episode_dir / "stats.json"
+            assert ep_stats.is_file(), f"stats.json not carried over for {ep.episode_dir}"
+
+
+class TestStartRecordingMutationSourceRoot:
+    """Tests verifying start_recording_mutation sets _source_dataset_root on cache client."""
+
+    def test_start_recording_mutation_sets_source_dataset_root(self, tmp_path: Path) -> None:
+        """Cache client's _source_dataset_root is set to the source client's path."""
+        manifest = _make_manifest(num_episodes=1)
+        ds_path = tmp_path / "ds"
+        _create_dataset_on_disk(ds_path, manifest)
+        client = RawVideoDatasetClient(ds_path)
+        features = _make_features()
+
+        with patch("internal_datasets.raw_video.raw_video_dataset_client.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.cache_dir = tmp_path / "cache"
+            mock_settings.return_value = settings
+
+            mutation = client.start_recording_mutation(fps=30, features=features, robot_type="test_robot")
+
+        cache_client = mutation.cache_dataset
+        assert isinstance(cache_client, RawVideoDatasetClient)
+        assert cache_client._source_dataset_root == ds_path

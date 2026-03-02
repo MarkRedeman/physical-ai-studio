@@ -29,6 +29,7 @@ from internal_datasets.raw_video.converters import (
     _read_jsonl,
 )
 from internal_datasets.raw_video.manifest import load_manifest
+from internal_datasets.raw_video.stats import EpisodeAccumulatorState
 from internal_datasets.raw_video.video_decode import VideoInfo
 
 # ============================================================================
@@ -818,3 +819,125 @@ class TestConverterCLI:
             ],
         )
         assert result.exit_code != 0
+
+
+# ============================================================================
+# Tests: Per-episode stats in LeRobotToRawVideoConverter
+# ============================================================================
+
+
+class TestLeRobotToRawVideoConverterStats:
+    """Tests verifying that conversion writes per-episode stats.json files."""
+
+    @patch("internal_datasets.raw_video.converters.get_video_info")
+    @patch("subprocess.run")
+    @patch("internal_datasets.raw_video.converters._compute_single_episode_stats")
+    def test_conversion_writes_per_episode_stats(
+        self, mock_compute_stats, mock_subprocess, mock_video_info, tmp_path: Path
+    ):
+        """After conversion, each episode directory should contain a stats.json."""
+        source = tmp_path / "lerobot_source"
+        source.mkdir()
+        dest = tmp_path / "raw_output"
+
+        mock_dataset = _make_mock_lerobot_dataset(
+            source,
+            num_episodes=2,
+            frames_per_episode=5,
+            cameras=["top"],
+            state_dim=3,
+            action_dim=3,
+        )
+
+        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_video_info.return_value = VideoInfo(
+            num_frames=5, fps=30.0, width=640, height=480, duration_s=5 / 30.0, codec="h264"
+        )
+
+        # Return a realistic EpisodeAccumulatorState from the mock.
+        mock_compute_stats.return_value = EpisodeAccumulatorState(
+            state={
+                "n": 5,
+                "mean": [0.0, 0.0, 0.0],
+                "m2": [1.0, 1.0, 1.0],
+                "min": [-1.0, -1.0, -1.0],
+                "max": [1.0, 1.0, 1.0],
+            },
+            action={
+                "n": 5,
+                "mean": [0.0, 0.0, 0.0],
+                "m2": [1.0, 1.0, 1.0],
+                "min": [-1.0, -1.0, -1.0],
+                "max": [1.0, 1.0, 1.0],
+            },
+            images={
+                "top": {
+                    "n": 100,
+                    "mean": [0.5, 0.5, 0.5],
+                    "m2": [0.1, 0.1, 0.1],
+                    "min": [0.0, 0.0, 0.0],
+                    "max": [1.0, 1.0, 1.0],
+                }
+            },
+            num_frames=5,
+            image_samples=5,
+        )
+
+        with patch("lerobot.datasets.lerobot_dataset.LeRobotDataset", return_value=mock_dataset):
+            converter = LeRobotToRawVideoConverter(source=source, dest=dest)
+            converter.convert()
+
+        # _compute_single_episode_stats should have been called once per episode.
+        assert mock_compute_stats.call_count == 2
+
+        # Each episode directory should have a stats.json file.
+        for i in range(2):
+            stats_path = dest / f"episode_{i:03d}" / "stats.json"
+            assert stats_path.is_file(), f"Missing stats.json for episode_{i:03d}"
+
+            # Verify it's a valid EpisodeAccumulatorState.
+            loaded = EpisodeAccumulatorState.from_json(stats_path.read_text())
+            assert loaded.num_frames == 5
+            assert loaded.state["n"] == 5
+            assert "top" in loaded.images
+
+    @patch("internal_datasets.raw_video.converters.get_video_info")
+    @patch("subprocess.run")
+    @patch("internal_datasets.raw_video.converters._compute_single_episode_stats")
+    def test_conversion_stats_failure_non_fatal(
+        self, mock_compute_stats, mock_subprocess, mock_video_info, tmp_path: Path
+    ):
+        """If per-episode stats computation fails, conversion still succeeds."""
+        source = tmp_path / "lerobot_source"
+        source.mkdir()
+        dest = tmp_path / "raw_output"
+
+        mock_dataset = _make_mock_lerobot_dataset(
+            source,
+            num_episodes=1,
+            frames_per_episode=3,
+            cameras=["top"],
+        )
+
+        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_video_info.return_value = VideoInfo(
+            num_frames=3, fps=30.0, width=640, height=480, duration_s=0.1, codec="h264"
+        )
+
+        # Make stats computation raise an exception.
+        mock_compute_stats.side_effect = RuntimeError("Video decode failed")
+
+        with patch("lerobot.datasets.lerobot_dataset.LeRobotDataset", return_value=mock_dataset):
+            converter = LeRobotToRawVideoConverter(source=source, dest=dest)
+            converter.convert()  # Should NOT raise
+
+        # Touch video file so load_manifest validation passes.
+        (dest / "episode_000" / "top.mp4").touch()
+
+        # Conversion should have completed — manifest should be valid.
+        manifest = load_manifest(dest)
+        assert len(manifest.episodes) == 1
+
+        # But no stats.json should exist (stats computation failed).
+        stats_path = dest / "episode_000" / "stats.json"
+        assert not stats_path.is_file()
