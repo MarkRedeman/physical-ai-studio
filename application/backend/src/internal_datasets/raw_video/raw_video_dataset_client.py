@@ -452,14 +452,12 @@ class RawVideoDatasetClient(DatasetClient):
         """Finalize the dataset.
 
         For raw-video datasets, finalization ensures any in-progress video
-        writers are closed and the manifest is up to date.  Invalidates the
-        stats cache so it gets recomputed on next training run.
+        writers are closed, any unsaved episode directory is cleaned up, and
+        the manifest is up to date.  Invalidates the stats cache so it gets
+        recomputed on next training run.
         """
-        # Close any dangling video writers (safety net)
-        for writer in self._video_writers.values():
-            if writer.is_running:
-                writer.close()
-        self._video_writers = {}
+        # Discard any pending (unsaved) episode directory
+        self.discard_buffer()
 
         # Invalidate stats cache
         cache_dir = self.path / ".cache"
