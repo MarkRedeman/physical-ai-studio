@@ -17,8 +17,6 @@ commands in ``converter_cli.py``.
 from __future__ import annotations
 
 import json
-import logging
-import shutil
 import subprocess
 from pathlib import Path
 from uuid import uuid4
@@ -28,8 +26,7 @@ import numpy as np
 
 from .manifest import CameraConfig, DatasetManifest, EpisodeEntry, load_manifest
 from .video_decode import get_video_info
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class LeRobotToRawVideoConverter:
