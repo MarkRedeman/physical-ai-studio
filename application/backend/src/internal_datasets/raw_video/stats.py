@@ -468,6 +468,7 @@ def compute_stats(
     manifest: DatasetManifest,
     dataset_root: Path,
     *,
+    source_dataset_root: Path | None = None,
     image_sample_count: int = 500,
 ) -> DatasetStats:
     """Compute normalization statistics over the entire dataset.
@@ -477,9 +478,17 @@ def compute_stats(
     computed from scratch.  All per-episode accumulators are then merged
     to produce the final dataset-level statistics.
 
+    When *source_dataset_root* is provided (e.g. when running against a
+    snapshot copy), newly computed per-episode stats are also written back
+    to the corresponding episode directory in the source dataset so that
+    future snapshots benefit from the cache.
+
     Args:
         manifest: Parsed dataset manifest.
         dataset_root: Root directory of the dataset on disk.
+        source_dataset_root: If not ``None``, also write per-episode stats
+            to ``<source_dataset_root>/<episode_dir>/stats.json`` after
+            computing them.  This enables cache persistence across snapshots.
         image_sample_count: Total number of video frames to sample across
             the entire dataset for image statistics.  Distributed
             proportionally across episodes.  Defaults to ``500``.
@@ -524,7 +533,15 @@ def compute_stats(
     for ep_idx, episode in enumerate(manifest.episodes):
         ep_dir = dataset_root / episode.episode_dir
 
+        # Try loading cached stats — check local first, then source.
         cached = _load_episode_stats(ep_dir)
+        if cached is None and source_dataset_root is not None:
+            source_ep_dir = source_dataset_root / episode.episode_dir
+            cached = _load_episode_stats(source_ep_dir)
+            if cached is not None:
+                # Copy from source into local so future reads are fast.
+                _save_episode_stats(ep_dir, cached)
+
         if cached is not None:
             episode_states.append(cached)
             cached_count += 1
@@ -536,6 +553,11 @@ def compute_stats(
                 image_sample_count=episode_image_samples[ep_idx],
             )
             _save_episode_stats(ep_dir, ep_stats)
+            # Write back to source so future snapshots benefit.
+            if source_dataset_root is not None:
+                source_ep_dir = source_dataset_root / episode.episode_dir
+                if source_ep_dir.is_dir():
+                    _save_episode_stats(source_ep_dir, ep_stats)
             episode_states.append(ep_stats)
             computed_count += 1
 
@@ -584,6 +606,8 @@ _CACHE_FILENAME = "stats.json"
 def load_or_compute_stats(
     manifest: DatasetManifest,
     dataset_root: Path,
+    *,
+    source_dataset_root: Path | None = None,
 ) -> DatasetStats:
     """Load cached dataset stats or compute and cache them.
 
@@ -596,6 +620,9 @@ def load_or_compute_stats(
     Args:
         manifest: Parsed dataset manifest.
         dataset_root: Root directory of the dataset on disk.
+        source_dataset_root: If not ``None``, passed through to
+            :func:`compute_stats` so that newly computed per-episode stats
+            are also written back to the source dataset.
 
     Returns:
         :class:`DatasetStats` loaded from cache or freshly computed.
@@ -614,7 +641,7 @@ def load_or_compute_stats(
     else:
         logger.info("No merged cache found; computing stats (with per-episode caching)")
 
-    stats = compute_stats(manifest, dataset_root)
+    stats = compute_stats(manifest, dataset_root, source_dataset_root=source_dataset_root)
 
     # Persist merged result
     cache_dir = dataset_root / _CACHE_DIR
@@ -635,6 +662,7 @@ def compute_episode_stats_background(
     episode: EpisodeEntry,
     dataset_root: Path,
     *,
+    source_dataset_root: Path | None = None,
     image_sample_count: int = 100,
 ) -> None:
     """Compute and cache stats for a single episode (designed for background use).
@@ -642,21 +670,41 @@ def compute_episode_stats_background(
     This function is safe to call from a background thread.  If the episode
     already has cached stats, this is a no-op.
 
+    When *source_dataset_root* is provided, the computed stats are written to
+    **both** the local ``dataset_root`` and the ``source_dataset_root``.  This
+    ensures that even if the local directory (e.g. a recording cache) is
+    deleted before the thread finishes, the source dataset still receives the
+    cached stats.
+
     Args:
         manifest: Parent dataset manifest.
         episode: The episode entry to process.
         dataset_root: Root directory of the dataset.
+        source_dataset_root: If not ``None``, also write per-episode stats
+            to the corresponding episode directory in this path.
         image_sample_count: Number of video frames to sample for image stats
             within this episode.  Defaults to ``100``.
     """
     ep_dir = dataset_root / episode.episode_dir
     if _load_episode_stats(ep_dir) is not None:
         logger.debug("Episode stats already cached for {}", episode.episode_dir)
+        # Still write to source if it doesn't have the stats yet.
+        if source_dataset_root is not None:
+            source_ep_dir = source_dataset_root / episode.episode_dir
+            if source_ep_dir.is_dir() and _load_episode_stats(source_ep_dir) is None:
+                cached = _load_episode_stats(ep_dir)
+                if cached is not None:
+                    _save_episode_stats(source_ep_dir, cached)
         return
 
     try:
         ep_stats = _compute_single_episode_stats(manifest, episode, dataset_root, image_sample_count=image_sample_count)
         _save_episode_stats(ep_dir, ep_stats)
+        # Also write to source dataset so the cache persists across teardown.
+        if source_dataset_root is not None:
+            source_ep_dir = source_dataset_root / episode.episode_dir
+            if source_ep_dir.is_dir():
+                _save_episode_stats(source_ep_dir, ep_stats)
         logger.info("Background stats computed for episode {}", episode.episode_dir)
     except Exception:
         logger.warning(

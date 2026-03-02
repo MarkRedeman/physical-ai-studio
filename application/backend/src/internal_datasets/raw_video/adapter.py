@@ -150,6 +150,10 @@ class RawVideoDatasetAdapter(Dataset):
     Args:
         dataset_root: Path to the top-level dataset directory that contains
             ``manifest.json``.
+        source_dataset_root: If not ``None``, the original source dataset
+            path.  When the adapter computes per-episode stats (e.g. on a
+            snapshot), it also writes them back to the source so that future
+            snapshots benefit from the cache.
         image_transforms: Optional callable (e.g. a
             ``torchvision.transforms.v2.Transform``) applied independently to
             each camera image tensor after decoding.  The callable must accept
@@ -168,12 +172,14 @@ class RawVideoDatasetAdapter(Dataset):
         self,
         dataset_root: Path,
         *,
+        source_dataset_root: Path | None = None,
         image_transforms: Callable | None = None,
         tolerance_s: float = 1e-4,
     ) -> None:
         super().__init__()
 
         self._dataset_root = Path(dataset_root)
+        self._source_dataset_root = source_dataset_root
         self._tolerance_s = tolerance_s
         self._image_transforms = image_transforms
 
@@ -199,7 +205,9 @@ class RawVideoDatasetAdapter(Dataset):
                 self._camera_shapes[cam.name] = (3, info.height, info.width)
 
         # Load (or lazily compute and cache) normalization statistics.
-        self._stats: DatasetStats = load_or_compute_stats(self._manifest, self._dataset_root)
+        self._stats: DatasetStats = load_or_compute_stats(
+            self._manifest, self._dataset_root, source_dataset_root=self._source_dataset_root
+        )
 
         # Delta indices are set later by the training pipeline.
         self._delta_indices: dict[str, list[int]] = {}
