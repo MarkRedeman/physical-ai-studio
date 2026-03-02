@@ -74,6 +74,12 @@ class RawVideoDatasetClient(DatasetClient):
     _recording_start_time: float
     _last_frame: np.ndarray | None
 
+    # Optional reference to the source dataset root.  When this client is a
+    # cache copy (created by start_recording_mutation), _source_dataset_root
+    # points to the original dataset so that background stats can be written
+    # back to the source directory in addition to the cache.
+    _source_dataset_root: Path | None
+
     def __init__(self, dataset_path: Path) -> None:
         self.path = dataset_path
         self._manifest = None
@@ -83,6 +89,7 @@ class RawVideoDatasetClient(DatasetClient):
         self._frame_count = 0
         self._recording_start_time = 0.0
         self._last_frame = None
+        self._source_dataset_root = None
 
         if self._check_exists():
             self._manifest = load_manifest(self.path)
@@ -387,9 +394,11 @@ class RawVideoDatasetClient(DatasetClient):
         bg_manifest = self._manifest
         bg_episode = episode_entry
         bg_root = self.path
+        bg_source = self._source_dataset_root
         thread = threading.Thread(
             target=compute_episode_stats_background,
             args=(bg_manifest, bg_episode, bg_root),
+            kwargs={"source_dataset_root": bg_source},
             daemon=True,
         )
         thread.start()
@@ -558,6 +567,10 @@ class RawVideoDatasetClient(DatasetClient):
         else:
             cache_dataset = RawVideoDatasetClient(cache_dir)
             cache_dataset.create(fps, features, robot_type)
+
+        # Tell the cache client where the source dataset lives so that
+        # background stats can be written back to the source directory.
+        cache_dataset._source_dataset_root = self.path
 
         return RecordingMutation(self, cache_dataset)
 

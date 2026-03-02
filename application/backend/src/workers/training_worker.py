@@ -81,7 +81,16 @@ class TrainingWorker(BaseProcessWorker):
                     )
 
                     self.interrupt_event.clear()
-                    await asyncio.create_task(self._train_model(job, model, snapshot, payload, base_model))
+                    await asyncio.create_task(
+                        self._train_model(
+                            job,
+                            model,
+                            snapshot,
+                            payload,
+                            base_model,
+                            source_dataset_path=Path(dataset.path),
+                        )
+                    )
             await asyncio.sleep(0.5)
 
     async def setup(self) -> None:
@@ -95,7 +104,9 @@ class TrainingWorker(BaseProcessWorker):
             await TrainingService.abort_orphan_jobs()
 
     @staticmethod
-    def _create_datamodule(snapshot_path: Path, train_batch_size) -> DataModule:
+    def _create_datamodule(
+        snapshot_path: Path, train_batch_size, *, source_dataset_path: Path | None = None
+    ) -> DataModule:
         """Create the appropriate DataModule based on the dataset format at *snapshot_path*.
 
         If the snapshot directory contains a ``manifest.json`` file the dataset
@@ -108,7 +119,7 @@ class TrainingWorker(BaseProcessWorker):
             from internal_datasets.raw_video import RawVideoDatasetAdapter
 
             logger.info("Detected raw-video dataset at {}", snapshot_path)
-            dataset = RawVideoDatasetAdapter(snapshot_path)
+            dataset = RawVideoDatasetAdapter(snapshot_path, source_dataset_root=source_dataset_path)
             return DataModule(train_dataset=dataset, train_batch_size=train_batch_size)
 
         logger.info("Loading LeRobot dataset from {}", snapshot_path)
@@ -119,7 +130,14 @@ class TrainingWorker(BaseProcessWorker):
         )
 
     async def _train_model(
-        self, job: Job, model: Model, snapshot: Snapshot, payload: TrainJobPayload, base_model: Model | None = None
+        self,
+        job: Job,
+        model: Model,
+        snapshot: Snapshot,
+        payload: TrainJobPayload,
+        base_model: Model | None = None,
+        *,
+        source_dataset_path: Path | None = None,
     ):
         settings = get_settings()
         await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Training started")
@@ -132,7 +150,9 @@ class TrainingWorker(BaseProcessWorker):
             path = Path(model.path)
             snapshot_path = Path(str(snapshot.path))
 
-            datamodule = self._create_datamodule(snapshot_path, train_batch_size=payload.batch_size)
+            datamodule = self._create_datamodule(
+                snapshot_path, train_batch_size=payload.batch_size, source_dataset_path=source_dataset_path
+            )
 
             if base_model is not None:
                 policy = load_policy(base_model)
