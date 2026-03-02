@@ -25,6 +25,7 @@ import click
 import numpy as np
 
 from .manifest import CameraConfig, DatasetManifest, EpisodeEntry, load_manifest
+from .stats import _compute_single_episode_stats, _save_episode_stats
 from .video_decode import get_video_info
 from loguru import logger
 
@@ -93,6 +94,23 @@ class LeRobotToRawVideoConverter:
         if dataset.meta.tasks is not None and len(dataset.meta.tasks) > 0:
             task_description = str(list(dataset.meta.tasks.to_dict()["task_index"].keys())[0])
 
+        # Build a manifest skeleton (without episodes) for per-episode stats
+        # computation.  _compute_single_episode_stats only uses state_dim,
+        # action_dim, and cameras from the manifest.
+        cam_configs = [CameraConfig(name=c) for c in camera_names]
+        manifest_skeleton = DatasetManifest(
+            name=self._source.name,
+            fps=fps,
+            state_dim=state_dim,
+            action_dim=action_dim,
+            state_names=state_names,
+            action_names=action_names,
+            robot_type=robot_type,
+            cameras=cam_configs,
+            episodes=[],
+            task_description=task_description,
+        )
+
         for ep_idx in range(num_episodes):
             click.echo(f"  Converting episode {ep_idx + 1}/{num_episodes} ...")
             ep_dir_name = f"episode_{ep_idx:03d}"
@@ -151,27 +169,32 @@ class LeRobotToRawVideoConverter:
                     row = {"timestamp": timestamp, "state": state, "action": action}
                     fh.write(json.dumps(row) + "\n")
 
-            episodes.append(
-                EpisodeEntry(
-                    episode_dir=ep_dir_name,
-                    data_file="data.jsonl",
-                    video_files=video_files,
-                )
+            episode_entry = EpisodeEntry(
+                episode_dir=ep_dir_name,
+                data_file="data.jsonl",
+                video_files=video_files,
             )
+            episodes.append(episode_entry)
+
+            # ---- Compute per-episode stats ----
+            # Pre-populate the per-episode stats cache so the first training
+            # run doesn't need to decode video frames for stats.
+            try:
+                ep_stats = _compute_single_episode_stats(
+                    manifest_skeleton,
+                    episode_entry,
+                    self._dest,
+                    image_sample_count=100,
+                )
+                _save_episode_stats(ep_dir, ep_stats)
+            except Exception:
+                logger.warning(
+                    "Failed to compute per-episode stats for %s; will be computed at training time",
+                    ep_dir_name,
+                )
 
         # ---- Write manifest.json ----
-        manifest = DatasetManifest(
-            name=self._source.name,
-            fps=fps,
-            state_dim=state_dim,
-            action_dim=action_dim,
-            state_names=state_names,
-            action_names=action_names,
-            robot_type=robot_type,
-            cameras=[CameraConfig(name=c) for c in camera_names],
-            episodes=episodes,
-            task_description=task_description,
-        )
+        manifest = manifest_skeleton.model_copy(update={"episodes": episodes})
         manifest_path = self._dest / "manifest.json"
         manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
