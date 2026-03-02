@@ -5,6 +5,9 @@ import {
     ButtonGroup,
     Content,
     Dialog,
+    Disclosure,
+    DisclosurePanel,
+    DisclosureTitle,
     Divider,
     Form,
     Heading,
@@ -77,22 +80,27 @@ export const TrainModelModal = (close: (job: SchemaTrainJob | undefined) => void
                         <Item key='pi0'>Pi0</Item>
                         <Item key='smolvla'>SmolVLA</Item>
                     </Picker>
-                    <NumberField
-                        label='Max Steps'
-                        value={maxSteps}
-                        onChange={setMaxSteps}
-                        minValue={100}
-                        maxValue={100000}
-                        step={100}
-                    />
-                    <NumberField
-                        label='Batch Size'
-                        value={batchSize}
-                        onChange={setBatchSize}
-                        minValue={1}
-                        maxValue={256}
-                        step={1}
-                    />
+                    <Disclosure isQuiet>
+                        <DisclosureTitle>Advanced settings</DisclosureTitle>
+                        <DisclosurePanel>
+                            <NumberField
+                                label='Max Steps'
+                                value={maxSteps}
+                                onChange={setMaxSteps}
+                                minValue={100}
+                                maxValue={100000}
+                                step={100}
+                            />
+                            <NumberField
+                                label='Batch Size'
+                                value={batchSize}
+                                onChange={setBatchSize}
+                                minValue={1}
+                                maxValue={256}
+                                step={1}
+                            />
+                        </DisclosurePanel>
+                    </Disclosure>
                 </Form>
             </Content>
             <ButtonGroup>

@@ -5,6 +5,9 @@ import {
     ButtonGroup,
     Content,
     Dialog,
+    Disclosure,
+    DisclosurePanel,
+    DisclosureTitle,
     Divider,
     Form,
     Heading,
@@ -75,22 +78,27 @@ export const RetrainModelModal = ({
                         ))}
                     </Picker>
                     <TextField label='Policy' value={baseModel.policy.toUpperCase()} isReadOnly />
-                    <NumberField
-                        label='Max Steps'
-                        value={maxSteps}
-                        onChange={setMaxSteps}
-                        minValue={100}
-                        maxValue={100000}
-                        step={100}
-                    />
-                    <NumberField
-                        label='Batch Size'
-                        value={batchSize}
-                        onChange={setBatchSize}
-                        minValue={1}
-                        maxValue={256}
-                        step={1}
-                    />
+                    <Disclosure isQuiet>
+                        <DisclosureTitle>Advanced settings</DisclosureTitle>
+                        <DisclosurePanel>
+                            <NumberField
+                                label='Max Steps'
+                                value={maxSteps}
+                                onChange={setMaxSteps}
+                                minValue={100}
+                                maxValue={100000}
+                                step={100}
+                            />
+                            <NumberField
+                                label='Batch Size'
+                                value={batchSize}
+                                onChange={setBatchSize}
+                                minValue={1}
+                                maxValue={256}
+                                step={1}
+                            />
+                        </DisclosurePanel>
+                    </Disclosure>
                 </Form>
             </Content>
             <ButtonGroup>
