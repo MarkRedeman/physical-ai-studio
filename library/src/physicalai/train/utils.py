@@ -5,15 +5,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
-from lerobot.datasets.utils import check_delta_timestamps, get_delta_indices
-
-from physicalai.data.lerobot.dataset import _LeRobotDatasetAdapter  # noqa: PLC2701
+from physicalai.data.dataset import Dataset
 
 if TYPE_CHECKING:
     from physicalai.data import DataModule
     from physicalai.policies.base.policy import Policy
+
+logger = logging.getLogger(__name__)
 
 
 def _get_delta_indices(model: Any, attr_name: str) -> list[int] | None:  # noqa: ANN401
@@ -50,32 +51,76 @@ def _get_delta_indices(model: Any, attr_name: str) -> list[int] | None:  # noqa:
     return None
 
 
+def _reformat_lerobot_dataset(policy: Policy, dataset: Dataset) -> None:
+    """Set delta_indices on a LeRobot dataset via delta_timestamps conversion."""
+    from lerobot.datasets.utils import check_delta_timestamps, get_delta_indices
+
+    delta_timestamps: dict[str, list[float]] = {}
+
+    # For policies with lerobot_policy attribute, use that; otherwise use policy.model
+    lerobot_model = getattr(policy, "lerobot_policy", None) or policy.model
+
+    for key in dataset.raw_features:
+        reward_delta_indices = _get_delta_indices(lerobot_model, "reward_delta_indices")
+        if key == "next.reward" and reward_delta_indices is not None:
+            delta_timestamps[key] = [i / dataset.fps for i in reward_delta_indices]
+
+        action_delta_indices = _get_delta_indices(lerobot_model, "action_delta_indices")
+        if key == "action" and action_delta_indices is not None:
+            delta_timestamps[key] = [i / dataset.fps for i in action_delta_indices]
+
+        observation_delta_indices = _get_delta_indices(lerobot_model, "observation_delta_indices")
+        if key.startswith("observation.") and observation_delta_indices is not None:
+            delta_timestamps[key] = [i / dataset.fps for i in observation_delta_indices]
+
+    if delta_timestamps:
+        check_delta_timestamps(delta_timestamps, dataset.fps, dataset.tolerance_s)
+        dataset.delta_indices = get_delta_indices(delta_timestamps, dataset.fps)
+
+
+def _reformat_generic_dataset(policy: Policy, dataset: Dataset) -> None:
+    """Set delta_indices on a generic Dataset (e.g. RawVideoDatasetAdapter).
+
+    Builds the delta_indices dict directly from the policy's integer
+    offsets, without the LeRobot delta_timestamps intermediate step.
+    """
+    model = getattr(policy, "lerobot_policy", None) or policy.model
+
+    delta_indices: dict[str, list[int]] = {}
+    for key in dataset.raw_features:
+        if key == "next.reward":
+            indices = _get_delta_indices(model, "reward_delta_indices")
+            if indices is not None:
+                delta_indices[key] = indices
+
+        elif key == "action":
+            indices = _get_delta_indices(model, "action_delta_indices")
+            if indices is not None:
+                delta_indices[key] = indices
+
+        elif key.startswith("observation."):
+            indices = _get_delta_indices(model, "observation_delta_indices")
+            if indices is not None:
+                delta_indices[key] = indices
+
+    if delta_indices:
+        dataset.delta_indices = delta_indices
+        logger.info("Set delta_indices on dataset: %s", {k: len(v) for k, v in delta_indices.items()})
+
+
 def reformat_dataset_to_match_policy(policy: Policy, datamodule: DataModule) -> None:
-    """Reformat dataset to have correct deltas and parametrs depending on policy."""
-    # if lerobot dataset, set delta timesteps correctly
-    # https://github.com/huggingface/lerobot/blob/33cad37054c2b594ceba57463e8f11ee374fa93c/src/lerobot/datasets/factory.py#L37
-    if isinstance(datamodule.train_dataset, _LeRobotDatasetAdapter):
-        delta_timestamps = {}
-        lerobot_dataset = datamodule.train_dataset
+    """Reformat dataset to have correct deltas and parameters depending on policy.
 
-        # Get the LeRobot policy model for delta indices
-        # For policies with lerobot_policy attribute, use that; otherwise use policy.model
-        lerobot_model = getattr(policy, "lerobot_policy", None) or policy.model
+    Works with any :class:`Dataset` implementation. For LeRobot datasets,
+    uses the delta_timestamps -> delta_indices conversion via LeRobot utils.
+    For other datasets (e.g. raw-video), sets delta_indices directly from
+    the policy's integer offsets.
+    """
+    from physicalai.data.lerobot.dataset import _LeRobotDatasetAdapter  # noqa: PLC2701
 
-        for key in lerobot_dataset.raw_features:
-            reward_delta_indices = _get_delta_indices(lerobot_model, "reward_delta_indices")
-            if key == "next.reward" and reward_delta_indices is not None:
-                delta_timestamps[key] = [i / lerobot_dataset.fps for i in reward_delta_indices]
+    dataset = datamodule.train_dataset
 
-            action_delta_indices = _get_delta_indices(lerobot_model, "action_delta_indices")
-            if key == "action" and action_delta_indices is not None:
-                delta_timestamps[key] = [i / lerobot_dataset.fps for i in action_delta_indices]
-
-            observation_delta_indices = _get_delta_indices(lerobot_model, "observation_delta_indices")
-            if key.startswith("observation.") and observation_delta_indices is not None:
-                delta_timestamps[key] = [i / lerobot_dataset.fps for i in observation_delta_indices]
-
-        # in place change the lerobot dataset
-        if delta_timestamps:
-            check_delta_timestamps(delta_timestamps, lerobot_dataset.fps, lerobot_dataset.tolerance_s)
-            lerobot_dataset.delta_indices = get_delta_indices(delta_timestamps, lerobot_dataset.fps)
+    if isinstance(dataset, _LeRobotDatasetAdapter):
+        _reformat_lerobot_dataset(policy, dataset)
+    elif isinstance(dataset, Dataset):
+        _reformat_generic_dataset(policy, dataset)
