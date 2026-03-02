@@ -20,7 +20,9 @@ Expected on-disk layout::
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -187,9 +189,45 @@ def load_manifest(dataset_root: Path) -> DatasetManifest:
     return manifest
 
 
+def save_manifest(dataset_root: Path, manifest: DatasetManifest) -> None:
+    """Atomically write a :class:`DatasetManifest` to ``manifest.json``.
+
+    The write is performed via a temporary file in the same directory followed
+    by :func:`os.replace`, so that concurrent readers never observe a
+    partially-written manifest.
+
+    Args:
+        dataset_root: Path to the top-level dataset directory.
+        manifest: The manifest to persist.
+
+    Raises:
+        OSError: If the write or rename fails.
+    """
+    dataset_root.mkdir(parents=True, exist_ok=True)
+    manifest_path = dataset_root / "manifest.json"
+    data = manifest.model_dump(mode="json")
+
+    # Write to a temp file in the same directory so os.replace is atomic
+    # (same filesystem guarantees).
+    fd, tmp_path = tempfile.mkstemp(dir=dataset_root, suffix=".tmp", prefix=".manifest_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp_path, manifest_path)
+    except BaseException:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 __all__ = [
     "CameraConfig",
     "DatasetManifest",
     "EpisodeEntry",
     "load_manifest",
+    "save_manifest",
 ]
