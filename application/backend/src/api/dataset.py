@@ -64,6 +64,13 @@ async def dataset_video_endpoint(
     if not requested_path.is_relative_to(dataset_root):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access to the requested file is forbidden.")
 
+    # Only serve video files — prevent leaking manifest.json, data.jsonl, etc.
+    ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mkv", ".webm", ".mov"}
+    if requested_path.suffix.lower() not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Only video files can be served from this endpoint."
+        )
+
     if not requested_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
 
