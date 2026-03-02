@@ -28,6 +28,7 @@ from __future__ import annotations
 import base64
 import json
 import shutil
+import threading
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -45,6 +46,7 @@ from internal_datasets.raw_video.manifest import (
     load_manifest,
     save_manifest,
 )
+from internal_datasets.raw_video.stats import compute_episode_stats_background
 from internal_datasets.raw_video.video_writer import VideoWriter
 from schemas import Episode, EpisodeVideo
 from settings import get_settings
@@ -378,6 +380,19 @@ class RawVideoDatasetClient(DatasetClient):
             self._frame_count,
             self._episode_dir,
         )
+
+        # Kick off background per-episode stats computation so it's ready
+        # before the next training run.  The thread is a daemon so it won't
+        # prevent process shutdown.
+        bg_manifest = self._manifest
+        bg_episode = episode_entry
+        bg_root = self.path
+        thread = threading.Thread(
+            target=compute_episode_stats_background,
+            args=(bg_manifest, bg_episode, bg_root),
+            daemon=True,
+        )
+        thread.start()
 
         # Reset recording state (but keep manifest loaded for next episode)
         self._episode_dir = None
