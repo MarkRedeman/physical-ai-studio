@@ -35,7 +35,7 @@ interface TrainModelDialogProps {
     defaultDatasetId?: Key | null;
     defaultMaxSteps?: number;
     extraPayload?: Partial<SchemaTrainJobPayload>;
-    policyField?: ReactNode;
+    policyField: ReactNode;
     getPolicy: () => string | undefined;
     close: (job: SchemaTrainJob | undefined) => void;
 }
@@ -100,7 +100,7 @@ export const TrainModelDialog = ({
                             <Item key={dataset.id}>{dataset.name}</Item>
                         ))}
                     </Picker>
-                    {policyField}
+                    <>{policyField}</>
                     <Disclosure isQuiet UNSAFE_style={{ padding: 0 }}>
                         <DisclosureTitle UNSAFE_style={{ fontSize: 13, padding: '4px 0' }}>
                             Advanced settings
