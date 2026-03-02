@@ -199,7 +199,7 @@ class RawVideoDatasetAdapter(Dataset):
                 self._camera_shapes[cam.name] = (3, info.height, info.width)
 
         # Load (or lazily compute and cache) normalization statistics.
-        self._stats: DatasetStats = load_or_compute_stats(self._manifest, self._frame_index, self._dataset_root)
+        self._stats: DatasetStats = load_or_compute_stats(self._manifest, self._dataset_root)
 
         # Delta indices are set later by the training pipeline.
         self._delta_indices: dict[str, list[int]] = {}
