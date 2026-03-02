@@ -1,0 +1,15 @@
+index:
+  title: "Dataset Architecture Proposal"
+
+slides:
+  theme: white
+  highlight_theme: monokai
+  separator_vertical: ^\s*-v-\s*$
+
+revealjs:
+  history: true
+  slideNumber: c/t
+  transition: slide
+  width: 1920
+  height: 1080
+  margin: 0.08
