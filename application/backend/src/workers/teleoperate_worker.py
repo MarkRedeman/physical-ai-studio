@@ -55,7 +55,7 @@ class TeleoperateWorker(BaseThreadWorker):
     camera_keys: list[str] = []
 
     dataset: DatasetClient | None = None
-    mutation: RecordingMutation | None = None
+    recording_mutation: RecordingMutation | None = None
     leader: RobotClient | None = None
     follower: RobotClient | None = None
     cameras: dict[str, VideoCaptureBase] = {}
@@ -154,7 +154,7 @@ class TeleoperateWorker(BaseThreadWorker):
             self.state.initialized = True
             logger.info("teleoperation all setup, reporting state")
         except Exception as e:
-            self.error = True
+            self.state.error = True
             self._report_error(e)
         self._report_state()
 
@@ -251,7 +251,7 @@ class TeleoperateWorker(BaseThreadWorker):
                 wait_time = 1 / self.fps - dt_s
                 precise_sleep(wait_time)
         except Exception as e:
-            self.error = True
+            self.state.error = True
             logger.exception(f"Teleoperation loop error: {e}")
             self._report_error(e)
 
@@ -296,7 +296,10 @@ class TeleoperateWorker(BaseThreadWorker):
             logger.warning(f"Failed cancelling queue join thread: {e}")
 
         if self.recording_mutation:
-            self.recording_mutation.teardown()
+            try:
+                self.recording_mutation.teardown()
+            except Exception as e:
+                logger.warning(f"Failed tearing down recording mutation: {e}")
 
         if self.follower is not None:
             try:
@@ -324,7 +327,7 @@ class TeleoperateWorker(BaseThreadWorker):
 
         import threading
 
-        logger.error("THREADS AFTER TELEOP TEARDOWN:\n" + "\n".join(t.name for t in threading.enumerate()))
+        logger.debug("THREADS AFTER TELEOP TEARDOWN:\n" + "\n".join(t.name for t in threading.enumerate()))
 
     def _base_64_encode_observation(self, observation: np.ndarray | None) -> str:
         if observation is None:
