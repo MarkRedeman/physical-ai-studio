@@ -1,28 +1,8 @@
-import { useState } from 'react';
+import { TextField } from '@geti/ui';
 
-import {
-    Button,
-    ButtonGroup,
-    Content,
-    Dialog,
-    Disclosure,
-    DisclosurePanel,
-    DisclosureTitle,
-    Divider,
-    Flex,
-    Form,
-    Heading,
-    Item,
-    Key,
-    NumberField,
-    Picker,
-    TextField,
-} from '@geti/ui';
-
-import { $api } from '../../api/client';
-import { SchemaModel, SchemaTrainJobPayload } from '../../api/openapi-spec';
+import { SchemaModel } from '../../api/openapi-spec';
 import { useProject } from '../../features/projects/use-project';
-import { SchemaTrainJob } from './train-model';
+import { SchemaTrainJob, TrainModelDialog } from './train-model-dialog';
 
 export const RetrainModelModal = ({
     baseModel,
@@ -32,88 +12,20 @@ export const RetrainModelModal = ({
     close: (job: SchemaTrainJob | undefined) => void;
 }) => {
     const { datasets, id: project_id } = useProject();
-    const [name, setName] = useState<string>(baseModel.name);
-    const [selectedDataset, setSelectedDataset] = useState<Key | null>(baseModel.dataset_id);
-    const [maxSteps, setMaxSteps] = useState<number>(10000);
-    const [batchSize, setBatchSize] = useState<number>(8);
-
-    const trainMutation = $api.useMutation('post', '/api/jobs:train');
-
-    const save = () => {
-        const dataset_id = selectedDataset?.toString();
-
-        if (!dataset_id) {
-            return;
-        }
-
-        const payload: SchemaTrainJobPayload = {
-            dataset_id,
-            project_id,
-            model_name: name,
-            policy: baseModel.policy,
-            max_steps: maxSteps,
-            batch_size: batchSize,
-            base_model_id: baseModel.id!,
-        };
-        trainMutation.mutateAsync({ body: payload }).then((response) => {
-            close(response as SchemaTrainJob | undefined);
-        });
-    };
 
     return (
-        <Dialog>
-            <Heading>Retrain Model</Heading>
-            <Divider />
-            <Content>
-                <Form
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        save();
-                    }}
-                    validationBehavior='native'
-                >
-                    <TextField label='Name' value={name} onChange={setName} />
-                    <Picker label='Dataset' selectedKey={selectedDataset} onSelectionChange={setSelectedDataset}>
-                        {datasets.map((dataset) => (
-                            <Item key={dataset.id}>{dataset.name}</Item>
-                        ))}
-                    </Picker>
-                    <TextField label='Policy' value={baseModel.policy.toUpperCase()} isReadOnly />
-                    <Disclosure isQuiet>
-                        <DisclosureTitle UNSAFE_style={{ fontSize: 13 }}>
-                            Advanced settings
-                        </DisclosureTitle>
-                        <DisclosurePanel>
-                            <Flex direction='column' gap='size-150'>
-                                <NumberField
-                                    label='Max Steps'
-                                    value={maxSteps}
-                                    onChange={setMaxSteps}
-                                    minValue={100}
-                                    maxValue={100000}
-                                    step={100}
-                                />
-                                <NumberField
-                                    label='Batch Size'
-                                    value={batchSize}
-                                    onChange={setBatchSize}
-                                    minValue={1}
-                                    maxValue={256}
-                                    step={1}
-                                />
-                            </Flex>
-                        </DisclosurePanel>
-                    </Disclosure>
-                </Form>
-            </Content>
-            <ButtonGroup>
-                <Button variant='secondary' onPress={() => close(undefined)}>
-                    Cancel
-                </Button>
-                <Button variant='accent' onPress={save}>
-                    Retrain
-                </Button>
-            </ButtonGroup>
-        </Dialog>
+        <TrainModelDialog
+            title='Retrain Model'
+            submitLabel='Retrain'
+            datasets={datasets}
+            projectId={project_id}
+            defaultName={baseModel.name}
+            defaultDatasetId={baseModel.dataset_id}
+            defaultMaxSteps={10000}
+            extraPayload={{ base_model_id: baseModel.id! }}
+            getPolicy={() => baseModel.policy}
+            close={close}
+            policyField={<TextField label='Policy' value={baseModel.policy.toUpperCase()} isReadOnly />}
+        />
     );
 };
