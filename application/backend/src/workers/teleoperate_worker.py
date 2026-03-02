@@ -13,14 +13,14 @@ from loguru import logger
 from pydantic import BaseModel
 
 from internal_datasets.dataset_client import DatasetClient
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+from internal_datasets.raw_video.raw_video_dataset_client import RawVideoDatasetClient
 from internal_datasets.mutations.recording_mutation import RecordingMutation
 from robots.robot_client import RobotClient
 from robots.robot_client_factory import RobotClientFactory
 from schemas import TeleoperationConfig
 from schemas.dataset import Episode
 from services.robot_calibration_service import RobotCalibrationService
-from utils.dataset import build_lerobot_dataset_features
+from utils.raw_video_dataset import build_raw_video_manifest_args
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker import create_frames_source_from_camera
 
@@ -48,7 +48,7 @@ class TeleoperateWorker(BaseThreadWorker):
     state: TeleoperateState
 
     config: TeleoperationConfig
-    fps: float = 30
+    fps: int = 30
     robot_client_factory: RobotClientFactory
 
     action_keys: list[str] = []
@@ -132,7 +132,7 @@ class TeleoperateWorker(BaseThreadWorker):
             if self.loop is None:
                 raise RuntimeError("The event loop must be set.")
             self.loop.run_until_complete(self.setup_environment())
-            self.dataset = InternalLeRobotDataset(Path(self.config.dataset.path))
+            self.dataset = RawVideoDatasetClient(Path(self.config.dataset.path))
 
             if self.leader is None or self.follower is None or self.dataset is None:
                 raise RuntimeError("Environment setup failed.")
@@ -140,11 +140,11 @@ class TeleoperateWorker(BaseThreadWorker):
             self.action_keys = self.follower.features()
             self.camera_keys = [str(camera.id) for camera in self.config.environment.cameras]
             features = self.loop.run_until_complete(
-                build_lerobot_dataset_features(self.config.environment, self.robot_client_factory)
+                build_raw_video_manifest_args(self.config.environment, self.robot_client_factory)
             )
 
             self.recording_mutation = self.dataset.start_recording_mutation(
-                fps=self.fps,  # TODO: Implement in Environment
+                fps=self.fps,
                 features=features,
                 robot_type=self.follower.name,
             )
@@ -244,7 +244,7 @@ class TeleoperateWorker(BaseThreadWorker):
                 self._report_observation(observations, timestamp)
                 if self.state.is_recording and self.recording_mutation is not None:
                     self.recording_mutation.add_frame(
-                        self._to_lerobot_observations(observations), actions, self.config.task
+                        self._to_dataset_observations(observations), actions, self.config.task
                     )
 
                 dt_s = time.perf_counter() - start_loop_t
@@ -255,12 +255,12 @@ class TeleoperateWorker(BaseThreadWorker):
             logger.exception(f"Teleoperation loop error: {e}")
             self._report_error(e)
 
-    def _to_lerobot_observations(self, observations: dict) -> dict:
+    def _to_dataset_observations(self, observations: dict) -> dict:
         """Remap camera observations from camera ID keys to lowercase camera name keys."""
-        lerobot_observations = dict(observations)
+        remapped = dict(observations)
         for camera in self.config.environment.cameras:
-            lerobot_observations[camera.name.lower()] = lerobot_observations.pop(str(camera.id))
-        return lerobot_observations
+            remapped[camera.name.lower()] = remapped.pop(str(camera.id))
+        return remapped
 
     def _on_start(self) -> None:
         logger.info("start")
