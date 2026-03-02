@@ -228,7 +228,8 @@ class TeleoperateWorker(BaseThreadWorker):
                 # Add force feedback
                 actions = (await self.leader.read_state())["state"]
                 observations = (await self.follower.read_state())["state"]
-                forces = (await self.follower.read_forces())["state"]
+                forces_result = await self.follower.read_forces()
+                forces = forces_result["state"] if forces_result is not None else None
                 await self.follower.set_joints_state(actions, 1 / self.fps)
                 if forces is not None:
                     await self.leader.set_forces(forces)
@@ -265,6 +266,7 @@ class TeleoperateWorker(BaseThreadWorker):
     def _on_start(self) -> None:
         logger.info("start")
         self.events["start"].clear()
+        self.start_episode_t = time.perf_counter()
         self.state.is_recording = True
         self._report_state()
 

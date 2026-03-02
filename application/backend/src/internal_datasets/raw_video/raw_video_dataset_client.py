@@ -482,14 +482,46 @@ class RawVideoDatasetClient(DatasetClient):
         logger.info("Finalized raw-video dataset at {}", self.path)
 
     def overwrite(self, source: DatasetClient) -> None:
-        """Overwrite this dataset with the contents of *source*."""
+        """Overwrite this dataset with the contents of *source*.
+
+        Uses a rename-swap pattern so that a crash mid-operation never
+        leaves the dataset in a half-written state.  Steps:
+
+        1. Copy *source* to a temporary sibling directory.
+        2. Rename the existing dataset directory out of the way.
+        3. Rename the temporary copy into place.
+        4. Remove the old directory (safe to fail — data is already intact).
+
+        If the destination doesn't exist yet, falls back to a simple copy.
+        """
         if not isinstance(source, RawVideoDatasetClient):
             raise ValueError(f"Cannot overwrite raw-video dataset with {source.__class__.__name__}")
 
         if self.path.is_dir():
-            shutil.rmtree(self.path)
+            # Atomic-ish swap via rename.  Both temp dirs are siblings of
+            # self.path so they reside on the same filesystem (rename is fast).
+            dest_new = self.path.with_name(self.path.name + f".__new_{uuid4().hex[:8]}")
+            dest_old = self.path.with_name(self.path.name + f".__old_{uuid4().hex[:8]}")
 
-        shutil.copytree(source.path, self.path)
+            shutil.copytree(source.path, dest_new)
+            try:
+                self.path.rename(dest_old)  # move old out of the way
+                dest_new.rename(self.path)  # put new in place
+            except Exception:
+                # Attempt rollback: if the rename to dest_old succeeded but
+                # the second rename failed, move old back.
+                if dest_old.is_dir() and not self.path.is_dir():
+                    dest_old.rename(self.path)
+                if dest_new.is_dir():
+                    shutil.rmtree(dest_new)
+                raise
+
+            # Clean up old directory (non-critical — already swapped)
+            if dest_old.is_dir():
+                shutil.rmtree(dest_old)
+        else:
+            shutil.copytree(source.path, self.path)
+
         self._manifest = load_manifest(self.path)
         logger.info("Overwrote dataset at {} from {}", self.path, source.path)
 
@@ -527,7 +559,6 @@ class RawVideoDatasetClient(DatasetClient):
         if not ep.video_files:
             return None
 
-        thumbnail_size = (320, 240)
         first_cam = next(iter(ep.video_files))
         video_path = ep_dir / ep.video_files[first_cam]
 
@@ -540,7 +571,7 @@ class RawVideoDatasetClient(DatasetClient):
                 ret, frame = cap.read()
                 if not ret or frame is None:
                     return None
-                thumbnail = cv2.resize(frame, thumbnail_size)
+                thumbnail = _resize_preserving_aspect_ratio(frame, max_width=320, max_height=240)
                 _, imagebytes = cv2.imencode(".jpg", thumbnail)
                 return base64.b64encode(imagebytes).decode()
             finally:
@@ -554,9 +585,8 @@ class RawVideoDatasetClient(DatasetClient):
         if self._last_frame is None:
             return None
 
-        thumbnail_size = (320, 240)
         try:
-            thumbnail = cv2.resize(self._last_frame, thumbnail_size)
+            thumbnail = _resize_preserving_aspect_ratio(self._last_frame, max_width=320, max_height=240)
             _, imagebytes = cv2.imencode(".jpg", thumbnail)
             return base64.b64encode(imagebytes).decode()
         except Exception:
@@ -573,6 +603,17 @@ def _read_jsonl(path: Path) -> list[dict]:
             if line:
                 rows.append(json.loads(line))
     return rows
+
+
+def _resize_preserving_aspect_ratio(frame: np.ndarray, max_width: int = 320, max_height: int = 240) -> np.ndarray:
+    """Resize a frame to fit within *max_width* x *max_height*, keeping aspect ratio."""
+    h, w = frame.shape[:2]
+    if h == 0 or w == 0:
+        return frame
+    scale = min(max_width / w, max_height / h, 1.0)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    return cv2.resize(frame, (new_w, new_h))
 
 
 __all__ = ["RawVideoDatasetClient"]
