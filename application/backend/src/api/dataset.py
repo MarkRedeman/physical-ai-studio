@@ -126,7 +126,7 @@ async def dataset_video_endpoint(
     requested_path = (dataset_root / video_path).resolve()
     logger.info(requested_path)
 
-    if not str(requested_path).startswith(str(dataset_root)):
+    if not requested_path.is_relative_to(dataset_root):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access to the requested file is forbidden.")
 
     if not requested_path.is_file():

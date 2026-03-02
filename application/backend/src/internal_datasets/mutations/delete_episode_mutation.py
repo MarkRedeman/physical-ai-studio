@@ -18,9 +18,11 @@ class DeleteEpisodesMutation:
     def delete_episodes(self, episode_indices: list[int]) -> DatasetClient:
         """Delete episodes. If all episodes are removed it deletes the dataset.
 
-        NOTE: LeRobot does not allow empty datasets. This is an implementation detail of DatasetClient.
-        However the remaining flow of delete_episodes makes no sense when removing all episodes.
-        Leaving until new implementation of dataset client arrives.
+        Uses a cache-copy pattern: copies the dataset excluding the deleted
+        episodes to a temporary directory, then overwrites the source.
+        For raw-video datasets, empty datasets (zero episodes) are allowed,
+        but we still delete the dataset entirely when all episodes are removed
+        to keep the behaviour consistent.
         """
         remaining_episodes = [
             episode for episode in self.source_dataset.get_episodes() if episode.episode_index not in episode_indices

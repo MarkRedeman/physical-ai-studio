@@ -70,6 +70,7 @@ class RawVideoDatasetClient(DatasetClient):
     _jsonl_buffer: list[dict]
     _frame_count: int
     _recording_start_time: float
+    _last_frame: np.ndarray | None
 
     def __init__(self, dataset_path: Path) -> None:
         self.path = dataset_path
@@ -79,6 +80,7 @@ class RawVideoDatasetClient(DatasetClient):
         self._jsonl_buffer = []
         self._frame_count = 0
         self._recording_start_time = 0.0
+        self._last_frame = None
 
         if self._check_exists():
             self._manifest = load_manifest(self.path)
@@ -291,6 +293,10 @@ class RawVideoDatasetClient(DatasetClient):
 
             writer.write_frame(frame)
 
+        # Cache the first frame for thumbnail generation (consistent with
+        # _build_thumbnail which reads the first frame from the video file).
+        if self._last_frame is None:
+            self._last_frame = frame  # type: ignore[possibly-unbound]
         self._frame_count += 1
 
     def save_episode(self, task: str) -> Episode:
@@ -304,6 +310,11 @@ class RawVideoDatasetClient(DatasetClient):
         """
         if self._manifest is None or self._episode_dir is None:
             raise RuntimeError("No episode to save")
+
+        if self._frame_count == 0:
+            logger.warning("Attempted to save an episode with zero frames — discarding instead")
+            self.discard_buffer()
+            raise ValueError("Cannot save an episode with zero frames")
 
         # Update task description
         if task and not self._manifest.task_description:
@@ -373,6 +384,7 @@ class RawVideoDatasetClient(DatasetClient):
         self._video_writers = {}
         self._jsonl_buffer = []
         self._frame_count = 0
+        self._last_frame = None
 
         return episode
 
@@ -394,6 +406,7 @@ class RawVideoDatasetClient(DatasetClient):
         self._video_writers = {}
         self._jsonl_buffer = []
         self._frame_count = 0
+        self._last_frame = None
 
     # ------------------------------------------------------------------
     # Delete
@@ -523,26 +536,32 @@ class RawVideoDatasetClient(DatasetClient):
 
         try:
             cap = cv2.VideoCapture(str(video_path))
-            ret, frame = cap.read()
-            cap.release()
-            if not ret or frame is None:
-                return None
-            thumbnail = cv2.resize(frame, thumbnail_size)
-            _, imagebytes = cv2.imencode(".jpg", thumbnail)
-            return base64.b64encode(imagebytes).decode()
+            try:
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    return None
+                thumbnail = cv2.resize(frame, thumbnail_size)
+                _, imagebytes = cv2.imencode(".jpg", thumbnail)
+                return base64.b64encode(imagebytes).decode()
+            finally:
+                cap.release()
         except Exception:
             logger.warning("Failed to build thumbnail from {}", video_path)
             return None
 
     def _build_thumbnail_from_buffer(self) -> str | None:
-        """Build a thumbnail from the last frame in the JSONL buffer.
+        """Build a thumbnail from the last frame cached during recording."""
+        if self._last_frame is None:
+            return None
 
-        Since the raw frames are already written to ffmpeg and not stored in
-        memory, this returns ``None``.  A future optimisation could cache the
-        last frame during recording.
-        """
-        # TODO: Cache last frame during add_frame() for thumbnail generation
-        return None
+        thumbnail_size = (320, 240)
+        try:
+            thumbnail = cv2.resize(self._last_frame, thumbnail_size)
+            _, imagebytes = cv2.imencode(".jpg", thumbnail)
+            return base64.b64encode(imagebytes).decode()
+        except Exception:
+            logger.warning("Failed to build thumbnail from cached frame")
+            return None
 
 
 def _read_jsonl(path: Path) -> list[dict]:
