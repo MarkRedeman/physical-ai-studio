@@ -51,7 +51,7 @@ class TrainingWorker(BaseProcessWorker):
 
             job = await job_service.get_pending_train_job()
             if job is not None:
-                with job_logging_ctx(job_id=str(job.id)):
+                with job_logging_ctx(job_id=str(job.id), job_type=job.type):
                     assert isinstance(job, TrainJob)
                     payload = job.payload
                     id = uuid4()

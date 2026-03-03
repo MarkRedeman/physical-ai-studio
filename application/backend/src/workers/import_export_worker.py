@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.logging.utils import job_logging_ctx
+
 if TYPE_CHECKING:
     import multiprocessing as mp
     from multiprocessing.synchronize import Event as EventClass
@@ -33,10 +35,11 @@ class ImportExportWorker(BaseProcessWorker):
         while not self.should_stop():
             job = await job_service.get_pending_import_export_job()
             if job is not None:
-                if job.type == JobType.IMPORT:
-                    await self._handle_import(job)
-                elif job.type == JobType.EXPORT:
-                    await self._handle_export(job)
+                with job_logging_ctx(job_id=str(job.id), job_type=job.type):
+                    if job.type == JobType.IMPORT:
+                        await self._handle_import(job)
+                    elif job.type == JobType.EXPORT:
+                        await self._handle_export(job)
             await asyncio.sleep(0.5)
 
     def setup(self) -> None:
