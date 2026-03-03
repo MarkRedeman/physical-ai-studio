@@ -11,8 +11,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from loguru import logger
-
 _HAS_TORCHCODEC = False
 _HAS_PYAV = False
 
@@ -326,7 +324,7 @@ def decode_frame(video_path: Path, frame_index: int) -> torch.Tensor:
 
 __all__ = [
     "VideoInfo",
-    "get_video_info",
-    "decode_frames",
     "decode_frame",
+    "decode_frames",
+    "get_video_info",
 ]

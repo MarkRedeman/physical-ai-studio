@@ -23,10 +23,10 @@ from uuid import uuid4
 
 import click
 import numpy as np
+from loguru import logger
 
 from .manifest import CameraConfig, DatasetManifest, EpisodeEntry, load_manifest
 from .video_decode import get_video_info
-from loguru import logger
 
 
 class LeRobotToRawVideoConverter:
@@ -416,7 +416,7 @@ def _ffmpeg_extract(
 
     cmd.append(str(dest))
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed (exit {result.returncode}) for {src} -> {dest}: {result.stderr}")
 

@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-
 from physicalai.data.dataset import Dataset
 from physicalai.data.observation import Feature, FeatureType, NormalizationParameters, Observation
 

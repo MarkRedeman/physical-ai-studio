@@ -16,7 +16,7 @@ from services.import_strategies.base import ImportStrategy
 logger = logging.getLogger(__name__)
 
 # Characters that should never appear in zip entry filenames.
-_CONTROL_CHARS = set(range(0x00, 0x20)) - {ord("\n"), ord("\r")}
+_CONTROL_CHARS = set(range(0x20)) - {ord("\n"), ord("\r")}
 _DANGEROUS_UNICODE = {
     "\u202e",  # RTL override — can visually disguise filenames
 }

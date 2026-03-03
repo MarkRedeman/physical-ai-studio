@@ -15,11 +15,10 @@ __all__ = [
     "Episode",
     "EpisodeInfo",
     "EpisodeVideo",
-    "InferenceConfig",
     "ExportJob",
     "ImportJob",
+    "InferenceConfig",
     "Job",
-    "TrainJob",
     "LeRobotConfig",
     "LeRobotDatasetInfo",
     "Model",
@@ -29,4 +28,5 @@ __all__ = [
     "SerialPortInfo",
     "Snapshot",
     "TeleoperationConfig",
+    "TrainJob",
 ]
