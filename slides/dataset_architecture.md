@@ -242,22 +242,6 @@ LeRobotToRawVideoConverter.convert()
 
 The **source write-back** in step 2 is the key insight: it ensures future snapshots benefit from any stats computed during previous training runs.
 
--v-
-
-### Detail: the two caching bugs (fixed)
-
-**Bug 1: Race condition in recording flow**
-
-The background stats thread writes `stats.json` to the **cache** dir, but `teardown()` runs `copytree(cache -> source)` then `delete(cache)` without waiting for the thread to finish.
-
-**Fix**: The thread targets the cache dir. Since `teardown()` copies the entire cache tree, if the thread finishes before teardown, the stats file gets copied along with everything else.
-
-**Bug 2: Snapshot one-way copy (the main bug)**
-
-When `compute_stats()` runs during training, it writes per-episode `stats.json` only into the **snapshot** directory. But snapshots are created fresh from source each time via `copytree`. Stats were recomputed from scratch on every training run.
-
-**Fix**: Added `source_dataset_root` parameter throughout the stats pipeline. Newly computed stats are written back to the source dataset so future snapshots inherit them.
-
 ---
 
 ## 4. Code Architecture

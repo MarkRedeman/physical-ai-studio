@@ -17,7 +17,9 @@ commands in ``converter_cli.py``.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from uuid import uuid4
 
@@ -55,8 +57,14 @@ class LeRobotToRawVideoConverter:
         self._source = Path(source)
         self._dest = Path(dest)
 
-    def convert(self) -> None:
-        """Run the conversion."""
+    def convert(self, *, max_workers: int | None = None) -> None:
+        """Run the conversion.
+
+        Args:
+            max_workers: Maximum number of threads for parallel episode
+                conversion.  Defaults to ``min(num_episodes, os.cpu_count() or 4)``.
+                Set to ``1`` to disable parallelism.
+        """
         self._validate_paths()
 
         from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -87,7 +95,6 @@ class LeRobotToRawVideoConverter:
         self._dest.mkdir(parents=True, exist_ok=False)
 
         num_episodes = dataset.meta.total_episodes
-        episodes: list[EpisodeEntry] = []
 
         # Extract task description from the first task if available.
         task_description = ""
@@ -111,87 +118,46 @@ class LeRobotToRawVideoConverter:
             task_description=task_description,
         )
 
-        for ep_idx in range(num_episodes):
-            click.echo(f"  Converting episode {ep_idx + 1}/{num_episodes} ...")
-            ep_dir_name = f"episode_{ep_idx:03d}"
-            ep_dir = self._dest / ep_dir_name
-            ep_dir.mkdir()
+        workers = max_workers if max_workers is not None else min(num_episodes, os.cpu_count() or 4)
+        workers = max(1, workers)
 
-            ep_meta = dataset.meta.episodes[ep_idx]
-
-            # ---- Extract video segments ----
-            video_files: dict[str, str] = {}
-            for cam_name in camera_names:
-                vid_key = f"observation.images.{cam_name}"
-                src_video = self._source / dataset.meta.get_video_file_path(ep_idx, vid_key)
-                from_ts = ep_meta[f"videos/{vid_key}/from_timestamp"]
-                to_ts = ep_meta[f"videos/{vid_key}/to_timestamp"]
-                dest_video_name = f"{cam_name}.mp4"
-                dest_video = ep_dir / dest_video_name
-
-                expected_frames = ep_meta["length"]
-                self._extract_video_segment(
-                    src_video,
-                    dest_video,
-                    from_ts,
-                    to_ts,
-                    expected_frames,
+        if workers == 1 or num_episodes <= 1:
+            # Sequential path — simpler, avoids thread overhead for small datasets.
+            episodes: list[EpisodeEntry] = []
+            for ep_idx in range(num_episodes):
+                click.echo(f"  Converting episode {ep_idx + 1}/{num_episodes} ...")
+                entry = self._convert_single_episode(
+                    dataset,
+                    ep_idx,
+                    camera_names,
                     fps,
-                )
-                video_files[cam_name] = dest_video_name
-
-            # ---- Write JSONL data ----
-            from_frame = ep_meta["dataset_from_index"]
-            to_frame = ep_meta["dataset_to_index"]
-            data_path = ep_dir / "data.jsonl"
-
-            with data_path.open("w", encoding="utf-8") as fh:
-                for global_idx in range(from_frame, to_frame):
-                    item = dataset.hf_dataset[global_idx]
-                    timestamp = (
-                        float(item["timestamp"].item())
-                        if hasattr(item["timestamp"], "item")
-                        else float(item["timestamp"])
-                    )
-                    state = item["observation.state"]
-                    action = item["action"]
-
-                    # Convert to plain lists.
-                    if hasattr(state, "tolist"):
-                        state = state.tolist()
-                    elif hasattr(state, "numpy"):
-                        state = state.numpy().tolist()
-                    if hasattr(action, "tolist"):
-                        action = action.tolist()
-                    elif hasattr(action, "numpy"):
-                        action = action.numpy().tolist()
-
-                    row = {"timestamp": timestamp, "state": state, "action": action}
-                    fh.write(json.dumps(row) + "\n")
-
-            episode_entry = EpisodeEntry(
-                episode_dir=ep_dir_name,
-                data_file="data.jsonl",
-                video_files=video_files,
-            )
-            episodes.append(episode_entry)
-
-            # ---- Compute per-episode stats ----
-            # Pre-populate the per-episode stats cache so the first training
-            # run doesn't need to decode video frames for stats.
-            try:
-                ep_stats = _compute_single_episode_stats(
                     manifest_skeleton,
-                    episode_entry,
-                    self._dest,
-                    image_sample_count=100,
                 )
-                _save_episode_stats(ep_dir, ep_stats)
-            except Exception:
-                logger.warning(
-                    "Failed to compute per-episode stats for %s; will be computed at training time",
-                    ep_dir_name,
-                )
+                episodes.append(entry)
+        else:
+            # Parallel path — convert episodes concurrently.
+            click.echo(f"  Converting {num_episodes} episodes with {workers} workers ...")
+            episodes_by_idx: dict[int, EpisodeEntry] = {}
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                future_to_idx = {
+                    pool.submit(
+                        self._convert_single_episode,
+                        dataset,
+                        ep_idx,
+                        camera_names,
+                        fps,
+                        manifest_skeleton,
+                    ): ep_idx
+                    for ep_idx in range(num_episodes)
+                }
+                for future in as_completed(future_to_idx):
+                    ep_idx = future_to_idx[future]
+                    entry = future.result()  # propagates exceptions
+                    episodes_by_idx[ep_idx] = entry
+                    click.echo(f"  Converted episode {ep_idx + 1}/{num_episodes}")
+
+            # Restore original order.
+            episodes = [episodes_by_idx[i] for i in range(num_episodes)]
 
         # ---- Write manifest.json ----
         manifest = manifest_skeleton.model_copy(update={"episodes": episodes})
@@ -199,6 +165,170 @@ class LeRobotToRawVideoConverter:
         manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
         click.echo(f"Conversion complete: {num_episodes} episodes written to {self._dest}")
+
+    def _convert_single_episode(
+        self,
+        dataset: object,
+        ep_idx: int,
+        camera_names: list[str],
+        fps: int,
+        manifest_skeleton: DatasetManifest,
+    ) -> EpisodeEntry:
+        """Convert a single episode: extract video, write JSONL, compute stats.
+
+        This method is safe to call from multiple threads — each episode writes
+        to its own directory and reads from disjoint ranges of the HuggingFace
+        dataset.
+
+        Returns:
+            The :class:`EpisodeEntry` for this episode.
+        """
+        ep_dir_name = f"episode_{ep_idx:03d}"
+        ep_dir = self._dest / ep_dir_name
+        ep_dir.mkdir(exist_ok=True)
+
+        ep_meta = dataset.meta.episodes[ep_idx]  # type: ignore[attr-defined]
+
+        # ---- Extract video segments ----
+        video_files: dict[str, str] = {}
+        for cam_name in camera_names:
+            vid_key = f"observation.images.{cam_name}"
+            src_video = self._source / dataset.meta.get_video_file_path(ep_idx, vid_key)  # type: ignore[attr-defined]
+            from_ts = ep_meta[f"videos/{vid_key}/from_timestamp"]
+            to_ts = ep_meta[f"videos/{vid_key}/to_timestamp"]
+            dest_video_name = f"{cam_name}.mp4"
+            dest_video = ep_dir / dest_video_name
+
+            expected_frames = ep_meta["length"]
+            self._extract_video_segment(
+                src_video,
+                dest_video,
+                from_ts,
+                to_ts,
+                expected_frames,
+                fps,
+            )
+            video_files[cam_name] = dest_video_name
+
+        # ---- Write JSONL data (batch HF dataset access) ----
+        from_frame = ep_meta["dataset_from_index"]
+        to_frame = ep_meta["dataset_to_index"]
+        data_path = ep_dir / "data.jsonl"
+
+        hf_dataset = dataset.hf_dataset  # type: ignore[attr-defined]
+        # Try batch slice access first (much faster for Arrow-backed datasets);
+        # fall back to row-by-row if the dataset doesn't support slicing well.
+        try:
+            batch = hf_dataset[from_frame:to_frame]
+            rows_written = self._write_jsonl_from_batch(data_path, batch, to_frame - from_frame)
+        except Exception:
+            rows_written = self._write_jsonl_row_by_row(data_path, hf_dataset, from_frame, to_frame)
+
+        if rows_written == 0:
+            logger.warning("Episode %s has 0 data rows", ep_dir_name)
+
+        episode_entry = EpisodeEntry(
+            episode_dir=ep_dir_name,
+            data_file="data.jsonl",
+            video_files=video_files,
+        )
+
+        # ---- Compute per-episode stats (async-friendly) ----
+        # Pre-populate the per-episode stats cache so the first training
+        # run doesn't need to decode video frames for stats.
+        try:
+            ep_stats = _compute_single_episode_stats(
+                manifest_skeleton,
+                episode_entry,
+                self._dest,
+                image_sample_count=100,
+            )
+            _save_episode_stats(ep_dir, ep_stats)
+        except Exception:
+            logger.warning(
+                "Failed to compute per-episode stats for %s; will be computed at training time",
+                ep_dir_name,
+            )
+
+        return episode_entry
+
+    @staticmethod
+    def _write_jsonl_from_batch(
+        data_path: Path,
+        batch: dict,
+        num_rows: int,
+    ) -> int:
+        """Write JSONL from a batch dict returned by HF dataset slice access.
+
+        Args:
+            data_path: Output file path.
+            batch: Dict of lists/tensors from ``hf_dataset[from:to]``.
+            num_rows: Expected number of rows in the batch.
+
+        Returns:
+            Number of rows written.
+        """
+        timestamps = batch["timestamp"]
+        states = batch["observation.state"]
+        actions = batch["action"]
+
+        with data_path.open("w", encoding="utf-8") as fh:
+            for i in range(num_rows):
+                ts = timestamps[i]
+                timestamp = float(ts.item()) if hasattr(ts, "item") else float(ts)
+
+                state = states[i]
+                if hasattr(state, "tolist"):
+                    state = state.tolist()
+                elif hasattr(state, "numpy"):
+                    state = state.numpy().tolist()
+
+                action = actions[i]
+                if hasattr(action, "tolist"):
+                    action = action.tolist()
+                elif hasattr(action, "numpy"):
+                    action = action.numpy().tolist()
+
+                row = {"timestamp": timestamp, "state": state, "action": action}
+                fh.write(json.dumps(row) + "\n")
+
+        return num_rows
+
+    @staticmethod
+    def _write_jsonl_row_by_row(
+        data_path: Path,
+        hf_dataset: object,
+        from_frame: int,
+        to_frame: int,
+    ) -> int:
+        """Fallback: write JSONL by accessing the HF dataset row by row.
+
+        Returns:
+            Number of rows written.
+        """
+        count = 0
+        with data_path.open("w", encoding="utf-8") as fh:
+            for global_idx in range(from_frame, to_frame):
+                item = hf_dataset[global_idx]  # type: ignore[index]
+                timestamp = (
+                    float(item["timestamp"].item()) if hasattr(item["timestamp"], "item") else float(item["timestamp"])
+                )
+                state = item["observation.state"]
+                action = item["action"]
+
+                if hasattr(state, "tolist"):
+                    state = state.tolist()
+                elif hasattr(state, "numpy"):
+                    state = state.numpy().tolist()
+                if hasattr(action, "tolist"):
+                    action = action.tolist()
+                elif hasattr(action, "numpy"):
+                    action = action.numpy().tolist()
+
+                row = {"timestamp": timestamp, "state": state, "action": action}
+                fh.write(json.dumps(row) + "\n")
+                count += 1
+        return count
 
     def _validate_paths(self) -> None:
         """Check that source exists and dest does not."""
