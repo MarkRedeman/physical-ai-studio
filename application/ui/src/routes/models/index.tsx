@@ -262,10 +262,7 @@ export const Index = () => {
                                 )}
                             </DialogTrigger>
                         </Flex>
-                        <JobList
-                            jobs={jobs.filter((m) => m.type === 'training') as SchemaTrainJob[]}
-                            nDownload={handleDownload}
-                        />
+                        <JobList jobs={jobs} onDownload={handleDownload} />
                         {hasModels && (
                             <ModelList
                                 models={models}
