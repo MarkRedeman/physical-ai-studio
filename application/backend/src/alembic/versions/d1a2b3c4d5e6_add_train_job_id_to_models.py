@@ -1,7 +1,7 @@
 """Add train_job_id to models table
 
 Revision ID: d1a2b3c4d5e6
-Revises: c3e4e04cc003
+Revises: c3a8f1e2b456
 Create Date: 2026-02-28 12:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d1a2b3c4d5e6"
-down_revision: str | Sequence[str] | None = "c3e4e04cc003"
+down_revision: str | Sequence[str] | None = "c3a8f1e2b456"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
