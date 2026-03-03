@@ -19,17 +19,8 @@ import pytest
 import torch
 from pydantic import ValidationError
 
-from internal_datasets.raw_video.frame_index import (
-    EpisodeBoundary,
-    FrameIndex,
-    _nearest_neighbor_resample,
-)
-from internal_datasets.raw_video.manifest import (
-    CameraConfig,
-    DatasetManifest,
-    EpisodeEntry,
-    load_manifest,
-)
+from internal_datasets.raw_video.frame_index import EpisodeBoundary, FrameIndex, _nearest_neighbor_resample
+from internal_datasets.raw_video.manifest import CameraConfig, DatasetManifest, EpisodeEntry, load_manifest
 from internal_datasets.raw_video.stats import DatasetStats, WelfordAccumulator
 from internal_datasets.raw_video.video_decode import VideoInfo
 
@@ -530,7 +521,7 @@ class TestRawVideoDatasetAdapter:
         timestamps = [np.linspace(0, 1, frames_per_episode) for _ in range(num_episodes)]
 
         # Camera shapes.
-        camera_shapes = {c: (3, 480, 640) for c in cameras}
+        camera_shapes = dict.fromkeys(cameras, (3, 480, 640))
 
         # VideoInfo mock for get_video_info.
         mock_video_info = _make_video_info(num_frames=frames_per_episode, fps=float(fps))

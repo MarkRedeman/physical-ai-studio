@@ -4,7 +4,7 @@ import asyncio
 import json
 import traceback
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 from loguru import logger
 
-from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload, JobStatus, JobType
+from schemas.job import ExportJob, ImportJob, JobStatus, JobType
 from services import JobService, ModelService
 from services.event_processor import EventType
 from workers.base import BaseProcessWorker
@@ -166,7 +166,7 @@ class ImportExportWorker(BaseProcessWorker):
                 "original_project_id": str(model.project_id),
                 "original_dataset_id": str(model.dataset_id) if model.dataset_id else None,
                 "original_snapshot_id": str(model.snapshot_id) if model.snapshot_id else None,
-                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "exported_at": datetime.now(UTC).isoformat(),
                 "physicalai_version": settings.version,
             }
 

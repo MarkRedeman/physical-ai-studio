@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from db import get_async_db_session_ctx
 from exceptions import DuplicateJobException, ModelNotRetrainableError, ResourceNotFoundError, ResourceType
 from repositories import JobRepository
-from schemas import ExportJob, ImportJob, Job, TrainJob
+from schemas import ExportJob, ImportJob, TrainJob
 from schemas.job import ExportJobPayload, ImportJobPayload, JobStatus, JobType, TrainJobPayload
 from services.model_service import ModelService
 

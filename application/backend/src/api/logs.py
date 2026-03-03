@@ -16,7 +16,7 @@ Source types:
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 import anyio
@@ -24,11 +24,7 @@ from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
-from core.logging.utils import (
-    VALID_SESSION_TYPES,
-    get_job_logs_path,
-    get_session_logs_path,
-)
+from core.logging.utils import VALID_SESSION_TYPES, get_job_logs_path, get_session_logs_path
 from schemas.logs import LogSource
 from settings import get_settings
 
@@ -114,7 +110,7 @@ def _get_file_created_at(path: str) -> datetime | None:
         stat = os.stat(path)
         # Use birth time if available (Linux 4.11+ with statx), fall back to mtime.
         ts = getattr(stat, "st_birthtime", None) or stat.st_mtime
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
+        return datetime.fromtimestamp(ts, tz=UTC)
     except OSError:
         return None
 

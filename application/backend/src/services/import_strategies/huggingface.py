@@ -179,7 +179,6 @@ class HuggingFaceImportStrategy(ImportStrategy):
             import lightning
             import torch
             import yaml
-
             from physicalai.train import __version__
 
             for backend in self._settings.supported_backends:
@@ -244,7 +243,7 @@ class HuggingFaceImportStrategy(ImportStrategy):
                 parts = Path(name).parts
                 if len(parts) == 1:
                     return ""
-                elif len(parts) == 2:
+                if len(parts) == 2:
                     return parts[0]
         return None
 

@@ -28,12 +28,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
+from loguru import logger
 
 from .manifest import DatasetManifest, EpisodeEntry
 from .video_decode import decode_frames, get_video_info
-
-from loguru import logger
-
 
 # ---------------------------------------------------------------------------
 # Welford accumulator
