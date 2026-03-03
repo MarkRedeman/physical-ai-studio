@@ -353,20 +353,27 @@ def _compute_single_episode_stats(
     action_acc = WelfordAccumulator(manifest.action_dim)
 
     # ------------------------------------------------------------------
-    # 1. State / action stats from JSONL
+    # 1. State / action stats from JSONL (batch)
     # ------------------------------------------------------------------
     data_path = ep_dir / episode.data_file
     num_frames = 0
 
+    # Read all JSONL rows, accumulate into arrays, then batch-update.
+    state_rows: list[list[float]] = []
+    action_rows: list[list[float]] = []
     with open(data_path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line:
                 continue
             row = json.loads(line)
-            state_acc.update(np.asarray(row["state"], dtype=np.float64))
-            action_acc.update(np.asarray(row["action"], dtype=np.float64))
+            state_rows.append(row["state"])
+            action_rows.append(row["action"])
             num_frames += 1
+
+    if num_frames > 0:
+        state_acc.update_batch(np.asarray(state_rows, dtype=np.float64))
+        action_acc.update_batch(np.asarray(action_rows, dtype=np.float64))
 
     # ------------------------------------------------------------------
     # 2. Image stats from sampled video frames

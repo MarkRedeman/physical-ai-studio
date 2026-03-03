@@ -13,6 +13,12 @@ Usage::
 
     # With custom robot type
     uv run src/converter_cli.py convert-to-lerobot --from ./raw_dataset --to ./lerobot_dataset --robot-type so100
+
+    uv run src/converter_cli.py convert-to-lerobot --from ./datasets/orange-cube-in-green-box/physicalai/datasets/raw_dataset_format --to ./datasets/orange-cube-in-green-box/physicalai/datasets/lerobot_dataset_format --robot-type so100
+
+
+
+
 """
 
 import sys
