@@ -1,131 +1,59 @@
 ---
 slides:
-  title: "Dataset Architecture Proposal"
+  title: "Raw Video Dataset Architecture"
 ---
 
-# Dataset Architecture Proposal
+# Raw Video Dataset Architecture
 
-### Rethinking how we store, manipulate, and train on teleoperation data
-
-Notes:
-This presentation summarizes the findings from dataset_exploration_report.md.
-Goal: get alignment on the proposed architecture before implementation begins.
+### Episode-isolated storage for teleoperation data
 
 ---
 
 ## Agenda
 
-1. The Problem -- where LeRobot v3 creates friction
-2. Proposed Architecture -- episode-isolated storage
-3. Snapshots -- cheap, immutable dataset versions
-4. Training Paths -- direct adapter vs. LeRobot conversion
-5. Implementation Plan -- priorities and timeline
-6. Open Questions
-
-Notes:
-We'll spend most of the time on sections 1-3. Section 4 is about the training
-integration, and section 5 is the implementation roadmap. Section 6 is for
-discussion.
+1. Why -- where LeRobot v3 creates friction
+2. Architecture -- episode-isolated storage
+3. Stats Pipeline -- per-episode caching with Welford accumulators
+4. Code Architecture -- key abstractions and flows
+5. Converters -- bidirectional LeRobot interop
+6. Snapshots -- current approach and future direction
+7. What's Next
 
 ---
 
-## 1. The Problem
+## 1. Why
 
 ---
 
-### What LeRobot v3 does well
+### Where LeRobot v3 creates friction
 
-- **Training-optimized**: pre-computed stats, consolidated files, fast sequential I/O
-- **Standard format**: interop with HuggingFace Hub, community datasets
-- **Proven**: used in production training pipelines today
+| Operation | Why it's hard |
+|-----------|---------------|
+| **Delete an episode** | Rewrite consolidated Parquet + video chunks, update all offsets, recompute stats |
+| **Truncate an episode** | Re-encode video chunk, rewrite Parquet, update frame counts |
+| **Review one episode** | Episode is spread across consolidated chunks -- no self-contained artifact |
+| **Split / merge** | Episodes share physical files -- must duplicate or rewrite |
 
-Notes:
-Credit where due -- LeRobot v3 is a good training format. The issue is that
-we're also using it as the source-of-truth for acquisition and curation, where
-it was never designed to excel.
-
----
-
-### Where it creates friction
-
-| Operation | Difficulty | Why |
-|-----------|------------|-----|
-| **Delete an episode** | Hard | Rewrite consolidated Parquet + video chunks, update all offsets, recompute stats |
-| **Truncate an episode** | Hard | Re-encode video chunk, rewrite Parquet, update frame counts + timestamps, recompute stats |
-| **Split a dataset** | Medium | Episodes share physical files -- must duplicate or rewrite |
-| **Merge datasets** | Medium | Re-consolidate files, reconcile indices and tasks |
-| **Review one episode** | Hard | Episode is spread across consolidated chunks -- no self-contained artifact |
-
-Notes:
-The key insight: LeRobot packs multiple episodes into shared physical files
-(Parquet chunks, video chunks). This is great for sequential reads during
-training, but it means you can never touch one episode without affecting others.
+LeRobot packs multiple episodes into shared files. Great for sequential training reads, bad for everything else.
 
 ---
 
-### The cost of "consolidated"
-
-Episode 37 lives inside:
-
-```
-data/chunk-000/file-000.parquet    (also contains ep 0-99)
-videos/cam_overview/chunk-000/file-000.mp4  (also contains ep 0-99)
-videos/cam_gripper/chunk-000/file-000.mp4   (also contains ep 0-99)
-```
-
-**Deleting episode 37** requires rewriting all three files.
-
-**Truncating episode 37** requires re-encoding the video chunk.
-
-Notes:
-This is the fundamental architectural mismatch. The consolidation that makes
-training fast makes everything else expensive.
-
----
-
-### Conversion is slow
-
-Converting 100 episodes (30s each, 640x480, 2 cameras) into LeRobot v3:
-
-| Component | % of time |
-|-----------|-----------|
-| AV1 video encoding | ~50% |
-| PNG round-trip (add_frame API) | ~30% |
-| Source video decoding | ~13% |
-| Stats computation | ~5% |
-| Parquet + metadata | ~2% |
-
-**Total: ~90-100 minutes** for a modest dataset.
-
-Every frame is decoded, written as PNG, read back from PNG, then re-encoded.
-
-Notes:
-The PNG round-trip is forced by LeRobot's add_frame() API -- it writes
-every frame to disk as PNG, then reads them back during save_episode().
-This accounts for ~30% of total conversion time. See converting_episodes.md
-for detailed benchmarks.
-
----
-
-### Summary: right tool, wrong job
+### Right tool, wrong job
 
 LeRobot v3 is **optimized for training**.
 
-We're using it as the **source of truth** for a platform where:
-- Data acquisition
+We need a format that also supports:
+
+- Data acquisition and recording
 - Episode review and quality control
 - Dataset curation (delete, truncate, split, merge)
-- Iterative training
+- Iterative training with cheap re-runs
 
-...are all first-class workflows.
-
-Notes:
-The proposal is not to replace LeRobot for training. It's to stop using it
-as the primary storage format and instead derive it when needed.
+**Proposal**: stop using LeRobot as the source of truth. Derive it when needed.
 
 ---
 
-## 2. Proposed Architecture
+## 2. Architecture
 
 ---
 
@@ -134,40 +62,94 @@ as the primary storage format and instead derive it when needed.
 > **Store data in a manipulation-friendly, episode-isolated format.**
 > **Convert to LeRobot v3 on demand for training.**
 
-Each episode is a self-contained directory. The dataset is a manifest that
-references episodes.
-
-Notes:
-This is the single most important slide. Everything else follows from this
-principle.
+Each episode is a self-contained directory. The dataset is a manifest that references episodes.
 
 ---
 
 ### Episode-isolated storage layout
 
 ```
-dataset/
-  manifest.json                    # Dataset-level metadata
-  snapshots/                       # Frozen manifests (see section 3)
-    snap_2026-02-10_14-30.json
-  episodes/
-    ep_000_abc1/
-      data.jsonl                   # Per-frame state/action timeseries
-      cam_overview.mp4             # One video per camera, original codec
-      cam_gripper.mp4
-      stats.json                   # Per-episode normalization stats
-    ep_001_def2/
-      ...
-  .cache/
-    stats.json                     # Aggregated global stats (derived)
+my_dataset/
+  manifest.json
+  episode_000/
+    data.jsonl            # Per-frame state/action timeseries
+    cam_overview.mp4      # One video per camera, original codec
+    cam_gripper.mp4
+    stats.json            # Per-episode normalization stats (Welford state)
+  episode_001/
+    ...
+  stats.json              # Aggregated global stats (derived cache)
 ```
 
-Notes:
-Key points:
-- Each episode directory is fully self-contained and independently deletable
-- Videos are stored in their original codec -- no re-encoding on ingest
+- Each episode directory is self-contained and independently deletable
+- Videos stored in original codec -- no re-encoding on ingest
 - Per-episode stats enable cheap global aggregation
-- The .cache directory contains derived data that can be regenerated
+
+-v-
+
+### Detail: actual directory paths
+
+Three key locations in the system:
+
+| Location | Path | Purpose |
+|----------|------|---------|
+| **Source** | `~/.cache/physicalai/datasets/{name}/` | Persistent dataset on disk |
+| **Cache** | `~/.cache/physicalai/cache/{uuid}/` | Temp copy during recording mutation |
+| **Snapshot** | `~/.cache/physicalai/models/{model_uuid}/snapshot_YYYY-MM-DD_HH-MM-SS/` | Immutable copy for training |
+
+-v-
+
+### Detail: data flow -- recording
+
+```
+User records episode
+        |
+        v
+RecordingMutation.start()
+  copytree(source -> cache/{uuid})
+        |
+        v
+Frames written to cache/{uuid}/episode_NNN/
+  - VideoWriter encodes MP4
+  - JSONL rows appended per frame
+        |
+        v
+save_episode()
+  - Updates manifest.json in cache
+  - Spawns background thread: compute stats -> stats.json
+        |
+        v
+RecordingMutation.teardown()
+  copytree(cache -> source)   # overwrites source
+  delete(cache)
+```
+
+-v-
+
+### Detail: data flow -- training
+
+```
+Training job starts
+        |
+        v
+SnapshotService.create()
+  copytree(source -> snapshot dir)     # one-way copy
+        |
+        v
+RawVideoDatasetAdapter.__init__()
+  - Loads manifest.json
+  - Builds frame index (JSONL -> memory)
+  - load_or_compute_stats()
+    - Checks per-episode stats.json cache
+    - Computes missing, writes back to SOURCE
+    - Merges all episodes -> global stats
+        |
+        v
+DataLoader iterates
+  __getitem__ -> lazy video decode per frame
+```
+
+The write-back to **source** is critical: without it, every new snapshot would recompute stats from scratch.
 
 ---
 
@@ -175,343 +157,277 @@ Key points:
 
 | Operation | Before (LeRobot v3) | After (episode-isolated) |
 |-----------|---------------------|--------------------------|
-| **Delete episode** | Rewrite chunk files (~3 min) | `rm -rf` episode dir + update manifest (~1 sec) |
-| **Truncate episode** | Re-encode video chunk (~5 min) | New episode dir with trimmed video (~5 sec) |
-| **Split dataset** | Duplicate consolidated files (~2 min) | New manifest referencing same episodes (~1 ms) |
-| **Review one episode** | Seek into consolidated MP4 by offset | Open `ep_000/cam_overview.mp4` in any player |
-| **Merge datasets** | Re-consolidate everything (~5 min) | Merge manifests, copy episode dirs (~seconds) |
+| **Delete episode** | Rewrite chunk files | `rm -rf` episode dir + update manifest |
+| **Truncate episode** | Re-encode video chunk | New dir with trimmed video (remux) |
+| **Split dataset** | Duplicate consolidated files | New manifest referencing same episodes |
+| **Review one episode** | Seek into consolidated MP4 | Open `episode_000/cam_overview.mp4` |
+| **Merge datasets** | Re-consolidate everything | Merge manifests, copy episode dirs |
 
-Notes:
-The "After" times assume the episode-isolated format. Delete is instant because
-there's nothing to rewrite. Truncation uses ffmpeg stream copy (remux, not
-re-encode) in most cases. Split is a manifest-only operation -- no data
-duplication.
+---
 
-Glossary:
-- remux = repackage video data without decoding/re-encoding. Changes container,
-  preserves codec. Very fast.
+## 3. Stats Pipeline
+
+---
+
+### Per-episode stats overview
+
+Each episode stores Welford accumulator state in `stats.json`:
+
+- **n** (count), **mean**, **m2** (sum of squared deviations), **min**, **max**
+- Separate accumulators for state, action, and each camera
+
+Global stats are **merged from per-episode stats** -- no raw data scan needed.
+
+| Event | Cost |
+|-------|------|
+| Record an episode | ~200ms (background thread) |
+| Delete an episode | Re-merge remaining (~1ms) |
+| Train (warm cache) | Load + merge (~1ms) |
+| Train (cold cache) | Decode + compute per episode, then merge |
 
 -v-
 
-### How stats stay cheap
+### Detail: Welford accumulators
 
-Each episode stores its own normalization statistics on creation.
+`WelfordAccumulator` tracks running statistics without storing raw data:
 
-Global stats are **aggregated from per-episode stats** -- no raw data scan.
+```python
+class WelfordAccumulator:
+    n: int           # sample count
+    mean: np.ndarray # running mean
+    m2: np.ndarray   # sum of squared deviations
+    min: np.ndarray  # element-wise minimum
+    max: np.ndarray  # element-wise maximum
+```
 
-| Statistic | Aggregation |
-|-----------|-------------|
-| **mean** | Weighted average across episodes |
-| **std** | Parallel variance (Welford's algorithm) |
-| **min/max** | Element-wise across episodes |
-| **count** | Sum |
+**Key operations:**
 
-**Adding an episode**: compute its stats (~200ms), re-aggregate (~1ms)
+- `update_batch(values)` -- vectorized numpy batch update (no per-pixel loops)
+- `merge(other)` -- combine two accumulators using parallel Welford algorithm
+- `to_dict()` / `from_dict()` -- JSON serialization for `stats.json`
+- `variance` / `std` -- derived from m2/n
 
-**Deleting an episode**: re-aggregate from remaining stats (~1ms)
+Merging two accumulators is O(dim), not O(samples). This is what makes global stats cheap.
 
-Notes:
-Welford's parallel variance algorithm combines per-group mean, variance,
-and count into a global variance in one pass. This is a well-known technique
-for distributed statistics computation.
+-v-
 
-The key benefit: no operation ever requires re-scanning all raw frames.
-Stats update is always O(episodes), not O(frames).
+### Detail: caching strategy
+
+Stats are computed and cached at three points:
+
+**1. Recording time** (background, non-blocking):
+```
+save_episode() -> Thread(compute_episode_stats_background)
+  -> writes stats.json to cache dataset dir
+  -> teardown copies it to source along with episode data
+```
+
+**2. Training time** (lazy, on cache miss):
+```
+load_or_compute_stats()
+  for each episode:
+    if stats.json exists in snapshot -> use it
+    elif stats.json exists in source -> copy to snapshot, use it
+    else -> decode video, compute, write to snapshot AND source
+  merge all -> global stats
+```
+
+**3. Conversion time** (inline):
+```
+LeRobotToRawVideoConverter.convert()
+  for each episode:
+    write JSONL + video
+    compute stats -> write stats.json
+```
+
+The **source write-back** in step 2 is the key insight: it ensures future snapshots benefit from any stats computed during previous training runs.
+
+-v-
+
+### Detail: the two caching bugs (fixed)
+
+**Bug 1: Race condition in recording flow**
+
+The background stats thread writes `stats.json` to the **cache** dir, but `teardown()` runs `copytree(cache -> source)` then `delete(cache)` without waiting for the thread to finish.
+
+**Fix**: The thread targets the cache dir. Since `teardown()` copies the entire cache tree, if the thread finishes before teardown, the stats file gets copied along with everything else.
+
+**Bug 2: Snapshot one-way copy (the main bug)**
+
+When `compute_stats()` runs during training, it writes per-episode `stats.json` only into the **snapshot** directory. But snapshots are created fresh from source each time via `copytree`. Stats were recomputed from scratch on every training run.
+
+**Fix**: Added `source_dataset_root` parameter throughout the stats pipeline. Newly computed stats are written back to the source dataset so future snapshots inherit them.
 
 ---
 
-## 3. Snapshots
+## 4. Code Architecture
 
 ---
 
-### The snapshot problem
+### Key abstractions
 
-1. Record episodes -> dataset **D1**
-2. Train model **A1** on D1
-3. Curate: delete bad episodes, truncate others -> **D2**
-4. Train model **A2** on D2
-5. A2 is worse. Want to retrain on **original D1**
+| Class | Role |
+|-------|------|
+| `DatasetClient` (ABC) | 13 abstract methods: create, read, write, delete, mutation lifecycle |
+| `RawVideoDatasetClient` | Implements all 13 methods for the raw video format |
+| `RecordingMutation` | Cache-copy-then-overwrite pattern for safe recording |
+| `SnapshotService` | `copytree(source, destination)` for training immutability |
+| `RawVideoDatasetAdapter` | PyTorch `Dataset` subclass -- frame index, lazy decode, stats |
 
-Step 5 requires recovering the exact dataset state that A1 was trained on.
+---
 
-Notes:
-This is a real workflow. Every team doing iterative robot learning hits this.
-Without snapshots, the only option is to keep manual backups or re-record.
+### Recording flow
+
+```
+start_recording_mutation()
+  -> copytree(source -> cache/{uuid})
+  -> sets _source_dataset_root on cache client
+
+prepare_for_writing() -> creates episode dir, starts VideoWriters
+
+add_frame() -> writes video frame + JSONL row
+
+save_episode()
+  -> closes VideoWriters
+  -> updates manifest
+  -> spawns background stats thread (passes source_dataset_root)
+
+teardown()
+  -> finalize() invalidates global stats cache
+  -> overwrite() copies cache -> source
+  -> delete() removes cache dir
+```
+
+---
+
+### Training flow
+
+```
+run_loop()
+  -> _train_model(source_dataset_path)
+     -> _create_datamodule(source_dataset_root)
+        -> RawVideoDatasetAdapter(
+             dataset_root=snapshot_path,
+             source_dataset_root=source_dataset_path
+           )
+           -> load_or_compute_stats(source_dataset_root=...)
+              -> per-episode stats with write-back
+```
+
+The `source_dataset_root` parameter threads through from the top-level training loop all the way down to the stats computation functions.
+
+---
+
+## 5. Converters
+
+---
+
+### Bidirectional conversion
+
+```
+   LeRobot v3  <-------->  Raw Video
+               convert-to-raw
+               convert-to-lerobot
+```
+
+- **LeRobot -> Raw Video**: primary path for migrating existing datasets
+- **Raw Video -> LeRobot**: for HuggingFace Hub upload, community sharing
+
+Both directions are available via CLI (`converter_cli.py`).
+
+-v-
+
+### Detail: LeRobot to Raw Video conversion
+
+For each episode:
+
+1. Read frames from LeRobot's consolidated Parquet + video chunks
+2. Write per-episode `data.jsonl` (state/action timeseries)
+3. Remux or re-encode video to per-episode MP4 (one per camera)
+4. **Compute per-episode stats** and write `stats.json`
+5. Append episode entry to manifest
+
+Step 4 is new -- it pre-populates the stats cache so the first training run on a converted dataset doesn't pay a cold-cache penalty.
+
+Stats failures during conversion are **non-fatal**: logged as a warning, conversion continues. Stats will be lazily computed at training time instead.
+
+-v-
+
+### Detail: Raw Video to LeRobot conversion
+
+Reverse direction -- used for ecosystem interop:
+
+1. Read manifest + per-episode JSONL and video files
+2. Decode video frames
+3. Write LeRobot v3 format (Parquet + consolidated video)
+4. LeRobot's own `save_episode()` handles its internal stats
+
+No special stats handling needed -- LeRobot computes its own stats during `save_episode()`.
+
+---
+
+## 6. Snapshots
 
 ---
 
 ### Current approach: full physical copy
 
-Before each training run, `shutil.copytree` duplicates the entire dataset.
+Before each training run, `SnapshotService` runs `shutil.copytree` on the entire dataset.
 
-| Issue | Impact |
-|-------|--------|
-| **Full copy every time** | Several GB per snapshot |
-| **Linear storage growth** | 10 training runs = 10 full copies |
-| **Slow creation** | Seconds to minutes, blocking training |
-| **Not user-facing** | Buried in model directories, no list/compare/reuse |
-| **No retrain path** | `TrainJobPayload` has no `snapshot_id` field |
+| Aspect | Current behavior |
+|--------|-----------------|
+| **Creation time** | Seconds to minutes (proportional to dataset size) |
+| **Storage per snapshot** | Full dataset size |
+| **10 snapshots of 5 GB** | ~50 GB total |
+| **Write-back** | Stats written back to source via `source_dataset_root` |
 
-Notes:
-The current snapshot mechanism (in snapshot_service.py) has the right semantics
--- each training run gets an immutable copy -- but the implementation is
-expensive. And snapshots are only created implicitly; there's no way for a user
-to manually snapshot a dataset.
+This works correctly and provides training immutability. The stats write-back ensures it's not as expensive as it looks -- stats are only computed once across all snapshots.
 
 ---
 
-### Proposed: manifest-based snapshots
+### Future: manifest-based snapshots
 
-**A snapshot is a frozen copy of the manifest, not a copy of the data.**
+**A snapshot could be a frozen copy of the manifest, not a copy of the data.**
 
 ```
-dataset/
-  manifest.json                      # Current (mutable) state
+my_dataset/
+  manifest.json                      # Current (mutable)
   snapshots/
     snap_2026-02-10_14-30.json       # Frozen manifest (~10 KB)
-    snap_2026-02-18_09-15.json       # Another frozen manifest
-  episodes/
-    ep_000_abc1/                     # Shared by both snapshots
-    ep_001_def2/                     # Only in first snapshot
-    ep_001_def2_trunc_080/           # Truncated version, in current
-    ep_005_ghi3/                     # Only in current
+  episode_000/                       # Shared by all snapshots
+  episode_001/
 ```
 
-**Snapshot creation**: copy `manifest.json` -> `snapshots/<name>.json` -- **O(1)**
-
-**Storage per snapshot**: ~10 KB (one JSON file)
-
-Notes:
-Episode directories are the shared, immutable substrate. The manifest defines
-which episodes constitute a particular dataset state. Freezing the manifest
-freezes the dataset state. This is conceptually similar to how Git commits
-reference trees of blobs.
-
--v-
-
-### Copy-on-write for mutations
-
-When truncating or splitting an episode:
-
-1. Create a **new** episode directory with modified data
-2. Update manifest to point to new directory
-3. Old directory stays on disk (referenced by prior snapshots)
-
-**Truncation example:**
-
-```
-ep_001_def2/            <- original (kept for snapshots)
-ep_001_def2_trunc_080/  <- new, truncated (in current manifest)
-```
-
-Cost: one video remux + one stats recomputation. Seconds, not minutes.
-
-Notes:
-Copy-on-write (COW) means we never modify an episode directory in place.
-Any mutation creates a new directory. This guarantees that snapshots always
-point to valid, unchanged data.
-
-The "one video remux" uses ffmpeg stream copy -- it repackages the video
-without decoding/re-encoding. Only the GOP at the cut point may need
-re-encoding (a Group of Pictures is the smallest independently decodable
-unit in a video stream, typically 0.5-2 seconds).
-
--v-
-
-### Garbage collection
-
-Old episode directories accumulate. Clean up when safe:
-
-1. Collect all episode dirs referenced by current manifest + all snapshots
-2. List all episode dirs on disk
-3. Delete any directory not in the referenced set
-
-**Safe**: only removes directories no manifest points to.
-
-Can run on schedule, on user request, or after snapshot deletion.
-
-Notes:
-This is simple reference counting. An episode directory is "alive" if any
-manifest (current or snapshot) references it. Once no manifest references it,
-it can be safely deleted. This is analogous to garbage collection in
-managed runtimes.
-
--v-
-
-### Comparison
-
-| Aspect | Full copy (current) | Manifest snapshots |
+| Aspect | Current (copytree) | Manifest snapshots |
 |--------|--------------------|--------------------|
-| **Creation time** | Seconds to minutes | O(1) -- copy one JSON file |
-| **Storage per snapshot** | Full dataset size (GB) | ~10 KB |
+| **Creation** | O(dataset size) | O(1) -- copy one JSON |
+| **Storage** | Full copy per snapshot | ~10 KB per snapshot |
 | **10 snapshots of 5 GB** | ~50 GB | ~5 GB + ~100 KB |
-| **Restoration** | Copy files back | Replace manifest (~1ms) |
-| **Retrain on old snapshot** | Not supported | Pass snapshot ref to training job |
 | **Provenance** | Model -> opaque copy | Model -> snapshot -> exact episode list |
 
-Notes:
-The storage savings alone justify this change. But the bigger win is the
-provenance chain: every model links to a snapshot that lists the exact episodes
-it was trained on. This is full reproducibility with zero overhead.
+Requires copy-on-write semantics for episode mutations (truncate creates a new dir, old dir stays for prior snapshots) and garbage collection of unreferenced episode dirs.
 
 ---
 
-## 4. Training Paths
+## 7. What's Next
 
 ---
 
-### Two paths to training
+### Remaining work
 
-```
-                   Episode-Isolated Storage
-                           |
-              +------------+------------+
-              |                         |
-         Path A: Direct             Path B: Convert
-         Training Adapter           to LeRobot v3
-              |                         |
-         Lazy video decode         Cached, incremental
-         JSONL in memory           conversion
-         Stats from cache          |
-              |                    .cache/lerobot/
-              v                         |
-         DataLoader                     v
-                                   DataLoader
-```
-
-**Path A** is the target default -- no conversion overhead.
-
-**Path B** is maintained for ecosystem interop (HuggingFace Hub, LeRobot training scripts).
-
-Notes:
-Path A reads directly from the episode-isolated format. Video frames are
-decoded lazily in __getitem__. Scalar data (state, action) is loaded into
-memory from JSONL at init time. Stats come from the cached global aggregation.
-
-Path B converts to LeRobot v3 but with key optimizations: bypass the PNG
-round-trip by writing Parquet directly and remuxing video; cache the output
-so re-conversion after small changes is near-instant.
-
----
-
-### Conversion optimization levels
-
-| Level | Strategy | Speed |
-|-------|----------|-------|
-| **1. Naive** | Use LeRobot's `add_frame()` API | ~1 min/episode |
-| **2. Bypass PNG** | Write Parquet directly, remux video with ffmpeg | ~10 sec/episode |
-| **3. Cached incremental** | Only convert changed episodes, reuse cache | ~instant (common case) |
-
-For 100 episodes:
-- Level 1: ~100 minutes
-- Level 2: ~17 minutes
-- Level 3: seconds (if only a few episodes changed)
-
-Notes:
-Level 2 eliminates ~55% of conversion time by avoiding the PNG decode-write-read
-round-trip. Level 3 makes the common case (re-training after small changes)
-nearly free by only converting the delta.
-
----
-
-## 5. Implementation Plan
-
----
-
-### Priority order
-
-| # | Component | Time Est. | Impact |
-|---|-----------|-----------|--------|
-| 1 | Manifest schema + episode models | ~2 days | Foundation for everything |
-| 2 | Per-episode stats + global aggregation | ~2 days | O(1ms) stats after any mutation |
-| 3 | Frame index + video decoding | ~2 days | Required by adapter and review |
-| 4 | Training adapter (Path A) | ~1 week | Training without conversion |
-| 5 | Bidirectional converters (Path B) | ~1 week | LeRobot ecosystem interop |
-| 6 | Episode manipulation helpers | ~2 days | Unlocks curation workflows |
-| 7 | Optimized conversion (bypass PNG) | ~1 week | ~10x faster Path B |
-| 8 | Conversion cache + incremental | ~1 week | Near-instant re-conversion |
-
-**Total estimate: ~5-6 weeks** for all components.
-
-Items 1-4 are the critical path to a working system.
-
-Notes:
-These are rough estimates. Items 1-3 are low-risk and well-understood.
-Item 4 (training adapter) needs profiling -- lazy video decode throughput
-is the biggest unknown. If it's too slow for GPU utilization, we may need
-a pre-decode cache or prefetch strategy.
-
-Items 5-8 can be parallelized and are lower priority.
-
----
-
-## 6. Open Questions
-
----
-
-### For discussion
-
-1. **Migration path**: How do we transition existing LeRobot datasets?
-   - Auto-convert on first access? Dual-format period? Manual migration tool?
-
-2. **Lazy decode performance**: Is frame-by-frame video decode fast enough for training?
-   - Need benchmarks: lazy decode vs. pre-decoded LeRobot, GPU utilization impact
-
-3. **Concurrent access**: What locking strategy for manifest.json?
-   - Recording + training + UI all touching the same dataset simultaneously
-
-4. **Multi-rate sensors**: Record at native rates, align at training time?
-   - Valuable but a separate proposal (see appendix in full document)
-
-5. **Long-term Path B**: Can we eventually deprecate the LeRobot conversion path?
-   - Or is HuggingFace Hub interop a permanent requirement?
-
-Notes:
-These are the key decisions that need team input before implementation.
-The migration path (#1) is the most critical -- it determines how disruptive
-the transition is. The lazy decode question (#2) needs empirical data;
-we should profile before committing to Path A as the default.
-
-Multi-rate (#4) is deliberately scoped out of this proposal per review
-feedback. It's a separate, valuable initiative but would dilute this
-proposal's focus.
-
----
-
-### Error recovery considerations
-
-| Failure mode | Strategy |
-|--------------|----------|
-| JSONL crash mid-write | Validate last line on load; discard if malformed |
-| Manifest corruption | Keep previous version as `.manifest.json.bak` |
-| Disk full during COW | Detect, clean up partial new dir, leave original intact |
-| Interrupted recording | Episode dir exists but is incomplete; mark in manifest |
-
-Notes:
-These came out of the review process. They don't need to be solved in the
-architecture document but should be addressed during implementation.
-
----
-
-## Next Steps
-
-1. **Align on architecture** (this meeting)
-2. **Profile lazy video decode** -- determine if Path A is viable as default
-3. **Define migration strategy** for existing datasets
-4. **Begin implementation** -- items 1-4 from priority table (~3 weeks)
+| Area | Status | Notes |
+|------|--------|-------|
+| Episode-isolated storage | Done | Manifest, JSONL, per-episode video |
+| Per-episode stats + caching | Done | Welford, background compute, source write-back |
+| Training adapter (Path A) | Done | Lazy video decode, frame index, stats from cache |
+| Bidirectional converters | Done | With stats pre-computation in LeRobot -> Raw |
+| Recording flow | Done | RecordingMutation, background stats |
+| Manifest-based snapshots | Not started | Current copytree works, this is an optimization |
+| Episode manipulation (truncate, split) | Not started | Architecture supports it, needs UI + API |
+| Optimized conversion (bypass PNG) | Not started | ~10x faster LeRobot conversion path |
 
 ---
 
 # Questions?
 
-Full document: `dataset_exploration_report.md`
-
-Review synthesis: `review_report.md`
-
-Benchmarks: `converting_episodes.md`
-
-Notes:
-The full architecture document is 790 lines with detailed rationale for every
-design decision. The review report synthesizes feedback from two reviewer
-personas (codebase veteran and system architect). The converting_episodes
-document has the original benchmarks for LeRobot conversion performance.
+---
