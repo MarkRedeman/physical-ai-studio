@@ -540,6 +540,7 @@ class TestRawVideoDatasetAdapter:
         state_data = [np.random.randn(frames_per_episode, state_dim).astype(np.float32) for _ in range(num_episodes)]
         action_data = [np.random.randn(frames_per_episode, action_dim).astype(np.float32) for _ in range(num_episodes)]
         timestamps = [np.linspace(0, 1, frames_per_episode) for _ in range(num_episodes)]
+        task_indices = [np.zeros(frames_per_episode, dtype=np.int64) for _ in range(num_episodes)]
 
         # Camera shapes.
         camera_shapes = dict.fromkeys(cameras, (3, 480, 640))
@@ -552,7 +553,10 @@ class TestRawVideoDatasetAdapter:
             patch(f"{self._PATCH_PREFIX}.load_manifest", return_value=manifest),
             patch(f"{self._PATCH_PREFIX}.FrameIndex", return_value=mock_fi),
             patch(f"{self._PATCH_PREFIX}.load_or_compute_stats", return_value=mock_stats),
-            patch(f"{self._PATCH_PREFIX}._load_jsonl_data", return_value=(state_data, action_data, timestamps)),
+            patch(
+                f"{self._PATCH_PREFIX}._load_jsonl_data",
+                return_value=(state_data, action_data, timestamps, task_indices),
+            ),
             patch(f"{self._PATCH_PREFIX}.get_video_info", return_value=mock_video_info),
             patch(f"{self._PATCH_PREFIX}.decode_frame", return_value=torch.rand(3, 480, 640)),
             patch(f"{self._PATCH_PREFIX}.decode_frames", return_value=torch.rand(4, 3, 480, 640)),
