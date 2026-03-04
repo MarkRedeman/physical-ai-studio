@@ -2,13 +2,15 @@
 
 Studio exports are zip files containing:
 - exports/{backend}/{policy}.pt + metadata.yaml
-- manifest.json (optional, for reconnecting dataset/snapshot references)
+- manifest.json (optional, for reconnecting dataset/snapshot/model references)
+- metrics.csv (optional, training metrics from CSVLogger)
 """
 
 import json
 import logging
 import shutil
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -81,14 +83,18 @@ class PhysicalAIStudioExportImportStrategy(ImportStrategy):
             project_id=UUID(project_id),
             dataset_id=None,
             snapshot_id=None,
+            version=manifest.get("version", 1),
+            parent_model_id=None,
+            created_at=self._parse_created_at(manifest.get("created_at")),
         )
         model_dir = self._settings.models_dir / str(model.id)
         model_dir.mkdir(parents=True, exist_ok=True)
         model.path = str(model_dir)
 
-        # Try to reconnect dataset/snapshot from manifest
+        # Try to reconnect dataset/snapshot/parent from manifest
         model.dataset_id = await self._try_resolve_dataset(manifest.get("original_dataset_id"))
         model.snapshot_id = await self._try_resolve_snapshot(manifest.get("original_snapshot_id"))
+        model.parent_model_id = await self._try_resolve_model(manifest.get("parent_model_id"))
 
         # Extract export artifacts
         for entry in all_names:
@@ -104,6 +110,13 @@ class PhysicalAIStudioExportImportStrategy(ImportStrategy):
             target = model_dir / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(zf.read(entry))
+
+        # Extract training metrics if present
+        metrics_arcname = f"{zip_root}/metrics.csv"
+        if metrics_arcname in all_names:
+            metrics_dir = model_dir / "version_0"
+            metrics_dir.mkdir(parents=True, exist_ok=True)
+            (metrics_dir / "metrics.csv").write_bytes(zf.read(metrics_arcname))
 
         # Verify extraction succeeded
         exports_dir = model_dir / "exports"
@@ -144,4 +157,24 @@ class PhysicalAIStudioExportImportStrategy(ImportStrategy):
             snapshot = await self._snapshot_service.get_snapshot_by_id(UUID(snapshot_id_str))
             return snapshot.id
         except Exception:
+            return None
+
+    async def _try_resolve_model(self, model_id_str: str | None) -> UUID | None:
+        """Try to resolve a parent model ID; return None if it no longer exists."""
+        if not model_id_str:
+            return None
+        try:
+            model = await self._model_service.get_model_by_id(UUID(model_id_str))
+            return model.id
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_created_at(value: str | None) -> datetime | None:
+        """Parse an ISO-format datetime string from the manifest."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
             return None
