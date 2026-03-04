@@ -159,6 +159,9 @@ class ImportExportWorker(BaseProcessWorker):
                 "name": model.name,
                 "policy": model.policy,
                 "properties": model.properties,
+                "version": model.version,
+                "parent_model_id": str(model.parent_model_id) if model.parent_model_id else None,
+                "created_at": model.created_at.isoformat() if model.created_at else None,
                 "original_model_id": str(model.id),
                 "original_project_id": str(model.project_id),
                 "original_dataset_id": str(model.dataset_id) if model.dataset_id else None,
@@ -184,6 +187,11 @@ class ImportExportWorker(BaseProcessWorker):
                     if file_path.is_file() and "archive" not in file_path.parts:
                         arcname = str(Path(model.name) / file_path.relative_to(model_path))
                         zf.write(file_path, arcname)
+
+                # Add training metrics if available
+                metrics_file = model_path / "version_0" / "metrics.csv"
+                if metrics_file.is_file():
+                    zf.write(metrics_file, str(Path(model.name) / "metrics.csv"))
 
             updated_job = await JobService.update_job_status(
                 job_id=job.id,
