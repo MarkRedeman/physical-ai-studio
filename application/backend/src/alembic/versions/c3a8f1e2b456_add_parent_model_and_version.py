@@ -1,7 +1,7 @@
 """Add parent_model_id and version to models
 
 Revision ID: c3a8f1e2b456
-Revises: aa0f562acb23
+Revises: 9b2617a3adba
 Create Date: 2026-02-27 12:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c3a8f1e2b456"
-down_revision: str | Sequence[str] | None = "aa0f562acb23"
+down_revision: str | Sequence[str] | None = "9b2617a3adba"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
