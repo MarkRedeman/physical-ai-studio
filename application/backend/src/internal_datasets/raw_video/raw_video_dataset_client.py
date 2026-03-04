@@ -182,12 +182,19 @@ class RawVideoDatasetClient(DatasetClient):
             # Build thumbnail from first frame of first camera
             thumbnail = self._build_thumbnail(ep_dir, ep) if ep.video_files else None
 
+            # Collect per-episode task strings from JSONL task_index fields.
+            ep_task_indices = sorted({row.get("task_index", 0) for row in rows})
+            ep_tasks = [self._manifest.tasks[i] for i in ep_task_indices if i < len(self._manifest.tasks)]
+            # Fallback: use task_description if tasks list is empty.
+            if not ep_tasks and self._manifest.task_description:
+                ep_tasks = [self._manifest.task_description]
+
             result.append(
                 Episode(
                     episode_index=idx,
                     length=length,
                     fps=self._manifest.fps,
-                    tasks=[self._manifest.task_description] if self._manifest.task_description else [],
+                    tasks=ep_tasks,
                     actions=actions,
                     action_keys=self._manifest.action_names,
                     videos=videos,
@@ -198,9 +205,11 @@ class RawVideoDatasetClient(DatasetClient):
         return result
 
     def get_tasks(self) -> list[str]:
-        """Return task descriptions in the dataset."""
+        """Return all task descriptions in the dataset."""
         if self._manifest is None:
             return []
+        if self._manifest.tasks:
+            return list(self._manifest.tasks)
         if self._manifest.task_description:
             return [self._manifest.task_description]
         return []
@@ -255,7 +264,29 @@ class RawVideoDatasetClient(DatasetClient):
         self._jsonl_buffer = []
         self._frame_count = 0
         self._recording_start_time = time.perf_counter()
+        self._episode_tasks: dict[str, int] = {}  # task string → index (local to this recording session)
         logger.info("Prepared episode directory: {}", self._episode_dir)
+
+    def _get_or_create_task_index(self, task: str) -> int:
+        """Return the task index for *task*, creating a new entry if needed.
+
+        The method first checks ``self._manifest.tasks``, then the local
+        ``self._episode_tasks`` mapping for tasks introduced during this
+        recording session.
+        """
+        if self._manifest is None:
+            return 0
+        # Check existing manifest tasks.
+        for idx, existing in enumerate(self._manifest.tasks):
+            if existing == task:
+                return idx
+        # Check local session tasks (not yet merged into manifest).
+        if task in self._episode_tasks:
+            return self._episode_tasks[task]
+        # Assign the next available index.
+        next_idx = len(self._manifest.tasks) + len(self._episode_tasks)
+        self._episode_tasks[task] = next_idx
+        return next_idx
 
     def add_frame(self, obs: dict, act: dict, task: str) -> None:
         """Add a single frame to the recording buffer.
@@ -264,7 +295,9 @@ class RawVideoDatasetClient(DatasetClient):
             obs: Observation dict mapping camera names to RGB ``np.ndarray``
                  frames (HWC uint8), and joint names to float values.
             act: Action dict mapping joint names to float values.
-            task: Task description string (stored in manifest on save).
+            task: Task description string.  The task is recorded per-frame
+                  in the JSONL data file as a ``task_index``.  New task
+                  strings are added to the manifest's ``tasks`` list on save.
         """
         if self._manifest is None or self._episode_dir is None:
             raise RuntimeError("Not in a recording session — call prepare_for_writing() first")
@@ -275,12 +308,16 @@ class RawVideoDatasetClient(DatasetClient):
         state_vector = [float(obs.get(name, 0.0)) for name in self._manifest.state_names]
         action_vector = [float(act.get(name, 0.0)) for name in self._manifest.action_names]
 
+        # Resolve the task index for this frame.
+        task_index = self._get_or_create_task_index(task) if task else 0
+
         # Buffer the JSONL row
         self._jsonl_buffer.append(
             {
                 "timestamp": round(timestamp, 6),
                 "state": state_vector,
                 "action": action_vector,
+                "task_index": task_index,
             }
         )
 
@@ -329,6 +366,19 @@ class RawVideoDatasetClient(DatasetClient):
         if task and not self._manifest.task_description:
             self._manifest = self._manifest.model_copy(update={"task_description": task})
 
+        # Merge any new tasks discovered during this episode into the manifest.
+        if self._episode_tasks:
+            # Sort by assigned index so ordering is deterministic.
+            new_tasks = sorted(self._episode_tasks.items(), key=lambda kv: kv[1])
+            updated_tasks = list(self._manifest.tasks) + [t for t, _ in new_tasks]
+            self._manifest = self._manifest.model_copy(update={"tasks": updated_tasks})
+        # Ensure the current task is in the manifest tasks list even if it
+        # was already there (handles the case where task was passed to
+        # save_episode but not to any add_frame call).
+        if task and task not in self._manifest.tasks:
+            updated_tasks = list(self._manifest.tasks) + [task]
+            self._manifest = self._manifest.model_copy(update={"tasks": updated_tasks})
+
         # Close all video writers
         for cam_name, writer in self._video_writers.items():
             if writer.is_running:
@@ -370,11 +420,15 @@ class RawVideoDatasetClient(DatasetClient):
 
         thumbnail = self._build_thumbnail_from_buffer()
 
+        # Collect unique task strings for this episode's frames.
+        episode_task_indices = {row.get("task_index", 0) for row in self._jsonl_buffer}
+        episode_tasks = [self._manifest.tasks[i] for i in sorted(episode_task_indices) if i < len(self._manifest.tasks)]
+
         episode = Episode(
             episode_index=episode_index,
             length=self._frame_count,
             fps=self._manifest.fps,
-            tasks=[task] if task else [],
+            tasks=episode_tasks if episode_tasks else ([task] if task else []),
             actions=actions,
             action_keys=self._manifest.action_names,
             videos=videos,

@@ -54,21 +54,24 @@ from loguru import logger
 def _load_jsonl_data(
     manifest: DatasetManifest,
     dataset_root: Path,
-) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
+) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
     """Pre-load all JSONL episode data into memory as contiguous numpy arrays.
 
     Each JSONL file contains one JSON object per line with the fields
-    ``"timestamp"``, ``"state"``, and ``"action"``.
+    ``"timestamp"``, ``"state"``, and ``"action"``.  An optional
+    ``"task_index"`` integer field is also read; when absent it defaults
+    to ``0`` for backwards compatibility with older datasets.
 
     Args:
         manifest: Validated dataset manifest.
         dataset_root: Root directory of the dataset on disk.
 
     Returns:
-        A 3-tuple of:
-        - ``state_data``:  list of arrays, each ``(num_rows, state_dim)``
-        - ``action_data``: list of arrays, each ``(num_rows, action_dim)``
-        - ``timestamps``:  list of arrays, each ``(num_rows,)``
+        A 4-tuple of:
+        - ``state_data``:      list of arrays, each ``(num_rows, state_dim)``
+        - ``action_data``:     list of arrays, each ``(num_rows, action_dim)``
+        - ``timestamps``:      list of arrays, each ``(num_rows,)``
+        - ``task_indices``:    list of arrays, each ``(num_rows,)`` int64
 
     Raises:
         ValueError: If a JSONL row is missing required fields or contains
@@ -77,6 +80,7 @@ def _load_jsonl_data(
     state_data: list[np.ndarray] = []
     action_data: list[np.ndarray] = []
     timestamps: list[np.ndarray] = []
+    task_indices: list[np.ndarray] = []
 
     for ep_idx, episode in enumerate(manifest.episodes):
         data_path = dataset_root / episode.episode_dir / episode.data_file
@@ -84,6 +88,7 @@ def _load_jsonl_data(
         rows_state: list[list[float]] = []
         rows_action: list[list[float]] = []
         rows_ts: list[float] = []
+        rows_task_idx: list[int] = []
 
         with data_path.open("r", encoding="utf-8") as fh:
             for line_no, line in enumerate(fh, start=1):
@@ -116,10 +121,12 @@ def _load_jsonl_data(
                 rows_state.append(state_vec)
                 rows_action.append(action_vec)
                 rows_ts.append(float(record["timestamp"]))
+                rows_task_idx.append(int(record.get("task_index", 0)))
 
         state_data.append(np.array(rows_state, dtype=np.float32))
         action_data.append(np.array(rows_action, dtype=np.float32))
         timestamps.append(np.array(rows_ts, dtype=np.float64))
+        task_indices.append(np.array(rows_task_idx, dtype=np.int64))
 
         logger.debug(
             "Loaded episode %d (%s): %d rows",
@@ -128,7 +135,7 @@ def _load_jsonl_data(
             len(rows_ts),
         )
 
-    return state_data, action_data, timestamps
+    return state_data, action_data, timestamps, task_indices
 
 
 class RawVideoDatasetAdapter(Dataset):
@@ -193,7 +200,10 @@ class RawVideoDatasetAdapter(Dataset):
         self._state_data: list[np.ndarray]
         self._action_data: list[np.ndarray]
         self._timestamps: list[np.ndarray]
-        self._state_data, self._action_data, self._timestamps = _load_jsonl_data(self._manifest, self._dataset_root)
+        self._task_indices: list[np.ndarray]
+        self._state_data, self._action_data, self._timestamps, self._task_indices = _load_jsonl_data(
+            self._manifest, self._dataset_root
+        )
 
         # Probe camera image shapes from the first episode's videos.
         self._camera_shapes: dict[str, tuple[int, ...]] = {}
@@ -281,6 +291,20 @@ class RawVideoDatasetAdapter(Dataset):
                 transformed[cam_name] = tensor
         return transformed
 
+    def _resolve_task(self, episode_idx: int, data_row_idx: int) -> tuple[int, str]:
+        """Look up the task index and description for a given frame.
+
+        Returns:
+            ``(task_index, task_string)`` pair.  Falls back to ``(0, "")``
+            when the dataset has no tasks defined.
+        """
+        task_idx = int(self._task_indices[episode_idx][data_row_idx])
+        tasks = self._manifest.tasks
+        if tasks and 0 <= task_idx < len(tasks):
+            return task_idx, tasks[task_idx]
+        # Fallback: no tasks list or index out of range.
+        return task_idx, ""
+
     def _getitem_simple(self, idx: int) -> Observation:
         """Retrieve a single-frame observation without temporal windowing."""
         episode_idx, video_frame_idx, data_row_idx = self._frame_index.lookup(idx)
@@ -300,6 +324,8 @@ class RawVideoDatasetAdapter(Dataset):
 
         images = self._apply_image_transforms(images)
 
+        task_idx, task_str = self._resolve_task(episode_idx, data_row_idx)
+
         return Observation(
             action=action_tensor,
             state=state_tensor,
@@ -307,9 +333,9 @@ class RawVideoDatasetAdapter(Dataset):
             episode_index=torch.tensor(episode_idx),
             frame_index=torch.tensor(video_frame_idx),
             index=torch.tensor(idx),
-            task_index=torch.tensor(0),
+            task_index=torch.tensor(task_idx),
             timestamp=torch.tensor(timestamp),
-            task=self._manifest.task_description or "",
+            task=task_str,
         )
 
     # ------------------------------------------------------------------
@@ -410,6 +436,8 @@ class RawVideoDatasetAdapter(Dataset):
 
         images = self._apply_image_transforms(images)
 
+        task_idx, task_str = self._resolve_task(episode_idx, data_row_idx)
+
         return Observation(
             action=action_tensor,
             state=state_tensor,
@@ -417,9 +445,9 @@ class RawVideoDatasetAdapter(Dataset):
             episode_index=torch.tensor(episode_idx),
             frame_index=torch.tensor(video_frame_idx),
             index=torch.tensor(idx),
-            task_index=torch.tensor(0),
+            task_index=torch.tensor(task_idx),
             timestamp=torch.tensor(timestamp),
-            task=self._manifest.task_description or "",
+            task=task_str,
             extra=extra if extra else None,
         )
 

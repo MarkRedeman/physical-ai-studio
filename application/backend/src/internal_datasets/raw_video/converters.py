@@ -96,10 +96,16 @@ class LeRobotToRawVideoConverter:
 
         num_episodes = dataset.meta.total_episodes
 
-        # Extract task description from the first task if available.
+        # Extract task descriptions from the LeRobot task table.
+        # .to_dict()["task_index"] returns {task_string: integer_index}.
+        tasks: list[str] = []
         task_description = ""
         if dataset.meta.tasks is not None and len(dataset.meta.tasks) > 0:
-            task_description = str(list(dataset.meta.tasks.to_dict()["task_index"].keys())[0])
+            tasks_dict = dataset.meta.tasks.to_dict()["task_index"]
+            # Sort by integer index (values) to preserve ordering.
+            tasks = [str(k) for k, _ in sorted(tasks_dict.items(), key=lambda x: int(x[1]))]
+            if tasks:
+                task_description = tasks[0]
 
         # Build a manifest skeleton (without episodes) for per-episode stats
         # computation.  _compute_single_episode_stats only uses state_dim,
@@ -116,6 +122,7 @@ class LeRobotToRawVideoConverter:
             cameras=cam_configs,
             episodes=[],
             task_description=task_description,
+            tasks=tasks,
         )
 
         workers = max_workers if max_workers is not None else min(num_episodes, os.cpu_count() or 4)
@@ -216,13 +223,15 @@ class LeRobotToRawVideoConverter:
         data_path = ep_dir / "data.jsonl"
 
         hf_dataset = dataset.hf_dataset  # type: ignore[attr-defined]
+        # Check if the HF dataset has a task_index column.
+        has_task_index = "task_index" in (getattr(hf_dataset, "column_names", None) or [])
         # Try batch slice access first (much faster for Arrow-backed datasets);
         # fall back to row-by-row if the dataset doesn't support slicing well.
         try:
             batch = hf_dataset[from_frame:to_frame]
-            rows_written = self._write_jsonl_from_batch(data_path, batch, to_frame - from_frame)
+            rows_written = self._write_jsonl_from_batch(data_path, batch, to_frame - from_frame, has_task_index)
         except Exception:
-            rows_written = self._write_jsonl_row_by_row(data_path, hf_dataset, from_frame, to_frame)
+            rows_written = self._write_jsonl_row_by_row(data_path, hf_dataset, from_frame, to_frame, has_task_index)
 
         if rows_written == 0:
             logger.warning("Episode %s has 0 data rows", ep_dir_name)
@@ -257,6 +266,7 @@ class LeRobotToRawVideoConverter:
         data_path: Path,
         batch: dict,
         num_rows: int,
+        has_task_index: bool = False,
     ) -> int:
         """Write JSONL from a batch dict returned by HF dataset slice access.
 
@@ -264,6 +274,7 @@ class LeRobotToRawVideoConverter:
             data_path: Output file path.
             batch: Dict of lists/tensors from ``hf_dataset[from:to]``.
             num_rows: Expected number of rows in the batch.
+            has_task_index: Whether to include ``task_index`` from the batch.
 
         Returns:
             Number of rows written.
@@ -271,6 +282,7 @@ class LeRobotToRawVideoConverter:
         timestamps = batch["timestamp"]
         states = batch["observation.state"]
         actions = batch["action"]
+        task_indices = batch.get("task_index") if has_task_index else None
 
         with data_path.open("w", encoding="utf-8") as fh:
             for i in range(num_rows):
@@ -289,7 +301,10 @@ class LeRobotToRawVideoConverter:
                 elif hasattr(action, "numpy"):
                     action = action.numpy().tolist()
 
-                row = {"timestamp": timestamp, "state": state, "action": action}
+                row: dict = {"timestamp": timestamp, "state": state, "action": action}
+                if task_indices is not None:
+                    ti = task_indices[i]
+                    row["task_index"] = int(ti.item()) if hasattr(ti, "item") else int(ti)
                 fh.write(json.dumps(row) + "\n")
 
         return num_rows
@@ -300,6 +315,7 @@ class LeRobotToRawVideoConverter:
         hf_dataset: object,
         from_frame: int,
         to_frame: int,
+        has_task_index: bool = False,
     ) -> int:
         """Fallback: write JSONL by accessing the HF dataset row by row.
 
@@ -325,7 +341,10 @@ class LeRobotToRawVideoConverter:
                 elif hasattr(action, "numpy"):
                     action = action.numpy().tolist()
 
-                row = {"timestamp": timestamp, "state": state, "action": action}
+                row: dict = {"timestamp": timestamp, "state": state, "action": action}
+                if has_task_index and "task_index" in item:
+                    ti = item["task_index"]
+                    row["task_index"] = int(ti.item()) if hasattr(ti, "item") else int(ti)
                 fh.write(json.dumps(row) + "\n")
                 count += 1
         return count
@@ -466,7 +485,12 @@ class RawVideoToLeRobotConverter:
             image_writer_threads=4,
         )
 
-        task = manifest.task_description or "default"
+        # Build task lookup: use manifest.tasks if available, else fallback.
+        tasks = (
+            manifest.tasks
+            if manifest.tasks
+            else ([manifest.task_description] if manifest.task_description else ["default"])
+        )
         num_episodes = len(manifest.episodes)
 
         for ep_idx, episode in enumerate(manifest.episodes):
@@ -492,8 +516,12 @@ class RawVideoToLeRobotConverter:
                 data_row_idx = _nearest_data_row(frame_idx, num_frames, len(rows))
 
                 row = rows[data_row_idx]
+                # Resolve per-frame task from task_index; default to first task.
+                task_idx = row.get("task_index", 0)
+                task_str = tasks[task_idx] if 0 <= task_idx < len(tasks) else tasks[0]
+
                 frame: dict = {
-                    "task": task,
+                    "task": task_str,
                     "observation.state": np.array(row["state"], dtype=np.float32),
                     "action": np.array(row["action"], dtype=np.float32),
                 }
