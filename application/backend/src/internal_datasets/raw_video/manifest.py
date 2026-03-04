@@ -87,6 +87,12 @@ class DatasetManifest(BaseModel):
         cameras: Camera configurations used across the dataset.
         episodes: Ordered list of episode entries.
         task_description: Optional human-readable description of the task.
+            Kept for backwards compatibility with older manifests.
+            Prefer using *tasks* for new datasets.
+        tasks: Ordered list of task descriptions.  Position in the list
+            is the task index used in JSONL ``task_index`` fields.
+            When empty, falls back to *task_description* (if set) for
+            backwards compatibility with single-task manifests.
     """
 
     name: str
@@ -99,6 +105,7 @@ class DatasetManifest(BaseModel):
     cameras: list[CameraConfig]
     episodes: list[EpisodeEntry]
     task_description: str = ""
+    tasks: list[str] = []
 
     @model_validator(mode="after")
     def _validate_names_length(self) -> DatasetManifest:
@@ -107,6 +114,19 @@ class DatasetManifest(BaseModel):
             raise ValueError(f"state_names has {len(self.state_names)} entries but state_dim is {self.state_dim}")
         if len(self.action_names) != self.action_dim:
             raise ValueError(f"action_names has {len(self.action_names)} entries but action_dim is {self.action_dim}")
+        return self
+
+    @model_validator(mode="after")
+    def _migrate_task_description(self) -> DatasetManifest:
+        """Backwards compat: populate *tasks* from *task_description* when empty.
+
+        Older manifests only have a single ``task_description`` string.  This
+        validator ensures *tasks* is always the authoritative source: if it is
+        empty but *task_description* is set, we populate ``tasks`` with that
+        single entry.
+        """
+        if not self.tasks and self.task_description:
+            self.tasks = [self.task_description]
         return self
 
     @model_validator(mode="after")
