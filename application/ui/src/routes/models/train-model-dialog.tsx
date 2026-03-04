@@ -47,7 +47,7 @@ export const TrainModelDialog = ({
     projectId,
     defaultName = '',
     defaultDatasetId = null,
-    defaultMaxSteps = 100,
+    defaultMaxSteps = 10000,
     extraPayload,
     policyField,
     getPolicy,
