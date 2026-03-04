@@ -25,21 +25,23 @@ raw_dataset/
 ├── manifest.json
 ├── episode_000/
 │   ├── data.jsonl
+│   ├── stats.json          # per-episode stats cache (auto-generated)
 │   ├── cam_top.mp4
 │   └── cam_gripper.mp4
 ├── episode_001/
 │   ├── data.jsonl
+│   ├── stats.json
 │   ├── cam_top.mp4
 │   └── cam_gripper.mp4
 └── .cache/
-    └── stats.json          # auto-generated on first load
+    └── stats.json          # merged dataset-level stats (auto-generated)
 ```
 
 - `manifest.json` -- Top-level schema describing the dataset (see below).
-- `episode_NNN/` -- One directory per episode, containing a JSONL data file and one
-  video file per camera.
-- `.cache/stats.json` -- Normalization statistics, automatically computed on first load
-  and cached for subsequent runs.
+- `episode_NNN/` -- One directory per episode, containing a JSONL data file, one
+  video file per camera, and a per-episode `stats.json` cache.
+- `.cache/stats.json` -- Merged normalization statistics across all episodes,
+  automatically computed on first load and cached for subsequent runs.
 
 ## manifest.json Schema
 
@@ -49,9 +51,13 @@ raw_dataset/
 | `fps`              | `int` (> 0)           | yes      | --      | Target frames per second for training.                                      |
 | `state_dim`        | `int` (> 0)           | yes      | --      | Dimensionality of the state vector.                                         |
 | `action_dim`       | `int` (> 0)           | yes      | --      | Dimensionality of the action vector.                                        |
+| `state_names`      | `list[string]`        | no       | `[]`    | Names for each state dimension (e.g. `["joint_0.pos", ...]`).              |
+| `action_names`     | `list[string]`        | no       | `[]`    | Names for each action dimension.                                            |
+| `robot_type`       | `string`              | no       | `""`    | Robot type identifier (e.g. `"so100"`).                                     |
 | `cameras`          | `list[CameraConfig]`  | yes      | --      | Camera configurations. Each entry has a `name` field (valid Python identifier). |
 | `episodes`         | `list[EpisodeEntry]`  | yes      | --      | Ordered list of episode entries (see below).                                |
-| `task_description` | `string`              | no       | `""`    | Optional human-readable description of the task.                            |
+| `tasks`            | `list[string]`        | no       | `[]`    | Ordered list of task descriptions. Position = task index.                   |
+| `task_description` | `string`              | no       | `""`    | Legacy single-task description. Auto-migrated to `tasks` on load.          |
 
 Each **EpisodeEntry** has:
 
@@ -74,6 +80,9 @@ Each **EpisodeEntry** has:
   "fps": 30,
   "state_dim": 7,
   "action_dim": 7,
+  "state_names": ["joint_0.pos", "joint_1.pos", "joint_2.pos", "joint_3.pos", "joint_4.pos", "joint_5.pos", "gripper.pos"],
+  "action_names": ["joint_0.pos", "joint_1.pos", "joint_2.pos", "joint_3.pos", "joint_4.pos", "joint_5.pos", "gripper.pos"],
+  "robot_type": "so100",
   "cameras": [
     {"name": "top"},
     {"name": "gripper"}
@@ -96,28 +105,41 @@ Each **EpisodeEntry** has:
       }
     }
   ],
+  "tasks": [
+    "Pick up the red block and place it in the bin",
+    "Pick up the blue block and place it on the shelf"
+  ],
   "task_description": "Pick up the red block and place it in the bin"
 }
 ```
 
+> **Backwards compatibility:** Older manifests with only `task_description` (no `tasks`
+> field) are automatically migrated on load -- a model validator populates
+> `tasks = [task_description]` when `tasks` is empty but `task_description` is set.
+
 ## data.jsonl Format
 
-Each line in the JSONL file is a JSON object with three required fields:
+Each line in the JSONL file is a JSON object with three required fields and one
+optional field:
 
 ```json
-{"timestamp": 0.0, "state": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], "action": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1]}
-{"timestamp": 0.033, "state": [0.11, 0.21, 0.31, 0.41, 0.51, 0.61, 0.71], "action": [0.51, 0.61, 0.71, 0.81, 0.91, 1.01, 1.11]}
+{"timestamp": 0.0, "state": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], "action": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1], "task_index": 0}
+{"timestamp": 0.033, "state": [0.11, 0.21, 0.31, 0.41, 0.51, 0.61, 0.71], "action": [0.51, 0.61, 0.71, 0.81, 0.91, 1.01, 1.11], "task_index": 1}
 ```
 
-| Field       | Type            | Description                                                  |
-|-------------|-----------------|--------------------------------------------------------------|
-| `timestamp` | `float`         | Time in seconds from the start of the episode.               |
-| `state`     | `list[float]`   | State vector. Length must equal `state_dim` from the manifest.|
-| `action`    | `list[float]`   | Action vector. Length must equal `action_dim` from the manifest.|
+| Field        | Type            | Required | Default | Description                                                  |
+|--------------|-----------------|----------|---------|--------------------------------------------------------------|
+| `timestamp`  | `float`         | yes      | --      | Time in seconds from the start of the episode.               |
+| `state`      | `list[float]`   | yes      | --      | State vector. Length must equal `state_dim` from the manifest.|
+| `action`     | `list[float]`   | yes      | --      | Action vector. Length must equal `action_dim` from the manifest.|
+| `task_index` | `int`           | no       | `0`     | Index into the manifest `tasks` list for this frame.         |
 
 Blank lines are skipped. The number of data rows does not need to match the video
 frame count -- the adapter applies nearest-neighbor resampling to align them (see
 [Architecture](#architecture)).
+
+> **Backwards compatibility:** Older JSONL files without the `task_index` field default
+> to `0` for every frame, preserving single-task behaviour.
 
 ## Quick Start
 
@@ -172,6 +194,9 @@ datamodule = DataModule(train_dataset=dataset)
 
 ```
 manifest.py --> frame_index.py --> stats.py --> adapter.py
+                                                    ^
+converters.py  (LeRobot <-> RawVideo conversion)    |
+raw_video_dataset_client.py  (recording/playback) --+
 ```
 
 1. **manifest.py** -- Parses and validates `manifest.json` using Pydantic models
@@ -185,7 +210,10 @@ manifest.py --> frame_index.py --> stats.py --> adapter.py
 3. **stats.py** -- Computes element-wise normalization statistics (mean, std, min, max)
    for state/action vectors using Welford's online algorithm (single pass, numerically
    stable). Per-channel image statistics are computed from a uniform sample of video
-   frames (default 500). Results are cached to `.cache/stats.json`.
+   frames (default 500). Results are cached at two levels: per-episode
+   (`<episode_dir>/stats.json`) and dataset-wide (`.cache/stats.json`). Per-episode
+   caches are written in a background thread after recording and during conversion,
+   enabling fast incremental stats computation.
 
 4. **adapter.py** -- `RawVideoDatasetAdapter(Dataset)` ties everything together. It
    pre-loads all scalar data into memory, decodes video frames lazily, and implements
@@ -219,9 +247,22 @@ positions. Supported delta keys:
 
 ### Stats caching
 
-Normalization statistics are stored at `<dataset_root>/.cache/stats.json`. The cache
-is considered valid when its modification time is newer than `manifest.json`. If the
-manifest is modified after the cache was written, stats are recomputed automatically.
+Normalization statistics are computed and cached at two levels:
+
+1. **Per-episode**: `<episode_dir>/stats.json` -- Accumulator state (Welford counters)
+   for each episode, saved immediately after recording via a background thread and
+   also written during LeRobot-to-RawVideo conversion. This avoids re-reading video
+   frames when computing dataset-level stats.
+
+2. **Dataset-level**: `<dataset_root>/.cache/stats.json` -- Merged statistics across
+   all episodes. Computed on first training load by merging per-episode accumulators
+   (fast, no video decoding required when per-episode caches exist). The cache is
+   considered valid when its modification time is newer than `manifest.json`. If the
+   manifest is modified after the cache was written, stats are recomputed
+   automatically.
+
+When a dataset is copied for mutation (recording new episodes), per-episode stats
+files are preserved so that only the newly recorded episodes need computation.
 
 ## Video Backend
 
@@ -247,10 +288,55 @@ and RGB channel order.
   call. No frames are held in memory between samples.
 - **O(1) frame lookup**: The `FrameIndex` maps global indices to episode-local indices
   via pre-computed numpy arrays -- no binary search required.
-- **Stats are cached**: Normalization statistics are computed once and persisted to
-  `.cache/stats.json`. Subsequent loads skip computation entirely (validated by mtime).
+- **Stats are cached incrementally**: Per-episode stats are saved in background
+  threads during recording and during conversion. Dataset-level stats are computed
+  by merging per-episode accumulators without re-reading video frames. Only new
+  episodes require computation.
 - **Batch video decode**: When temporal windowing requests multiple frames from the
   same episode and camera, they are decoded in a single `decode_frames()` call.
+
+## Converting Between Formats
+
+The `converters.py` module provides bidirectional conversion between the raw video
+format and the LeRobot HuggingFace dataset format, available as CLI commands.
+
+### LeRobot to Raw Video
+
+```bash
+PYTHONPATH=src uv run --project . python -m internal_datasets.raw_video.converters to-raw \
+    /path/to/lerobot_dataset \
+    /path/to/output_raw_dataset
+```
+
+Options:
+- `--max-workers N` -- Number of parallel ffmpeg processes for video conversion
+  (default: `min(num_episodes, cpu_count)`).
+
+This converter:
+- Stream-copies H.264 video tracks when possible, falling back to re-encoding only
+  when stream copy fails.
+- Extracts all tasks from the LeRobot task table into `manifest.tasks`.
+- Writes per-frame `task_index` in each JSONL row.
+- Computes and writes per-episode `stats.json` files during conversion.
+
+### Raw Video to LeRobot
+
+```bash
+PYTHONPATH=src uv run --project . python -m internal_datasets.raw_video.converters to-lerobot \
+    /path/to/raw_dataset \
+    /path/to/output_lerobot_dataset
+```
+
+Options:
+- `--robot-type TYPE` -- Override the robot type (default: read from manifest, or
+  `"unknown"`).
+
+This converter:
+- Reads per-frame `task_index` from JSONL rows and resolves them to task strings via
+  the manifest `tasks` list.
+- Falls back to `task_description` (or `"default"`) when no tasks are defined.
+- Creates properly formatted LeRobot v2 datasets with parquet data files and video
+  chunks.
 
 ## Limitations
 
