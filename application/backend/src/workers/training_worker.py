@@ -79,7 +79,6 @@ class TrainingWorker(BaseProcessWorker):
                         parent_model_id=payload.base_model_id,
                         version=base_model.version + 1 if base_model else 1,
                         created_at=None,
-                        train_job_id=job.id,
                     )
 
                     self.interrupt_event.clear()

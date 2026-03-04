@@ -203,7 +203,6 @@ class ModelDB(Base):
     dataset_id: Mapped[str | None] = mapped_column(ForeignKey("datasets.id"), nullable=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
     snapshot_id: Mapped[str | None] = mapped_column(ForeignKey("snapshots.id"), nullable=True)
-    train_job_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.id", ondelete="RESTRICT"), nullable=True)
     parent_model_id: Mapped[str | None] = mapped_column(
         ForeignKey("models.id", ondelete="SET NULL"), nullable=True, default=None
     )
