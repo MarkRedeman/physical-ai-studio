@@ -309,6 +309,7 @@ class RawVideoDatasetAdapter(Dataset):
             index=torch.tensor(idx),
             task_index=torch.tensor(0),
             timestamp=torch.tensor(timestamp),
+            task=self._manifest.task_description or "",
         )
 
     # ------------------------------------------------------------------
@@ -418,6 +419,7 @@ class RawVideoDatasetAdapter(Dataset):
             index=torch.tensor(idx),
             task_index=torch.tensor(0),
             timestamp=torch.tensor(timestamp),
+            task=self._manifest.task_description or "",
             extra=extra if extra else None,
         )
 
