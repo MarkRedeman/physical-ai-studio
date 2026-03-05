@@ -1,0 +1,450 @@
+#+title: Calibration
+* Configuration
+
+#+begin_src text
+geti-action/application/backend  mark/calibration-revamp uv run src/cli_robot_setup.py --robot-type SO101_Leader --serial-number 5AAF270363 --print-registers
+
+====================================================================================================
+REGISTER DUMP
+====================================================================================================
+
+  shoulder_pan    (ID 1)  expected gearing: 1/345
+  shoulder_lift   (ID 2)  expected gearing: 1/345
+  elbow_flex      (ID 3)  expected gearing: 1/345
+  wrist_flex      (ID 4)  expected gearing: 1/345
+  wrist_roll      (ID 5)  expected gearing: 1/345
+  gripper         (ID 6)  expected gearing: 1/345
+
+Register                                     shoulder_pan    shoulder_lift       elbow_flex       wrist_flex       wrist_roll          gripper
+----------------------------------------------------------------------------------------------------------------------------------------------
+Firmware_Major_Version @0(1B)                           3                3                3                3                3                3
+Firmware_Minor_Version @1(1B)                          10               10               10               10               10               10
+raw @2(1B)                                              0                0                0                0                0                0
+Model_Number @3(2B)                                   777              777              777              777              777              777
+raw @4(1B)                                              3                3                3                3                3                3
+ID @5(1B)                                               1                2                3                4                5                6
+Baud_Rate @6(1B)                                        0                0                0                0                0                0
+Return_Delay_Time @7(1B)                                0                0                0                0                0                0
+Response_Status_Level @8(1B)                            1                1                1                1                1                1
+Min_Position_Limit @9(2B)                             848              822              929              874              141             2031
+raw @10(1B)                                             3                3                3                3                0                7
+Max_Position_Limit @11(2B)                           3491             2421             3139             3183             3951             3320
+raw @12(1B)                                            13                9               12               12               15               12
+Max_Temperature_Limit @13(1B)                          80               70               80               80               80               80
+Max_Voltage_Limit @14(1B)                             120               80              120              120              120              120
+Min_Voltage_Limit @15(1B)                              40               40               40               40               40               40
+Max_Torque_Limit @16(2B)                             1000             1000             1000             1000             1000              500
+raw @17(1B)                                             3                3                3                3                3                1
+Phase @18(1B)                                          92               12               92               92               92               92
+Unloading_Condition @19(1B)                            44               44               44               44               44               44
+LED_Alarm_Condition @20(1B)                            47               47               47               47               47               47
+P_Coefficient @21(1B)                                  16               16               16               16               16               16
+D_Coefficient @22(1B)                                  32               32               32               32               32               32
+I_Coefficient @23(1B)                                   0                0                0                0                0                0
+Minimum_Startup_Force @24(2B)                           0               16                0                0                0                0
+raw @25(1B)                                             0                0                0                0                0                0
+CW_Dead_Zone @26(1B)                                    1                1                1                1                1                1
+CCW_Dead_Zone @27(1B)                                   1                1                1                1                1                1
+Protection_Current @28(2B)                            300              500              300              300              300              250
+raw @29(1B)                                             1                1                1                1                1                0
+Angular_Resolution @30(1B)                              1                1                1                1                1                1
+Homing_Offset @31(2B)                                 268            -1252              952              785            -1130             1024
+raw @32(1B)                                             1               12                3                3               12                4
+Operating_Mode @33(1B)                                  0                0                0                0                0                0
+Protective_Torque @34(1B)                              20               20               20               20               20               20
+Protection_Time @35(1B)                               200              200              200              200              200              200
+Overload_Torque @36(1B)                                80               80               80               80               80               25
+Velocity_closed_loop_P_proportional_coefficient @37(1B)               10               10               10               10               10               10
+Over_Current_Protection_Time @38(1B)                  250              200              250              250              250              250
+Velocity_closed_loop_I_integral_coefficient @39(1B)              200              200              200              200              200              200
+Torque_Enable @40(1B)                                   0                0                0                0                0                0
+Acceleration @41(1B)                                  254              254              254              254              254              254
+Goal_Position @42(2B)                                   0                0                0                0                0             1751
+raw @43(1B)                                             0                0                0                0                0                6
+Goal_Time @44(2B)                                       0                0                0                0                0                0
+raw @45(1B)                                             0                0                0                0                0                0
+Goal_Velocity @46(2B)                                   0                0                0                0                0                0
+raw @47(1B)                                             0                0                0                0                0                0
+Torque_Limit @48(2B)                                 1000             1000             1000             1000             1000              500
+raw @49(1B)                                             3                3                3                3                3                1
+raw @50(1B)                                             0                0                0                0                0                0
+raw @51(1B)                                             0                0                0                0                0                0
+raw @52(1B)                                             0                0                0                0                0                0
+raw @53(1B)                                             0                0                0                0                0                0
+raw @54(1B)                                             0                0                0                0                0                0
+Lock @55(1B)                                            0                0                0                0                0                0
+Present_Position @56(2B)                             2071              841             3126             2947             2937             2051
+raw @57(1B)                                             8                3               12               11               11                8
+Present_Velocity @58(2B)                                0                0                0                0                0                0
+raw @59(1B)                                             0                0                0                0                0                0
+Present_Load @60(2B)                                    0                0                0                0                0                0
+raw @61(1B)                                             0                0                0                0                0                0
+Present_Voltage @62(1B)                                49               49               49               49               49               49
+Present_Temperature @63(1B)                            25               25               24               26               26               26
+raw @64(1B)                                             0                0                0                0                0                0
+Status @65(1B)                                          0                0                0                0                0                0
+Moving @66(1B)                                          0                0                0                0                0                0
+raw @67(1B)                                            23               73               54              131              121                3
+raw @68(1B)                                             8                3               12               11               11                8
+Present_Current @69(2B)                                 0                0                0                0                0                0
+raw @70(1B)                                             0                0                0                0                0                0
+Goal_Position_2 @71(2B)                                 0                0                0                0                0                0
+raw @72(1B)                                             0                0                0                0                0                0
+raw @73(1B)                                             0                0                0                0                0                0
+raw @74(1B)                                             0                0                0                0                0                0
+raw @75(1B)                                             0                0                0                0                0                0
+raw @76(1B)                                             0                0                0                0                0                0
+raw @77(1B)                                             0                0                0                0                0                0
+raw @78(1B)                                           255              255              255              255              255              255
+raw @79(1B)                                           255              255              255              255              255              255
+Moving_Velocity @80(1B)                                 1                1                1                1                1                1
+Moving_Velocity_Threshold @80(1B)                       1                1                1                1                1                1
+DTs @81(1B)                                            10               20               10               10               10               10
+Velocity_Unit_factor @82(1B)                           50               50               50               50               50               50
+Hts @83(1B)                                             1                1                1                1                1                1
+Maximum_Velocity_Limit @84(1B)                        250               68              250              250              250              250
+Maximum_Acceleration @85(1B)                          254              254              254              254              254              254
+Acceleration_Multiplier  @86(1B)                      100                1              100              100              100              100
+raw @87(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @88(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @89(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @90(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @91(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @92(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @93(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @94(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @95(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @96(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @97(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @98(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @99(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @100(1B)                                          ERR              ERR              ERR              ERR              ERR              ERR
+
+Rows highlighted in yellow indicate values that differ between motors.
+
+
+=== SO101_Leader Setup Check ===
+Serial Number: 5AAF270363
+Port:          /dev/ttyACM0
+
+Connection ... OK
+
+Voltage:
+  shoulder_pan    (ID 1) . 4.9V
+  shoulder_lift   (ID 2) . 4.9V
+  elbow_flex      (ID 3) . 4.9V
+  wrist_flex      (ID 4) . 4.9V
+  wrist_roll      (ID 5) . 4.9V
+  gripper         (ID 6) . 4.9V
+Voltage ..... OK (avg 4.9V, expected USB only (< 7V))
+
+Motors:
+  shoulder_pan    (ID 1) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+  shoulder_lift   (ID 2) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+  elbow_flex      (ID 3) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+  wrist_flex      (ID 4) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+  wrist_roll      (ID 5) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+  gripper         (ID 6) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+Motor Setup .. OK (6/6 motors found)
+
+Calibration:
+  shoulder_pan    (ID 1) . CALIBRATED  (offset=268, min=848, max=3491)
+  shoulder_lift   (ID 2) . CALIBRATED  (offset=-1252, min=822, max=2421)
+  elbow_flex      (ID 3) . CALIBRATED  (offset=952, min=929, max=3139)
+  wrist_flex      (ID 4) . CALIBRATED  (offset=785, min=874, max=3183)
+  wrist_roll      (ID 5) . CALIBRATED  (offset=-1130, min=141, max=3951)
+  gripper         (ID 6) . CALIBRATED  (offset=1024, min=2031, max=3320)
+Calibration .. OK (6/6 motors calibrated)
+
+Overall: READY
+
+geti-action/application/backend  mark/calibration-revamp uv run src/cli_robot_setup.py --robot-type SO101_Follower --serial-number 5AAF270379 --print-registers
+
+====================================================================================================
+REGISTER DUMP
+====================================================================================================
+
+  shoulder_pan    (ID 1)  expected gearing: 1/191
+  shoulder_lift   (ID 2)  expected gearing: 1/191
+  elbow_flex      (ID 3)  expected gearing: 1/147
+  wrist_flex      (ID 4)  expected gearing: 1/147
+  wrist_roll      (ID 5)  expected gearing: 1/147
+  gripper         (ID 6)  expected gearing: 1/345
+
+Register                                     shoulder_pan    shoulder_lift       elbow_flex       wrist_flex       wrist_roll          gripper
+----------------------------------------------------------------------------------------------------------------------------------------------
+Firmware_Major_Version @0(1B)                           3                3                3                3                3                3
+Firmware_Minor_Version @1(1B)                          10               10               10               10               10               10
+raw @2(1B)                                              0                0                0                0                0                0
+Model_Number @3(2B)                                   777              777              777              777              777              777
+raw @4(1B)                                              3                3                3                3                3                3
+ID @5(1B)                                               1                2                3                4                5                6
+Baud_Rate @6(1B)                                        0                0                0                0                0                0
+Return_Delay_Time @7(1B)                                0                0                0                0                0                0
+Response_Status_Level @8(1B)                            1                1                1                1                1                1
+Min_Position_Limit @9(2B)                             708              854              785              873              160             2000
+raw @10(1B)                                             2                3                3                3                0                7
+Max_Position_Limit @11(2B)                           3431             3162             3019             3208             4016             3525
+raw @12(1B)                                            13               12               11               12               15               13
+Max_Temperature_Limit @13(1B)                          70               70               70               70               70               70
+Max_Voltage_Limit @14(1B)                             140              140              140              140              140              140
+Min_Voltage_Limit @15(1B)                              40               40               40               40               40               40
+Max_Torque_Limit @16(2B)                             1000             1000             1000             1000             1000              500
+raw @17(1B)                                             3                3                3                3                3                1
+Phase @18(1B)                                          12               12               12               12               12               12
+Unloading_Condition @19(1B)                            44               44               44               44               44               44
+LED_Alarm_Condition @20(1B)                            47               47               47               47               47               47
+P_Coefficient @21(1B)                                  16               16               16               16               16               16
+D_Coefficient @22(1B)                                  32               32               32               32               32               32
+I_Coefficient @23(1B)                                   0                0                0                0                0                0
+Minimum_Startup_Force @24(2B)                          16               16               16               16               16               16
+raw @25(1B)                                             0                0                0                0                0                0
+CW_Dead_Zone @26(1B)                                    1                1                1                1                1                1
+CCW_Dead_Zone @27(1B)                                   1                1                1                1                1                1
+Protection_Current @28(2B)                            310              310              310              310              310              250
+raw @29(1B)                                             1                1                1                1                1                0
+Angular_Resolution @30(1B)                              1                1                1                1                1                1
+Homing_Offset @31(2B)                                 158              221             1202            -1631             -468              986
+raw @32(1B)                                             0                0                4               14                9                3
+Operating_Mode @33(1B)                                  0                0                0                0                0                0
+Protective_Torque @34(1B)                              20               20               20               20               20               20
+Protection_Time @35(1B)                               200              200              200              200              200              200
+Overload_Torque @36(1B)                                80               80               80               80               80               25
+Velocity_closed_loop_P_proportional_coefficient @37(1B)               10               10               10               10               10               10
+Over_Current_Protection_Time @38(1B)                  200              200              200              200              200              200
+Velocity_closed_loop_I_integral_coefficient @39(1B)              200              200              200              200              200              200
+Torque_Enable @40(1B)                                   0                0                0                0                0                0
+Acceleration @41(1B)                                  254              254              254              254              254              254
+Goal_Position @42(2B)                                   0                0                0                0                0                0
+raw @43(1B)                                             0                0                0                0                0                0
+Goal_Time @44(2B)                                       0                0                0                0                0                0
+raw @45(1B)                                             0                0                0                0                0                0
+Goal_Velocity @46(2B)                                   0                0                0                0                0                0
+raw @47(1B)                                             0                0                0                0                0                0
+Torque_Limit @48(2B)                                 1000             1000             1000             1000             1000              500
+raw @49(1B)                                             3                3                3                3                3                1
+raw @50(1B)                                             0                0                0                0                0                0
+raw @51(1B)                                             0                0                0                0                0                0
+raw @52(1B)                                             0                0                0                0                0                0
+raw @53(1B)                                             0                0                0                0                0                0
+raw @54(1B)                                             0                0                0                0                0                0
+Lock @55(1B)                                            0                0                0                0                0                0
+Present_Position @56(2B)                             2140              898             3015             2823             2983             2341
+raw @57(1B)                                             8                3               11               11               11                9
+Present_Velocity @58(2B)                                0                0                0                0                0                0
+raw @59(1B)                                             0                0                0                0                0                0
+Present_Load @60(2B)                                    0                0                0                0                0                0
+raw @61(1B)                                             0                0                0                0                0                0
+Present_Voltage @62(1B)                               119              119              119              120              118              119
+Present_Temperature @63(1B)                            31               31               30               32               32               32
+raw @64(1B)                                             0                0                0                0                0                0
+Status @65(1B)                                          0                0                0                0                0                0
+Moving @66(1B)                                          0                0                0                0                0                0
+raw @67(1B)                                            92              130              199                7              167               37
+raw @68(1B)                                             8                3               11               11               11                9
+Present_Current @69(2B)                                 0                0                0                0                0                0
+raw @70(1B)                                             0                0                0                0                0                0
+Goal_Position_2 @71(2B)                                 0                0                0                0                0                0
+raw @72(1B)                                             0                0                0                0                0                0
+raw @73(1B)                                             0                0                0                0                0                0
+raw @74(1B)                                             0                0                0                0                0                0
+raw @75(1B)                                             0                0                0                0                0                0
+raw @76(1B)                                             0                0                0                0                0                0
+raw @77(1B)                                             0                0                0                0                0                0
+raw @78(1B)                                           255              255              255              255              255              255
+raw @79(1B)                                           255              255              255              255              255              255
+Moving_Velocity @80(1B)                                 1                1                1                1                1                1
+Moving_Velocity_Threshold @80(1B)                       1                1                1                1                1                1
+DTs @81(1B)                                            20               20               20               20               20               20
+Velocity_Unit_factor @82(1B)                           50               50               50               50               50               50
+Hts @83(1B)                                             1                1                1                1                1                1
+Maximum_Velocity_Limit @84(1B)                         65               65               65               65               65               65
+Maximum_Acceleration @85(1B)                          254              254              254              254              254              254
+Acceleration_Multiplier  @86(1B)                        1                1                1                1                1                1
+raw @87(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @88(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @89(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @90(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @91(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @92(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @93(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @94(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @95(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @96(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @97(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @98(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @99(1B)                                           ERR              ERR              ERR              ERR              ERR              ERR
+raw @100(1B)                                          ERR              ERR              ERR              ERR              ERR              ERR
+
+Rows highlighted in yellow indicate values that differ between motors.
+
+
+=== SO101_Follower Setup Check ===
+Serial Number: 5AAF270379
+Port:          /dev/ttyACM1
+
+Connection ... OK
+
+Voltage:
+  shoulder_pan    (ID 1) . 11.9V
+  shoulder_lift   (ID 2) . 11.8V
+  elbow_flex      (ID 3) . 11.9V
+  wrist_flex      (ID 4) . 12.0V
+  wrist_roll      (ID 5) . 11.8V
+  gripper         (ID 6) . 12.0V
+Voltage ..... OK (avg 11.9V, expected external power supply (>= 7V))
+
+Motors:
+  shoulder_pan    (ID 1) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/191)
+  shoulder_lift   (ID 2) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/191)
+  elbow_flex      (ID 3) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/147)
+  wrist_flex      (ID 4) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/147)
+  wrist_roll      (ID 5) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/147)
+  gripper         (ID 6) . FOUND  [Angular_Resolution=1]  (expected gearing: 1/345)
+Motor Setup .. OK (6/6 motors found)
+
+Calibration:
+  shoulder_pan    (ID 1) . CALIBRATED  (offset=158, min=708, max=3431)
+  shoulder_lift   (ID 2) . CALIBRATED  (offset=221, min=854, max=3162)
+  elbow_flex      (ID 3) . CALIBRATED  (offset=1202, min=785, max=3019)
+  wrist_flex      (ID 4) . CALIBRATED  (offset=-1631, min=873, max=3208)
+  wrist_roll      (ID 5) . CALIBRATED  (offset=-468, min=160, max=4016)
+  gripper         (ID 6) . CALIBRATED  (offset=986, min=2000, max=3525)
+Calibration .. OK (6/6 motors calibrated)
+
+Overall: READY
+
+#+end_src
+
+* Old
+
+    uv run src/cli_robot_setup.py --robot-type SO101_Follower --serial-number 5AAF270379 --print-registers
+    uv run src/cli_robot_setup.py --robot-type SO101_Leader --serial-number 5AAF270363 --print-registers
+
+# Calibration 
+
+So I think I finally realized why I've been struggling so much with getting a proper UX in for the setup motors and calibration phase.
+The reason is that the current proposed UX is wrong as it leads to a possibility of having an inconsistent application state.
+
+Let me elaborate a bit more and then also provide an alternative better UX: Intuitively I believe that for any good application design should enforce that its application state must remain in a consistent state. If for some reason we can't reach this then we must put extra defensive guard rails so that we can lead the state back into a consistent state.
+A good way to do this is to limit the possibility of reaching an inconsistent state, for instance by adding early validation.
+
+Now consider the current UX proposal of the robot configuration + setup motors and calibration.
+First a user uses the robot form to select their robot type, the connection method (usb for SO101, or network for Trossen, for lekiwi we need to support both [1]) and then the specific connection criteria (which usb port, ip number etc).
+After choosing the robot type we display it's URDF model in the right panel, but we can't really show anything else yet because we don't know if robot has finalized it's motor/calibration setup. (I think this is already a good hint on why the current UX is wrong)
+Regardless of this, the user can submit the robot configuration and start selecting the robot from the robot list, use it in environments and start recording datasets - even though we as the server can not yet guarantee that this is a robot with a valid motor and calibration setup.
+
+This UX ended up working while developing Geti Action because all of us have already setup their robots /before/ integrating it with Geti Action. However if you were to apply this UX to a completely new user, with a new robot, then it starts to break down:
+- In the robots page we would need to detect if the motors and calibration have been setup, or show big warning messages
+- In the environments page we would need to filter out robots that have not been setup properly
+- In the recording page we would need to prevent users from recording robots with an unfinished setup
+- In the model page we would end to prevent users from running models on unfinished setups
+
+That is to say, because we do not guarantee that the robot is in a consistent state when we store it in the database we end up requiring putting in a lot of effort to prevent the user from using it.
+What makes this even more complicated is that we only need to do this conditionally: Trossen does not require the same calibration concept, and likely other more complicated industrial robots don't need it either.
+So we end up adding a ton of guard rails in the application which are only applicable for a few robots.
+
+## The proposed solution
+
+To me it's very clear now that the current proposed UX leads to a lot of issues and I don't think we should continue with this at the moment. 
+However I do have a proposal for a UX that does allow the application to have a consistent robot state.
+That solution is to move the setup motor and calibration phase into the form setup where we create the robot.
+
+This flow would work as follows:
+1. The user clicks "Add new robot"
+2. User selects the robot type "SO101 Follower", "SO101 Leader", "Trossen Follower", "Trossen Leader" - they select "SO101 Follower"
+   a) The Robot viewer on the right hand side shows the SO101 robot
+3. User selects the robot by serial number and/or usb port [2]
+4. We try to connect with the robot to determine its state:
+   a) Cannot connect over USb - we need to show a proper error message. The "Add robot" button remains disabled
+   b) Motors have not been setup, go to step `5`. The "Add robot" button remains disabled
+   c) Motors have been setup but they don't contain calibration values, go to step `6`. The "Add robot" button remains disabled
+   c) Motors have been setup and contain calibration values, go to step `7`. The "Add robot" button becomes enabled
+5. On the right hand side we show a "Setup motors" flow. This flow has some sub steps where we have a list of joints that the user needs to setup, in addition the 3D viewer will highlight every joint while going through thist step. this step has the following sub steps:
+   a) Setup `shoulder_pan`
+   b) Setup `shoulder_lift`
+   c) Setup `elbow_flex`
+   d) Setup `wrist_flex`
+   e) Setup `wrist_roll`
+   f) Setup `gripper`
+   After completing the setup steps for all 6 joints the "Setup motors" flow is finished and the user can go to step `6`.
+   Note that if for some reason the user exits this flow (closing the browser) then that's fine as we did not store the robot in our database. They can reinitiate the flow again at a later point in time.
+   
+6. The user needs to start the calibration flow. This is similar as the demo I showed before, but now within the "create robot" setup:
+   a) Centering the robot to get the offset values
+      When clicking "next" Geti Action will submit these new values to the robot's controller board.
+   b) Moving each individual joint to get its min and max range
+   c) Submitting the new calibration values, this stores the calibration values into the robot's controller board.
+
+7. Verifying the robot setup. At this point in time Geti Action will take the calibration values from the motor and store them in a local file. This file is needed for Lerobot to connect with the SO101 arm.
+   After storing this we can verify that Geti Action can read and write to the robot. We will ask the user to perform a few verification steps to make sure all is ok, but this can be ignored/skipped as well.
+   a) Store calibration file on disk (automatic)
+   b) Verify movement by user
+   c) Verify movement by Geti
+   d) Submits the robot
+
+Once all these steps are done we will have a fully setup SO101 Arm connected to Geti Action. We do not need to put on guard rails at various locations as we can guarantee that the robot is in a consistent state.
+Not all robots need this setup. If the user connects their Trossen robot, then we can skip steps 4, 5, and 6 and immediately ask the user to verify their connection. The same will hold for SO101 robots that are connected via a network interface (e.g. the websocket connections I've shown before).
+
+This approach makes a LOT more sense to me. Not only do we make the whole "setup robot" flow more interesting, we also immediately validate that we can actually connect to robots before submitting them. This will also open up more improvements to the "robot controller" screen (the screen you see on the `/robots/{robot_id}` page)
+ 
+
+On a technical note: the flow above can be fully contained into a `robots/SO-101/setup.tsx` and `robots/SO-101/setup-worker.py` file.
+These files can be relatively simple, and more importantly they are encapsulated: they don't contain knowledge about other robots. This will make it a lot easier for us to apply the same concept to say LeKiWi, Aloha etc., without requiring the same concept for Trossen.
+The worker would be a websocket worker that essentially keeps track of a state machine, allowing to automatically skip steps when we confirm that the motor or calibration has already been setup before.
+
+Opens:
+- Open: What if you'd need to re calibrate the robot?
+  Answer: Actually I've never needed to do this, but we could allow this in a separate setting / re calibration screen. This is an edge case though
+- Open: What if the setup fails?
+  Answer: the "submit robot" button remains disabled. We ask the user to start over
+- Open: What if the user adds the same robot twice. During the setup of the second robot something fails and we end up with an inconsistent state.
+  Answer: we don't allow adding the same robot twice? Or we skip this setup?
+- Open: What if the user bricks their robot outside of Geti Action
+  Answer: This would require us to re-add guards. However I think we could simplify this by having a common "Connection error" usecase + documentation on how to resolve this.
+
+
+[1] An interesting note here is that if you were to connect to a robot by network, then I believe we should assume that the robot has already been fully configured. I.e. Trossen does not support a calibration and setup motor UX.
+If we were to look at LeKiwi then their guide also assumes you perfrom setup motor and calibration scripts while using a wired connection.
+My point here is: if there's a wired connection, then we may perform setup motors + calibration, otherwise we should assume the robot has been configured properly and the network protocol should guarantee a consistent state.
+
+[2] In here we can make their live easier by having a "Help me find my robot" button. This button triggers a new dialog asking the user to disconnect the robot, and then plug it back in. We keep track of the connected usb ports and then select the one that went missing.
+
+# Robot setup implementation
+
+Ok let's start the actual application integration as the script we build is a great way to verify that our assumptions are correct.
+I'd like you to start to come up with a plan to integrate the whole robot setup flow that we discussed before. Currently when a user adds a new robot they go to the `http://localhost:3000/projects/ab30f4b4-7b60-4e5c-b2bf-43dfbbc75549/robots/new` route.
+At this route they can fill in the robot name, select the robot type and then select the robot based on either the serial number or usb port.
+There's also an option to select a Trossen WidowX robot, please ignore that for now.
+
+We can keep this as is for now and add some extra steps to  this "Add new robot" wizard.
+So after selecting the robot type and the robot (usb/serial number) we want to start to verify if the robot is setup properly:
+1. We check if the voltage of the motor controller corresponds with the leader/follower setting.
+   If it does not then we halt and show the user an informative warning that they need to select the other robot type.
+2. Motors setup check: we need to verify that all motors (i.e. the 6 joints) are available and configured correctly.
+   If it's not then we start the `setup_motors` script that lerobot's SO101 Follower class has implemented.
+   Note though that I don't want to use lerobot's implementation directly, as it relies on `input` calls which aren't usable from our FastAPI server. Instead we should look at their implementation and reimplement it in our websocket worker.
+3. When we have verified that the motors have been setup then we do a calibration check step. If the motors have already been calibrated, then we show a button to skip the calibration setup.
+   If the motors haven't been calibrated, or if the user wants to manually calibrate, then we start a calibration setup.
+   During this setup the UI will receive `state_was_updated` events with the current (denormalized) joints state. (see the `robot_worker.py` file and the robot clients)
+   This state will be used to determine the homing offsets and the min and max range of every joint.
+   
+   We ask the user to first center the robot and apply `homing_offsets` (via `bus.set_half_turn_homings`). These offsets are applied after the user clicks a button ("next"?) to indiate that it will write to the motor.
+   After that's done we ask the user to move all joints into their min and max position while keeping track of these.
+   At this point we show a table where each row represents a joint and the columns show the min value, current value and max value.
+   Then we have another button "finalize" that when clicked will write the calibration to the motor controller.
+   The setup then goes to the next, verification phase.
+4. During the verification phase we read the calibration stored in the robot controller. This calibration is then stored as a file (potentially via our calibration service, by storing it in our database as well) so that we can use it to connect to our robot.
+   We now use the `robot_websocket` endpoint (in `robot_control.py`) to read the normalized joint states of the robot.
+   These are then synced to the URDF model that we display at the same time. This way we may verify that the motor and calibration setup were successfully done.
+   At this phase we show a "Save robot" button. When clicked this will store the actual robot configuration into our database by calling the `create_project_robot` endpoint.
+
+I hope this requirement is clear, but do feel free to ask me any follow up questions.
+I will allow you some freedom wrt how the UI looks and some of the implementation details.
+Architectually I think the most important part is that we need to define a new websocket worker (`SO101SetupWorker`) that is used for both the motor and calibration setup. This worker should hold its own "state machine" (though we don't have to be very strict here wrt implementing certain design patterns) to see which step the user is in.
+The UI uses this worker during stpes 2 and 3.
+When the user switches over to step 4 we use the existing robot worker to connect with the calibrated robot.
+   
+   
+   
+
