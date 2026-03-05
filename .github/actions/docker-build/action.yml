@@ -21,6 +21,12 @@ inputs:
     description: "Newline-separated image labels (from docker/metadata-action)"
     required: false
     default: ""
+  cache-write:
+    description: >
+      Write build cache to the registry (true/false). Set to false for
+      fork PRs where GITHUB_TOKEN cannot write to the org's packages.
+    required: false
+    default: "true"
 
 outputs:
   digest:
@@ -57,5 +63,7 @@ runs:
         # image in GHCR, avoiding the 10 GB GHA cache limit that caused
         # cache thrashing across cpu/xpu/cuda scopes (~18-20 GB total).
         # The caller must log in to ghcr.io before invoking this action.
+        # Cache reads always work (public packages); writes require
+        # packages:write which fork PRs do not have.
         cache-from: type=registry,ref=ghcr.io/open-edge-platform/physical-ai-studio-${{ inputs.device }}:buildcache
-        cache-to: type=registry,ref=ghcr.io/open-edge-platform/physical-ai-studio-${{ inputs.device }}:buildcache,mode=max
+        cache-to: ${{ inputs.cache-write == 'true' && format('type=registry,ref=ghcr.io/open-edge-platform/physical-ai-studio-{0}:buildcache,mode=max', inputs.device) || '' }}
