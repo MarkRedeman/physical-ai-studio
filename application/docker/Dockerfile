@@ -146,12 +146,6 @@ RUN --mount=type=cache,id=uv-cuda,target=/root/.cache/uv \
 # ===========================================================================
 FROM python:${PYTHON_VERSION}-slim@sha256:f3fa41d74a768c2fce8016b98c191ae8c1bacd8f1152870a3f9f87d350920b7c AS runtime-base
 
-# OCI image metadata
-ARG GIT_SHA=unknown
-LABEL org.opencontainers.image.source="https://github.com/open-edge-platform/physical-ai-studio" \
-      org.opencontainers.image.description="Physical AI Studio is an end-to-end framework for teaching robots to perform tasks through imitation learning from human demonstrations" \
-      org.opencontainers.image.revision="${GIT_SHA}"
-
 # uv is needed at runtime for `uv run` in run.sh
 COPY --from=docker.io/astral/uv:0.10.4@sha256:4cac394b6b72846f8a85a7a0e577c6d61d4e17fe2ccee65d9451a8b3c9efb4ac /uv /uvx /bin/
 
@@ -197,6 +191,11 @@ EXPOSE 8000
 # Stage 6a: CPU runtime target
 # ===========================================================================
 FROM runtime-base AS physical-ai-studio-cpu
+
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.source="https://github.com/open-edge-platform/physical-ai-studio" \
+      org.opencontainers.image.description="Physical AI Studio is an end-to-end framework for teaching robots to perform tasks through imitation learning from human demonstrations" \
+      org.opencontainers.image.revision="${GIT_SHA}"
 
 ARG APP_UID=1000
 ARG APP_GID=1000
@@ -244,6 +243,11 @@ RUN echo "deb [arch=amd64 trusted=yes] https://ppa.launchpadcontent.net/kobuk-te
 SHELL ["/bin/sh", "-c"]
 
 FROM runtime-xpu AS physical-ai-studio-xpu
+
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.source="https://github.com/open-edge-platform/physical-ai-studio" \
+      org.opencontainers.image.description="Physical AI Studio is an end-to-end framework for teaching robots to perform tasks through imitation learning from human demonstrations" \
+      org.opencontainers.image.revision="${GIT_SHA}"
 
 ARG APP_UID=1000
 ARG APP_GID=1000
@@ -308,6 +312,11 @@ RUN set -eux; \
     apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 FROM runtime-cuda AS physical-ai-studio-cuda
+
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.source="https://github.com/open-edge-platform/physical-ai-studio" \
+      org.opencontainers.image.description="Physical AI Studio is an end-to-end framework for teaching robots to perform tasks through imitation learning from human demonstrations" \
+      org.opencontainers.image.revision="${GIT_SHA}"
 
 ARG APP_UID=1000
 ARG APP_GID=1000
