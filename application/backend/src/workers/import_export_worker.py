@@ -42,19 +42,15 @@ class ImportExportWorker(BaseProcessWorker):
                         await self._handle_export(job)
             await asyncio.sleep(0.5)
 
-    def setup(self) -> None:
-        super().setup()
+    async def setup(self) -> None:
+        await super().setup()
         with logger.contextualize(worker=self.__class__.__name__):
-            if self.loop is None:
-                raise RuntimeError("The event loop must be set.")
-            self.loop.run_until_complete(self._abort_orphan_jobs())
+            await self._abort_orphan_jobs()
 
-    def teardown(self) -> None:
-        super().teardown()
+    async def teardown(self) -> None:
+        await super().teardown()
         with logger.contextualize(worker=self.__class__.__name__):
-            if self.loop is None:
-                raise RuntimeError("The event loop must be set.")
-            self.loop.run_until_complete(self._abort_orphan_jobs())
+            await self._abort_orphan_jobs()
 
     @staticmethod
     async def _abort_orphan_jobs() -> None:
