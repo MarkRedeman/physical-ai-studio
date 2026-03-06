@@ -171,13 +171,6 @@ max-args = 7
 
 
 # ============================================================================ #
-# PYTEST CONFIGURATION                                                         #
-# ============================================================================ #
-[tool.pytest.ini_options]
-pythonpath = "src"
-testpaths = ["tests"]
-
-# ============================================================================ #
 # MYPY CONFIGURATION                                                           #
 # ============================================================================ #
 [tool.mypy]
@@ -185,6 +178,9 @@ python_version = "3.12"
 ignore_missing_imports = true
 show_error_codes = true
 
+# ============================================================================ #
+# PYTEST CONFIGURATION                                                         #
+# ============================================================================ #
 [tool.pytest.ini_options]
 addopts = ["--strict-markers", "--strict-config", "--showlocals", "-ra"]
 testpaths = "tests"
