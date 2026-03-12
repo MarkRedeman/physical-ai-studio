@@ -123,31 +123,19 @@ class InternalLeRobotDataset(DatasetClient):
 
         if not self.exists_on_disk:
             return []
-        metadata = self._dataset.meta
-        episodes = metadata.episodes
 
-        result = []
-        action_feature_names = self._dataset.features.get("action", {}).get("names", [])
-        for episode in episodes:
-            episode_index = episode["episode_index"]
-            result.append(
-                Episode(
-                    actions=self._get_episode_actions(episode).tolist(),
-                    fps=metadata.fps,
-                    videos={
-                        video_key: EpisodeVideo(
-                            start=episode[f"videos/{video_key}/from_timestamp"],
-                            end=episode[f"videos/{video_key}/to_timestamp"],
-                            path=str(metadata.get_video_file_path(episode_index, video_key)),
-                        )
-                        for video_key in self._dataset.meta.video_keys
-                    },
-                    action_keys=action_feature_names,
-                    **episode,
-                )
-            )
+        return [self._build_episode_from_metadata(episode) for episode in self._dataset.meta.episodes]
 
-        return result
+    def find_episode(self, episode_index: int) -> Episode | None:
+        """Find episode by index or return None."""
+        if not self.exists_on_disk:
+            return None
+
+        episode = self._find_episode_metadata(episode_index)
+        if episode is None:
+            return None
+
+        return self._build_episode_from_metadata(episode)
 
     def get_episode_infos(self) -> list[EpisodeInfo]:
         """Get lightweight episode summaries."""
@@ -164,35 +152,6 @@ class InternalLeRobotDataset(DatasetClient):
             )
             for episode in metadata.episodes
         ]
-
-    def find_episode(self, episode_index: int) -> Episode | None:
-        """Find episode by index or return None."""
-        if not self.exists_on_disk:
-            return None
-
-        metadata = self._dataset.meta
-        episodes = metadata.episodes
-        action_feature_names = self._dataset.features.get("action", {}).get("names", [])
-        for episode in episodes:
-            if episode["episode_index"] != episode_index:
-                continue
-
-            return Episode(
-                actions=self._get_episode_actions(episode).tolist(),
-                fps=metadata.fps,
-                videos={
-                    video_key: EpisodeVideo(
-                        start=episode[f"videos/{video_key}/from_timestamp"],
-                        end=episode[f"videos/{video_key}/to_timestamp"],
-                        path=str(metadata.get_video_file_path(episode_index, video_key)),
-                    )
-                    for video_key in self._dataset.meta.video_keys
-                },
-                action_keys=action_feature_names,
-                **episode,
-            )
-
-        return None
 
     def add_frame(self, obs: dict, act: dict, task: str) -> None:
         """Add frame to recording buffer."""
@@ -335,6 +294,27 @@ class InternalLeRobotDataset(DatasetClient):
         to_idx = episode["dataset_to_index"]
         actions = self._dataset.hf_dataset["action"][from_idx:to_idx]
         return torch.stack(actions)
+
+    def _build_episode_from_metadata(self, episode: dict) -> Episode:
+        metadata = self._dataset.meta
+        episode_index = episode["episode_index"]
+        action_feature_names = self._dataset.features.get("action", {}).get("names", [])
+
+        return Episode(
+            actions=self._get_episode_actions(episode).tolist(),
+            fps=metadata.fps,
+            videos={
+                video_key: EpisodeVideo(
+                    start=episode[f"videos/{video_key}/from_timestamp"],
+                    end=episode[f"videos/{video_key}/to_timestamp"],
+                    path=str(metadata.get_video_file_path(episode_index, video_key)),
+                )
+                for video_key in self._dataset.meta.video_keys
+            },
+            action_keys=action_feature_names,
+            thumbnail=None,
+            **episode,
+        )
 
     def _find_episode_metadata(self, episode_index: int) -> dict | None:
         for episode in self._dataset.meta.episodes:
