@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from email.utils import format_datetime
 from uuid import UUID
 
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+from internal_datasets.dataset_client import DatasetClient
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class EpisodeThumbnailService:
     def get_thumbnail(
         self,
         dataset_id: UUID,
-        dataset: InternalLeRobotDataset,
+        dataset: DatasetClient,
         episode_index: int,
         camera: str | None = None,
         width: int = 320,
@@ -41,7 +41,7 @@ class EpisodeThumbnailService:
         last_modified = format_datetime(datetime.fromtimestamp(video_stat.st_mtime, tz=UTC), usegmt=True)
         return EpisodeThumbnail(content=thumbnail_bytes, etag=f'"{etag}"', last_modified=last_modified)
 
-    def _resolve_video_key(self, dataset: InternalLeRobotDataset, camera: str | None) -> str | None:
+    def _resolve_video_key(self, dataset: DatasetClient, camera: str | None) -> str | None:
         video_keys = dataset.get_video_keys()
         if len(video_keys) == 0:
             return None

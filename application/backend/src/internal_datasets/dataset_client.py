@@ -42,6 +42,16 @@ class DatasetClient(ABC):
         """Get the video keys used to record the dataset"""
 
     @abstractmethod
+    def get_episode_thumbnail_png(
+        self,
+        episode_index: int,
+        video_key: str,
+        width: int = 320,
+        height: int = 240,
+    ) -> tuple[bytes, Path] | None:
+        """Build a PNG thumbnail and return bytes with source video path."""
+
+    @abstractmethod
     def create(self, fps: int, features: dict, robot_type: str) -> None:
         """Create dataset."""
 
