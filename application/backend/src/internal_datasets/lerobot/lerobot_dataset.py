@@ -17,7 +17,7 @@ from loguru import logger
 
 from internal_datasets.dataset_client import DatasetClient
 from internal_datasets.mutations.recording_mutation import RecordingMutation
-from schemas import Episode, EpisodeVideo
+from schemas import Episode, EpisodeInfo, EpisodeVideo
 from settings import get_settings
 
 
@@ -150,6 +150,22 @@ class InternalLeRobotDataset(DatasetClient):
             )
 
         return result
+
+    def get_episode_infos(self) -> list[EpisodeInfo]:
+        """Get lightweight episode summaries."""
+        if not self.exists_on_disk:
+            return []
+
+        metadata = self._dataset.meta
+        return [
+            EpisodeInfo(
+                episode_index=episode["episode_index"],
+                tasks=episode["tasks"],
+                length=episode["length"],
+                fps=metadata.fps,
+            )
+            for episode in metadata.episodes
+        ]
 
     def find_episode(self, episode_index: int) -> Episode | None:
         """Find episode by index or return None."""

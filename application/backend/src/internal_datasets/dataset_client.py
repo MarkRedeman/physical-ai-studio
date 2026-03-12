@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from schemas import Episode
+from schemas import Episode, EpisodeInfo
 
 if TYPE_CHECKING:
     from internal_datasets.mutations.recording_mutation import RecordingMutation
@@ -20,6 +20,14 @@ class DatasetClient(ABC):
     @abstractmethod
     def get_episodes(self) -> list[Episode]:
         """Get episodes of dataset."""
+
+    @abstractmethod
+    def get_episode_infos(self) -> list[EpisodeInfo]:
+        """Get episode summaries without heavy frame/action data."""
+
+    @abstractmethod
+    def find_episode(self, episode_index: int) -> Episode | None:
+        """Find episode by index or return None."""
 
     @abstractmethod
     def get_tasks(self) -> list[str]:

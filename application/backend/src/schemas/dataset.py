@@ -10,6 +10,7 @@ class EpisodeInfo(BaseModel):
     episode_index: int
     tasks: list[str]
     length: int
+    fps: int
 
 
 class EpisodeVideo(BaseModel):

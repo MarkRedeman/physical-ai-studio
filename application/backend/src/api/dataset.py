@@ -10,7 +10,7 @@ from api.dependencies import HTTPException, get_dataset_id, get_dataset_service,
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from internal_datasets.mutations.delete_episode_mutation import DeleteEpisodesMutation
 from internal_datasets.utils import get_internal_dataset
-from schemas import Dataset, Episode
+from schemas import Dataset, Episode, EpisodeInfo
 from services import DatasetService, EpisodeThumbnailService
 
 router = APIRouter(prefix="/api/dataset", tags=["Dataset"])
@@ -29,11 +29,11 @@ async def get_dataset(
 async def get_episodes_of_dataset(
     dataset_id: Annotated[UUID, Depends(get_dataset_id)],
     dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
-) -> list[Episode]:
+) -> list[EpisodeInfo]:
     """Get dataset episodes of dataset by id."""
     dataset = await dataset_service.get_dataset_by_id(dataset_id)
     internal_dataset = get_internal_dataset(dataset)
-    return internal_dataset.get_episodes()
+    return internal_dataset.get_episode_infos()
 
 
 @router.get("/{dataset_id}/episodes/{episode_index}")
