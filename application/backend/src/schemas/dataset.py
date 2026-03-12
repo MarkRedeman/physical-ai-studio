@@ -27,7 +27,6 @@ class Episode(BaseModel):
     actions: list[list[float]]
     action_keys: list[str]
     videos: dict[str, EpisodeVideo]
-    thumbnail: str | None
 
 
 class LeRobotDatasetInfo(BaseModel):

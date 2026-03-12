@@ -130,7 +130,6 @@ class InternalLeRobotDataset(DatasetClient):
         action_feature_names = self._dataset.features.get("action", {}).get("names", [])
         for episode in episodes:
             episode_index = episode["episode_index"]
-            thumbnail = None
             result.append(
                 Episode(
                     actions=self._get_episode_actions(episode).tolist(),
@@ -144,7 +143,6 @@ class InternalLeRobotDataset(DatasetClient):
                         for video_key in self._dataset.meta.video_keys
                     },
                     action_keys=action_feature_names,
-                    thumbnail=thumbnail,
                     **episode,
                 )
             )
@@ -191,7 +189,6 @@ class InternalLeRobotDataset(DatasetClient):
                     for video_key in self._dataset.meta.video_keys
                 },
                 action_keys=action_feature_names,
-                thumbnail=None,
                 **episode,
             )
 
@@ -284,8 +281,6 @@ class InternalLeRobotDataset(DatasetClient):
                 video_timestamps[video_key].end += offset
 
         action_feature_names = self._dataset.features.get("action", {}).get("names", [])
-        camera_key = self._dataset.meta.camera_keys[0]
-        thumbnail = self._build_thumbnail_from_buffer(data, camera_key)
         return Episode(
             episode_index=episode_index,
             length=len(data["frame_index"]),
@@ -294,7 +289,6 @@ class InternalLeRobotDataset(DatasetClient):
             actions=data["action"].tolist(),
             videos=video_timestamps,
             action_keys=action_feature_names,
-            thumbnail=thumbnail,
         )
 
     def _build_episode_data_from_buffer(self) -> dict:
@@ -366,17 +360,6 @@ class InternalLeRobotDataset(DatasetClient):
             return None
 
         return imagebytes.tobytes()
-
-    def _build_thumbnail_from_buffer(self, episode_buffer: dict, image_key: str) -> str | None:
-        thumbnail_size = (320, 240)
-
-        image_path = episode_buffer[image_key][-1]
-        image = cv2.imread(image_path)
-        if image is None:
-            return None
-        thumbnail = cv2.resize(image, thumbnail_size)
-        _, imagebytes = cv2.imencode(".jpg", thumbnail)
-        return base64.b64encode(imagebytes).decode()
 
     def _build_thumbnail(self, episode: dict, image_key: str) -> str:
         thumbnail_size = (320, 240)
