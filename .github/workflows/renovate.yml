@@ -67,6 +67,10 @@ jobs:
           app-id: ${{ secrets.RENOVATE_APP_ID }}
           private-key: ${{ secrets.RENOVATE_APP_PEM }}
 
+      - name: Install @geti/ui packages
+        working-directory: "application/ui"
+        run: npm run clone-geti-ui-packages
+
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@abd08c7549b2a864af5df4a2e369c43f035a6a9d # v46.1.5
         with:
