@@ -23,6 +23,15 @@ async def list_jobs(
     return await job_service.get_job_list()
 
 
+@router.delete("/{job_id}")
+async def delete_job(
+    job_id: Annotated[UUID, Depends(get_job_id)],
+    job_service: Annotated[JobService, Depends(get_job_service)],
+) -> None:
+    """Delete a job. Only allows deleting failed jobs"""
+    await job_service.delete_job(job_id)
+
+
 @router.post(":train")
 async def submit_train_job(
     job_service: Annotated[JobService, Depends(get_job_service)],
