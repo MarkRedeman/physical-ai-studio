@@ -1,6 +1,7 @@
 import logging
 from fractions import Fraction
 
+from lerobot.datasets.video_utils import resolve_vcodec
 from pydantic import BaseModel, Field
 
 from .dataset import Dataset
@@ -35,6 +36,7 @@ class StreamingEncodingSettings(BaseModel):
     @staticmethod
     def _vcodec_candidates() -> list[str]:
         return [
+            resolve_vcodec("auto"),
             "h264_videotoolbox",
             "hevc_videotoolbox",
             "h264_nvenc",
