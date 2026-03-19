@@ -43,12 +43,12 @@ export const RecordingViewer = ({ recordingConfig }: RecordingViewerProps) => {
 
     const robots = (recordingConfig.environment.robots ?? []).map(({ robot }) => robot);
 
-    const backPath = paths.project.datasets.show({
-        dataset_id: recordingConfig.dataset.id!,
-        project_id: recordingConfig.dataset.project_id,
-    });
-
     if (!state.initialized) {
+        const backPath = paths.project.datasets.show({
+            dataset_id: recordingConfig.dataset.id!,
+            project_id: recordingConfig.dataset.project_id,
+        });
+
         return (
             <Flex
                 width='100%'
@@ -72,14 +72,6 @@ export const RecordingViewer = ({ recordingConfig }: RecordingViewerProps) => {
     return (
         <RobotModelsProvider>
             <Flex direction={'column'} height={'100%'} position={'relative'}>
-                <View height='size-800'>
-                    <Button href={backPath} alignSelf={'start'}>
-                        <Icon>
-                            <ChevronLeft color='white' fill='white' />
-                        </Icon>
-                        <Text>Stop recording</Text>
-                    </Button>
-                </View>
                 <Flex direction={'row'} flex gap={'size-100'}>
                     <Flex direction={'column'} alignContent={'start'} flex gap={'size-30'}>
                         {recordingConfig.environment.cameras!.map((camera) => (
