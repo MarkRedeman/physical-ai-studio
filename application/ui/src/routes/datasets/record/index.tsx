@@ -26,6 +26,16 @@ const RecordingPage = () => {
             },
         },
     });
+
+    const episodeQuery = $api.useSuspenseQuery('get', '/api/dataset/{dataset_id}/episodes', {
+        params: {
+            path: {
+                dataset_id,
+            },
+        },
+    });
+    const totalEpisodes = episodeQuery.data.length;
+
     const backPath = paths.project.datasets.show({ project_id, dataset_id });
 
     const onSetupDone = (config: SchemaTeleoperationConfig | undefined) => {
@@ -48,7 +58,13 @@ const RecordingPage = () => {
             height={'100%'}
         >
             <View backgroundColor={'gray-300'} gridArea={'header'}>
-                <Flex height='100%' alignItems={'center'} marginX='1rem' gap='size-200'>
+                <Flex
+                    height='100%'
+                    alignItems={'center'}
+                    marginX='1rem'
+                    gap='size-200'
+                    justifyContent={'space-between'}
+                >
                     <Link href={backPath} isQuiet variant='overBackground'>
                         <Flex marginEnd='size-200' direction='row' gap='size-200' alignItems={'center'}>
                             <Icon>
@@ -60,6 +76,11 @@ const RecordingPage = () => {
                             </Flex>
                         </Flex>
                     </Link>
+                    {totalEpisodes > 0 && (
+                        <Text UNSAFE_className={classes.episodesText}>
+                            Total episodes recorded: <span className={classes.episodesCount}>{totalEpisodes}</span>
+                        </Text>
+                    )}
                 </Flex>
             </View>
 
