@@ -369,6 +369,97 @@ Implementations:
 
 ---
 
+## CI and end-to-end testing improvements
+
+This split architecture enables a cleaner and more scalable test strategy by separating concerns:
+
+## 1) Faster, more reliable CI stages
+
+Today, integration coverage is constrained by one runtime environment per test job. With coordinator/worker split, CI can run independent matrices:
+
+- coordinator-only tests (no GPU dependencies)
+- training-worker tests per backend (`cpu`, `cuda`, `xpu`)
+- inference-worker tests per backend (`cpu`, `cuda`, `xpu`)
+
+This reduces flaky cross-backend interactions and allows backend-specific failures to be isolated quickly.
+
+## 2) Contract testing between services
+
+Define and version message contracts for:
+
+- worker registration payloads
+- heartbeat payloads
+- command envelopes
+- event envelopes
+
+Add schema validation tests that run in CI without hardware. This catches breaking protocol changes before E2E runs.
+
+## 3) Layered E2E strategy
+
+Adopt a tiered pipeline:
+
+### Tier A — coordinator E2E (always on)
+
+- run with no workers
+- verify degraded-mode behavior
+- verify setup/camera/robot/recording workflows
+- verify clear error responses for train/inference actions
+
+### Tier B — single-backend worker E2E
+
+- coordinator + one worker backend (typically CPU in standard CI)
+- validate full job lifecycle and inference flow using real transport
+
+### Tier C — hardware-specific E2E (scheduled/self-hosted)
+
+- coordinator(cpu) + training(cuda) + inference(xpu)
+- coordinator(cpu) + training(xpu) + inference(cpu)
+- run on self-hosted runners with required devices
+
+This keeps PR CI fast while preserving high-confidence hardware validation in scheduled/nightly jobs.
+
+## 4) Deterministic test fixtures
+
+Use Redis stream fixtures and synthetic workers to test orchestration logic deterministically:
+
+- fake worker registers + heartbeats
+- coordinator dispatches command
+- fake worker emits completion/failure events
+- assertions on DB transitions and API responses
+
+No GPU required for orchestration correctness tests.
+
+## 5) Failure-injection and recovery tests
+
+The distributed model makes resilience testable in CI:
+
+- worker crash during training
+- heartbeat timeout and offline transition
+- command retry/idempotency behavior
+- coordinator restart with Redis replay
+
+These are difficult to validate in an in-process architecture and become first-class test scenarios after the split.
+
+## 6) Suggested CI pipeline shape
+
+1. **lint/type/unit** (existing)
+2. **contract tests** (message schema compatibility)
+3. **coordinator integration** (no workers)
+4. **worker integration** (CPU backend)
+5. **E2E smoke** (coordinator + CPU workers)
+6. **nightly hardware matrix** (CUDA/XPU self-hosted)
+
+## 7) Practical repo-level additions
+
+- `tests/contracts/` for message schema tests
+- `tests/integration/coordinator/` for degraded-mode and registry tests
+- `tests/integration/workers/` for backend-specific worker behavior
+- `tests/e2e/` split into `smoke` and `hardware_matrix`
+
+This structure aligns tests to runtime boundaries and makes failures more actionable.
+
+---
+
 ## Recommended MVP scope
 
 Deliver first:
