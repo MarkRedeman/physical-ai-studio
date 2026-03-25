@@ -14,7 +14,6 @@ from api.dependencies import (
     get_episode_thumbnail_service,
 )
 from api.utils import safe_archive_name
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from internal_datasets.mutations.delete_episode_mutation import DeleteEpisodesMutation
 from internal_datasets.utils import get_internal_dataset
 from schemas import Dataset, Episode, EpisodeInfo
@@ -69,9 +68,6 @@ async def get_episode_thumbnail(  # noqa: PLR0913
     """Get a thumbnail image for one episode."""
     dataset = await dataset_service.get_dataset_by_id(dataset_id)
     internal_dataset = get_internal_dataset(dataset)
-
-    if not isinstance(internal_dataset, InternalLeRobotDataset):
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Thumbnail is unsupported")
 
     thumbnail = thumbnail_service.get_thumbnail(
         dataset_id=dataset_id,

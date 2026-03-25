@@ -48,7 +48,7 @@ from internal_datasets.raw_video.manifest import (
 )
 from internal_datasets.raw_video.stats import compute_episode_stats_background
 from internal_datasets.raw_video.video_writer import VideoWriter
-from schemas import Episode, EpisodeVideo
+from schemas import Episode, EpisodeInfo, EpisodeVideo
 from settings import get_settings
 
 
@@ -197,6 +197,56 @@ class RawVideoDatasetClient(DatasetClient):
 
         return result
 
+    def get_episode_infos(self) -> list[EpisodeInfo]:
+        """Return lightweight episode summaries without actions/videos payloads."""
+        if self._manifest is None:
+            return []
+
+        task_list = [self._manifest.task_description] if self._manifest.task_description else []
+        return [
+            EpisodeInfo(
+                episode_index=idx,
+                tasks=task_list,
+                length=_count_jsonl_rows(self.path / ep.episode_dir / ep.data_file),
+                fps=self._manifest.fps,
+            )
+            for idx, ep in enumerate(self._manifest.episodes)
+        ]
+
+    def find_episode(self, episode_index: int) -> Episode | None:
+        """Find episode by index or return ``None`` when not present."""
+        if self._manifest is None:
+            return None
+        if episode_index < 0 or episode_index >= len(self._manifest.episodes):
+            return None
+
+        ep = self._manifest.episodes[episode_index]
+        ep_dir = self.path / ep.episode_dir
+        rows = _read_jsonl(ep_dir / ep.data_file)
+        length = len(rows)
+        actions = [row["action"] for row in rows]
+
+        videos: dict[str, EpisodeVideo] = {}
+        for cam_name, video_filename in ep.video_files.items():
+            video_path = ep_dir / video_filename
+            videos[cam_name] = EpisodeVideo(
+                start=0.0,
+                end=length / self._manifest.fps if length > 0 else 0.0,
+                path=str(video_path.relative_to(self.path)),
+            )
+
+        thumbnail = self._build_thumbnail(ep_dir, ep) if ep.video_files else None
+        return Episode(
+            episode_index=episode_index,
+            length=length,
+            fps=self._manifest.fps,
+            tasks=[self._manifest.task_description] if self._manifest.task_description else [],
+            actions=actions,
+            action_keys=self._manifest.action_names,
+            videos=videos,
+            thumbnail=thumbnail,
+        )
+
     def get_tasks(self) -> list[str]:
         """Return task descriptions in the dataset."""
         if self._manifest is None:
@@ -217,6 +267,57 @@ class RawVideoDatasetClient(DatasetClient):
             raise KeyError(f"Camera {camera!r} not found in episode {episode}")
 
         return self.path / ep.episode_dir / ep.video_files[camera]
+
+    def get_video_keys(self) -> list[str]:
+        """Return camera/video keys available in this dataset."""
+        if self._manifest is None:
+            return []
+        return [cam.name for cam in self._manifest.cameras]
+
+    def get_episode_thumbnail_png(
+        self,
+        episode_index: int,
+        video_key: str,
+        width: int = 320,
+        height: int = 240,
+    ) -> tuple[bytes, Path] | None:
+        """Build a PNG thumbnail from the first frame of an episode video."""
+        if self._manifest is None:
+            return None
+        if episode_index < 0 or episode_index >= len(self._manifest.episodes):
+            return None
+
+        # Accept both raw camera names ("top") and prefixed keys
+        # ("observation.images.top") for API compatibility.
+        camera = video_key
+        if camera.startswith("observation.images."):
+            camera = camera.removeprefix("observation.images.")
+
+        ep = self._manifest.episodes[episode_index]
+        video_file = ep.video_files.get(camera)
+        if video_file is None:
+            return None
+
+        video_path = self.path / ep.episode_dir / video_file
+        if not video_path.is_file():
+            return None
+
+        try:
+            cap = cv2.VideoCapture(str(video_path))
+            try:
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    return None
+                resized = cv2.resize(frame, (width, height))
+                encoded, imagebytes = cv2.imencode(".png", resized)
+                if not encoded:
+                    return None
+                return imagebytes.tobytes(), video_path
+            finally:
+                cap.release()
+        except Exception:
+            logger.warning("Failed to build PNG thumbnail from {}", video_path)
+            return None
 
     # ------------------------------------------------------------------
     # Write (recording)
@@ -631,6 +732,16 @@ def _read_jsonl(path: Path) -> list[dict]:
             if line:
                 rows.append(json.loads(line))
     return rows
+
+
+def _count_jsonl_rows(path: Path) -> int:
+    """Count non-empty JSONL rows without parsing payloads."""
+    count = 0
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                count += 1
+    return count
 
 
 def _resize_preserving_aspect_ratio(frame: np.ndarray, max_width: int = 320, max_height: int = 240) -> np.ndarray:

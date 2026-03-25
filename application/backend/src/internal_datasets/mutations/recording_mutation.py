@@ -1,5 +1,6 @@
 from loguru import logger
 
+from schemas.dataset import Episode
 from internal_datasets.dataset_client import DatasetClient
 
 

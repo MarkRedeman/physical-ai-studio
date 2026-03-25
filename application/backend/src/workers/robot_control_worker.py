@@ -11,7 +11,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from utils.raw_video_dataset import build_raw_video_manifest_args
-from application.backend.src.internal_datasets.raw_video.raw_video_dataset_client import RawVideoDatasetClient
+from internal_datasets.raw_video.raw_video_dataset_client import RawVideoDatasetClient
 from control.environment_integration import EnvironmentIntegration
 from control.sync_mixed_model_integration import SyncMixedModelIntegration
 from internal_datasets.dataset_client import DatasetClient
