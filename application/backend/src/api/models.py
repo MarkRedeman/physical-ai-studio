@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from starlette import status
 from starlette.background import BackgroundTask
 
@@ -47,6 +48,7 @@ async def model_download_endpoint(
     model_service: Annotated[ModelService, Depends(get_model_service)],
     model_download_service: Annotated[ModelDownloadService, Depends(get_model_download_service)],
     include_snapshot: bool = False,
+    backend: str | None = None,
 ) -> FileResponse:
     """Download model folder as a zip archive.
 
@@ -59,7 +61,21 @@ async def model_download_endpoint(
     if not model_path.exists() or not model_path.is_dir():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model path not found.")
 
-    archive_path = model_download_service.create_model_archive(model_path, include_snapshot=include_snapshot)
+    if backend is not None and include_snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="include_snapshot can only be used when backend is not specified.",
+        )
+
+    try:
+        archive_path = model_download_service.create_model_archive(
+            model, include_snapshot=include_snapshot, backend=backend
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    except (FileNotFoundError, ValidationError) as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
     filename = f"{safe_archive_name(model.name, fallback='model')}.zip"
     return FileResponse(
         archive_path,

@@ -1,6 +1,19 @@
 import { useRef, useState } from 'react';
 
-import { Button, ButtonGroup, Checkbox, Content, Dialog, DialogContainer, Divider, Flex, Heading } from '@geti-ui/ui';
+import {
+    Button,
+    ButtonGroup,
+    Checkbox,
+    Content,
+    Dialog,
+    DialogContainer,
+    Divider,
+    Flex,
+    Heading,
+    Item,
+    Key,
+    Picker,
+} from '@geti-ui/ui';
 import { useMutation } from '@tanstack/react-query';
 
 import { fetchClient } from '../../api/client';
@@ -10,19 +23,30 @@ import { getArchiveBlobFromResponse, getFilenameFromContentDisposition, isAbortE
 export const useModelDownload = (modelId: string) => {
     const [progress, setProgress] = useState<number | null>(null);
     const [includeSnapshot, setIncludeSnapshot] = useState(false);
+    const [selectedBackend, setSelectedBackend] = useState<Key>('original');
 
     const abortRef = useRef<AbortController | null>(null);
 
     const mutation = useMutation({
-        mutationFn: async ({ includeSnapshot: withSnapshot }: { includeSnapshot: boolean }) => {
+        mutationFn: async ({
+            includeSnapshot: withSnapshot,
+            backend,
+        }: {
+            includeSnapshot: boolean;
+            backend: string | null;
+        }) => {
             const abortController = new AbortController();
             abortRef.current = abortController;
 
-            const basePath = fetchClient.PATH('/api/models/{model_id}/download', {
-                params: { path: { model_id: modelId } },
+            const downloadUrl = fetchClient.PATH('/api/models/{model_id}/download', {
+                params: {
+                    path: { model_id: modelId },
+                    query: {
+                        include_snapshot: withSnapshot || undefined,
+                        backend: backend ?? undefined,
+                    },
+                },
             });
-
-            const downloadUrl = withSnapshot ? `${basePath}?include_snapshot=true` : basePath;
 
             const response = await fetch(downloadUrl, {
                 signal: abortController.signal,
@@ -68,6 +92,8 @@ export const useModelDownload = (modelId: string) => {
         progress,
         includeSnapshot,
         setIncludeSnapshot,
+        selectedBackend,
+        setSelectedBackend,
         cancelDownload,
     };
 };
@@ -81,7 +107,18 @@ export const ModelDownloadDialog = ({
     isOpen: boolean;
     onClose: () => void;
 }) => {
-    const { mutation, progress, includeSnapshot, setIncludeSnapshot, cancelDownload } = useModelDownload(modelId);
+    const {
+        mutation,
+        progress,
+        includeSnapshot,
+        setIncludeSnapshot,
+        selectedBackend,
+        setSelectedBackend,
+        cancelDownload,
+    } = useModelDownload(modelId);
+
+    const backend = selectedBackend.toString();
+    const isOriginalBackend = backend === 'original';
 
     const handleClose = () => {
         if (mutation.isPending) {
@@ -93,7 +130,10 @@ export const ModelDownloadDialog = ({
 
     const handleDownload = () => {
         mutation.mutate(
-            { includeSnapshot },
+            {
+                includeSnapshot: isOriginalBackend ? includeSnapshot : false,
+                backend: isOriginalBackend ? null : backend,
+            },
             {
                 onSuccess: () => {
                     onClose();
@@ -125,7 +165,31 @@ export const ModelDownloadDialog = ({
                             />
                         ) : (
                             <Flex direction='column' gap='size-200'>
-                                <Checkbox isSelected={includeSnapshot} onChange={setIncludeSnapshot}>
+                                <Picker
+                                    label='Backend'
+                                    selectedKey={selectedBackend}
+                                    onSelectionChange={(nextBackend) => {
+                                        if (nextBackend === null) {
+                                            return;
+                                        }
+                                        setSelectedBackend(nextBackend);
+                                        if (nextBackend.toString() !== 'original') {
+                                            setIncludeSnapshot(false);
+                                        }
+                                    }}
+                                >
+                                    <Item key='original'>Original model folder</Item>
+                                    <Item key='torch'>Torch</Item>
+                                    <Item key='onnx'>ONNX</Item>
+                                    <Item key='openvino'>OpenVINO</Item>
+                                    <Item key='torch_export_ir'>Torch Export IR</Item>
+                                </Picker>
+
+                                <Checkbox
+                                    isSelected={includeSnapshot}
+                                    onChange={setIncludeSnapshot}
+                                    isDisabled={!isOriginalBackend}
+                                >
                                     Include training dataset snapshot
                                 </Checkbox>
                             </Flex>

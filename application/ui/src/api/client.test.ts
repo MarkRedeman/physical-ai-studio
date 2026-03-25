@@ -25,6 +25,17 @@ describe('fetchClient.PATH', () => {
                 ).toBe('https://geti.ai/api/cameras/supported_formats/usb?fingerprint=abc123');
             });
 
+            it('appends model download query parameters to the URL', () => {
+                expect(
+                    fetchClient.PATH('/api/models/{model_id}/download', {
+                        params: {
+                            path: { model_id: 'abc' },
+                            query: { backend: 'torch_export_ir', include_snapshot: true },
+                        },
+                    })
+                ).toBe('https://geti.ai/api/models/abc/download?backend=torch_export_ir&include_snapshot=true');
+            });
+
             it('throws when path parameters are missing', () => {
                 expect(() =>
                     fetchClient.PATH('/api/projects/{project_id}/robots/{robot_id}', {
@@ -102,6 +113,17 @@ describe('fetchClient.PATH', () => {
                     params: { path: { driver: 'usb' }, query: { fingerprint: 'abc123' } },
                 })
             ).toBe('/api/cameras/supported_formats/usb?fingerprint=abc123');
+        });
+
+        it('appends model download query parameters to the URL', () => {
+            expect(
+                fetchClient.PATH('/api/models/{model_id}/download', {
+                    params: {
+                        path: { model_id: 'abc' },
+                        query: { backend: 'torch_export_ir', include_snapshot: true },
+                    },
+                })
+            ).toBe('/api/models/abc/download?backend=torch_export_ir&include_snapshot=true');
         });
     });
 
