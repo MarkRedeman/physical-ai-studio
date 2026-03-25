@@ -4,6 +4,7 @@
 import { Dispatch, SetStateAction, useMemo } from 'react';
 
 import { Item, Picker, Section } from '@geti/ui';
+import { orderBy } from 'lodash-es';
 
 import { $api } from '../../api/client';
 import type { LogSource } from './log-types';
@@ -59,7 +60,11 @@ export const SourcesPicker = ({
             sections.push({ title: 'Workers', items: workerSources });
         }
 
-        const jobSources = sources.filter((s) => s.type === 'job');
+        const jobSources = orderBy(
+            sources.filter((s) => s.type === 'job'),
+            ['created_at'],
+            ['desc']
+        );
         if (jobSources.length > 0) {
             sections.push({ title: 'Jobs', items: jobSources });
         }
