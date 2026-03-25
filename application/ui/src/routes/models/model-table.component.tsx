@@ -1,8 +1,11 @@
+import { useState } from 'react';
+
 import { ActionButton, Button, DialogTrigger, Flex, Grid, Item, Key, Menu, MenuTrigger, Text, View } from '@geti/ui';
 import { MoreMenu } from '@geti/ui/icons';
 
 import { SchemaJob, SchemaModel } from '../../api/openapi-spec';
 import { GRID_COLUMNS } from './constants';
+import { ModelDownloadDialog } from './model-download-dialog.component';
 import { StartInferenceDialog } from './start-model-modal.component';
 import { durationBetween } from './utils';
 
@@ -34,6 +37,8 @@ export const ModelRow = ({
     onRetrain: () => void;
     onViewLogs?: () => void;
 }) => {
+    const [isDownloadDialogOpen, setDownloadDialogOpen] = useState(false);
+
     const onAction = (key: Key) => {
         const action = key.toString();
         if (action === 'delete') {
@@ -44,6 +49,9 @@ export const ModelRow = ({
         }
         if (action === 'logs') {
             onViewLogs?.();
+        }
+        if (action === 'download') {
+            setDownloadDialogOpen(true);
         }
     };
 
@@ -83,10 +91,16 @@ export const ModelRow = ({
                     </ActionButton>
                     <Menu onAction={onAction} disabledKeys={disabledKeys}>
                         <Item key='logs'>Logs</Item>
+                        <Item key='download'>Download</Item>
                         <Item key='retrain'>Retrain</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>
                 </MenuTrigger>
+                <ModelDownloadDialog
+                    modelId={model.id!}
+                    isOpen={isDownloadDialogOpen}
+                    onClose={() => setDownloadDialogOpen(false)}
+                />
             </View>
         </Grid>
     );

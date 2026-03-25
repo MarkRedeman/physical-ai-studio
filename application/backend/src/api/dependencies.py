@@ -11,6 +11,7 @@ from services import (
     DatasetDownloadService,
     DatasetService,
     EpisodeThumbnailService,
+    ModelDownloadService,
     ModelService,
     ProjectCameraService,
     ProjectService,
@@ -107,6 +108,12 @@ def get_episode_thumbnail_service() -> EpisodeThumbnailService:
 def get_model_service() -> ModelService:
     """Provides a ModelService instance for managing models."""
     return ModelService()
+
+
+@lru_cache
+def get_model_download_service() -> ModelDownloadService:
+    """Provides a ModelDownloadService instance for model exports."""
+    return ModelDownloadService()
 
 
 @lru_cache
