@@ -142,6 +142,19 @@ Adapter strategy:
 
 Extend job schema with a dedicated import type and step-level progress.
 
+**Design note:** Model `Job.payload` as a **discriminated union** by job `type` (similar to `schemas/project_camera.py` where `Camera` uses `Field(discriminator="driver")`).
+
+This avoids an untyped `dict` payload and gives us strongly-typed payloads per job kind:
+
+- `TrainingJobPayload` for `type="training"`
+- `DatasetImportJobPayload` for `type="dataset_import"`
+
+Recommendation for `application/backend/src/schemas/job.py`:
+
+- introduce a `JobPayload = Annotated[TrainingJobPayload | DatasetImportJobPayload, Field(discriminator="type")]`-style model (or equivalent discriminator strategy at the `Job` level),
+- keep step-specific metadata in typed fields, not free-form `extra_info` where possible,
+- include import-step enum and current step in the import payload for predictable UI orchestration.
+
 Proposed `JobType` addition:
 
 - `DATASET_IMPORT = "dataset_import"`
