@@ -315,6 +315,65 @@ Deliverable: production-grade import behavior.
 
 ---
 
+## Reuse Path: Future "Model Import" Feature
+
+The same architecture proposed for dataset import can be reused for model import with minimal conceptual changes.
+
+## 1) Shared architecture
+
+1. **Staged import job**
+   - Reuse `JobType` + discriminated payload approach.
+   - Add `model_import` payload + step enum mirroring dataset flow.
+
+2. **Source detection + adapters**
+   - Reuse detector/adapter pipeline (`detect -> parse -> canonical manifest -> user finalize -> commit`).
+   - Add adapters for app-exported models first, then external model package formats.
+
+3. **Canonical manifest strategy**
+   - Mirror dataset canonical manifest with a model canonical manifest (`model-manifest.v1.json`).
+   - Keep source-specific metadata normalized for consistent validation + UX.
+
+4. **Two-step UX**
+   - Step 1: upload and detect model package.
+   - Step 2: user resolves missing/ambiguous fields (target project, model name, base model link strategy, dataset/snapshot relinking rules).
+
+5. **Atomic safety model**
+   - Same staging extraction, checksum validation, path traversal protections, and commit/rollback semantics.
+
+## 2) Model-specific manifest ideas
+
+Potential canonical fields:
+
+- `manifest_version`
+- `source_type`
+- `model_name`
+- `policy`
+- `export_format` (`onnx`, `openvino`, `torch`, `torchexport`, etc.)
+- `source_app_version` / training version
+- `input_schema` / `output_schema` hashes
+- `robot_type` / expected observation-action schema
+- optional linkage metadata (`dataset_signature`, `snapshot_signature`, `parent_model_signature`)
+
+## 3) Model-specific open design points
+
+1. Relinking strategy when referenced dataset/snapshot is missing in target instance.
+2. Policy/runtime compatibility checks (inference backend availability, opset compatibility, hardware constraints).
+3. Version lineage behavior (`parent_model_id`, `version`) across instances.
+4. Whether model import should optionally trigger an automatic compatibility test run.
+
+## 4) Recommendation
+
+Implement dataset import infrastructure as a **generic import framework** now:
+
+- one import-job orchestration pattern,
+- one detector/adapter interface,
+- one canonical-manifest normalization pattern,
+- resource-specific validators and commit handlers.
+
+This reduces duplicate backend/UI work when adding model import later.
+
+---
+
 ## Open Questions Tracker
 
 Status legend: `OPEN`, `DECIDED`, `DEFERRED`
@@ -339,6 +398,8 @@ Status legend: `OPEN`, `DECIDED`, `DEFERRED`
 | OQ-16 | How do we detect and parse Trossen SDK datasets reliably (signature files/layout)? | OPEN | |
 | OQ-17 | Which manifest fields are mandatory before finalization vs user-fillable in step 2? | OPEN | |
 | OQ-18 | Do we expose job-step events for realtime UX, or polling only in v1? | OPEN | |
+| OQ-19 | Should we design a generic import framework now so `dataset_import` and `model_import` share orchestration/components? | OPEN | |
+| OQ-20 | For future model import, what are the canonical relinking rules for dataset/snapshot/lineage metadata? | OPEN | |
 
 ---
 
