@@ -557,6 +557,17 @@ This object is stored in import payload and returned through job fetch/websocket
 5. Write DB record only after successful extraction/validation.
 6. On failure, leave clear `message`, `validation_report`, and cleanup status in payload.
 
+Implementation notes for next hardening increment:
+
+- **Stricter ZIP extraction policy**:
+  - reject absolute paths, `..` traversal, symlink entries, and unsupported file types,
+  - enforce max file count + max single-file size + total uncompressed size,
+  - extract into isolated temp dir, then validate expected structure before move.
+- **Improve manifest extraction from archive context**:
+  - parse source manifest from known paths (`studio-dataset-manifest.json`, `geti-dataset-manifest.json`) and root folder variants,
+  - merge manifest metadata with inferred archive structure details,
+  - prefer canonicalized fields (`original_dataset_uuid`, source/version, robot/camera/fps hints) and surface provenance warnings when partial/ambiguous.
+
 ---
 
 ## Incremental Implementation Checklist (API + Job first)
