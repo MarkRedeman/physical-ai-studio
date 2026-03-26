@@ -14,12 +14,17 @@ import yaml
 
 from physicalai.export.backends import ExportBackend
 from physicalai.inference.adapters import get_adapter
+from physicalai.inference.component_factory import instantiate_component
+from physicalai.inference.constants import ACTION
+from physicalai.inference.manifest import ComponentSpec
 from physicalai.inference.runners import get_runner
 
 if TYPE_CHECKING:
     import numpy as np
 
     from physicalai.inference.adapters.base import RuntimeAdapter
+    from physicalai.inference.postprocessors.base import Postprocessor
+    from physicalai.inference.preprocessors.base import Preprocessor
     from physicalai.inference.runners.base import InferenceRunner
 
 
@@ -107,6 +112,9 @@ class InferenceModel:
 
         self.runner: InferenceRunner = runner if runner is not None else get_runner(self.metadata)
 
+        self.preprocessors: list[Preprocessor] = self._load_processors("preprocessors")
+        self.postprocessors: list[Postprocessor] = self._load_processors("postprocessors")
+
     @property
     def use_action_queue(self) -> bool:
         """Whether action queuing is enabled (backward compat)."""
@@ -146,26 +154,39 @@ class InferenceModel:
         """
         return cls(export_dir=export_dir, **kwargs)
 
-    def __call__(self, observation: dict[str, np.ndarray]) -> np.ndarray:
-        """Primary inference API — prepare inputs and delegate to runner.
+    def __call__(self, inputs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Run the full inference pipeline and return model outputs.
+
+        Pipeline: preprocessors → _prepare_inputs → runner → postprocessors.
+
+        This is the generic inference API — it returns the full output
+        dict without assuming any domain-specific keys.
 
         Args:
-            observation: Robot observation as a dict mapping input names to numpy arrays.
+            inputs: Input payload as a dict mapping names to numpy arrays.
 
         Returns:
-            Action array to execute.
+            Model outputs after runner execution and postprocessing.
         """
-        inputs = self._prepare_inputs(observation)
-        return self.runner.run(self.adapter, inputs)
+        for preprocessor in self.preprocessors:
+            inputs = preprocessor(inputs)
+
+        prepared = self._prepare_inputs(inputs)
+        outputs = self.runner.run(self.adapter, prepared)
+
+        for postprocessor in self.postprocessors:
+            outputs = postprocessor(outputs)
+
+        return outputs
 
     def select_action(self, observation: dict[str, np.ndarray]) -> np.ndarray:
         """Select action for given observation.
 
-        Matches PyTorch policy API for seamless transition from
-        training to production. Delegates to ``__call__``.
+        Domain-specific convenience method for robotics policies.
+        Delegates to ``__call__`` and extracts the ``"action"`` key.
 
         Args:
-            observation: Robot observation as a dict mapping input names to numpy arrays.
+            observation: Observation dict mapping names to numpy arrays.
 
         Returns:
             Action array to execute.
@@ -175,7 +196,8 @@ class InferenceModel:
             >>> action = policy.select_action(obs)
             >>> next_obs, reward, done = env.step(action)
         """
-        return self(observation)
+        outputs = self(observation)
+        return outputs[ACTION]
 
     def reset(self) -> None:
         """Reset policy state for new episode.
@@ -194,49 +216,46 @@ class InferenceModel:
         """
         self.runner.reset()
 
-    def _prepare_inputs(self, observation: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        """Flatten and filter observation dict for the adapter.
+    def _prepare_inputs(self, inputs: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Flatten and filter input dict for the adapter.
 
         Flattens nested dicts using dot notation (e.g., ``{"obs": {"image": x}}``
         becomes ``{"obs.image": x}``), then filters to only the keys the adapter
         expects.
 
         Args:
-            observation: Observation dict mapping input names to arrays. Values
+            inputs: Input dict mapping names to arrays. Values
                 may be nested dicts, which are flattened with dot-separated keys.
 
         Returns:
             Flat dict containing only the adapter's expected inputs. If the
-            adapter has no declared input names, returns ``observation`` unchanged.
+            adapter has no declared input names, returns ``inputs`` unchanged.
 
         Raises:
             KeyError: If an expected adapter input is not found in the
-                (flattened) observation.
+                (flattened) inputs.
         """
         expected = self.adapter.input_names
 
         if expected:
-            flat_observation: dict[str, np.ndarray] = {}
-            for key, value in observation.items():
+            flat_inputs: dict[str, np.ndarray] = {}
+            for key, value in inputs.items():
                 if isinstance(value, dict):
                     for sub_key, sub_value in value.items():
-                        flat_observation[f"{key}.{sub_key}"] = sub_value
+                        flat_inputs[f"{key}.{sub_key}"] = sub_value
                 else:
-                    flat_observation[key] = value
+                    flat_inputs[key] = value
 
             filtered: dict[str, np.ndarray] = {}
             for k in expected:
-                if k in flat_observation:
-                    filtered[k] = flat_observation[k]
+                if k in flat_inputs:
+                    filtered[k] = flat_inputs[k]
                 else:
-                    msg = (
-                        f"Expected input '{k}' not found in observation.\n"
-                        f"Available keys: {list(flat_observation.keys())}"
-                    )
+                    msg = f"Expected input '{k}' not found in inputs.\nAvailable keys: {list(flat_inputs.keys())}"
                     raise KeyError(msg)
 
             return filtered
-        return observation
+        return inputs
 
     def _load_metadata(self) -> dict[str, Any]:
         """Load export metadata from manifest.json, metadata.yaml, or metadata.json.
@@ -275,6 +294,21 @@ class InferenceModel:
                 return json.load(f)
 
         return {}
+
+    def _load_processors(self, key: str) -> list[Any]:
+        """Instantiate preprocessors or postprocessors from manifest metadata.
+
+        Args:
+            key: ``"preprocessors"`` or ``"postprocessors"``.
+
+        Returns:
+            List of instantiated processor objects, or empty list if the
+            manifest does not declare any for *key*.
+        """
+        specs = self.metadata.get(key, [])
+        if not specs:
+            return []
+        return [instantiate_component(ComponentSpec.model_validate(s)) for s in specs]
 
     def _detect_policy_name(self) -> str:
         """Auto-detect policy name from files or metadata.
