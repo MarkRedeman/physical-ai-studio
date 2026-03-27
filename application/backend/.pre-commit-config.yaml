@@ -45,9 +45,10 @@ repos:
     rev: 0.58.0
     hooks:
       - id: pyrefly-check
-        args: ["-c", "pyproject.toml"]
-        pass_filenames: false
+        name: Pyrefly (type checking)
+        entry: uv run pyrefly check -c pyproject.toml
         language: system
+        pass_filenames: false
 
   # ========================================================================== #
   # ALEMBIC MIGRATION CHECKS                                                   #
