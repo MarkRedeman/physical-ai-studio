@@ -20,6 +20,8 @@ from internal_datasets.utils import get_internal_dataset
 from schemas import Dataset, Episode, EpisodeInfo
 from services import DatasetDownloadService, DatasetService, EpisodeThumbnailService
 
+from loguru import logger
+
 router = APIRouter(prefix="/api/dataset", tags=["Dataset"])
 
 
@@ -38,8 +40,11 @@ async def get_episodes_of_dataset(
     dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
 ) -> list[EpisodeInfo]:
     """Get dataset episodes of dataset by id."""
+    logger.info("HOI episodes???")
     dataset = await dataset_service.get_dataset_by_id(dataset_id)
+    logger.info("HOI dataset: {}", dataset)
     internal_dataset = get_internal_dataset(dataset)
+    logger.info("internal: {}", internal_dataset)
     return internal_dataset.get_episode_infos()
 
 

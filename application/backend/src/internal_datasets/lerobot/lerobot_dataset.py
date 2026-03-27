@@ -149,6 +149,8 @@ class InternalLeRobotDataset(DatasetClient):
 
     def get_episodes(self) -> list[Episode]:
         """Get episodes of dataset."""
+        logger.info("HOI: exists_on_disk={}", self.exists_on_disk)
+        logger.info("HOI: {}", self._dataset)
 
         if not self.exists_on_disk:
             return []
@@ -169,6 +171,9 @@ class InternalLeRobotDataset(DatasetClient):
 
     def get_episode_infos(self) -> list[EpisodeInfo]:
         """Get lightweight episode summaries."""
+        logger.info("HOI: exists_on_disk={}", self.exists_on_disk)
+        logger.info("SELF: {}", self)
+
         if not self.exists_on_disk:
             return []
 
@@ -251,6 +256,7 @@ class InternalLeRobotDataset(DatasetClient):
     @staticmethod
     def _check_repository_exists(repo_path: Path) -> bool:
         """Check if repository path contains info and therefor exists."""
+        logger.info("CHECKING: {} = {}",(repo_path / "meta/info.json"), (repo_path / "meta/info.json").is_file())
         return (repo_path / "meta/info.json").is_file()
 
     def _build_episode_from_buffer(self, episode: dict | None, task: str) -> Episode:
@@ -322,10 +328,14 @@ class InternalLeRobotDataset(DatasetClient):
 
     def _get_episode_actions(self, episode: dict) -> torch.Tensor:
         """Get episode actions tensor from specific episode."""
-        from_idx = episode["dataset_from_index"]
-        to_idx = episode["dataset_to_index"]
-        actions = self._dataset.hf_dataset["action"][from_idx:to_idx]
-        return torch.stack(actions)
+        try:
+            from_idx = episode["dataset_from_index"]
+            to_idx = episode["dataset_to_index"]
+            actions = self._dataset.hf_dataset["action"][from_idx:to_idx]
+            return torch.stack(actions)
+        except: 
+            return torch.stack([])
+    
 
     def _build_episode_from_metadata(self, episode: EpisodeMetadata) -> Episode:
         metadata = self._dataset.meta
@@ -333,7 +343,7 @@ class InternalLeRobotDataset(DatasetClient):
         action_feature_names = self._dataset.features.get("action", {}).get("names", [])
 
         return Episode(
-            actions=self._get_episode_actions(episode).tolist(),
+            actions=[], #self._get_episode_actions(episode).tolist(),
             fps=metadata.fps,
             videos={
                 video_key: EpisodeVideo(
