@@ -182,7 +182,7 @@ export const ModelDownloadDialog = ({
                                     <Item key='torch'>Torch</Item>
                                     <Item key='onnx'>ONNX</Item>
                                     <Item key='openvino'>OpenVINO</Item>
-                                    <Item key='torch_export_ir'>Torch Export IR</Item>
+                                    <Item key='executorch'>Executorch</Item>
                                 </Picker>
 
                                 <Checkbox

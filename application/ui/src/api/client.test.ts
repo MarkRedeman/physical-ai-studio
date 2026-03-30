@@ -30,10 +30,10 @@ describe('fetchClient.PATH', () => {
                     fetchClient.PATH('/api/models/{model_id}/download', {
                         params: {
                             path: { model_id: 'abc' },
-                            query: { backend: 'torch_export_ir', include_snapshot: true },
+                            query: { backend: 'executorch', include_snapshot: true },
                         },
                     })
-                ).toBe('https://geti.ai/api/models/abc/download?backend=torch_export_ir&include_snapshot=true');
+                ).toBe('https://geti.ai/api/models/abc/download?backend=executorch&include_snapshot=true');
             });
 
             it('throws when path parameters are missing', () => {
@@ -120,10 +120,10 @@ describe('fetchClient.PATH', () => {
                 fetchClient.PATH('/api/models/{model_id}/download', {
                     params: {
                         path: { model_id: 'abc' },
-                        query: { backend: 'torch_export_ir', include_snapshot: true },
+                        query: { backend: 'executorch', include_snapshot: true },
                     },
                 })
-            ).toBe('/api/models/abc/download?backend=torch_export_ir&include_snapshot=true');
+            ).toBe('/api/models/abc/download?backend=executorch&include_snapshot=true');
         });
     });
 
