@@ -50,7 +50,7 @@ export const DiagnosticsStep = () => {
     // the user needs to fix the power supply first. When voltage is unreadable
     // (e.g. after a full reset where all motors share ID 1), we still show the
     // motor section so the user can proceed to motor setup.
-    const showMotorSection = !voltageReadable || voltageOk;
+    const showMotorSection = true; //!voltageReadable || voltageOk;
 
     return (
         <Flex direction='column' gap='size-200'>
@@ -73,7 +73,7 @@ export const DiagnosticsStep = () => {
                     voltageReadable
                         ? voltageOk
                             ? { variant: 'ok', label: `${(voltageResult.avg_voltage ?? 0).toFixed(1)}V OK` }
-                            : { variant: 'error', label: `${(voltageResult.avg_voltage ?? 0).toFixed(1)}V MISMATCH` }
+                            : { variant: 'warning', label: `${(voltageResult.avg_voltage ?? 0).toFixed(1)}V MISMATCH` }
                         : { variant: 'pending', label: 'Unreadable' }
                 }
                 defaultExpanded={!voltageOk || !voltageReadable}
@@ -81,7 +81,7 @@ export const DiagnosticsStep = () => {
                 <Flex direction='column' gap='size-100' marginTop='size-100'>
                     {voltageReadable ? (
                         <>
-                            <InlineAlert variant={voltageOk ? 'success' : 'error'}>
+                            <InlineAlert variant={voltageOk ? 'success' : 'warning'}>
                                 Average: <strong>{(voltageResult.avg_voltage ?? 0).toFixed(1)}V</strong>
                                 {' — '}
                                 Expected: {voltageResult.expected_source}
@@ -89,7 +89,7 @@ export const DiagnosticsStep = () => {
                             </InlineAlert>
                             {!voltageOk && (
                                 <InlineAlert variant='warning'>
-                                    The voltage does not match what is expected for a{' '}
+                                    The voltage does not match what we expect for a{' '}
                                     {voltageResult.robot_type.includes('Follower') ? 'Follower' : 'Leader'}. Please
                                     verify the robot type and power connections, then re-check.
                                 </InlineAlert>
