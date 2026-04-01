@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING
 import psutil
 from loguru import logger
 
-from workers.training_worker import TrainingWorker
-
 if TYPE_CHECKING:
     import threading
 
@@ -26,6 +24,8 @@ class Scheduler:
         logger.info("Scheduler initialized")
 
     def start_workers(self) -> None:
+        from workers.training_worker import TrainingWorker
+
         training_proc = TrainingWorker(
             stop_event=self.mp_stop_event,
             interrupt_event=self.training_interrupt_event,

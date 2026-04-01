@@ -4,14 +4,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, WebSocket, status
 from fastapi.responses import Response
-from frame_source import FrameSourceFactory
 from loguru import logger
 
 from api.dependencies import CameraRegistryDep
 from schemas.camera import SupportedCameraFormat
 from schemas.project_camera import Camera as ProjectCamera
 from schemas.project_camera import CameraAdapter
-from workers.camera_worker import CameraWorker
 from workers.transport.websocket_transport import WebSocketTransport
 
 router = APIRouter(prefix="/api/cameras", tags=["Cameras"])
@@ -23,6 +21,8 @@ async def get_supported_formats(
     fingerprint: str,
 ) -> list[SupportedCameraFormat]:
     """Returns the supported camera resolution and fps associated to the camera"""
+    from frame_source import FrameSourceFactory
+
     camera = FrameSourceFactory.create(driver if driver != "usb_camera" else "webcam", source=fingerprint)
     formats = camera.get_supported_formats()
 
@@ -78,6 +78,8 @@ async def camera_websocket(
             {"event": "status", "state": "running", ...}
     """
     await websocket.accept()
+
+    from workers.camera_worker import CameraWorker
 
     worker_id = uuid4()
     camera.id = worker_id

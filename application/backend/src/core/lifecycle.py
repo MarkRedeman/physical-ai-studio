@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,35 @@ from workers.camera_worker_registry import CameraWorkerRegistry
 from workers.robot_worker_registry import RobotWorkerRegistry
 
 from .scheduler import Scheduler
+
+
+def _warmup_imports() -> None:
+    """Eagerly import heavy modules in a background thread.
+
+    After deferring ML/CV imports out of the module-level code paths, this
+    function pre-loads them so they are cached in ``sys.modules`` before a
+    user request needs them.  Python's import lock ensures that if a request
+    handler triggers the same import concurrently, it simply blocks until
+    the import finishes — no duplicate work or races.
+    """
+    import importlib
+
+    modules = [
+        "torch",
+        "cv2",
+        "frame_source",
+        "workers.training_worker",
+        "workers.camera_worker",
+        "workers.robot_control_worker",
+        "robots.robot_client_factory",
+        "internal_datasets.lerobot.lerobot_dataset",
+    ]
+    for mod in modules:
+        try:
+            importlib.import_module(mod)
+            logger.debug("Warmup: imported {}", mod)
+        except Exception:
+            logger.opt(exception=True).warning("Warmup: failed to import {}", mod)
 
 
 @asynccontextmanager
@@ -44,10 +74,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.robot_manager = RobotConnectionManager()
     await app.state.robot_manager.find_robots()
 
+    # Pre-load heavy ML/CV modules in a background thread so the first
+    # user request doesn't pay the import cost.
+    warmup_task = asyncio.create_task(asyncio.to_thread(_warmup_imports))
+
     yield
 
     # Shutdown
     logger.info("Shutting down %s application...", settings.app_name)
+
+    # Cancel warmup if still running
+    if not warmup_task.done():
+        warmup_task.cancel()
+        try:
+            await warmup_task
+        except asyncio.CancelledError:
+            pass
 
     camera_registry: CameraWorkerRegistry = app.state.camera_registry
     await camera_registry.shutdown_all()

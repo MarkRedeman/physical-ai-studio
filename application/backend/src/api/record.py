@@ -1,18 +1,19 @@
 import asyncio
 import multiprocessing as mp
 from queue import Empty
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import Response
 from loguru import logger
 
 from api.dependencies import RobotCalibrationServiceDep, RobotConnectionManagerDep, get_scheduler_ws
-from core.scheduler import Scheduler
-from robots.robot_client_factory import RobotClientFactory
 from schemas import Dataset, Model
 from schemas.environment import EnvironmentWithRelations
-from workers.robot_control_worker import RobotControlWorker
+
+if TYPE_CHECKING:
+    from core.scheduler import Scheduler
+    from workers.robot_control_worker import RobotControlWorker
 
 router = APIRouter(prefix="/api/record")
 
@@ -23,7 +24,7 @@ async def robot_control_websocket_openapi() -> Response:
     return Response(status_code=426)
 
 
-async def handle_incoming(websocket: WebSocket, process: RobotControlWorker) -> None:
+async def handle_incoming(websocket: WebSocket, process: "RobotControlWorker") -> None:
     """Handle incoming messages for robot control."""
     try:
         while True:
@@ -76,9 +77,12 @@ async def robot_control_websocket(
     websocket: WebSocket,
     robot_manager: RobotConnectionManagerDep,
     calibration_service: RobotCalibrationServiceDep,
-    scheduler: Annotated[Scheduler, Depends(get_scheduler_ws)],
+    scheduler: Annotated["Scheduler", Depends(get_scheduler_ws)],
 ) -> None:
     """Robot control websocket."""
+    from robots.robot_client_factory import RobotClientFactory
+    from workers.robot_control_worker import RobotControlWorker
+
     await websocket.accept()
     queue: mp.Queue = mp.Queue()
     process = RobotControlWorker(

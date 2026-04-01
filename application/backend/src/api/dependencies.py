@@ -1,12 +1,11 @@
 from functools import lru_cache
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import Depends, status
 from fastapi.exceptions import HTTPException
 from fastapi.requests import HTTPConnection
 
-from core.scheduler import Scheduler
 from services import (
     DatasetDownloadService,
     DatasetService,
@@ -26,6 +25,9 @@ from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
 from workers.robot_worker_registry import RobotWorkerRegistry
+
+if TYPE_CHECKING:
+    from core.scheduler import Scheduler
 
 
 def is_valid_uuid(identifier: str) -> bool:
@@ -193,12 +195,12 @@ def validate_uuid(uuid: str) -> UUID:
     return UUID(uuid)
 
 
-def get_scheduler(request: HTTPConnection) -> Scheduler:
+def get_scheduler(request: HTTPConnection) -> "Scheduler":
     """Provide the global Scheduler instance."""
     return request.app.state.scheduler
 
 
-def get_scheduler_ws(request: HTTPConnection) -> Scheduler:
+def get_scheduler_ws(request: HTTPConnection) -> "Scheduler":
     """Provide the global Scheduler instance for WebSocket."""
     return request.app.state.scheduler
 

@@ -15,7 +15,6 @@ from api.dependencies import (
     get_episode_thumbnail_service,
 )
 from api.utils import safe_archive_name
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from internal_datasets.mutations.delete_episode_mutation import DeleteEpisodesMutation
 from internal_datasets.utils import get_internal_dataset
 from schemas import Dataset, Episode, EpisodeInfo
@@ -68,6 +67,8 @@ async def get_episode_thumbnail(  # noqa: PLR0913
     height: Annotated[int, Query(ge=32, le=1080)] = 240,
 ) -> Response:
     """Get a thumbnail image for one episode."""
+    from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+
     dataset = await dataset_service.get_dataset_by_id(dataset_id)
     internal_dataset = get_internal_dataset(dataset)
 
