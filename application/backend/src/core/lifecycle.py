@@ -81,11 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     logger.info("Starting %s application...", settings.app_name)
 
-    t0 = time.monotonic()
     app_scheduler = Scheduler()
-    app_scheduler.start_workers()
-    logger.info("Scheduler started in {:.2f}s", time.monotonic() - t0)
-
     app.state.scheduler = app_scheduler
     app.state.event_processor = EventProcessor(app_scheduler.event_queue)
 
@@ -104,6 +100,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         total_ms = int(time.time() * 1000) - int(run_sh_start)
         logger.info("Total wall-time since run.sh: {:.2f}s", total_ms / 1000)
 
+    # Start the training worker process in a background thread.  The heavy
+    # import (torch / lightning) happens inside start_workers(), but nothing
+    # depends on the training process being alive before the server accepts
+    # requests, so we avoid blocking startup.
+    worker_task = asyncio.create_task(asyncio.to_thread(app_scheduler.start_workers))
+
     # Pre-load heavy ML/CV modules in a background thread so the first
     # user request doesn't pay the import cost.
     warmup_task = asyncio.create_task(asyncio.to_thread(_warmup_imports))
@@ -113,13 +115,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Shutdown
     logger.info("Shutting down %s application...", settings.app_name)
 
-    # Cancel warmup if still running
-    if not warmup_task.done():
-        warmup_task.cancel()
-        try:
-            await warmup_task
-        except asyncio.CancelledError:
-            pass
+    # Cancel background tasks if still running
+    for task in (warmup_task, worker_task):
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     camera_registry: CameraWorkerRegistry = app.state.camera_registry
     await camera_registry.shutdown_all()
