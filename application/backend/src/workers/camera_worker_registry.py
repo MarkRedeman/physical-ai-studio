@@ -1,13 +1,16 @@
 """Registry for managing camera workers."""
 
+from __future__ import annotations
+
 import asyncio
-from types import TracebackType
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 from loguru import logger
 
 if TYPE_CHECKING:
+    from types import TracebackType
+    from uuid import UUID
+
     from .camera_worker import CameraWorker
 
 
@@ -15,7 +18,7 @@ class CameraWorkerRegistry:
     """Manages lifecycle of camera workers."""
 
     def __init__(self, max_workers: int = 10, shutdown_timeout_s: float = 10.0):
-        self._workers: dict[UUID, "CameraWorker"] = {}
+        self._workers: dict[UUID, CameraWorker] = {}
         self._lock = asyncio.Lock()
         self._max_workers = max_workers
         self._shutdown_timeout_s = shutdown_timeout_s
@@ -23,7 +26,7 @@ class CameraWorkerRegistry:
     async def create_and_register(
         self,
         worker_id: UUID,
-        worker: "CameraWorker",
+        worker: CameraWorker,
     ) -> None:
         """
         Create and register a new camera worker.
@@ -56,11 +59,11 @@ class CameraWorkerRegistry:
                 logger.error(f"Error shutting down worker {worker_id}: {e}")
             logger.info(f"Camera worker unregistered: {worker_id}")
 
-    async def get(self, worker_id: UUID) -> "CameraWorker | None":
+    async def get(self, worker_id: UUID) -> CameraWorker | None:
         """Get a worker by id."""
         return self._workers.get(worker_id)
 
-    def list_all(self) -> "list[CameraWorker]":
+    def list_all(self) -> list[CameraWorker]:
         """List all active workers."""
         return list(self._workers.values())
 
