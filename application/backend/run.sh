@@ -31,7 +31,7 @@ UV_CMD=${UV_CMD:-uv run --no-sync}
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S.%3N') | INFO     | run.sh - $*"; }
 
 export PYTHONUNBUFFERED=1
-export PYTHONPATH=.
+export PYTHONPATH=src
 
 # Always run migrations — Alembic is idempotent and will skip
 # already-applied migrations. This ensures the persistent volume
