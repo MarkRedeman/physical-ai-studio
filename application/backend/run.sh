@@ -44,5 +44,8 @@ fi
 
 echo "Starting FastAPI server..."
 
+# Export process start time so the application can measure total startup
+# wall-time including Python interpreter and module import overhead.
+export _RUN_SH_START_MS=$(date +%s%3N)
 echo $UV_CMD "$APP_MODULE"
 exec $UV_CMD "$APP_MODULE"

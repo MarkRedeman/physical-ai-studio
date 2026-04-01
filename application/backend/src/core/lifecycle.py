@@ -1,4 +1,6 @@
 import asyncio
+import os
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -59,6 +61,8 @@ def _warmup_imports() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """FastAPI lifespan context manager"""
+    lifespan_start = time.monotonic()
+
     # Startup
     setup_logging()
     setup_uvicorn_logging()
@@ -76,15 +80,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
 
     logger.info("Starting %s application...", settings.app_name)
+
+    t0 = time.monotonic()
     app_scheduler = Scheduler()
     app_scheduler.start_workers()
+    logger.info("Scheduler started in {:.2f}s", time.monotonic() - t0)
+
     app.state.scheduler = app_scheduler
     app.state.event_processor = EventProcessor(app_scheduler.event_queue)
-    logger.info("Application startup completed")
 
     # Initialize RobotHardwareManager
+    t0 = time.monotonic()
     app.state.robot_manager = RobotConnectionManager()
     await app.state.robot_manager.find_robots()
+    logger.info("Robot discovery took {:.2f}s", time.monotonic() - t0)
+
+    logger.info("Application startup completed in {:.2f}s", time.monotonic() - lifespan_start)
+
+    # If launched via run.sh, report total wall-time including Python
+    # interpreter startup and module imports (before lifespan was entered).
+    run_sh_start = os.environ.get("_RUN_SH_START_MS")
+    if run_sh_start:
+        total_ms = int(time.time() * 1000) - int(run_sh_start)
+        logger.info("Total wall-time since run.sh: {:.2f}s", total_ms / 1000)
 
     # Pre-load heavy ML/CV modules in a background thread so the first
     # user request doesn't pay the import cost.
