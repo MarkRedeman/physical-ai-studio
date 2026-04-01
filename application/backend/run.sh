@@ -27,25 +27,28 @@ SEED_DB=${SEED_DB:-false}
 APP_MODULE=${APP_MODULE:-src/main.py}
 UV_CMD=${UV_CMD:-uv run --no-sync}
 
+# Timestamped echo — mirrors the loguru format used by the Python app.
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S.%3N') | INFO     | run.sh - $*"; }
+
 export PYTHONUNBUFFERED=1
 export PYTHONPATH=.
 
 # Always run migrations — Alembic is idempotent and will skip
 # already-applied migrations. This ensures the persistent volume
 # has an up-to-date schema regardless of how it was created.
-echo "Running database migrations..."
+log "Running database migrations..."
 $UV_CMD src/cli.py migrate
 
 if [[ "$SEED_DB" == "true" ]]; then
-    echo "Seeding the database..."
+    log "Seeding the database..."
     $UV_CMD application/cli.py init-db
     $UV_CMD application/cli.py seed --with-model=True
 fi
 
-echo "Starting FastAPI server..."
+log "Starting FastAPI server..."
 
 # Export process start time so the application can measure total startup
 # wall-time including Python interpreter and module import overhead.
 export _RUN_SH_START_MS=$(date +%s%3N)
-echo $UV_CMD "$APP_MODULE"
+log "$UV_CMD $APP_MODULE"
 exec $UV_CMD "$APP_MODULE"
