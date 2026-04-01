@@ -7,7 +7,6 @@ from loguru import logger
 
 from api.dependencies import get_project_id
 from schemas.robot import RobotType
-from workers.robots.so101_setup_worker import SO101SetupWorker
 from workers.transport.websocket_transport import WebSocketTransport
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Robot Setup"])
@@ -54,6 +53,8 @@ async def robot_setup_websocket(
     await websocket.accept()
 
     try:
+        from workers.robots.so101_setup_worker import SO101SetupWorker
+
         worker = SO101SetupWorker(
             transport=WebSocketTransport(websocket),
             robot_type=robot_type,

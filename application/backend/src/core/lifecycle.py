@@ -27,14 +27,26 @@ def _warmup_imports() -> None:
     import importlib
 
     modules = [
+        # Heavy third-party libraries
         "torch",
         "cv2",
+        "lerobot",
+        "trossen_arm",
+        # Internal modules that pull in the above
         "frame_source",
         "workers.training_worker",
         "workers.camera_worker",
         "workers.robot_control_worker",
+        "workers.robots.robot_worker",
+        "workers.robots.so101_setup_worker",
         "robots.robot_client_factory",
+        "robots.so101.so101",
+        "robots.widowxai.trossen_widowx_ai_follower",
+        "robots.widowxai.trossen_widowx_ai_leader",
         "internal_datasets.lerobot.lerobot_dataset",
+        "utils.calibration",
+        "utils.trossen_robot_tools",
+        "utils.serial_robot_tools",
     ]
     for mod in modules:
         try:

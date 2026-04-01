@@ -2,12 +2,13 @@
 
 import asyncio
 from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self
 from uuid import UUID
 
 from loguru import logger
 
-from workers.robots.robot_worker import RobotWorker
+if TYPE_CHECKING:
+    from workers.robots.robot_worker import RobotWorker
 
 
 class RobotWorkerRegistry:
@@ -26,7 +27,7 @@ class RobotWorkerRegistry:
             max_workers: Maximum number of concurrent workers allowed.
             shutdown_timeout_s: Seconds to wait for workers to shutdown gracefully.
         """
-        self._workers: dict[UUID, RobotWorker] = {}
+        self._workers: dict[UUID, "RobotWorker"] = {}
         self._lock = asyncio.Lock()
         self._max_workers = max_workers
         self._shutdown_timeout_s = shutdown_timeout_s
@@ -34,7 +35,7 @@ class RobotWorkerRegistry:
     async def create_and_register(
         self,
         worker_id: UUID,
-        worker: RobotWorker,
+        worker: "RobotWorker",
     ) -> None:
         """
         Register a new robot worker in the registry.
@@ -76,7 +77,7 @@ class RobotWorkerRegistry:
                 logger.error(f"Error shutting down worker {worker_id}: {e}")
             logger.info(f"Robot worker unregistered: {worker_id}")
 
-    async def get(self, worker_id: UUID) -> RobotWorker | None:
+    async def get(self, worker_id: UUID) -> "RobotWorker | None":
         """
         Retrieve a worker by its ID.
 
@@ -88,7 +89,7 @@ class RobotWorkerRegistry:
         """
         return self._workers.get(worker_id)
 
-    def list_all(self) -> list[RobotWorker]:
+    def list_all(self) -> "list[RobotWorker]":
         """
         Get a list of all currently registered workers.
 

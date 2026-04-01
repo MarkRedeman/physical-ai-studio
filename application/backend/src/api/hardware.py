@@ -1,12 +1,8 @@
 from fastapi import APIRouter
-from frame_source import FrameSourceFactory
 from loguru import logger
 
 from schemas import CalibrationConfig, Camera, CameraProfile, Robot, SerialPortInfo
 from schemas.robot import RobotType
-from utils.calibration import get_calibrations
-from utils.serial_robot_tools import find_robots, identify_so101_robot_visually
-from utils.trossen_robot_tools import identify_trossen_robot_visually
 
 router = APIRouter(prefix="/api/hardware", tags=["Hardware"])
 
@@ -14,6 +10,8 @@ router = APIRouter(prefix="/api/hardware", tags=["Hardware"])
 @router.get("/cameras")
 async def get_cameras() -> list[Camera]:
     """Get all cameras"""
+    from frame_source import FrameSourceFactory
+
     cameras = FrameSourceFactory.discover_devices(sources=["webcam", "realsense", "genicam", "basler"])
     logger.debug("Discovered cameras: {}", cameras)
     res = []
@@ -36,12 +34,16 @@ async def get_cameras() -> list[Camera]:
 @router.get("/serial_devices")
 async def get_robots() -> list[SerialPortInfo]:
     """Get all connected Robots"""
+    from utils.serial_robot_tools import find_robots
+
     return await find_robots()
 
 
 @router.get("/calibrations")
 async def get_lerobot_calibrations() -> list[CalibrationConfig]:
     """Get calibrations known to huggingface leRobot"""
+    from utils.calibration import get_calibrations
+
     return get_calibrations()
 
 
@@ -49,7 +51,11 @@ async def get_lerobot_calibrations() -> list[CalibrationConfig]:
 async def identify_robot(robot: Robot, joint: str | None = None) -> None:
     """Visually identify the robot by moving given joint on robot"""
     if robot.type in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER}:
+        from utils.serial_robot_tools import identify_so101_robot_visually
+
         await identify_so101_robot_visually(robot, joint)
 
     if robot.type in {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}:
+        from utils.trossen_robot_tools import identify_trossen_robot_visually
+
         await identify_trossen_robot_visually(robot)

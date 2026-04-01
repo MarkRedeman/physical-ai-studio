@@ -2,9 +2,6 @@ from physicalai.robot.so101 import SO101, SO101Calibration
 
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.robot_client import RobotClient
-from robots.so101.adapter import SO101Adapter
-from robots.widowxai.trossen_widowx_ai_follower import TrossenWidowXAIFollower
-from robots.widowxai.trossen_widowx_ai_leader import TrossenWidowXAILeader
 from schemas.calibration import Calibration
 from schemas.robot import NetworkIpRobotConfig, Robot, RobotType
 from services.robot_calibration_service import RobotCalibrationService, find_robot_port
@@ -26,6 +23,8 @@ class RobotClientFactory:
     async def build(self, robot: Robot) -> RobotClient:
         match robot.type:
             case RobotType.TROSSEN_WIDOWXAI_FOLLOWER:
+                from robots.widowxai.trossen_widowx_ai_follower import TrossenWidowXAIFollower
+
                 config = NetworkIpRobotConfig(
                     type="follower",
                     robot_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
@@ -33,6 +32,8 @@ class RobotClientFactory:
                 )
                 return TrossenWidowXAIFollower(config=config)
             case RobotType.TROSSEN_WIDOWXAI_LEADER:
+                from robots.widowxai.trossen_widowx_ai_leader import TrossenWidowXAILeader
+
                 config = NetworkIpRobotConfig(
                     type="leader",
                     robot_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
@@ -46,7 +47,9 @@ class RobotClientFactory:
             case _:
                 raise ValueError(f"Unsupported robot type: {robot.type}")
 
-    async def _build_so101(self, robot: Robot) -> SO101Adapter:
+    async def _build_so101(self, robot: Robot) -> RobotClient:
+        from robots.so101.adapter import SO101Adapter
+
         port = await self._find_robot_port(robot)
         calibration = await self._get_robot_calibration(robot)
 

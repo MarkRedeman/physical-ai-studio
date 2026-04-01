@@ -14,7 +14,6 @@ from api.dependencies import (
     get_robot_service,
 )
 from services import RobotService
-from workers.robots.robot_worker import RobotWorker
 from workers.transport.websocket_transport import WebSocketTransport
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
@@ -55,6 +54,8 @@ async def robot_websocket(  # noqa: PLR0913
         fps: Target frequency for state updates.
     """
     await websocket.accept()
+
+    from workers.robots.robot_worker import RobotWorker
 
     robot = await robot_service.get_robot_by_id(project_id, robot_id)
     logger.info("Found robot with websocket {}", robot)

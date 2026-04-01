@@ -1,9 +1,8 @@
 import json
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import aiofiles
-from lerobot.motors import MotorCalibration
-from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
 from loguru import logger
 
 from db.engine import get_async_db_session_ctx
@@ -13,6 +12,9 @@ from schemas.calibration import Calibration
 from schemas.robot import Robot, RobotType
 from settings import Settings
 from utils.serial_robot_tools import RobotConnectionManager
+
+if TYPE_CHECKING:
+    from lerobot.motors import MotorCalibration
 
 
 async def find_robot_port(manager: RobotConnectionManager, robot: Robot) -> str | None:
@@ -91,7 +93,9 @@ class RobotCalibrationService:
 
             return calibration
 
-    async def get_robot_motor_calibration(self, robot: Robot) -> dict[str, MotorCalibration]:
+    async def get_robot_motor_calibration(self, robot: Robot) -> "dict[str, MotorCalibration]":
+        from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
+
         if robot.type not in (RobotType.SO101_FOLLOWER, RobotType.SO101_LEADER):
             raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
 

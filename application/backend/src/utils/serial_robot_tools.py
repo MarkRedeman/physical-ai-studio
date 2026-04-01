@@ -1,6 +1,5 @@
 import asyncio
 
-from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
 from loguru import logger
 from serial.tools import list_ports
 from serial.tools.list_ports_common import ListPortInfo
@@ -96,6 +95,8 @@ def find_port_for_serial(serial_number: str) -> str:
 
 async def identify_so101_robot_visually(robot: Robot, joint: str | None = None) -> None:
     """Identify the robot by moving the joint from current to min to max to initial position"""
+    from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
+
     if robot.type not in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER}:
         raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
 
