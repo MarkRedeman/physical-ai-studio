@@ -100,29 +100,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         total_ms = int(time.time() * 1000) - int(run_sh_start)
         logger.info("Total wall-time since run.sh: {:.2f}s", total_ms / 1000)
 
-    # Start the training worker process in a background thread.  The heavy
-    # import (torch / lightning) happens inside start_workers(), but nothing
-    # depends on the training process being alive before the server accepts
-    # requests, so we avoid blocking startup.
-    worker_task = asyncio.create_task(asyncio.to_thread(app_scheduler.start_workers))
+    # Pre-load heavy ML/CV modules and then start worker processes in a
+    # single background thread.  These MUST be serialised: scipy (pulled in
+    # by lightning → torchmetrics) is not thread-safe during initialisation
+    # and will raise ``AttributeError: Module 'scipy' has no attribute '_lib'``
+    # if two threads try to import it concurrently.
+    def _background_startup() -> None:
+        _warmup_imports()
+        app_scheduler.start_workers()
 
-    # Pre-load heavy ML/CV modules in a background thread so the first
-    # user request doesn't pay the import cost.
-    warmup_task = asyncio.create_task(asyncio.to_thread(_warmup_imports))
+    background_task = asyncio.create_task(asyncio.to_thread(_background_startup))
 
     yield
 
     # Shutdown
     logger.info("Shutting down %s application...", settings.app_name)
 
-    # Cancel background tasks if still running
-    for task in (warmup_task, worker_task):
-        if not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+    # Cancel background task if still running
+    if not background_task.done():
+        background_task.cancel()
+        try:
+            await background_task
+        except asyncio.CancelledError:
+            pass
 
     camera_registry: CameraWorkerRegistry = app.state.camera_registry
     await camera_registry.shutdown_all()
