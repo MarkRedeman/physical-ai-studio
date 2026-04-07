@@ -275,3 +275,81 @@ asyncio.create_task(_warmup_task())
 ```
 
 Endpoint handlers can then optionally `await _warmup_done.wait()` if they want to guarantee the imports are ready before proceeding — though in practice the import lock already handles this correctly.
+
+## Dev Hot-Reload and Multiprocessing Workers
+
+FastAPI/uvicorn hot-reload only restarts the **API server process**. It does **not** hot-patch running child processes created with `multiprocessing`.
+
+In this codebase, `TrainingWorker` runs as a separate process, so changes to files like `workers/training_worker.py` are not reflected until:
+
+1. the API process reloads,
+2. lifespan shutdown stops child workers,
+3. lifespan startup re-imports heavy ML modules,
+4. a new worker process is spawned.
+
+This explains why hot-reload works great for API routes but feels slow for training code edits.
+
+### Why it feels especially slow here
+
+Training startup imports `torch`, `lightning`, `torchmetrics`, and `scipy`, which can take multiple seconds per fresh process. Even with API startup optimized, worker refresh still pays this cost.
+
+### Recommended dev workflow improvement: split API and worker in development
+
+Use two independent processes in dev:
+
+- **API process** (`uvicorn --reload`) for endpoints/UI integration
+- **Worker process** (`training-worker` entrypoint with file watcher) for training loop logic
+
+Both processes communicate through the same DB/event queue abstractions already used by the app. In dev mode, the API should **not** auto-spawn the training worker; instead, the worker is launched by a separate command.
+
+#### Suggested design
+
+1. Add a setting flag:
+   - `AUTO_START_TRAINING_WORKER=true` (default for prod)
+   - In dev, set `AUTO_START_TRAINING_WORKER=false`
+2. In `lifespan`, only call `app_scheduler.start_workers()` when the flag is true.
+3. Add a dedicated CLI command, e.g.:
+
+```bash
+uv run --no-sync src/cli.py run-training-worker
+```
+
+4. Wrap that command with a watcher in dev (`watchfiles`/`watchexec`), scoped to worker-related paths:
+
+```bash
+watchfiles \
+  --filter python \
+  'uv run --no-sync src/cli.py run-training-worker' \
+  src/workers src/services src/models src/control src/utils
+```
+
+5. Keep API reload separate:
+
+```bash
+./run.sh   # starts uvicorn with reload in dev
+```
+
+Now API edits and worker edits restart independently, which shortens iteration loops.
+
+### Optional high-leverage refinements
+
+- **Narrow worker watch scope** to avoid unnecessary restarts on unrelated API-only edits.
+- **Debounce restart events** (e.g. 200-500 ms) so formatter save bursts trigger one restart.
+- **Delay heavy imports in worker process entrypoint** exactly like API code paths, keeping worker boot minimal.
+- **Mark readiness in logs** (e.g. `Training worker ready in Xs`) so startup regressions are obvious.
+
+### Production guidance
+
+Do not use file watchers in production. Keep the current integrated lifecycle behavior:
+
+- API process starts
+- background warmup runs
+- scheduler starts worker(s)
+
+This keeps deployment simple and deterministic while preserving fast API availability.
+
+### Expected impact
+
+- **API endpoint edit loop:** remains fast (~1-2s reload)
+- **Worker code edit loop:** improves from full app restart + worker spawn to isolated worker restart
+- **Overall dev UX:** less waiting, fewer unrelated restarts, clearer ownership of failures (API vs worker)

@@ -28,7 +28,6 @@ from api.webui import SPAStaticFiles
 from core import lifespan
 from exception_handlers import register_application_exception_handlers
 from settings import get_settings
-from utils.device import get_torch_device
 
 settings = get_settings()
 app = FastAPI(
@@ -79,6 +78,8 @@ if (
     app.mount("/", static_files, name="webui")
 
 if __name__ == "__main__":
+    from utils.device import get_torch_device
+
     if get_torch_device() == "xpu" and mp.get_start_method(allow_none=True) != "spawn":
         mp.set_start_method("spawn", force=True)
     uvicorn_port = int(os.environ.get("HTTP_SERVER_PORT", settings.port))
