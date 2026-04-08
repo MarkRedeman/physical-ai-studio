@@ -19,8 +19,8 @@ from services import (
     RobotService,
 )
 from services.environment_service import EnvironmentService
-from services.event_processor import EventProcessor
 from services.job_service import JobService
+from services.dataset_import_job_service import DatasetImportJobService
 from services.log_service import LogService
 from services.robot_calibration_service import RobotCalibrationService
 from services.snapshot_service import SnapshotService
@@ -141,6 +141,12 @@ def get_model_import_service(
 def get_job_service() -> JobService:
     """Provides a JobService instance for managing jobs."""
     return JobService()
+
+
+@lru_cache
+def get_dataset_import_job_service() -> DatasetImportJobService:
+    """Provides a DatasetImportJobService instance for managing dataset import jobs."""
+    return DatasetImportJobService()
 
 
 def get_log_service(request: HTTPConnection) -> LogService:

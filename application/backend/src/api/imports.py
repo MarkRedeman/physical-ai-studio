@@ -4,10 +4,10 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from api.dependencies import get_job_service, get_project_id
+from api.dependencies import get_dataset_import_job_service, get_project_id
 from schemas import Job
 from schemas.import_job import DatasetImportFinalizeInput, DatasetImportSource
-from services.job_service import JobService
+from services.dataset_import_job_service import DatasetImportJobService
 from settings import get_settings
 
 router = APIRouter(prefix="/api/projects/{project_id}/imports", tags=["Imports"])
@@ -35,7 +35,7 @@ def _persist_uploaded_archive(file: UploadFile) -> Path:
 async def submit_dataset_import_job(
     project_id: ProjectID,
     archive: Annotated[UploadFile, File(description="Dataset archive ZIP")],
-    job_service: Annotated[JobService, Depends(get_job_service)],
+    dataset_import_job_service: Annotated[DatasetImportJobService, Depends(get_dataset_import_job_service)],
     source_hint: Annotated[str, Form()] = "auto",
 ) -> Job:
     """Upload a dataset archive and enqueue asynchronous import job."""
@@ -55,7 +55,7 @@ async def submit_dataset_import_job(
         )
 
     uploaded_archive_path = _persist_uploaded_archive(archive)
-    return await job_service.submit_dataset_import_job(
+    return await dataset_import_job_service.submit_dataset_import_job(
         project_id=project_id,
         uploaded_archive_path=str(uploaded_archive_path),
         source_hint=source_hint,
@@ -67,10 +67,10 @@ async def finalize_dataset_import_job(
     project_id: ProjectID,
     job_id: UUID,
     payload: DatasetImportFinalizeInput,
-    job_service: Annotated[JobService, Depends(get_job_service)],
+    dataset_import_job_service: Annotated[DatasetImportJobService, Depends(get_dataset_import_job_service)],
 ) -> Job:
     """Finalize staged dataset import by providing required user inputs."""
-    return await job_service.finalize_dataset_import_job(
+    return await dataset_import_job_service.finalize_dataset_import_job(
         project_id=project_id,
         job_id=job_id,
         finalize_input=payload,
@@ -81,7 +81,7 @@ async def finalize_dataset_import_job(
 async def cancel_dataset_import_job(
     project_id: ProjectID,
     job_id: UUID,
-    job_service: Annotated[JobService, Depends(get_job_service)],
+    dataset_import_job_service: Annotated[DatasetImportJobService, Depends(get_dataset_import_job_service)],
 ) -> Job:
     """Cancel dataset import before full import starts."""
-    return await job_service.cancel_dataset_import_job(project_id=project_id, job_id=job_id)
+    return await dataset_import_job_service.cancel_dataset_import_job(project_id=project_id, job_id=job_id)

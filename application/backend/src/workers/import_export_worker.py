@@ -31,10 +31,9 @@ class ImportExportWorker(BaseProcessWorker):
         self.queue = event_queue
 
     async def run_loop(self) -> None:
-        job_service = JobService()
         logger.info("ImportExport Worker is running")
         while not self.should_stop():
-            job = await job_service.get_pending_import_export_job()
+            job = await JobService.get_pending_import_export_job()
             if job is not None:
                 if job.type == JobType.IMPORT:
                     await self._handle_import(job)

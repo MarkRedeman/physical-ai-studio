@@ -52,12 +52,11 @@ class TrainingWorker(BaseProcessWorker):
         self.interrupt_event = interrupt_event
 
     async def run_loop(self) -> None:
-        job_service = JobService()
         logger.info("Training Worker is running")
         while not self.should_stop():
             settings = get_settings()
 
-            job = await job_service.get_pending_train_job()
+            job = await JobService.get_pending_train_job()
             if job is not None and isinstance(job, TrainJob):
                 payload = job.payload
                 id = uuid4()

@@ -17,6 +17,7 @@ from services.import_adapters import (
     StudioAdapter,
     TrossenSDKAdapter,
 )
+from services.dataset_import_job_service import DatasetImportJobService
 from services.job_service import JobService
 from workers.base import BaseProcessWorker
 
@@ -151,7 +152,7 @@ class DatasetImportWorker(BaseProcessWorker):
         payload.dataset_manifest_draft = manifest
 
         if manifest.source.original_dataset_uuid is not None:
-            await JobService.ensure_unique_source_dataset_uuid(
+            await DatasetImportJobService.ensure_unique_source_dataset_uuid(
                 project_id=project_id,
                 source_dataset_uuid=manifest.source.original_dataset_uuid,
                 exclude_job_id=job_id,
