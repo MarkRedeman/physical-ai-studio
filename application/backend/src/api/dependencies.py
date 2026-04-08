@@ -9,21 +9,23 @@ from fastapi.requests import HTTPConnection
 from core.scheduler import Scheduler
 from services import (
     DatasetDownloadService,
+    DatasetImportJobService,
     DatasetService,
     EpisodeThumbnailService,
+    ExportModelJobService,
+    ImportModelJobService,
     ModelDownloadService,
     ModelImportService,
     ModelService,
     ProjectCameraService,
     ProjectService,
     RobotService,
+    SnapshotService,
 )
 from services.environment_service import EnvironmentService
 from services.job_service import JobService
-from services.dataset_import_job_service import DatasetImportJobService
 from services.log_service import LogService
 from services.robot_calibration_service import RobotCalibrationService
-from services.snapshot_service import SnapshotService
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
@@ -147,6 +149,18 @@ def get_job_service() -> JobService:
 def get_dataset_import_job_service() -> DatasetImportJobService:
     """Provides a DatasetImportJobService instance for managing dataset import jobs."""
     return DatasetImportJobService()
+
+
+@lru_cache
+def get_import_model_job_service() -> ImportModelJobService:
+    """Provides an ImportModelJobService instance for managing model import jobs."""
+    return ImportModelJobService()
+
+
+@lru_cache
+def get_export_model_job_service() -> ExportModelJobService:
+    """Provides an ExportModelJobService instance for managing model export jobs."""
+    return ExportModelJobService()
 
 
 def get_log_service(request: HTTPConnection) -> LogService:

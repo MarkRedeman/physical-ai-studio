@@ -10,7 +10,8 @@ from starlette.background import BackgroundTask
 
 from api.dependencies import (
     get_dataset_service,
-    get_job_service,
+    get_export_model_job_service,
+    get_import_model_job_service,
     get_model_download_service,
     get_model_id,
     get_model_service,
@@ -21,7 +22,8 @@ from internal_datasets.utils import get_internal_dataset
 from schemas import Model
 from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload
 from services import DatasetService, ModelDownloadService, ModelService
-from services.job_service import JobService
+from services.export_model_job_service import ExportModelJobService
+from services.import_model_job_service import ImportModelJobService
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ async def model_download_endpoint(
 async def export_model(
     model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
-    job_service: Annotated[JobService, Depends(get_job_service)],
+    export_job_service: Annotated[ExportModelJobService, Depends(get_export_model_job_service)],
 ) -> ExportJob:
     """Submit an export job for a model.
 
@@ -105,7 +107,7 @@ async def export_model(
         model_id=model.id,
         model_name=model.name,
     )
-    return await job_service.submit_export_job(payload)
+    return await export_job_service.submit_export_job(payload)
 
 
 @router.get("/{model_id}/export/download")
@@ -150,7 +152,7 @@ async def import_model(
     file: UploadFile,
     project_id: Annotated[str, Form()],
     name: Annotated[str, Form()],
-    job_service: Annotated[JobService, Depends(get_job_service)],
+    import_job_service: Annotated[ImportModelJobService, Depends(get_import_model_job_service)],
 ) -> ImportJob:
     """Submit a model import job.
 
@@ -169,7 +171,7 @@ async def import_model(
         upload_file_path=tmp.name,
         original_filename=file.filename or "upload.zip",
     )
-    return await job_service.submit_import_job(payload)
+    return await import_job_service.submit_import_job(payload)
 
 
 @router.delete("/{model_id}")

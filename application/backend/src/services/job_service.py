@@ -16,10 +16,6 @@ from repositories import JobRepository
 from schemas import Job
 from schemas.base_job import JobStatus, JobType
 from schemas.job import (
-    ExportJob,
-    ExportJobPayload,
-    ImportJob,
-    ImportJobPayload,
     JobPayload,
     TrainJob,
     TrainJobPayload,
@@ -117,34 +113,6 @@ class JobService:
                 updates["end_time"] = datetime.datetime.now(tz=datetime.UTC)
 
             return await repo.update(job, updates)
-
-    @staticmethod
-    async def submit_import_job(payload: ImportJobPayload) -> ImportJob:
-        async with get_async_db_session_ctx() as session:
-            repo = JobRepository(session)
-            try:
-                job = ImportJob(
-                    project_id=payload.project_id,
-                    payload=payload,
-                    message="Import job submitted",
-                )
-                return await repo.save(job)
-            except IntegrityError:
-                raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
-
-    @staticmethod
-    async def submit_export_job(payload: ExportJobPayload) -> ExportJob:
-        async with get_async_db_session_ctx() as session:
-            repo = JobRepository(session)
-            try:
-                job = ExportJob(
-                    project_id=payload.project_id,
-                    payload=payload,
-                    message="Export job submitted",
-                )
-                return await repo.save(job)
-            except IntegrityError:
-                raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
 
     @staticmethod
     async def get_pending_import_export_job() -> Job | None:
