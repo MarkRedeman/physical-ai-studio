@@ -9,6 +9,7 @@ from loguru import logger
 from core.logging.utils import job_logging_ctx
 from schemas.base_job import JobStatus
 from schemas.import_job import DatasetImportJobPayload, ImportStep
+from services.dataset_import_service import DatasetImportService
 from services.event_processor import EventType
 from services.import_adapters import (
     DatasetImportAdapter,
@@ -17,13 +18,13 @@ from services.import_adapters import (
     StudioAdapter,
     TrossenSDKAdapter,
 )
-from services.dataset_import_service import DatasetImportService
 from services.job_service import JobService
 from workers.base import BaseProcessWorker
 
 if TYPE_CHECKING:
     import multiprocessing as mp
     from multiprocessing.synchronize import Event as EventClass
+    from uuid import UUID
 
 
 class DatasetImportWorker(BaseProcessWorker):
@@ -76,7 +77,7 @@ class DatasetImportWorker(BaseProcessWorker):
                 await self._process_job(job.id)
             await asyncio.sleep(0.5)
 
-    async def _process_job(self, job_id) -> None:
+    async def _process_job(self, job_id: UUID) -> None:
         with job_logging_ctx(job_id=str(job_id)):
             job = await JobService.get_job_by_id(job_id)
             if not isinstance(job.payload, DatasetImportJobPayload):
@@ -104,7 +105,7 @@ class DatasetImportWorker(BaseProcessWorker):
                 )
                 self.queue.put((EventType.JOB_UPDATE, failed_job))
 
-    async def _run_detection(self, job_id, project_id, payload: DatasetImportJobPayload) -> None:
+    async def _run_detection(self, job_id: UUID, project_id: UUID, payload: DatasetImportJobPayload) -> None:
         logger.info(
             "Starting source detection for job_id='{}' with archive='{}'",
             job_id,
@@ -181,7 +182,7 @@ class DatasetImportWorker(BaseProcessWorker):
         )
         self.queue.put((EventType.JOB_UPDATE, job))
 
-    async def _run_commit(self, job_id, project_id, payload: DatasetImportJobPayload) -> None:
+    async def _run_commit(self, job_id: UUID, project_id: UUID, payload: DatasetImportJobPayload) -> None:
         expected_adapter_name = (
             payload.dataset_manifest_draft.source.adapter if payload.dataset_manifest_draft else None
         )

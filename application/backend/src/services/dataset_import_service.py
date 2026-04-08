@@ -4,12 +4,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 
 from db import get_async_db_session_ctx
-from exceptions import (
-    DuplicateImportSourceError,
-    InvalidJobStateError,
-    ResourceNotFoundError,
-    ResourceType,
-)
+from exceptions import DuplicateImportSourceError, InvalidJobStateError, ResourceNotFoundError, ResourceType
 from repositories import JobRepository
 from schemas import Job
 from schemas.base_job import JobStatus, JobType

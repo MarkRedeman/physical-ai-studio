@@ -53,6 +53,9 @@ export const ModelRow = ({
         if (action === 'logs') {
             onViewLogs?.();
         }
+        if (action === 'export') {
+            onExport();
+        }
         if (action === 'download') {
             setDownloadDialogOpen(true);
 
@@ -125,7 +128,7 @@ export const ModelRow = ({
                         <Item key='logs'>Logs</Item>
                         <Item key='download'>Download</Item>
                         <Item key='retrain'>Retrain</Item>
-                        <Item key='download'>Download</Item>
+                        <Item key='export'>Export</Item>
                         <Item key='delete'>Delete</Item>
                     </Menu>
                 </MenuTrigger>

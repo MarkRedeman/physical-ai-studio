@@ -44,7 +44,7 @@ class StudioAdapter(DatasetImportAdapter):
         except zipfile.BadZipFile:
             return False
 
-    def parse_to_draft_manifest(self, archive_path: Path, payload: DatasetImportJobPayload) -> DatasetManifestV1:
+    def parse_to_draft_manifest(self, archive_path: Path, payload: DatasetImportJobPayload) -> DatasetManifestV1:  # noqa: ARG002
         original_dataset_uuid = None
         source_format_version = None
         source_identifier = archive_path.name
@@ -65,11 +65,11 @@ class StudioAdapter(DatasetImportAdapter):
                             except (TypeError, ValueError):
                                 original_dataset_uuid = None
                         break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception(e)
 
         logger.info(
-            "StudioAdapter manifest draft parsed: archive='{}', source_identifier='{}', source_format_version='{}', original_dataset_uuid='{}'",
+            "StudioAdapter manifest draft parsed: archive='{}', source_identifier='{}', source_format_version='{}', original_dataset_uuid='{}'",  # noqa: E501
             archive_path,
             source_identifier,
             source_format_version,
@@ -89,7 +89,7 @@ class StudioAdapter(DatasetImportAdapter):
             missing_fields=["environment_id"],
         )
 
-    def validate(self, manifest: DatasetManifestV1, payload: DatasetImportJobPayload) -> ImportValidationReport:
+    def validate(self, manifest: DatasetManifestV1, payload: DatasetImportJobPayload) -> ImportValidationReport:  # noqa: ARG002
         report = ImportValidationReport(is_valid=True)
 
         if payload.finalize_input is None:
@@ -173,7 +173,7 @@ class StudioAdapter(DatasetImportAdapter):
 class LeRobotV2Adapter(DatasetImportAdapter):
     source = DatasetImportSource.LEROBOT_V2
 
-    def detect(self, archive_path: Path) -> bool:
+    def detect(self, archive_path: Path) -> bool:  # noqa: ARG002
         return False
 
     def parse_to_draft_manifest(self, archive_path: Path, payload: DatasetImportJobPayload) -> DatasetManifestV1:
@@ -189,7 +189,7 @@ class LeRobotV2Adapter(DatasetImportAdapter):
 class LeRobotV3Adapter(DatasetImportAdapter):
     source = DatasetImportSource.LEROBOT_V3
 
-    def detect(self, archive_path: Path) -> bool:
+    def detect(self, archive_path: Path) -> bool:  # noqa: ARG002
         return False
 
     def parse_to_draft_manifest(self, archive_path: Path, payload: DatasetImportJobPayload) -> DatasetManifestV1:
@@ -205,7 +205,7 @@ class LeRobotV3Adapter(DatasetImportAdapter):
 class TrossenSDKAdapter(DatasetImportAdapter):
     source = DatasetImportSource.TROSSEN_SDK
 
-    def detect(self, archive_path: Path) -> bool:
+    def detect(self, archive_path: Path) -> bool:  # noqa: ARG002
         return False
 
     def parse_to_draft_manifest(self, archive_path: Path, payload: DatasetImportJobPayload) -> DatasetManifestV1:

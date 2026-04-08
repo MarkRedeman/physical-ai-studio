@@ -35,7 +35,7 @@ class SafeImportStrategy(ImportStrategy):
     - Excessive directory depth
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         inner: ImportStrategy,
         *,

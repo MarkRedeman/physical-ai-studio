@@ -5,31 +5,29 @@ from sqlalchemy.exc import IntegrityError
 
 from db import get_async_db_session_ctx
 from db.schema import JobDB
-from exceptions import DuplicateJobException, ModelNotRetrainableError, ResourceInUseError, ResourceNotFoundError, ResourceType
+from exceptions import (
+    DuplicateJobException,
+    ModelNotRetrainableError,
+    ResourceInUseError,
+    ResourceNotFoundError,
+    ResourceType,
+)
 from repositories import JobRepository
 from schemas import Job
 from schemas.base_job import JobStatus, JobType
-from schemas.job import (
-    ExportJob,
-    ExportJobPayload,
-    ImportJob,
-    ImportJobPayload,
-    JobPayload,
-    TrainJob,
-    TrainJobPayload,
-)
+from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload, JobPayload, TrainJob, TrainJobPayload
 from services.model_service import ModelService
 
 
 class JobService:
     @staticmethod
-    async def get_job_list(extra_filters: dict | None = None) -> list[TrainJob | ImportJob | ExportJob]:
+    async def get_job_list(extra_filters: dict | None = None) -> list[Job]:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             return await repo.get_all(extra_filters=extra_filters)
 
     @staticmethod
-    async def get_job_by_id(job_id: UUID) -> TrainJob | ImportJob | ExportJob:
+    async def get_job_by_id(job_id: UUID) -> Job:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             job = await repo.get_by_id(job_id)
@@ -106,8 +104,7 @@ class JobService:
 
             return await repo.update(job, updates)
 
-    @staticmethod
-    async def submit_import_job(payload: ImportJobPayload) -> ImportJob:
+    async def submit_import_job(self, payload: ImportJobPayload) -> ImportJob:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             try:
@@ -135,7 +132,7 @@ class JobService:
                 raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
 
     @staticmethod
-    async def get_pending_import_export_job() -> TrainJob | ImportJob | ExportJob | None:
+    async def get_pending_import_export_job() -> Job | None:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             return await repo.get_pending_job_by_types([JobType.IMPORT, JobType.EXPORT])
@@ -147,7 +144,7 @@ class JobService:
         message: str | None = None,
         progress: int | None = None,
         extra_info: dict | None = None,
-    ) -> TrainJob | ImportJob | ExportJob:
+    ) -> Job:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             job = await repo.get_by_id(job_id)
