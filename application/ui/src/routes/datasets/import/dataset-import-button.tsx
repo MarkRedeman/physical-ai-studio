@@ -756,10 +756,9 @@ export const DatasetImportButton = ({
     onImportCompleted,
 }: DatasetImportButtonProps = {}) => {
     const { project_id } = useProjectId();
-    const [isOpen, setOpen] = useState(false);
 
     return (
-        <DialogTrigger isOpen={isOpen} onOpenChange={setOpen}>
+        <DialogTrigger>
             <Button variant='secondary' alignSelf={'center'}>
                 <Text>{buttonLabel}</Text>
             </Button>
@@ -773,7 +772,6 @@ export const DatasetImportButton = ({
                         onImportCompleted={onImportCompleted}
                         onClose={() => {
                             close();
-                            setOpen(false);
                         }}
                     />
                 </Suspense>
