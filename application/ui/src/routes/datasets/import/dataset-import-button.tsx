@@ -22,6 +22,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import { $api, fetchClient } from '../../../api/client';
+import type {
+    SchemaDatasetImportJob,
+    SchemaDatasetImportJobPayload,
+    SchemaDatasetImportSource,
+    SchemaImportStep,
+    SchemaJobStatus,
+} from '../../../api/openapi-spec';
 import { DownloadProgressContent } from '../../../components/download-progress-content';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
@@ -44,98 +51,142 @@ interface DatasetFields {
     environmentId: string | undefined;
 }
 
-type ImportPayload = {
-    step?: string;
-    source_hint?: string;
-    result_dataset_id?: string;
+/** Narrow the job union to the dataset import variant. */
+const isDatasetImportJob = (
+    job: { type: string; payload: unknown } | undefined
+): job is SchemaDatasetImportJob => {
+    return job?.type === 'dataset_import';
 };
 
-type ImportJobResponse = { id: string };
-
-const asImportPayload = (payload: unknown): ImportPayload => {
-    if (payload && typeof payload === 'object') {
-        return payload as ImportPayload;
+/** Type-safe accessor for the dataset import payload from any job response. */
+const getImportPayload = (
+    job: { type: string; payload: unknown } | undefined
+): SchemaDatasetImportJobPayload | undefined => {
+    if (isDatasetImportJob(job)) {
+        return job.payload;
     }
-    return {};
+    return undefined;
 };
 
-const submitDatasetImportTwoPhase = async ({
-    projectId,
-    file,
-    source,
-    abortRef,
-    onUploadProgress,
-}: {
-    projectId: string;
-    file: File;
-    source: string;
-    abortRef: React.MutableRefObject<XMLHttpRequest | null>;
-    onUploadProgress: (progress: number | null) => void;
-}): Promise<ImportJobResponse> => {
-    const preparePath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets:prepare', {
-        params: { path: { project_id: projectId } },
-    });
+// ---------------------------------------------------------------------------
+// useDatasetUpload — shared upload hook for ImportDatasetForm & DetectionFailedForm
+// ---------------------------------------------------------------------------
 
-    return await new Promise<ImportJobResponse>((resolve, reject) => {
-        const prepareXhr = new XMLHttpRequest();
-        abortRef.current = prepareXhr;
-        prepareXhr.open('POST', preparePath);
-        prepareXhr.responseType = 'json';
+interface UseDatasetUploadResult {
+    /** Start the two-phase prepare + upload flow. */
+    upload: (file: File, source: SourceHint) => Promise<string | undefined>;
+    /** Abort any in-flight request. */
+    abort: () => void;
+    /** Upload progress percentage (null while indeterminate). */
+    progress: number | null;
+    /** Underlying mutation state for isPending / isError / error. */
+    mutation: ReturnType<typeof useMutation<{ id: string }, Error, { file: File; source: string }>>;
+}
 
-        prepareXhr.onload = () => {
-            if (prepareXhr.status < 200 || prepareXhr.status >= 300) {
-                reject(new Error(`Failed to prepare import: ${prepareXhr.status}`));
-                return;
-            }
+const useDatasetUpload = (projectId: string): UseDatasetUploadResult => {
+    const [progress, setProgress] = useState<number | null>(null);
+    const abortRef = useRef<XMLHttpRequest | null>(null);
 
-            const preparedJob = prepareXhr.response as ImportJobResponse;
-            if (!preparedJob?.id) {
-                reject(new Error('Failed to prepare import: missing job id'));
-                return;
-            }
-
-            const uploadPath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets/{job_id}:upload', {
-                params: { path: { project_id: projectId, job_id: preparedJob.id } },
-            });
-
-            const uploadXhr = new XMLHttpRequest();
-            abortRef.current = uploadXhr;
-            uploadXhr.open('PUT', uploadPath);
-            uploadXhr.responseType = 'json';
-
-            uploadXhr.upload.onprogress = (event) => {
-                if (event.lengthComputable && event.total > 0) {
-                    onUploadProgress(Math.round((event.loaded / event.total) * 100));
-                } else {
-                    onUploadProgress(null);
-                }
-            };
-
-            uploadXhr.onload = () => {
-                if (uploadXhr.status >= 200 && uploadXhr.status < 300) {
-                    const uploadedJob = uploadXhr.response as ImportJobResponse;
-                    resolve({ id: uploadedJob?.id ?? preparedJob.id });
-                } else {
-                    reject(new Error(`Failed to upload dataset archive: ${uploadXhr.status}`));
-                }
-            };
-
-            uploadXhr.onerror = () => reject(new Error('Failed to upload dataset archive'));
-            uploadXhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
-
-            const uploadFormData = new FormData();
-            uploadFormData.append('archive', file);
-            uploadXhr.send(uploadFormData);
+    useEffect(() => {
+        return () => {
+            abortRef.current?.abort();
         };
+    }, []);
 
-        prepareXhr.onerror = () => reject(new Error('Failed to prepare dataset import job'));
-        prepareXhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+    const mutation = useMutation({
+        mutationFn: async ({ file, source }: { file: File; source: string }) => {
+            // Phase 1: prepare job using typed fetchClient (no XHR needed — tiny request)
+            const { data: preparedJob, error } = await fetchClient.POST(
+                '/api/projects/{project_id}/imports/datasets:prepare',
+                {
+                    params: { path: { project_id: projectId } },
+                    body: { source_hint: source },
+                    bodySerializer: (body) => {
+                        const fd = new FormData();
+                        fd.append('source_hint', (body as { source_hint: string }).source_hint);
+                        return fd;
+                    },
+                }
+            );
 
-        const prepareFormData = new FormData();
-        prepareFormData.append('source_hint', source);
-        prepareXhr.send(prepareFormData);
+            if (error || !preparedJob) {
+                throw new Error('Failed to prepare dataset import job');
+            }
+
+            const jobId = (preparedJob as { id?: string }).id;
+            if (!jobId) {
+                throw new Error('Failed to prepare import: missing job id');
+            }
+
+            // Phase 2: upload archive via XHR (needs onprogress for large files)
+            const uploadPath = fetchClient.PATH(
+                '/api/projects/{project_id}/imports/datasets/{job_id}:upload',
+                { params: { path: { project_id: projectId, job_id: jobId } } }
+            );
+
+            return await new Promise<{ id: string }>((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                abortRef.current = xhr;
+                xhr.open('PUT', uploadPath);
+                xhr.responseType = 'json';
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable && event.total > 0) {
+                        setProgress(Math.round((event.loaded / event.total) * 100));
+                    } else {
+                        setProgress(null);
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        const uploaded = xhr.response as { id?: string } | null;
+                        resolve({ id: uploaded?.id ?? jobId });
+                    } else {
+                        reject(new Error(`Failed to upload dataset archive: ${xhr.status}`));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error('Failed to upload dataset archive'));
+                xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+
+                const fd = new FormData();
+                fd.append('archive', file);
+                xhr.send(fd);
+            });
+        },
+        onMutate: () => {
+            setProgress(null);
+        },
+        onSettled: () => {
+            abortRef.current = null;
+        },
     });
+
+    const upload = async (file: File, source: SourceHint): Promise<string | undefined> => {
+        try {
+            const job = await mutation.mutateAsync({ file, source });
+            return job.id;
+        } catch (error) {
+            if (isAbortError(error)) {
+                return undefined;
+            }
+            return undefined;
+        }
+    };
+
+    const abort = () => {
+        abortRef.current?.abort();
+        mutation.reset();
+        setProgress(null);
+    };
+
+    return { upload, abort, progress, mutation };
 };
+
+// ---------------------------------------------------------------------------
+// ImportDatasetForm — file picker + upload trigger
+// ---------------------------------------------------------------------------
 
 interface ImportDatasetFormProps {
     project_id: string;
@@ -156,43 +207,13 @@ const ImportDatasetForm = ({
     archive,
     onUploaded,
 }: ImportDatasetFormProps) => {
-    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-    const abortRef = useRef<XMLHttpRequest | null>(null);
-
-    useEffect(() => {
-        return () => {
-            abortRef.current?.abort();
-        };
-    }, []);
-
-    const uploadMutation = useMutation({
-        mutationFn: async ({ file, source }: { file: File; source: string }) => {
-            return await submitDatasetImportTwoPhase({
-                projectId: project_id,
-                file,
-                source,
-                abortRef,
-                onUploadProgress: setUploadProgress,
-            });
-        },
-        onMutate: () => {
-            setUploadProgress(null);
-        },
-        onSettled: () => {
-            abortRef.current = null;
-        },
-    });
+    const { upload, abort, progress, mutation } = useDatasetUpload(project_id);
 
     const startUpload = async (file: File) => {
         onFileSelected(file);
-
-        try {
-            const job = await uploadMutation.mutateAsync({ file, source: sourceHint });
-            onUploaded(job.id);
-        } catch (error) {
-            if (isAbortError(error)) {
-                return;
-            }
+        const jobId = await upload(file, sourceHint);
+        if (jobId) {
+            onUploaded(jobId);
         }
     };
 
@@ -204,10 +225,8 @@ const ImportDatasetForm = ({
     };
 
     const onCancel = () => {
-        if (uploadMutation.isPending) {
-            abortRef.current?.abort();
-            uploadMutation.reset();
-            setUploadProgress(null);
+        if (mutation.isPending) {
+            abort();
             return;
         }
         onClose();
@@ -239,7 +258,7 @@ const ImportDatasetForm = ({
                         )}
                         <View>
                             <FileTrigger acceptedFileTypes={['.zip']} onSelect={handleFileList}>
-                                <Button variant='secondary' isDisabled={uploadMutation.isPending}>
+                                <Button variant='secondary' isDisabled={mutation.isPending}>
                                     {archive !== null ? 'Choose a different file' : 'Browse'}
                                 </Button>
                             </FileTrigger>
@@ -248,21 +267,28 @@ const ImportDatasetForm = ({
                 </DropZone>
 
                 <DownloadProgressContent
-                    isError={uploadMutation.isError && !isAbortError(uploadMutation.error)}
-                    isPending={uploadMutation.isPending}
-                    progress={uploadProgress}
+                    isError={mutation.isError && !isAbortError(mutation.error)}
+                    isPending={mutation.isPending}
+                    progress={progress}
                     errorMessage='Failed to upload dataset archive. Please try again.'
                     preparingMessage='Uploading dataset archive...'
                 />
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={onCancel}>
-                    {uploadMutation.isPending ? 'Abort upload' : 'Cancel'}
+                    {mutation.isPending ? 'Abort upload' : 'Cancel'}
                 </Button>
             </ButtonGroup>
         </>
     );
 };
+
+// ---------------------------------------------------------------------------
+// DatasetAnalysisInProgress — polls job until detection completes
+// ---------------------------------------------------------------------------
+
+const TERMINAL_STATUSES: SchemaJobStatus[] = ['failed', 'canceled'];
+const IMPORTING_STEPS: SchemaImportStep[] = ['ready_to_commit', 'importing_resource'];
 
 interface DatasetAnalysisInProgressProps {
     jobId: string;
@@ -297,30 +323,28 @@ const DatasetAnalysisInProgress = ({
     const hasTransitionedRef = useRef(false);
 
     const job = importJobQuery.data;
+    const payload = getImportPayload(job);
 
-    if (!hasTransitionedRef.current && job) {
-        const payload = asImportPayload(job.payload);
-
-        if (job.status === 'failed' || job.status === 'canceled') {
+    if (!hasTransitionedRef.current && job && payload) {
+        if (TERMINAL_STATUSES.includes(job.status as SchemaJobStatus)) {
             hasTransitionedRef.current = true;
 
-            if (payload.step === 'detecting_source') {
+            if (payload.step === ('detecting_source' satisfies SchemaImportStep)) {
                 onDetectionFailed(
                     job.message ?? 'Could not automatically detect the dataset format. Please select a format manually.'
                 );
             } else {
                 onFailed(job.message ?? 'Import failed during processing.');
             }
-        } else if (job.status === 'completed' && payload.result_dataset_id) {
+        } else if (job.status === ('completed' satisfies SchemaJobStatus) && payload.result_dataset_id) {
             hasTransitionedRef.current = true;
             onCompleted(payload.result_dataset_id);
-        } else if (payload.step === 'waiting_for_user_input') {
+        } else if (payload.step === ('waiting_for_user_input' satisfies SchemaImportStep)) {
             hasTransitionedRef.current = true;
             onReady();
         } else if (
-            payload.step === 'ready_to_commit' ||
-            payload.step === 'importing_resource' ||
-            job.status === 'running'
+            IMPORTING_STEPS.includes(payload.step) ||
+            job.status === ('running' satisfies SchemaJobStatus)
         ) {
             hasTransitionedRef.current = true;
             onImporting();
@@ -345,6 +369,10 @@ const DatasetAnalysisInProgress = ({
     );
 };
 
+// ---------------------------------------------------------------------------
+// DetectionFailedForm — retry with explicit source hint
+// ---------------------------------------------------------------------------
+
 const USER_SOURCE_HINTS = VALID_SOURCE_HINTS.filter((hint) => hint !== 'auto');
 
 interface DetectionFailedFormProps {
@@ -357,53 +385,21 @@ interface DetectionFailedFormProps {
 
 const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClose }: DetectionFailedFormProps) => {
     const [sourceHint, setSourceHint] = useState<SourceHint>(USER_SOURCE_HINTS[0]);
-    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-    const abortRef = useRef<XMLHttpRequest | null>(null);
-
-    useEffect(() => {
-        return () => {
-            abortRef.current?.abort();
-        };
-    }, []);
-
-    const retryMutation = useMutation({
-        mutationFn: async ({ file, source }: { file: File; source: string }) => {
-            return await submitDatasetImportTwoPhase({
-                projectId: project_id,
-                file,
-                source,
-                abortRef,
-                onUploadProgress: setUploadProgress,
-            });
-        },
-        onMutate: () => {
-            setUploadProgress(null);
-        },
-        onSettled: () => {
-            abortRef.current = null;
-        },
-    });
+    const { upload, abort, progress, mutation } = useDatasetUpload(project_id);
 
     const onRetryUpload = async () => {
         if (!archive) {
             return;
         }
-
-        try {
-            const job = await retryMutation.mutateAsync({ file: archive, source: sourceHint });
-            onRetry(job.id);
-        } catch (error) {
-            if (isAbortError(error)) {
-                return;
-            }
+        const jobId = await upload(archive, sourceHint);
+        if (jobId) {
+            onRetry(jobId);
         }
     };
 
     const onCancel = () => {
-        if (retryMutation.isPending) {
-            abortRef.current?.abort();
-            retryMutation.reset();
-            setUploadProgress(null);
+        if (mutation.isPending) {
+            abort();
             return;
         }
         onClose();
@@ -428,9 +424,9 @@ const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClo
                 </Picker>
 
                 <DownloadProgressContent
-                    isError={retryMutation.isError && !isAbortError(retryMutation.error)}
-                    isPending={retryMutation.isPending}
-                    progress={uploadProgress}
+                    isError={mutation.isError && !isAbortError(mutation.error)}
+                    isPending={mutation.isPending}
+                    progress={progress}
                     errorMessage='Failed to upload dataset archive. Please try again.'
                     preparingMessage='Re-uploading dataset archive...'
                 />
@@ -438,12 +434,12 @@ const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClo
 
             <ButtonGroup>
                 <Button variant='secondary' onPress={onCancel}>
-                    {retryMutation.isPending ? 'Abort upload' : 'Cancel'}
+                    {mutation.isPending ? 'Abort upload' : 'Cancel'}
                 </Button>
                 <Button
                     variant='accent'
                     onPress={onRetryUpload}
-                    isPending={retryMutation.isPending}
+                    isPending={mutation.isPending}
                     isDisabled={archive === null}
                 >
                     Retry with selected format
@@ -452,6 +448,10 @@ const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClo
         </>
     );
 };
+
+// ---------------------------------------------------------------------------
+// ConfirmDatasetImport — finalize form
+// ---------------------------------------------------------------------------
 
 interface ConfirmDatasetImportProps {
     project_id: string;
@@ -556,6 +556,10 @@ const ConfirmDatasetImport = ({
     );
 };
 
+// ---------------------------------------------------------------------------
+// DatasetImportInProgress — polls until import completes
+// ---------------------------------------------------------------------------
+
 interface DatasetImportInProgressProps {
     jobId: string;
     onClose: () => void;
@@ -577,11 +581,10 @@ const DatasetImportInProgress = ({ jobId, onClose, onCompleted }: DatasetImportI
     const hasCompletedRef = useRef(false);
 
     const job = importJobQuery.data;
+    const payload = getImportPayload(job);
 
-    if (!hasCompletedRef.current && job) {
-        const payload = asImportPayload(job.payload);
-
-        if (job.status === 'completed' && payload.result_dataset_id) {
+    if (!hasCompletedRef.current && payload) {
+        if (job?.status === ('completed' satisfies SchemaJobStatus) && payload.result_dataset_id) {
             hasCompletedRef.current = true;
             onCompleted?.(payload.result_dataset_id);
         }
@@ -606,6 +609,10 @@ const DatasetImportInProgress = ({ jobId, onClose, onCompleted }: DatasetImportI
         </>
     );
 };
+
+// ---------------------------------------------------------------------------
+// ImportDatasetDialog — orchestrator
+// ---------------------------------------------------------------------------
 
 interface ImportDatasetDialogProps {
     project_id: string;
@@ -734,6 +741,10 @@ const ImportDatasetDialog = ({
         </Dialog>
     );
 };
+
+// ---------------------------------------------------------------------------
+// DatasetImportButton — public export
+// ---------------------------------------------------------------------------
 
 interface DatasetImportButtonProps {
     existingJobId?: string;
