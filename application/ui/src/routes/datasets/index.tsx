@@ -24,7 +24,7 @@ const Datasets = ({ datasets }: DatasetsProps) => {
 
     if (datasets.length === 0) {
         return (
-            <Flex margin={'size-200'} direction={'column'} flex>
+            <Flex marginX={'size-200'} direction={'column'} height='100%'>
                 <DatasetImportJobs />
 
                 <IllustratedMessage>
