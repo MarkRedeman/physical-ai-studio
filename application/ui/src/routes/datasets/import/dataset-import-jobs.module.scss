@@ -1,0 +1,35 @@
+.jobHeader {
+    border-radius: 4px 4px 0px 0px;
+    background-color: var(--spectrum-global-color-gray-200);
+    padding: var(--spectrum-global-dimension-size-150);
+    padding-left: var(--spectrum-global-dimension-size-500);
+    text-transform: uppercase;
+    border-left: 4px solid transparent;
+
+    font-size: var(--spectrum-global-dimension-font-size-50);
+}
+
+.jobRow {
+    background-color: var(--spectrum-global-color-gray-75);
+    padding: var(--spectrum-global-dimension-size-150);
+    padding-left: var(--spectrum-global-dimension-size-500);
+    border-top: 1px solid var(--spectrum-global-color-gray-200);
+    border-left: 4px solid transparent;
+    min-height: var(--spectrum-global-dimension-size-800);
+}
+
+.jobRow:hover {
+    background-color: var(--spectrum-global-color-gray-100);
+}
+
+.jobInfo {
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.progressBar div {
+    border-radius: 0px !important;
+}
+
+.progressBar div[class*='spectrum-BarLoader-fill'] {
+    background-color: var(--energy-blue);
+}
