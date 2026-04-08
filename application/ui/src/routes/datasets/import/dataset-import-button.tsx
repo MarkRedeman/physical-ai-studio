@@ -631,6 +631,7 @@ const ImportDatasetDialog = ({
 
     const onImportDone = (datasetId: string) => {
         void queryClient.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}'] });
+        void queryClient.invalidateQueries({ queryKey: ['get', '/api/jobs'] });
         onImportCompleted?.(datasetId);
         onDialogClose();
         navigate(paths.project.datasets.show({ project_id, dataset_id: datasetId }));
