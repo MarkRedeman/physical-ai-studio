@@ -1,47 +1,18 @@
-from datetime import datetime
-from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer
 
-from schemas.base import BaseIDModel
-
-
-class JobType(StrEnum):
-    TRAINING = "training"
-
-
-class JobStatus(StrEnum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELED = "canceled"
-
-
-class Job(BaseIDModel):
-    project_id: UUID
-    type: JobType = JobType.TRAINING
-    progress: int = Field(default=0, ge=0, le=100, description="Progress percentage from 0 to 100")
-    status: JobStatus = JobStatus.PENDING
-    payload: dict
-    extra_info: dict | None = None
-    message: str = "Job created"
-    start_time: datetime | None = None
-    end_time: datetime | None = None
-    created_at: datetime | None = Field(None)
-
-    @field_serializer("project_id")
-    def serialize_project_id(self, project_id: UUID, _info: Any) -> str:
-        return str(project_id)
+from schemas.base_job import BaseJob, JobType
+from schemas.import_job import DatasetImportJobPayload, ModelImportJobPayload
 
 
 class JobList(BaseModel):
-    jobs: list[Job]
+    jobs: list["Job"]
 
 
 class TrainJobPayload(BaseModel):
+    type: Literal[JobType.TRAINING] = JobType.TRAINING
     project_id: UUID
     dataset_id: UUID
     policy: str
@@ -65,3 +36,28 @@ class TrainJobPayload(BaseModel):
     @field_serializer("base_model_id")
     def serialize_base_model_id(self, base_model_id: UUID | None, _info: Any) -> str | None:
         return str(base_model_id) if base_model_id else None
+
+
+class TrainJob(BaseJob):
+    type: Literal[JobType.TRAINING] = JobType.TRAINING
+    payload: TrainJobPayload
+
+
+class DatasetImportJob(BaseJob):
+    type: Literal[JobType.DATASET_IMPORT] = JobType.DATASET_IMPORT
+    payload: DatasetImportJobPayload
+
+
+class ModelImportJob(BaseJob):
+    type: Literal[JobType.MODEL_IMPORT] = JobType.MODEL_IMPORT
+    payload: ModelImportJobPayload
+
+
+JobPayload = TrainJobPayload | DatasetImportJobPayload | ModelImportJobPayload
+
+Job = Annotated[
+    TrainJob | DatasetImportJob | ModelImportJob,
+    Field(discriminator="type"),
+]
+
+JobList.model_rebuild()

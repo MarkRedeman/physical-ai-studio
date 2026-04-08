@@ -1,13 +1,15 @@
 from collections.abc import Callable
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from db.schema import JobDB
 from repositories.base import BaseRepository
 from repositories.mappers import JobMapper
 from schemas import Job
-from schemas.job import JobStatus, JobType, TrainJobPayload
+from schemas.base_job import JobStatus, JobType
+from schemas.job import TrainJobPayload
 
 
 class JobRepository(BaseRepository):
@@ -43,4 +45,24 @@ class JobRepository(BaseRepository):
             extra_filters={"type": job_type, "status": JobStatus.PENDING},
             order_by=self.schema.created_at,
             ascending=True,
+        )
+
+    async def get_pending_dataset_import_job(self) -> Job | None:
+        return await self.get_one(
+            extra_filters={"type": JobType.DATASET_IMPORT, "status": JobStatus.PENDING},
+            expressions=[
+                func.json_extract(JobDB.payload, "$.step").in_(
+                    [
+                        "uploaded",
+                        "ready_to_commit",
+                    ]
+                )
+            ],
+            order_by=self.schema.created_at,
+            ascending=True,
+        )
+
+    async def get_jobs_by_type(self, project_id: UUID, job_type: JobType) -> list[Job]:
+        return await self.get_all(
+            extra_filters={"project_id": self._id_to_str(project_id), "type": job_type},
         )
