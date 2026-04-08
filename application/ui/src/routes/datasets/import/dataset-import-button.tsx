@@ -540,7 +540,6 @@ const ConfirmDatasetImport = ({
 };
 
 interface DatasetImportInProgressProps {
-    project_id: string;
     jobId: string;
     statusMessage?: string;
     onClose: () => void;
@@ -548,14 +547,11 @@ interface DatasetImportInProgressProps {
 }
 
 const DatasetImportInProgress = ({
-    project_id,
     jobId,
     statusMessage,
     onClose,
     onCompleted,
 }: DatasetImportInProgressProps) => {
-    const navigate = useNavigate();
-    const queryClient = useQueryClient();
     const importJobQuery = $api.useQuery(
         'get',
         '/api/jobs/{job_id}',
@@ -567,7 +563,13 @@ const DatasetImportInProgress = ({
         }
     );
 
+    const hasCompletedRef = useRef(false);
+
     useEffect(() => {
+        if (hasCompletedRef.current) {
+            return;
+        }
+
         const job = importJobQuery.data;
         if (!job) {
             return;
@@ -576,12 +578,10 @@ const DatasetImportInProgress = ({
         const payload = asImportPayload(job.payload);
 
         if (job.status === 'completed' && payload.result_dataset_id) {
-            void queryClient.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}'] });
+            hasCompletedRef.current = true;
             onCompleted?.(payload.result_dataset_id);
-            onClose();
-            navigate(paths.project.datasets.show({ project_id, dataset_id: payload.result_dataset_id }));
         }
-    }, [importJobQuery.data, navigate, onClose, onCompleted, project_id, queryClient]);
+    }, [importJobQuery.data, onCompleted]);
 
     return (
         <>
@@ -623,6 +623,7 @@ const ImportDatasetDialog = ({
     });
 
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [archive, setArchive] = useState<File | null>(null);
     const [datasetName, setDatasetName] = useState('');
     const [defaultTask, setDefaultTask] = useState('');
@@ -645,6 +646,13 @@ const ImportDatasetDialog = ({
             onPendingJobDismissed?.(importJobId);
         }
         onClose();
+    };
+
+    const onImportDone = (datasetId: string) => {
+        void queryClient.invalidateQueries({ queryKey: ['get', '/api/projects/{project_id}'] });
+        onImportCompleted?.(datasetId);
+        onDialogClose();
+        navigate(paths.project.datasets.show({ project_id, dataset_id: datasetId }));
     };
 
     return (
@@ -678,11 +686,7 @@ const ImportDatasetDialog = ({
                         setImportStatusMessage(message);
                         setImportPhase('awaiting_import');
                     }}
-                    onCompleted={(datasetId) => {
-                        onImportCompleted?.(datasetId);
-                        onDialogClose();
-                        navigate(paths.project.datasets.show({ project_id, dataset_id: datasetId }));
-                    }}
+                    onCompleted={onImportDone}
                     onDetectionFailed={(message) => {
                         setImportStatusMessage(message);
                         setImportPhase('detection_failed');
@@ -731,11 +735,10 @@ const ImportDatasetDialog = ({
 
             {importPhase === 'awaiting_import' && importJobId && (
                 <DatasetImportInProgress
-                    project_id={project_id}
                     jobId={importJobId}
                     statusMessage={importStatusMessage}
                     onClose={onDialogClose}
-                    onCompleted={onImportCompleted}
+                    onCompleted={onImportDone}
                 />
             )}
         </Dialog>
