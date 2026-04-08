@@ -29,8 +29,20 @@ import { isAbortError } from '../../utils/download';
 
 const VALID_SOURCE_HINTS = ['auto', 'studio', 'lerobot_v2', 'lerobot_v3', 'trossen_sdk'] as const;
 type SourceHint = (typeof VALID_SOURCE_HINTS)[number];
-type ImportPhase = 'editing' | 'awaiting_detection' | 'detection_failed' | 'ready_to_finalize' | 'awaiting_import';
 type EnvironmentOption = { id: string; name: string };
+
+type ImportPhase =
+    | { step: 'editing'; errorMessage?: string }
+    | { step: 'awaiting_detection' }
+    | { step: 'detection_failed'; errorMessage: string }
+    | { step: 'ready_to_finalize' }
+    | { step: 'awaiting_import' };
+
+interface DatasetFields {
+    datasetName: string;
+    defaultTask: string;
+    environmentId: string | undefined;
+}
 
 type ImportPayload = {
     step?: string;
@@ -49,15 +61,17 @@ interface ImportDatasetFormProps {
     project_id: string;
     onClose: () => void;
     sourceHint?: SourceHint;
+    errorMessage?: string;
     onFileSelect: (files: FileList | null) => void;
     archive: File | null;
-    onUploaded: (jobId: string, message: string) => void;
+    onUploaded: (jobId: string) => void;
 }
 
 const ImportDatasetForm = ({
     project_id,
     onClose,
     sourceHint = 'auto',
+    errorMessage,
     onFileSelect,
     archive,
     onUploaded,
@@ -126,7 +140,7 @@ const ImportDatasetForm = ({
         try {
             const job = await uploadMutation.mutateAsync({ file: archive, source: sourceHint });
 
-            onUploaded(job.id, 'Upload accepted. Waiting for server-side dataset detection…');
+            onUploaded(job.id);
         } catch (error) {
             if (isAbortError(error)) {
                 return;
@@ -147,6 +161,8 @@ const ImportDatasetForm = ({
     return (
         <>
             <Content>
+                {errorMessage ? <Text>{errorMessage}</Text> : null}
+
                 <DropZone
                     isFilled={archive !== null}
                     onDrop={async (e) => {
@@ -205,9 +221,8 @@ const ImportDatasetForm = ({
 
 interface DatasetAnalysisInProgressProps {
     jobId: string;
-    statusMessage?: string;
-    onReady: (message: string) => void;
-    onImporting: (message: string) => void;
+    onReady: () => void;
+    onImporting: () => void;
     onCompleted: (datasetId: string) => void;
     onDetectionFailed: (message: string) => void;
     onFailed: (message: string) => void;
@@ -216,7 +231,6 @@ interface DatasetAnalysisInProgressProps {
 
 const DatasetAnalysisInProgress = ({
     jobId,
-    statusMessage,
     onReady,
     onImporting,
     onCompleted,
@@ -270,20 +284,20 @@ const DatasetAnalysisInProgress = ({
 
         if (payload.step === 'waiting_for_user_input') {
             hasTransitionedRef.current = true;
-            onReady('Dataset analyzed. Review fields and click "Finalize import".');
+            onReady();
             return;
         }
 
         if (payload.step === 'ready_to_commit' || payload.step === 'importing_resource' || job.status === 'running') {
             hasTransitionedRef.current = true;
-            onImporting('Import is already running. Showing live import progress…');
+            onImporting();
         }
     }, [importJobQuery.data, onCompleted, onDetectionFailed, onFailed, onImporting, onReady]);
 
     return (
         <>
             <Content>
-                <Text>{statusMessage ?? 'Upload accepted. Waiting for server-side dataset detection…'}</Text>
+                <Text>Upload accepted. Waiting for server-side dataset detection…</Text>
                 {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
             </Content>
             <ButtonGroup>
@@ -303,12 +317,12 @@ const USER_SOURCE_HINTS = VALID_SOURCE_HINTS.filter((hint) => hint !== 'auto');
 interface DetectionFailedFormProps {
     project_id: string;
     archive: File | null;
-    statusMessage?: string;
-    onRetry: (jobId: string, message: string) => void;
+    errorMessage: string;
+    onRetry: (jobId: string) => void;
     onClose: () => void;
 }
 
-const DetectionFailedForm = ({ project_id, archive, statusMessage, onRetry, onClose }: DetectionFailedFormProps) => {
+const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClose }: DetectionFailedFormProps) => {
     const [sourceHint, setSourceHint] = useState<SourceHint>(USER_SOURCE_HINTS[0]);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const abortRef = useRef<XMLHttpRequest | null>(null);
@@ -371,7 +385,7 @@ const DetectionFailedForm = ({ project_id, archive, statusMessage, onRetry, onCl
 
         try {
             const job = await retryMutation.mutateAsync({ file: archive, source: sourceHint });
-            onRetry(job.id, 'Re-uploading with selected format. Waiting for detection…');
+            onRetry(job.id);
         } catch (error) {
             if (isAbortError(error)) {
                 return;
@@ -392,10 +406,7 @@ const DetectionFailedForm = ({ project_id, archive, statusMessage, onRetry, onCl
     return (
         <>
             <Content>
-                <Text>
-                    {statusMessage ??
-                        'Could not automatically detect the dataset format. Please select a format and try again.'}
-                </Text>
+                <Text>{errorMessage}</Text>
 
                 {archive !== null ? <Text>Archive: {archive.name}</Text> : null}
 
@@ -441,14 +452,9 @@ interface ConfirmDatasetImportProps {
     jobId: string;
     onClose: () => void;
     environments: EnvironmentOption[];
-    environmentId: string | undefined;
-    onEnvironmentChange: (value: string | undefined) => void;
-    datasetName: string;
-    onDatasetNameChange: (value: string) => void;
-    defaultTask: string;
-    onDefaultTaskChange: (value: string) => void;
-    statusMessage?: string;
-    onFinalized: (message: string) => void;
+    fields: DatasetFields;
+    onFieldsChange: (fields: DatasetFields) => void;
+    onFinalized: () => void;
 }
 
 const ConfirmDatasetImport = ({
@@ -456,21 +462,16 @@ const ConfirmDatasetImport = ({
     jobId,
     onClose,
     environments,
-    environmentId,
-    onEnvironmentChange,
-    datasetName,
-    onDatasetNameChange,
-    defaultTask,
-    onDefaultTaskChange,
-    statusMessage,
+    fields,
+    onFieldsChange,
     onFinalized,
 }: ConfirmDatasetImportProps) => {
     const finalizeMutation = $api.useMutation('post', '/api/projects/{project_id}/imports/datasets/{job_id}:finalize');
     const [finalizeError, setFinalizeError] = useState<string | undefined>(undefined);
-    const canFinalize = environmentId !== undefined && datasetName.trim().length > 0;
+    const canFinalize = fields.environmentId !== undefined && fields.datasetName.trim().length > 0;
 
     const onFinalize = async () => {
-        if (!canFinalize || environmentId === undefined) {
+        if (!canFinalize || fields.environmentId === undefined) {
             return;
         }
 
@@ -484,13 +485,13 @@ const ConfirmDatasetImport = ({
                     },
                 },
                 body: {
-                    dataset_name: datasetName,
-                    environment_id: environmentId,
-                    default_task: defaultTask.length > 0 ? defaultTask : undefined,
+                    dataset_name: fields.datasetName,
+                    environment_id: fields.environmentId,
+                    default_task: fields.defaultTask.length > 0 ? fields.defaultTask : undefined,
                 },
             });
 
-            onFinalized('Finalize accepted. Waiting for import to complete…');
+            onFinalized();
         } catch {
             setFinalizeError('Failed to finalize import. Please check job state and try again.');
         }
@@ -499,14 +500,19 @@ const ConfirmDatasetImport = ({
     return (
         <>
             <Content>
-                <Text>{statusMessage ?? 'Dataset analyzed. Review fields and click "Finalize import".'}</Text>
+                <Text>Dataset analyzed. Review fields and click &quot;Finalize import&quot;.</Text>
                 {finalizeError ? <Text>{finalizeError}</Text> : null}
 
                 <Picker
                     items={environments}
-                    selectedKey={environmentId}
+                    selectedKey={fields.environmentId}
                     label='Environment'
-                    onSelectionChange={(value) => onEnvironmentChange(value === null ? undefined : value.toString())}
+                    onSelectionChange={(value) =>
+                        onFieldsChange({
+                            ...fields,
+                            environmentId: value === null ? undefined : value.toString(),
+                        })
+                    }
                 >
                     {(item) => <Item key={item.id}>{item.name}</Item>}
                 </Picker>
@@ -515,11 +521,16 @@ const ConfirmDatasetImport = ({
                     isRequired
                     width='100%'
                     label='Dataset name'
-                    value={datasetName}
-                    onChange={onDatasetNameChange}
+                    value={fields.datasetName}
+                    onChange={(value) => onFieldsChange({ ...fields, datasetName: value })}
                 />
 
-                <TextField width='100%' label='Task' value={defaultTask} onChange={onDefaultTaskChange} />
+                <TextField
+                    width='100%'
+                    label='Task'
+                    value={fields.defaultTask}
+                    onChange={(value) => onFieldsChange({ ...fields, defaultTask: value })}
+                />
             </Content>
 
             <ButtonGroup>
@@ -541,14 +552,12 @@ const ConfirmDatasetImport = ({
 
 interface DatasetImportInProgressProps {
     jobId: string;
-    statusMessage?: string;
     onClose: () => void;
     onCompleted?: (datasetId: string) => void;
 }
 
 const DatasetImportInProgress = ({
     jobId,
-    statusMessage,
     onClose,
     onCompleted,
 }: DatasetImportInProgressProps) => {
@@ -586,7 +595,7 @@ const DatasetImportInProgress = ({
     return (
         <>
             <Content>
-                <Text>{statusMessage ?? 'Finalize accepted. Waiting for import to complete…'}</Text>
+                <Text>Waiting for import to complete…</Text>
                 {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
                 <Loading mode='inline' variant='intel' size='L' />
             </Content>
@@ -625,24 +634,27 @@ const ImportDatasetDialog = ({
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [archive, setArchive] = useState<File | null>(null);
-    const [datasetName, setDatasetName] = useState('');
-    const [defaultTask, setDefaultTask] = useState('');
-    const [environmentId, setEnvironmentId] = useState<string | undefined>(() => environments[0]?.id);
+    const [fields, setFields] = useState<DatasetFields>({
+        datasetName: '',
+        defaultTask: '',
+        environmentId: environments[0]?.id,
+    });
     const [importJobId, setImportJobId] = useState<string | undefined>(initialJobId);
-    const [importPhase, setImportPhase] = useState<ImportPhase>(initialJobId ? 'awaiting_detection' : 'editing');
-    const [importStatusMessage, setImportStatusMessage] = useState<string | undefined>(undefined);
+    const [importPhase, setImportPhase] = useState<ImportPhase>(
+        initialJobId ? { step: 'awaiting_detection' } : { step: 'editing' }
+    );
 
     const onFileSelect = (files: FileList | null) => {
         const file = files?.[0] ?? null;
         setArchive(file);
-        if (file !== null && datasetName.trim().length === 0) {
+        if (file !== null && fields.datasetName.trim().length === 0) {
             const suggestion = file.name.endsWith('.zip') ? file.name.slice(0, -4) : file.name;
-            setDatasetName(suggestion);
+            setFields((prev) => ({ ...prev, datasetName: suggestion }));
         }
     };
 
     const onDialogClose = () => {
-        if (importJobId && importPhase !== 'editing') {
+        if (importJobId && importPhase.step !== 'editing') {
             onPendingJobDismissed?.(importJobId);
         }
         onClose();
@@ -660,83 +672,70 @@ const ImportDatasetDialog = ({
             <Heading>Import dataset</Heading>
             <Divider />
 
-            {importPhase === 'editing' && (
+            {importPhase.step === 'editing' && (
                 <ImportDatasetForm
                     project_id={project_id}
                     onClose={onDialogClose}
+                    errorMessage={importPhase.errorMessage}
                     onFileSelect={onFileSelect}
                     archive={archive}
-                    onUploaded={(jobId, message) => {
+                    onUploaded={(jobId) => {
                         setImportJobId(jobId);
-                        setImportStatusMessage(message);
-                        setImportPhase('awaiting_detection');
+                        setImportPhase({ step: 'awaiting_detection' });
                     }}
                 />
             )}
 
-            {importPhase === 'awaiting_detection' && importJobId && (
+            {importPhase.step === 'awaiting_detection' && importJobId && (
                 <DatasetAnalysisInProgress
                     jobId={importJobId}
-                    statusMessage={importStatusMessage}
-                    onReady={(message) => {
-                        setImportStatusMessage(message);
-                        setImportPhase('ready_to_finalize');
+                    onReady={() => {
+                        setImportPhase({ step: 'ready_to_finalize' });
                     }}
-                    onImporting={(message) => {
-                        setImportStatusMessage(message);
-                        setImportPhase('awaiting_import');
+                    onImporting={() => {
+                        setImportPhase({ step: 'awaiting_import' });
                     }}
                     onCompleted={onImportDone}
-                    onDetectionFailed={(message) => {
-                        setImportStatusMessage(message);
-                        setImportPhase('detection_failed');
+                    onDetectionFailed={(errorMessage) => {
+                        setImportPhase({ step: 'detection_failed', errorMessage });
                     }}
-                    onFailed={(message) => {
-                        setImportStatusMessage(message);
-                        setImportPhase('editing');
+                    onFailed={(errorMessage) => {
+                        setImportPhase({ step: 'editing', errorMessage });
                     }}
                     onClose={onDialogClose}
                 />
             )}
 
-            {importPhase === 'detection_failed' && (
+            {importPhase.step === 'detection_failed' && (
                 <DetectionFailedForm
                     project_id={project_id}
                     archive={archive}
-                    statusMessage={importStatusMessage}
-                    onRetry={(jobId, message) => {
+                    errorMessage={importPhase.errorMessage}
+                    onRetry={(jobId) => {
                         setImportJobId(jobId);
-                        setImportStatusMessage(message);
-                        setImportPhase('awaiting_detection');
+                        setImportPhase({ step: 'awaiting_detection' });
                     }}
                     onClose={onDialogClose}
                 />
             )}
 
-            {importPhase === 'ready_to_finalize' && importJobId && (
+            {importPhase.step === 'ready_to_finalize' && importJobId && (
                 <ConfirmDatasetImport
                     project_id={project_id}
                     jobId={importJobId}
                     onClose={onClose}
                     environments={environments}
-                    environmentId={environmentId}
-                    onEnvironmentChange={setEnvironmentId}
-                    datasetName={datasetName}
-                    onDatasetNameChange={setDatasetName}
-                    defaultTask={defaultTask}
-                    onDefaultTaskChange={setDefaultTask}
-                    statusMessage={importStatusMessage}
-                    onFinalized={(message) => {
-                        setImportStatusMessage(message);
-                        setImportPhase('awaiting_import');
+                    fields={fields}
+                    onFieldsChange={setFields}
+                    onFinalized={() => {
+                        setImportPhase({ step: 'awaiting_import' });
                     }}
                 />
             )}
 
-            {importPhase === 'awaiting_import' && importJobId && (
+            {importPhase.step === 'awaiting_import' && importJobId && (
                 <DatasetImportInProgress
                     jobId={importJobId}
-                    statusMessage={importStatusMessage}
                     onClose={onDialogClose}
                     onCompleted={onImportDone}
                 />
