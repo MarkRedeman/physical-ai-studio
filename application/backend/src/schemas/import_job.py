@@ -54,7 +54,7 @@ class DatasetManifestSource(BaseModel):
     original_dataset_uuid: UUID | None = None
 
     @field_serializer("original_dataset_uuid")
-    def serialize_original_dataset_uuid(self, original_dataset_uuid: UUID | None, _info) -> str | None:
+    def serialize_original_dataset_uuid(self, original_dataset_uuid: UUID | None) -> str | None:
         return str(original_dataset_uuid) if original_dataset_uuid else None
 
 
@@ -88,7 +88,7 @@ class DatasetImportFinalizeInput(BaseModel):
     user_overrides: dict = Field(default_factory=dict)
 
     @field_serializer("environment_id")
-    def serialize_environment_id(self, environment_id: UUID, _info) -> str:
+    def serialize_environment_id(self, environment_id: UUID) -> str:
         return str(environment_id)
 
 
@@ -104,7 +104,7 @@ class DatasetImportJobPayload(BaseModel):
     finalize_input: DatasetImportFinalizeInput | None = None
 
     @field_serializer("result_dataset_id")
-    def serialize_result_dataset_id(self, result_dataset_id: UUID | None, _info) -> str | None:
+    def serialize_result_dataset_id(self, result_dataset_id: UUID | None) -> str | None:
         return str(result_dataset_id) if result_dataset_id else None
 
 
@@ -117,7 +117,7 @@ class ModelImportJobPayload(BaseModel):
     source_hint: ModelImportSource | Literal["auto"] = "auto"
 
     @field_serializer("project_id")
-    def serialize_project_id(self, project_id: UUID, _info) -> str:
+    def serialize_project_id(self, project_id: UUID) -> str:
         return str(project_id)
 
 

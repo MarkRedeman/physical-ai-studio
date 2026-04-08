@@ -9,7 +9,7 @@ from api.dependencies import get_event_processor_ws, get_job_id, get_job_service
 from core.scheduler import Scheduler
 from schemas import Job
 from schemas.base_job import JobStatus
-from schemas.job import ExportJob, ImportJob, JobType, TrainJob, TrainJobPayload
+from schemas.job import DatasetImportJob, ExportJob, ImportJob, JobType, TrainJob, TrainJobPayload
 from services.event_processor import EventProcessor, EventType
 from services.job_service import JobService
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 @router.get("")
 async def list_jobs(
     job_service: Annotated[JobService, Depends(get_job_service)],
-) -> list[TrainJob | ImportJob | ExportJob]:
+) -> list[Job]:
     """Fetch all jobs."""
     return await job_service.get_job_list()
 
@@ -79,7 +79,7 @@ async def jobs_websocket(
     """Robot control websocket."""
     await websocket.accept()
 
-    async def send_data(event: EventType, payload: TrainJob | ImportJob | ExportJob):
+    async def send_data(event: EventType, payload: TrainJob | DatasetImportJob | ImportJob | ExportJob):
         """Pass job update through to websocket."""
         await websocket.send_json(
             {

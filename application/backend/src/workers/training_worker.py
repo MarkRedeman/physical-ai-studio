@@ -58,8 +58,7 @@ class TrainingWorker(BaseProcessWorker):
             settings = get_settings()
 
             job = await job_service.get_pending_train_job()
-            if job is not None:
-                assert isinstance(job, TrainJob)
+            if job is not None and isinstance(job, TrainJob):
                 payload = job.payload
                 id = uuid4()
 
@@ -164,6 +163,7 @@ class TrainingWorker(BaseProcessWorker):
             job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.COMPLETED, message="Training finished"
             )
+
             model = await ModelService.create_model(model)
             self.queue.put((EventType.MODEL_UPDATE, model))
         except Exception as e:

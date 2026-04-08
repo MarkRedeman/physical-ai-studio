@@ -5,9 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
-from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse
-from starlette import status
 from starlette.background import BackgroundTask
 
 from api.dependencies import (
@@ -22,7 +20,8 @@ from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
 from schemas import Model
 from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload
-from services import DatasetService, JobService, ModelDownloadService, ModelService
+from services import DatasetService, ModelDownloadService, ModelService
+from services.job_service import JobService
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +159,7 @@ async def import_model(
     """
     # Save uploaded file to temp location
     contents = await file.read()
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")  # noqa: SIM115
     tmp.write(contents)
     tmp.close()
 

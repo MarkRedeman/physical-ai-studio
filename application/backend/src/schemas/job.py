@@ -6,10 +6,6 @@ from pydantic import BaseModel, Field, TypeAdapter, field_serializer
 from schemas.base_job import BaseJob, JobType
 from schemas.import_job import DatasetImportJobPayload
 
-# ---------------------------------------------------------------------------
-# Payload models (no ``type`` discriminator – the parent Job carries it)
-# ---------------------------------------------------------------------------
-
 
 class TrainJobPayload(BaseModel):
     type: Literal[JobType.TRAINING] = JobType.TRAINING

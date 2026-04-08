@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
-from uuid import UUID
+from typing import TYPE_CHECKING
 
 from schemas import Dataset
 from schemas.import_job import DatasetImportJobPayload, DatasetImportSource, DatasetManifestV1, ImportValidationReport
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from uuid import UUID
 
 
 class DatasetImportAdapter(ABC):

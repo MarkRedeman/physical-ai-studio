@@ -8,14 +8,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from schemas.base_job import JobStatus, JobType
+from services.job_service import JobService
+
 if TYPE_CHECKING:
     import multiprocessing as mp
     from multiprocessing.synchronize import Event as EventClass
 
 from loguru import logger
 
-from schemas.job import ExportJob, ImportJob, JobStatus, JobType
-from services import JobService, ModelService
+from schemas.job import ExportJob, ImportJob
+from services import ModelService
 from services.event_processor import EventType
 from workers.base import BaseProcessWorker
 
@@ -39,19 +42,15 @@ class ImportExportWorker(BaseProcessWorker):
                     await self._handle_export(job)
             await asyncio.sleep(0.5)
 
-    def setup(self) -> None:
-        super().setup()
+    async def setup(self) -> None:
+        await super().setup()
         with logger.contextualize(worker=self.__class__.__name__):
-            if self.loop is None:
-                raise RuntimeError("The event loop must be set.")
-            self.loop.run_until_complete(self._abort_orphan_jobs())
+            await self._abort_orphan_jobs()
 
-    def teardown(self) -> None:
-        super().teardown()
+    async def teardown(self) -> None:
+        await super().teardown()
         with logger.contextualize(worker=self.__class__.__name__):
-            if self.loop is None:
-                raise RuntimeError("The event loop must be set.")
-            self.loop.run_until_complete(self._abort_orphan_jobs())
+            await self._abort_orphan_jobs()
 
     @staticmethod
     async def _abort_orphan_jobs() -> None:

@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router';
 
 import { SchemaDatasetOutput } from '../../api/openapi-spec';
 import { paths } from '../../router';
+import { DatasetImportButton } from '../../routes/datasets/dataset-import-button';
 import { NewDatasetForm } from '../../routes/datasets/new-dataset.component';
 import { useProjectId } from '../projects/use-project';
 import { DeleteDatasetDialog } from './delete-dataset-dialog';
@@ -75,7 +76,6 @@ export const DatasetTabs = ({
                     return (
                         <Item
                             aria-label={dataset.name}
-                            id={dataset.id}
                             key={dataset.id}
                             href={paths.project.datasets.show({ project_id, dataset_id: dataset.id! })}
                         >
@@ -109,6 +109,7 @@ export const DatasetTabs = ({
                         <Add />
                     </Icon>
                 </ActionButton>
+                <DatasetImportButton />
             </div>
 
             <DialogContainer
