@@ -75,6 +75,7 @@ export const DatasetTabs = ({
                     return (
                         <Item
                             aria-label={dataset.name}
+                            id={dataset.id}
                             key={dataset.id}
                             href={paths.project.datasets.show({ project_id, dataset_id: dataset.id! })}
                         >

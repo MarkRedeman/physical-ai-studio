@@ -1,10 +1,13 @@
-import { Content, Flex, Heading, IllustratedMessage, Item, TabPanels, Tabs, Text, View } from '@geti-ui/ui';
+import { Suspense } from 'react';
+
+import { Content, Flex, Heading, IllustratedMessage, Item, Loading, TabPanels, Tabs, Text, View } from '@geti-ui/ui';
 import { useParams } from 'react-router';
 
 import { SchemaDatasetOutput } from '../../api/openapi-spec';
 import { DatasetTabs } from '../../features/datasets/dataset-tabs';
 import { useProject, useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
+import { DatasetImportJobs } from './dataset-import-jobs.component';
 import { DatasetProvider } from './dataset-provider';
 import { DatasetViewer } from './dataset-viewer';
 import { NewDatasetLink } from './new-dataset.component';
@@ -45,6 +48,7 @@ const Datasets = ({ datasets }: DatasetsProps) => {
                     '--spectrum-tabs-item-gap': 'var(--spectrum-global-dimension-size-100)',
                 }}
             >
+                <DatasetImportJobs />
                 <DatasetTabs datasets={datasets} selectedDatasetId={dataset_id} />
                 <TabPanels UNSAFE_style={{ border: 'none' }} marginTop={'size-200'} minHeight={0}>
                     <Item key={dataset_id}>
@@ -52,9 +56,11 @@ const Datasets = ({ datasets }: DatasetsProps) => {
                             {dataset_id === undefined ? (
                                 <Text>No datasets yet...</Text>
                             ) : (
-                                <DatasetProvider dataset_id={dataset_id}>
-                                    <DatasetViewer />
-                                </DatasetProvider>
+                                <Suspense fallback={<Loading />}>
+                                    <DatasetProvider dataset_id={dataset_id}>
+                                        <DatasetViewer />
+                                    </DatasetProvider>
+                                </Suspense>
                             )}
                         </Flex>
                     </Item>
