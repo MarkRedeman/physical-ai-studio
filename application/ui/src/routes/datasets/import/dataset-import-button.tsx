@@ -62,7 +62,7 @@ interface ImportDatasetFormProps {
     onClose: () => void;
     sourceHint?: SourceHint;
     errorMessage?: string;
-    onFileSelect: (files: FileList | null) => void;
+    onFileSelected: (file: File) => void;
     archive: File | null;
     onUploaded: (jobId: string) => void;
 }
@@ -72,7 +72,7 @@ const ImportDatasetForm = ({
     onClose,
     sourceHint = 'auto',
     errorMessage,
-    onFileSelect,
+    onFileSelected,
     archive,
     onUploaded,
 }: ImportDatasetFormProps) => {
@@ -130,21 +130,24 @@ const ImportDatasetForm = ({
             abortRef.current = null;
         },
     });
-    const canUpload = archive !== null;
 
-    const onUpload = async () => {
-        if (!canUpload || archive === null) {
-            return;
-        }
+    const startUpload = async (file: File) => {
+        onFileSelected(file);
 
         try {
-            const job = await uploadMutation.mutateAsync({ file: archive, source: sourceHint });
-
+            const job = await uploadMutation.mutateAsync({ file, source: sourceHint });
             onUploaded(job.id);
         } catch (error) {
             if (isAbortError(error)) {
                 return;
             }
+        }
+    };
+
+    const handleFileList = (files: FileList | null) => {
+        const file = files?.[0] ?? null;
+        if (file !== null) {
+            void startUpload(file);
         }
     };
 
@@ -172,9 +175,7 @@ const ImportDatasetForm = ({
                         }
                         const file = await fileItem.getFile();
                         if (file.name.endsWith('.zip')) {
-                            const dataTransfer = new DataTransfer();
-                            dataTransfer.items.add(file);
-                            onFileSelect(dataTransfer.files);
+                            void startUpload(file);
                         }
                     }}
                 >
@@ -185,8 +186,8 @@ const ImportDatasetForm = ({
                             <Text>Drop a .zip archive here or click to browse</Text>
                         )}
                         <View>
-                            <FileTrigger acceptedFileTypes={['.zip']} onSelect={onFileSelect}>
-                                <Button variant='secondary'>
+                            <FileTrigger acceptedFileTypes={['.zip']} onSelect={handleFileList}>
+                                <Button variant='secondary' isDisabled={uploadMutation.isPending}>
                                     {archive !== null ? 'Choose a different file' : 'Browse'}
                                 </Button>
                             </FileTrigger>
@@ -199,20 +200,12 @@ const ImportDatasetForm = ({
                     isPending={uploadMutation.isPending}
                     progress={uploadProgress}
                     errorMessage='Failed to upload dataset archive. Please try again.'
-                    preparingMessage='Uploading dataset archive…'
+                    preparingMessage='Uploading dataset archive...'
                 />
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={onCancel}>
                     {uploadMutation.isPending ? 'Abort upload' : 'Cancel'}
-                </Button>
-                <Button
-                    variant='accent'
-                    onPress={onUpload}
-                    isPending={uploadMutation.isPending}
-                    isDisabled={!canUpload}
-                >
-                    Upload dataset
                 </Button>
             </ButtonGroup>
         </>
@@ -251,16 +244,9 @@ const DatasetAnalysisInProgress = ({
 
     const hasTransitionedRef = useRef(false);
 
-    useEffect(() => {
-        if (hasTransitionedRef.current) {
-            return;
-        }
+    const job = importJobQuery.data;
 
-        const job = importJobQuery.data;
-        if (!job) {
-            return;
-        }
-
+    if (!hasTransitionedRef.current && job) {
         const payload = asImportPayload(job.payload);
 
         if (job.status === 'failed' || job.status === 'canceled') {
@@ -273,31 +259,26 @@ const DatasetAnalysisInProgress = ({
             } else {
                 onFailed(job.message ?? 'Import failed during processing.');
             }
-            return;
-        }
-
-        if (job.status === 'completed' && payload.result_dataset_id) {
+        } else if (job.status === 'completed' && payload.result_dataset_id) {
             hasTransitionedRef.current = true;
             onCompleted(payload.result_dataset_id);
-            return;
-        }
-
-        if (payload.step === 'waiting_for_user_input') {
+        } else if (payload.step === 'waiting_for_user_input') {
             hasTransitionedRef.current = true;
             onReady();
-            return;
-        }
-
-        if (payload.step === 'ready_to_commit' || payload.step === 'importing_resource' || job.status === 'running') {
+        } else if (
+            payload.step === 'ready_to_commit' ||
+            payload.step === 'importing_resource' ||
+            job.status === 'running'
+        ) {
             hasTransitionedRef.current = true;
             onImporting();
         }
-    }, [importJobQuery.data, onCompleted, onDetectionFailed, onFailed, onImporting, onReady]);
+    }
 
     return (
         <>
             <Content>
-                <Text>Upload accepted. Waiting for server-side dataset detection…</Text>
+                <Text>Upload accepted. Waiting for server-side dataset detection...</Text>
                 {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
             </Content>
             <ButtonGroup>
@@ -305,7 +286,7 @@ const DatasetAnalysisInProgress = ({
                     Close
                 </Button>
                 <Button variant='accent' isDisabled isPending>
-                    Processing upload…
+                    Processing upload...
                 </Button>
             </ButtonGroup>
         </>
@@ -426,7 +407,7 @@ const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClo
                     isPending={retryMutation.isPending}
                     progress={uploadProgress}
                     errorMessage='Failed to upload dataset archive. Please try again.'
-                    preparingMessage='Re-uploading dataset archive…'
+                    preparingMessage='Re-uploading dataset archive...'
                 />
             </Content>
 
@@ -556,11 +537,7 @@ interface DatasetImportInProgressProps {
     onCompleted?: (datasetId: string) => void;
 }
 
-const DatasetImportInProgress = ({
-    jobId,
-    onClose,
-    onCompleted,
-}: DatasetImportInProgressProps) => {
+const DatasetImportInProgress = ({ jobId, onClose, onCompleted }: DatasetImportInProgressProps) => {
     const importJobQuery = $api.useQuery(
         'get',
         '/api/jobs/{job_id}',
@@ -574,28 +551,21 @@ const DatasetImportInProgress = ({
 
     const hasCompletedRef = useRef(false);
 
-    useEffect(() => {
-        if (hasCompletedRef.current) {
-            return;
-        }
+    const job = importJobQuery.data;
 
-        const job = importJobQuery.data;
-        if (!job) {
-            return;
-        }
-
+    if (!hasCompletedRef.current && job) {
         const payload = asImportPayload(job.payload);
 
         if (job.status === 'completed' && payload.result_dataset_id) {
             hasCompletedRef.current = true;
             onCompleted?.(payload.result_dataset_id);
         }
-    }, [importJobQuery.data, onCompleted]);
+    }
 
     return (
         <>
             <Content>
-                <Text>Waiting for import to complete…</Text>
+                <Text>Waiting for import to complete...</Text>
                 {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
                 <Loading mode='inline' variant='intel' size='L' />
             </Content>
@@ -605,7 +575,7 @@ const DatasetImportInProgress = ({
                     Close
                 </Button>
                 <Button variant='accent' isDisabled isPending>
-                    Importing dataset…
+                    Importing dataset...
                 </Button>
             </ButtonGroup>
         </>
@@ -644,10 +614,9 @@ const ImportDatasetDialog = ({
         initialJobId ? { step: 'awaiting_detection' } : { step: 'editing' }
     );
 
-    const onFileSelect = (files: FileList | null) => {
-        const file = files?.[0] ?? null;
+    const onFileSelected = (file: File) => {
         setArchive(file);
-        if (file !== null && fields.datasetName.trim().length === 0) {
+        if (fields.datasetName.trim().length === 0) {
             const suggestion = file.name.endsWith('.zip') ? file.name.slice(0, -4) : file.name;
             setFields((prev) => ({ ...prev, datasetName: suggestion }));
         }
@@ -677,7 +646,7 @@ const ImportDatasetDialog = ({
                     project_id={project_id}
                     onClose={onDialogClose}
                     errorMessage={importPhase.errorMessage}
-                    onFileSelect={onFileSelect}
+                    onFileSelected={onFileSelected}
                     archive={archive}
                     onUploaded={(jobId) => {
                         setImportJobId(jobId);
@@ -734,11 +703,7 @@ const ImportDatasetDialog = ({
             )}
 
             {importPhase.step === 'awaiting_import' && importJobId && (
-                <DatasetImportInProgress
-                    jobId={importJobId}
-                    onClose={onDialogClose}
-                    onCompleted={onImportDone}
-                />
+                <DatasetImportInProgress jobId={importJobId} onClose={onDialogClose} onCompleted={onImportDone} />
             )}
         </Dialog>
     );
