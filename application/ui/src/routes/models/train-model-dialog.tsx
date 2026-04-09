@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
     Button,
@@ -18,17 +18,77 @@ import {
     Key,
     NumberField,
     Picker,
+    StatusLight,
     Text,
     TextField,
 } from '@geti-ui/ui';
 
 import { $api } from '../../api/client';
-import { SchemaJob, SchemaModel, SchemaTrainJobPayload } from '../../api/openapi-spec';
+import { SchemaDeviceInfo, SchemaModel, SchemaTrainJob, SchemaTrainJobPayload } from '../../api/openapi-spec';
 import { useProject } from '../../features/projects/use-project';
+import { InlineAlert } from '../../features/robots/setup-wizard/shared/inline-alert';
 
-export type SchemaTrainJob = Omit<SchemaJob, 'payload'> & {
-    payload: SchemaTrainJobPayload;
+const GB = 1024 ** 3;
+
+/** Format bytes as a human-readable GB string. */
+const formatBytes = (bytes: number): string => {
+    const gb = bytes / GB;
+    return gb >= 10 ? `${Math.round(gb)} GB` : `${gb.toFixed(1)} GB`;
 };
+
+/**
+ * Available training policies with hardware requirements.
+ *
+ * `min_vram` is the estimated minimum VRAM (in bytes) required to train with batch_size=1.
+ */
+export const MODELS: ReadonlyArray<{
+    id: string;
+    name: string;
+    description: string;
+    license: string;
+    min_episodes: number | null;
+    min_steps: number | null;
+    min_vram: number;
+}> = [
+    {
+        id: 'act',
+        name: 'ACT',
+        description: 'Action Chunking with Transformers — lightweight and fast to train',
+        license: 'MIT / Apache-2.0',
+        min_episodes: null,
+        min_steps: null,
+        min_vram: 2 * GB,
+    },
+    {
+        id: 'smolvla',
+        name: 'SmolVLA',
+        description: 'Small Vision-Language-Action model based on SmolVLM2-500M',
+        license: 'Apache-2.0',
+        min_episodes: null,
+        min_steps: null,
+        min_vram: 8 * GB,
+    },
+    {
+        id: 'pi0',
+        name: 'Pi0',
+        description: 'Vision-Language-Action model based on PaliGemma 3B',
+        license: 'Apache-2.0 (code) / Gemma (weights)',
+        min_episodes: null,
+        min_steps: null,
+        min_vram: 12 * GB,
+    },
+    {
+        id: 'pi05',
+        name: 'Pi0.5',
+        description: 'Enhanced Pi0 with discrete state encoding and longer context',
+        license: 'Apache-2.0 (code) / Gemma (weights)',
+        min_episodes: null,
+        min_steps: null,
+        min_vram: 16 * GB,
+    },
+];
+
+export type { SchemaTrainJob };
 
 interface TrainModelDialogProps {
     baseModel?: SchemaModel;
@@ -51,6 +111,26 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
     const [numWorkers, setNumWorkers] = useState<Key | null>('auto');
     const [autoScaleBatchSize, setAutoScaleBatchSize] = useState<boolean>(true);
 
+    // Fetch training devices from system endpoint
+    const { data: trainingDevices = null } = $api.useQuery('get', '/api/system/devices/training');
+
+    // Pick the GPU with the most VRAM (if any)
+    const bestDevice: SchemaDeviceInfo | null = useMemo(() => {
+        if (!trainingDevices) return null;
+        const gpuDevices = trainingDevices.filter((d) => d.type !== 'cpu' && d.memory != null);
+        if (gpuDevices.length === 0) return null;
+        return gpuDevices.reduce((best, d) => ((d.memory ?? 0) > (best.memory ?? 0) ? d : best));
+    }, [trainingDevices]);
+
+    const availableVram = bestDevice?.memory ?? 0;
+
+    const selectedModel = useMemo(
+        () => MODELS.find((m) => m.id === selectedPolicy?.toString()) ?? null,
+        [selectedPolicy]
+    );
+
+    const hasInsufficientVram = selectedModel !== null && availableVram > 0 && selectedModel.min_vram > availableVram;
+
     const trainMutation = $api.useMutation('post', '/api/jobs:train');
 
     const save = () => {
@@ -69,6 +149,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
             batch_size: batchSize,
             num_workers: numWorkers === 'auto' ? 'auto' : Number(numWorkers),
             auto_scale_batch_size: autoScaleBatchSize,
+            device: bestDevice ? { type: bestDevice.type, index: bestDevice.index ?? undefined } : undefined,
             ...extraPayload,
         };
         trainMutation.mutateAsync({ body: payload }).then((response) => {
@@ -100,11 +181,34 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
                         onSelectionChange={setSelectedPolicy}
                         isDisabled={baseModel !== undefined}
                     >
-                        <Item key='act'>Act</Item>
-                        <Item key='pi0'>Pi0</Item>
-                        <Item key='pi05'>Pi05</Item>
-                        <Item key='smolvla'>SmolVLA</Item>
+                        {MODELS.map((model) => (
+                            <Item key={model.id} textValue={model.name}>
+                                <Text>{model.name}</Text>
+                                <Text slot='description'>{model.description}</Text>
+                            </Item>
+                        ))}
                     </Picker>
+
+                    {/* Training device info */}
+                    {trainingDevices !== null && (
+                        <Flex direction='column' gap='size-75'>
+                            {bestDevice ? (
+                                <StatusLight variant='positive'>
+                                    {bestDevice.name}, {formatBytes(bestDevice.memory!)} VRAM
+                                </StatusLight>
+                            ) : (
+                                <StatusLight variant='neutral'>CPU only (no GPU detected)</StatusLight>
+                            )}
+
+                            {hasInsufficientVram && (
+                                <InlineAlert variant='warning'>
+                                    {selectedModel!.name} requires at least {formatBytes(selectedModel!.min_vram)} VRAM
+                                    but your device has {formatBytes(availableVram)}. Training may fail or be very slow.
+                                </InlineAlert>
+                            )}
+                        </Flex>
+                    )}
+
                     <Disclosure isQuiet UNSAFE_style={{ padding: 0 }}>
                         <DisclosureTitle UNSAFE_style={{ fontSize: 13, padding: '4px 0' }}>
                             Advanced settings
