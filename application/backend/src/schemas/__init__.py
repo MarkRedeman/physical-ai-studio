@@ -1,6 +1,7 @@
 from .calibration import CalibrationConfig
 from .camera import Camera, CameraProfile
 from .dataset import Dataset, Episode, EpisodeInfo, EpisodeVideo, LeRobotDatasetInfo, Snapshot
+from .hardware import DeviceInfo, DeviceType
 from .job import Job
 from .model import Model
 from .project import Project
@@ -11,6 +12,8 @@ __all__ = [
     "Camera",
     "CameraProfile",
     "Dataset",
+    "DeviceInfo",
+    "DeviceType",
     "Episode",
     "EpisodeInfo",
     "EpisodeVideo",
