@@ -321,7 +321,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
                 </Flex>
             </Heading>
             <Divider />
-            <Content width={'800px'}>
+            <Content maxWidth={'800px'}>
                 <Form
                     onSubmit={(e) => {
                         e.preventDefault();
