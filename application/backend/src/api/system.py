@@ -20,3 +20,11 @@ async def get_training_devices(
 ) -> list[DeviceInfo]:
     """Returns the list of available training devices (CPU, Intel XPU, NVIDIA CUDA, Apple MPS)."""
     return system_service.get_training_devices()
+
+
+@system_router.get("/devices/inference")
+async def get_inference_devices(
+    system_service: Annotated[SystemService, Depends(get_system_service)],
+) -> list[DeviceInfo]:
+    """Returns the list of available inference devices (CPU, Intel XPU, NPU) via OpenVINO."""
+    return system_service.get_inference_devices()

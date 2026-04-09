@@ -19,9 +19,12 @@ class DeviceType(StrEnum):
 
 
 class DeviceInfo(BaseModel):
-    """Information about a compute device available for training."""
+    """Information about a compute device."""
 
     type: DeviceType = Field(..., description="Device type (cpu, xpu, cuda, mps, npu)")
     name: str = Field(..., description="Human-readable device name")
-    memory: int | None = Field(None, description="Total device memory in bytes (null for CPU/MPS)")
-    index: int | None = Field(None, description="Device index among those of the same type (null for CPU/MPS)")
+    memory: int | None = Field(None, description="Total device memory in bytes (null for CPU/MPS/NPU)")
+    index: int | None = Field(None, description="Device index among those of the same type (null for CPU/MPS/NPU)")
+    openvino_name: str | None = Field(
+        None, description="OpenVINO device identifier, e.g. 'CPU', 'GPU.0' (inference only)"
+    )

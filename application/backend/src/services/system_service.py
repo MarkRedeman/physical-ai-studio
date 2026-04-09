@@ -3,6 +3,7 @@
 
 """Service for querying system hardware information."""
 
+import openvino as ov
 import torch
 from loguru import logger
 
@@ -61,5 +62,57 @@ class SystemService:
                 DeviceInfo(type=DeviceType.MPS, name="MPS", memory=None, index=None),
             )
             logger.debug("Detected MPS device")
+
+        return devices
+
+    @staticmethod
+    def get_inference_devices() -> list[DeviceInfo]:
+        """Get available compute devices for inference via OpenVINO.
+
+        Enumerates CPU, Intel XPU/GPU, and NPU devices that OpenVINO
+        can use for model inference.
+
+        Returns:
+            list[DeviceInfo]: Available inference devices with name, type,
+                memory (where available), device index, and OpenVINO device name.
+        """
+        core = ov.Core()
+        devices: list[DeviceInfo] = [
+            DeviceInfo(type=DeviceType.CPU, name="CPU", memory=None, index=None, openvino_name="CPU"),
+        ]
+
+        for device in core.available_devices:
+            full_name = core.get_property(device, "FULL_DEVICE_NAME")
+
+            if device.lower().startswith("npu"):
+                devices.append(
+                    DeviceInfo(
+                        type=DeviceType.NPU,
+                        name=full_name,
+                        openvino_name=device,
+                        memory=None,
+                        index=None,
+                    ),
+                )
+                logger.debug("Detected NPU inference device: {}", full_name)
+
+            elif device.lower().startswith("gpu"):
+                # OpenVINO reports Intel GPUs as "GPU"; skip non-Intel devices
+                if "intel" not in full_name.lower():
+                    logger.warning("Skipping unsupported OpenVINO GPU device: {}", full_name)
+                    continue
+
+                memory = core.get_property(device, "GPU_DEVICE_TOTAL_MEM_SIZE")
+                device_id = core.get_property(device, "DEVICE_ID")
+                devices.append(
+                    DeviceInfo(
+                        type=DeviceType.XPU,
+                        name=full_name,
+                        memory=memory,
+                        index=device_id,
+                        openvino_name=device,
+                    ),
+                )
+                logger.debug("Detected XPU inference device: {} ({} bytes)", full_name, memory)
 
         return devices
