@@ -8,9 +8,6 @@ import {
     Content,
     ContextualHelp,
     Dialog,
-    Disclosure,
-    DisclosurePanel,
-    DisclosureTitle,
     Divider,
     Flex,
     Form,
@@ -22,12 +19,15 @@ import {
     StatusLight,
     Text,
     TextField,
+    View,
 } from '@geti-ui/ui';
 
 import { $api } from '../../api/client';
 import { SchemaDeviceInfo, SchemaModel, SchemaTrainJob, SchemaTrainJobPayload } from '../../api/openapi-spec';
 import { useProject } from '../../features/projects/use-project';
 import { InlineAlert } from '../../features/robots/setup-wizard/shared/inline-alert';
+
+import classes from './train-model-dialog.module.scss';
 
 const GB = 1024 ** 3;
 
@@ -54,7 +54,7 @@ export const MODELS: ReadonlyArray<{
     {
         id: 'act',
         name: 'ACT',
-        description: 'Action Chunking with Transformers — lightweight and fast to train',
+        description: 'Action Chunking with Transformers, lightweight and fast to train',
         license: 'MIT / Apache-2.0',
         min_episodes: null,
         min_steps: null,
@@ -88,6 +88,164 @@ interface TrainModelDialogProps {
     defaultMaxSteps?: number;
 }
 
+interface PolicySelectionProps {
+    selectedPolicy: string;
+    onSelectionChange: (policy: string) => void;
+    isDisabled?: boolean;
+    availableVram: number;
+}
+
+const PolicySelection = ({ selectedPolicy, onSelectionChange, isDisabled, availableVram }: PolicySelectionProps) => {
+    const selectedModel = MODELS.find((m) => m.id === selectedPolicy) ?? null;
+    const hasInsufficientVram = selectedModel !== null && availableVram > 0 && selectedModel.min_vram > availableVram;
+
+    return (
+        <Flex direction='column' gap='size-100'>
+            <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>Policy</Text>
+            <Flex direction='row' gap='size-200'>
+                {MODELS.map((model) => (
+                    <Card
+                        key={model.id}
+                        aria-label={`Select ${model.name} policy`}
+                        isSelected={selectedPolicy === model.id}
+                        isDisabled={isDisabled}
+                        onPress={() => onSelectionChange(model.id)}
+                        UNSAFE_className={classes.modelPolicyCard}
+                    >
+                        <Flex direction='column' gap='size-50'>
+                            <Flex justifyContent={'space-between'}>
+                                <Text
+                                    UNSAFE_style={{
+                                        fontWeight: 700,
+                                        color: selectedPolicy === model.id ? 'var(--energy-blue)' : undefined,
+                                    }}
+                                >
+                                    {model.name}
+                                </Text>
+                                <Flex
+                                    UNSAFE_style={{ fontSize: 11, opacity: 0.7, textAlign: 'right' }}
+                                    direction='column'
+                                    gap='size-50'
+                                >
+                                    <Text>{model.license}</Text>
+                                    <Text>&ge; {formatBytes(model.min_vram)} VRAM</Text>
+                                </Flex>
+                            </Flex>
+                            <Divider size='S' />
+                            <Text UNSAFE_style={{ fontSize: 12 }}>{model.description}</Text>
+                        </Flex>
+                    </Card>
+                ))}
+            </Flex>
+
+            {hasInsufficientVram && (
+                <View marginTop='size-100'>
+                    <InlineAlert variant='warning'>
+                        {selectedModel!.name} requires at least {formatBytes(selectedModel!.min_vram)} VRAM but your
+                        device has {formatBytes(availableVram)}. Training may fail or be very slow.
+                    </InlineAlert>
+                </View>
+            )}
+        </Flex>
+    );
+};
+
+interface TrainingParametersProps {
+    maxSteps: number;
+    onMaxStepsChange: (value: number) => void;
+    batchSize: number;
+    onBatchSizeChange: (value: number) => void;
+    numWorkers: Key | null;
+    onNumWorkersChange: (value: Key | null) => void;
+    autoScaleBatchSize: boolean;
+    onAutoScaleBatchSizeChange: (value: boolean) => void;
+}
+
+const TrainingParameters = ({
+    maxSteps,
+    onMaxStepsChange,
+    batchSize,
+    onBatchSizeChange,
+    numWorkers,
+    onNumWorkersChange,
+    autoScaleBatchSize,
+    onAutoScaleBatchSizeChange,
+}: TrainingParametersProps) => (
+    <Flex direction='row' gap='size-150' width='100%'>
+        <Flex direction='column' gap='size-150' width='100%'>
+            <NumberField
+                label='Batch Size'
+                value={batchSize}
+                onChange={onBatchSizeChange}
+                minValue={1}
+                maxValue={256}
+                step={1}
+                width='100%'
+                isDisabled={autoScaleBatchSize}
+                flex
+            />
+            <Flex direction='row' gap='size-100' alignItems='center'>
+                <Checkbox isSelected={autoScaleBatchSize} onChange={onAutoScaleBatchSizeChange}>
+                    Auto scale batch size
+                </Checkbox>
+                <ContextualHelp variant='info'>
+                    <Heading>Auto scale batch size</Heading>
+                    <Content>
+                        <Text>
+                            Automatically finds the largest batch size that fits in GPU memory before training starts.
+                        </Text>
+                    </Content>
+                </ContextualHelp>
+            </Flex>
+        </Flex>
+        <NumberField
+            label='Max Steps'
+            value={maxSteps}
+            onChange={onMaxStepsChange}
+            minValue={100}
+            maxValue={100000}
+            step={100}
+            width='100%'
+            contextualHelp={
+                <ContextualHelp variant='info'>
+                    <Heading>Max steps</Heading>
+                    <Content>
+                        <Text>
+                            Total number of gradient update steps. Training will stop after this many steps regardless
+                            of epochs.
+                        </Text>
+                    </Content>
+                </ContextualHelp>
+            }
+        />
+        <Picker
+            width='100%'
+            label='Data Workers'
+            selectedKey={numWorkers}
+            onSelectionChange={onNumWorkersChange}
+            contextualHelp={
+                <ContextualHelp variant='info'>
+                    <Heading>Data workers</Heading>
+                    <Content>
+                        <Text>
+                            Number of parallel processes for loading training data. Auto selects a value based on
+                            available CPU cores. More workers can speed up training but use more memory.
+                        </Text>
+                    </Content>
+                </ContextualHelp>
+            }
+        >
+            <Item key='auto'>Auto</Item>
+            <Item key='0'>0 (main process)</Item>
+            <Item key='1'>1</Item>
+            <Item key='2'>2</Item>
+            <Item key='4'>4</Item>
+            <Item key='8'>8</Item>
+            <Item key='16'>16</Item>
+        </Picker>
+    </Flex>
+);
+
 export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: TrainModelDialogProps) => {
     const defaultName = baseModel?.name ?? '';
     const defaultDatasetId = baseModel?.dataset_id ?? null;
@@ -115,10 +273,6 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
     }, [trainingDevices]);
 
     const availableVram = bestDevice?.memory ?? 0;
-
-    const selectedModel = useMemo(() => MODELS.find((m) => m.id === selectedPolicy) ?? null, [selectedPolicy]);
-
-    const hasInsufficientVram = selectedModel !== null && availableVram > 0 && selectedModel.min_vram > availableVram;
 
     const trainMutation = $api.useMutation('post', '/api/jobs:train');
 
@@ -148,7 +302,24 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
 
     return (
         <Dialog size='L' UNSAFE_style={{ width: 'fit-content' }}>
-            <Heading>Train model</Heading>
+            <Heading>
+                <Flex justifyContent={'space-between'}>
+                    <Text> Train model</Text>
+
+                    {/* Training device info */}
+                    {trainingDevices !== null && (
+                        <Flex UNSAFE_style={{ textAlign: 'right' }} direction='column' gap='size-75'>
+                            {bestDevice ? (
+                                <StatusLight variant='positive'>
+                                    {bestDevice.name}, {formatBytes(bestDevice.memory!)} VRAM
+                                </StatusLight>
+                            ) : (
+                                <StatusLight variant='neutral'>CPU only (no GPU detected)</StatusLight>
+                            )}
+                        </Flex>
+                    )}
+                </Flex>
+            </Heading>
             <Divider />
             <Content width={'800px'}>
                 <Form
@@ -172,139 +343,25 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
                             ))}
                         </Picker>
 
-                        {/* Policy selection */}
-                        <Flex direction='column' gap='size-100'>
-                            <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>Policy</Text>
-                            <Flex direction='row' gap='size-150'>
-                                {MODELS.map((model) => (
-                                    <Card
-                                        key={model.id}
-                                        aria-label={`Select ${model.name} policy`}
-                                        isSelected={selectedPolicy === model.id}
-                                        isDisabled={baseModel !== undefined}
-                                        onPress={() => setSelectedPolicy(model.id)}
-                                        UNSAFE_className='policy-card'
-                                    >
-                                        <Flex direction='column' gap='size-50'>
-                                            <Text UNSAFE_style={{ fontWeight: 700 }}>{model.name}</Text>
-                                            <Text UNSAFE_style={{ fontSize: 12 }}>{model.description}</Text>
-                                            <Flex
-                                                direction='column'
-                                                gap='size-100'
-                                                UNSAFE_style={{ fontSize: 11, opacity: 0.7 }}
-                                            >
-                                                <Text>{model.license}</Text>
-                                                <Text>&ge; {formatBytes(model.min_vram)} VRAM</Text>
-                                            </Flex>
-                                        </Flex>
-                                    </Card>
-                                ))}
-                            </Flex>
-                        </Flex>
-
-                        {/* Training device info */}
-                        {trainingDevices !== null && (
-                            <Flex direction='column' gap='size-75'>
-                                {bestDevice ? (
-                                    <StatusLight variant='positive'>
-                                        {bestDevice.name}, {formatBytes(bestDevice.memory!)} VRAM
-                                    </StatusLight>
-                                ) : (
-                                    <StatusLight variant='neutral'>CPU only (no GPU detected)</StatusLight>
-                                )}
-
-                                {hasInsufficientVram && (
-                                    <InlineAlert variant='warning'>
-                                        {selectedModel!.name} requires at least {formatBytes(selectedModel!.min_vram)}{' '}
-                                        VRAM but your device has {formatBytes(availableVram)}. Training may fail or be
-                                        very slow.
-                                    </InlineAlert>
-                                )}
-                            </Flex>
-                        )}
+                        <PolicySelection
+                            selectedPolicy={selectedPolicy}
+                            onSelectionChange={setSelectedPolicy}
+                            isDisabled={baseModel !== undefined}
+                            availableVram={availableVram}
+                        />
 
                         <Divider size='S' />
 
-                        <Disclosure isQuiet UNSAFE_style={{ padding: 0 }}>
-                            <DisclosureTitle UNSAFE_style={{ fontSize: 13, padding: '4px 0' }}>
-                                Advanced settings
-                            </DisclosureTitle>
-                            <DisclosurePanel UNSAFE_style={{ padding: 0 }}>
-                                <Flex direction='column' gap='size-150' width='100%'>
-                                    <Flex direction='row' gap='size-100' alignItems='center'>
-                                        <Checkbox isSelected={autoScaleBatchSize} onChange={setAutoScaleBatchSize}>
-                                            Auto scale batch size
-                                        </Checkbox>
-                                        <ContextualHelp variant='info'>
-                                            <Heading>Auto scale batch size</Heading>
-                                            <Content>
-                                                <Text>
-                                                    Automatically finds the largest batch size that fits in GPU memory
-                                                    before training starts.
-                                                </Text>
-                                            </Content>
-                                        </ContextualHelp>
-                                    </Flex>
-                                    <Flex direction='row' gap='size-150' width='100%'>
-                                        <NumberField
-                                            label='Batch Size'
-                                            value={batchSize}
-                                            onChange={setBatchSize}
-                                            minValue={1}
-                                            maxValue={256}
-                                            step={1}
-                                            isDisabled={autoScaleBatchSize}
-                                            flex
-                                        />
-                                        <NumberField
-                                            label='Max Steps'
-                                            value={maxSteps}
-                                            onChange={setMaxSteps}
-                                            minValue={100}
-                                            maxValue={100000}
-                                            step={100}
-                                            flex
-                                            contextualHelp={
-                                                <ContextualHelp variant='info'>
-                                                    <Heading>Max steps</Heading>
-                                                    <Content>
-                                                        <Text>
-                                                            Total number of gradient update steps. Training will stop
-                                                            after this many steps regardless of epochs.
-                                                        </Text>
-                                                    </Content>
-                                                </ContextualHelp>
-                                            }
-                                        />
-                                    </Flex>
-                                    <Picker
-                                        label='Data Workers'
-                                        selectedKey={numWorkers}
-                                        onSelectionChange={setNumWorkers}
-                                        contextualHelp={
-                                            <ContextualHelp variant='info'>
-                                                <Heading>Data workers</Heading>
-                                                <Content>
-                                                    <Text>
-                                                        Number of parallel processes for loading training data. Auto
-                                                        selects a value based on available CPU cores. More workers can
-                                                        speed up training but use more memory.
-                                                    </Text>
-                                                </Content>
-                                            </ContextualHelp>
-                                        }
-                                    >
-                                        <Item key='auto'>Auto</Item>
-                                        <Item key='0'>0 (main process)</Item>
-                                        <Item key='1'>1</Item>
-                                        <Item key='2'>2</Item>
-                                        <Item key='4'>4</Item>
-                                        <Item key='8'>8</Item>
-                                        <Item key='16'>16</Item>
-                                    </Picker>
-                                </Flex>
-                            </DisclosurePanel>
-                        </Disclosure>
+                        <TrainingParameters
+                            maxSteps={maxSteps}
+                            onMaxStepsChange={setMaxSteps}
+                            batchSize={batchSize}
+                            onBatchSizeChange={setBatchSize}
+                            numWorkers={numWorkers}
+                            onNumWorkersChange={setNumWorkers}
+                            autoScaleBatchSize={autoScaleBatchSize}
+                            onAutoScaleBatchSizeChange={setAutoScaleBatchSize}
+                        />
                     </Flex>
                 </Form>
             </Content>
