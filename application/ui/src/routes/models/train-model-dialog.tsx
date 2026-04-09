@@ -69,15 +69,6 @@ export const MODELS: ReadonlyArray<{
         min_vram: 8 * GB,
     },
     {
-        id: 'pi0',
-        name: 'Pi0',
-        description: 'Vision-Language-Action model based on PaliGemma 3B',
-        license: 'Apache-2.0 (code) / Gemma (weights)',
-        min_episodes: null,
-        min_steps: null,
-        min_vram: 12 * GB,
-    },
-    {
         id: 'pi05',
         name: 'Pi0.5',
         description: 'Enhanced Pi0 with discrete state encoding and longer context',
