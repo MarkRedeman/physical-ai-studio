@@ -65,6 +65,24 @@ class SystemService:
 
         return devices
 
+    @classmethod
+    def is_device_supported_for_training(cls, device_type: str) -> bool:
+        """Check whether a device type is available for training.
+
+        Args:
+            device_type: Device type string, e.g. 'cpu', 'cuda', 'xpu'.
+
+        Returns:
+            True if at least one device of the given type is available.
+        """
+        device_type_lower = device_type.lower()
+        return any(d.type == device_type_lower for d in cls.get_training_devices())
+
+    @classmethod
+    def supported_training_device_types(cls) -> list[str]:
+        """Return the distinct device type strings available for training."""
+        return sorted({d.type for d in cls.get_training_devices()})
+
     @staticmethod
     def get_inference_devices() -> list[DeviceInfo]:
         """Get available compute devices for inference via OpenVINO.
