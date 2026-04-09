@@ -8,6 +8,9 @@ import {
     Content,
     ContextualHelp,
     Dialog,
+    Disclosure,
+    DisclosurePanel,
+    DisclosureTitle,
     Divider,
     Flex,
     Form,
@@ -70,6 +73,15 @@ export const MODELS: ReadonlyArray<{
         min_vram: 8 * GB,
     },
     {
+        id: 'pi0',
+        name: 'Pi0',
+        description: 'Vision-Language-Action model based on PaliGemma 3B',
+        license: 'Apache-2.0 (code) / Gemma (weights)',
+        min_episodes: null,
+        min_steps: null,
+        min_vram: 12 * GB,
+    },
+    {
         id: 'pi05',
         name: 'Pi0.5',
         description: 'Enhanced Pi0 with discrete state encoding and longer context',
@@ -101,8 +113,8 @@ const PolicySelection = ({ selectedPolicy, onSelectionChange, isDisabled, availa
 
     return (
         <Flex direction='column' gap='size-100'>
-            <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>Policy</Text>
-            <Flex direction='row' gap='size-200'>
+            <Text UNSAFE_style={{ fontSize: 12 }}>Policy</Text>
+            <div className={classes.policyGrid}>
                 {MODELS.map((model) => (
                     <Card
                         key={model.id}
@@ -136,7 +148,7 @@ const PolicySelection = ({ selectedPolicy, onSelectionChange, isDisabled, availa
                         </Flex>
                     </Card>
                 ))}
-            </Flex>
+            </div>
 
             {hasInsufficientVram && (
                 <View marginTop='size-100'>
@@ -321,7 +333,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
                 </Flex>
             </Heading>
             <Divider />
-            <Content maxWidth={'800px'}>
+            <Content width={'700px'}>
                 <Form
                     onSubmit={(e) => {
                         e.preventDefault();
@@ -352,16 +364,23 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxSteps = 10000 }: 
 
                         <Divider size='S' />
 
-                        <TrainingParameters
-                            maxSteps={maxSteps}
-                            onMaxStepsChange={setMaxSteps}
-                            batchSize={batchSize}
-                            onBatchSizeChange={setBatchSize}
-                            numWorkers={numWorkers}
-                            onNumWorkersChange={setNumWorkers}
-                            autoScaleBatchSize={autoScaleBatchSize}
-                            onAutoScaleBatchSizeChange={setAutoScaleBatchSize}
-                        />
+                        <Disclosure isQuiet UNSAFE_style={{ padding: 0 }}>
+                            <DisclosureTitle UNSAFE_style={{ fontSize: 13, padding: '4px 0' }}>
+                                Advanced settings
+                            </DisclosureTitle>
+                            <DisclosurePanel UNSAFE_style={{ padding: 0 }}>
+                                <TrainingParameters
+                                    maxSteps={maxSteps}
+                                    onMaxStepsChange={setMaxSteps}
+                                    batchSize={batchSize}
+                                    onBatchSizeChange={setBatchSize}
+                                    numWorkers={numWorkers}
+                                    onNumWorkersChange={setNumWorkers}
+                                    autoScaleBatchSize={autoScaleBatchSize}
+                                    onAutoScaleBatchSizeChange={setAutoScaleBatchSize}
+                                />
+                            </DisclosurePanel>
+                        </Disclosure>
                     </Flex>
                 </Form>
             </Content>
