@@ -1,4 +1,4 @@
-import { Suspense, Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 
 import {
     Button,
@@ -12,6 +12,7 @@ import {
     Flex,
     Heading,
     Item,
+    Loading,
     Picker,
     Text,
     TextField,
@@ -27,11 +28,13 @@ import { paths } from '../../../router';
 import { isAbortError } from '../../utils/download';
 
 const VALID_SOURCE_HINTS = ['auto', 'studio', 'lerobot_v2', 'lerobot_v3', 'trossen_sdk'] as const;
-type ImportPhase = 'editing' | 'awaiting_detection' | 'ready_to_finalize' | 'awaiting_import';
+type SourceHint = (typeof VALID_SOURCE_HINTS)[number];
+type ImportPhase = 'editing' | 'awaiting_detection' | 'detection_failed' | 'ready_to_finalize' | 'awaiting_import';
 type EnvironmentOption = { id: string; name: string };
 
 type ImportPayload = {
     step?: string;
+    source_hint?: string;
     result_dataset_id?: string;
 };
 
@@ -45,8 +48,7 @@ const asImportPayload = (payload: unknown): ImportPayload => {
 interface ImportDatasetFormProps {
     project_id: string;
     onClose: () => void;
-    sourceHint: (typeof VALID_SOURCE_HINTS)[number];
-    onSourceHintChange: (value: (typeof VALID_SOURCE_HINTS)[number]) => void;
+    sourceHint?: SourceHint;
     onFileSelect: (files: FileList | null) => void;
     archive: File | null;
     onUploaded: (jobId: string, message: string) => void;
@@ -55,8 +57,7 @@ interface ImportDatasetFormProps {
 const ImportDatasetForm = ({
     project_id,
     onClose,
-    sourceHint,
-    onSourceHintChange,
+    sourceHint = 'auto',
     onFileSelect,
     archive,
     onUploaded,
@@ -184,17 +185,6 @@ const ImportDatasetForm = ({
                     errorMessage='Failed to upload dataset archive. Please try again.'
                     preparingMessage='Uploading dataset archive…'
                 />
-
-                <Picker
-                    items={VALID_SOURCE_HINTS.map((value) => ({ id: value, name: value }))}
-                    selectedKey={sourceHint}
-                    label='Source hint'
-                    onSelectionChange={(value) =>
-                        onSourceHintChange((value ?? 'auto').toString() as (typeof VALID_SOURCE_HINTS)[number])
-                    }
-                >
-                    {(item) => <Item key={item.id}>{item.name}</Item>}
-                </Picker>
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={onCancel}>
@@ -219,6 +209,7 @@ interface DatasetAnalysisInProgressProps {
     onReady: (message: string) => void;
     onImporting: (message: string) => void;
     onCompleted: (datasetId: string) => void;
+    onDetectionFailed: (message: string) => void;
     onFailed: (message: string) => void;
     onClose: () => void;
 }
@@ -229,6 +220,7 @@ const DatasetAnalysisInProgress = ({
     onReady,
     onImporting,
     onCompleted,
+    onDetectionFailed,
     onFailed,
     onClose,
 }: DatasetAnalysisInProgressProps) => {
@@ -259,7 +251,14 @@ const DatasetAnalysisInProgress = ({
 
         if (job.status === 'failed' || job.status === 'canceled') {
             hasTransitionedRef.current = true;
-            onFailed(job.message ?? 'Import failed during processing.');
+
+            if (payload.step === 'detecting_source') {
+                onDetectionFailed(
+                    job.message ?? 'Could not automatically detect the dataset format. Please select a format manually.'
+                );
+            } else {
+                onFailed(job.message ?? 'Import failed during processing.');
+            }
             return;
         }
 
@@ -279,7 +278,7 @@ const DatasetAnalysisInProgress = ({
             hasTransitionedRef.current = true;
             onImporting('Import is already running. Showing live import progress…');
         }
-    }, [importJobQuery.data, onCompleted, onFailed, onImporting, onReady]);
+    }, [importJobQuery.data, onCompleted, onDetectionFailed, onFailed, onImporting, onReady]);
 
     return (
         <>
@@ -293,6 +292,144 @@ const DatasetAnalysisInProgress = ({
                 </Button>
                 <Button variant='accent' isDisabled isPending>
                     Processing upload…
+                </Button>
+            </ButtonGroup>
+        </>
+    );
+};
+
+const USER_SOURCE_HINTS = VALID_SOURCE_HINTS.filter((hint) => hint !== 'auto');
+
+interface DetectionFailedFormProps {
+    project_id: string;
+    archive: File | null;
+    statusMessage?: string;
+    onRetry: (jobId: string, message: string) => void;
+    onClose: () => void;
+}
+
+const DetectionFailedForm = ({ project_id, archive, statusMessage, onRetry, onClose }: DetectionFailedFormProps) => {
+    const [sourceHint, setSourceHint] = useState<SourceHint>(USER_SOURCE_HINTS[0]);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const abortRef = useRef<XMLHttpRequest | null>(null);
+
+    useEffect(() => {
+        return () => {
+            abortRef.current?.abort();
+        };
+    }, []);
+
+    const uploadPath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets', {
+        params: { path: { project_id } },
+    });
+
+    const retryMutation = useMutation({
+        mutationFn: async ({ file, source }: { file: File; source: string }) => {
+            return await new Promise<{ id: string }>((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                abortRef.current = xhr;
+                xhr.open('POST', uploadPath);
+                xhr.responseType = 'json';
+
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable && event.total > 0) {
+                        setUploadProgress(Math.round((event.loaded / event.total) * 100));
+                    } else {
+                        setUploadProgress(null);
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(xhr.response as { id: string });
+                    } else {
+                        reject(new Error(`Failed to submit import: ${xhr.status}`));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error('Failed to upload dataset archive'));
+                xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+
+                const formData = new FormData();
+                formData.append('archive', file);
+                formData.append('source_hint', source);
+                xhr.send(formData);
+            });
+        },
+        onMutate: () => {
+            setUploadProgress(null);
+        },
+        onSettled: () => {
+            abortRef.current = null;
+        },
+    });
+
+    const onRetryUpload = async () => {
+        if (!archive) {
+            return;
+        }
+
+        try {
+            const job = await retryMutation.mutateAsync({ file: archive, source: sourceHint });
+            onRetry(job.id, 'Re-uploading with selected format. Waiting for detection…');
+        } catch (error) {
+            if (isAbortError(error)) {
+                return;
+            }
+        }
+    };
+
+    const onCancel = () => {
+        if (retryMutation.isPending) {
+            abortRef.current?.abort();
+            retryMutation.reset();
+            setUploadProgress(null);
+            return;
+        }
+        onClose();
+    };
+
+    return (
+        <>
+            <Content>
+                <Text>
+                    {statusMessage ??
+                        'Could not automatically detect the dataset format. Please select a format and try again.'}
+                </Text>
+
+                {archive !== null ? <Text>Archive: {archive.name}</Text> : null}
+
+                <Picker
+                    items={USER_SOURCE_HINTS.map((value) => ({ id: value, name: value }))}
+                    selectedKey={sourceHint}
+                    label='Dataset format'
+                    onSelectionChange={(value) =>
+                        setSourceHint((value ?? USER_SOURCE_HINTS[0]).toString() as SourceHint)
+                    }
+                >
+                    {(item) => <Item key={item.id}>{item.name}</Item>}
+                </Picker>
+
+                <DownloadProgressContent
+                    isError={retryMutation.isError && !isAbortError(retryMutation.error)}
+                    isPending={retryMutation.isPending}
+                    progress={uploadProgress}
+                    errorMessage='Failed to upload dataset archive. Please try again.'
+                    preparingMessage='Re-uploading dataset archive…'
+                />
+            </Content>
+
+            <ButtonGroup>
+                <Button variant='secondary' onPress={onCancel}>
+                    {retryMutation.isPending ? 'Abort upload' : 'Cancel'}
+                </Button>
+                <Button
+                    variant='accent'
+                    onPress={onRetryUpload}
+                    isPending={retryMutation.isPending}
+                    isDisabled={archive === null}
+                >
+                    Retry with selected format
                 </Button>
             </ButtonGroup>
         </>
@@ -451,6 +588,7 @@ const DatasetImportInProgress = ({
             <Content>
                 <Text>{statusMessage ?? 'Finalize accepted. Waiting for import to complete…'}</Text>
                 {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
+                <Loading mode='inline' variant='intel' size='L' />
             </Content>
 
             <ButtonGroup>
@@ -489,7 +627,6 @@ const ImportDatasetDialog = ({
     const [datasetName, setDatasetName] = useState('');
     const [defaultTask, setDefaultTask] = useState('');
     const [environmentId, setEnvironmentId] = useState<string | undefined>(() => environments[0]?.id);
-    const [sourceHint, setSourceHint] = useState<(typeof VALID_SOURCE_HINTS)[number]>('auto');
     const [importJobId, setImportJobId] = useState<string | undefined>(initialJobId);
     const [importPhase, setImportPhase] = useState<ImportPhase>(initialJobId ? 'awaiting_detection' : 'editing');
     const [importStatusMessage, setImportStatusMessage] = useState<string | undefined>(undefined);
@@ -519,8 +656,6 @@ const ImportDatasetDialog = ({
                 <ImportDatasetForm
                     project_id={project_id}
                     onClose={onDialogClose}
-                    sourceHint={sourceHint}
-                    onSourceHintChange={setSourceHint}
                     onFileSelect={onFileSelect}
                     archive={archive}
                     onUploaded={(jobId, message) => {
@@ -548,9 +683,27 @@ const ImportDatasetDialog = ({
                         onDialogClose();
                         navigate(paths.project.datasets.show({ project_id, dataset_id: datasetId }));
                     }}
+                    onDetectionFailed={(message) => {
+                        setImportStatusMessage(message);
+                        setImportPhase('detection_failed');
+                    }}
                     onFailed={(message) => {
                         setImportStatusMessage(message);
                         setImportPhase('editing');
+                    }}
+                    onClose={onDialogClose}
+                />
+            )}
+
+            {importPhase === 'detection_failed' && (
+                <DetectionFailedForm
+                    project_id={project_id}
+                    archive={archive}
+                    statusMessage={importStatusMessage}
+                    onRetry={(jobId, message) => {
+                        setImportJobId(jobId);
+                        setImportStatusMessage(message);
+                        setImportPhase('awaiting_detection');
                     }}
                     onClose={onDialogClose}
                 />
