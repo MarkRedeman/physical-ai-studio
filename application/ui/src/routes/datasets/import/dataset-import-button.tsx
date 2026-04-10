@@ -50,11 +50,91 @@ type ImportPayload = {
     result_dataset_id?: string;
 };
 
+type ImportJobResponse = { id: string };
+
 const asImportPayload = (payload: unknown): ImportPayload => {
     if (payload && typeof payload === 'object') {
         return payload as ImportPayload;
     }
     return {};
+};
+
+const submitDatasetImportTwoPhase = async ({
+    projectId,
+    file,
+    source,
+    abortRef,
+    onUploadProgress,
+}: {
+    projectId: string;
+    file: File;
+    source: string;
+    abortRef: React.MutableRefObject<XMLHttpRequest | null>;
+    onUploadProgress: (progress: number | null) => void;
+}): Promise<ImportJobResponse> => {
+    const preparePath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets:prepare', {
+        params: { path: { project_id: projectId } },
+    });
+
+    return await new Promise<ImportJobResponse>((resolve, reject) => {
+        const prepareXhr = new XMLHttpRequest();
+        abortRef.current = prepareXhr;
+        prepareXhr.open('POST', preparePath);
+        prepareXhr.responseType = 'json';
+
+        prepareXhr.onload = () => {
+            if (prepareXhr.status < 200 || prepareXhr.status >= 300) {
+                reject(new Error(`Failed to prepare import: ${prepareXhr.status}`));
+                return;
+            }
+
+            const preparedJob = prepareXhr.response as ImportJobResponse;
+            if (!preparedJob?.id) {
+                reject(new Error('Failed to prepare import: missing job id'));
+                return;
+            }
+
+            const uploadPath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets/{job_id}:upload', {
+                params: { path: { project_id: projectId, job_id: preparedJob.id } },
+            });
+
+            const uploadXhr = new XMLHttpRequest();
+            abortRef.current = uploadXhr;
+            uploadXhr.open('PUT', uploadPath);
+            uploadXhr.responseType = 'json';
+
+            uploadXhr.upload.onprogress = (event) => {
+                if (event.lengthComputable && event.total > 0) {
+                    onUploadProgress(Math.round((event.loaded / event.total) * 100));
+                } else {
+                    onUploadProgress(null);
+                }
+            };
+
+            uploadXhr.onload = () => {
+                if (uploadXhr.status >= 200 && uploadXhr.status < 300) {
+                    const uploadedJob = uploadXhr.response as ImportJobResponse;
+                    resolve({ id: uploadedJob?.id ?? preparedJob.id });
+                } else {
+                    reject(new Error(`Failed to upload dataset archive: ${uploadXhr.status}`));
+                }
+            };
+
+            uploadXhr.onerror = () => reject(new Error('Failed to upload dataset archive'));
+            uploadXhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+
+            const uploadFormData = new FormData();
+            uploadFormData.append('archive', file);
+            uploadXhr.send(uploadFormData);
+        };
+
+        prepareXhr.onerror = () => reject(new Error('Failed to prepare dataset import job'));
+        prepareXhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+
+        const prepareFormData = new FormData();
+        prepareFormData.append('source_hint', source);
+        prepareXhr.send(prepareFormData);
+    });
 };
 
 interface ImportDatasetFormProps {
@@ -85,42 +165,14 @@ const ImportDatasetForm = ({
         };
     }, []);
 
-    const uploadPath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets', {
-        params: { path: { project_id } },
-    });
-
     const uploadMutation = useMutation({
         mutationFn: async ({ file, source }: { file: File; source: string }) => {
-            return await new Promise<{ id: string }>((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                abortRef.current = xhr;
-                xhr.open('POST', uploadPath);
-                xhr.responseType = 'json';
-
-                xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable && event.total > 0) {
-                        const percent = Math.round((event.loaded / event.total) * 100);
-                        setUploadProgress(percent);
-                    } else {
-                        setUploadProgress(null);
-                    }
-                };
-
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve(xhr.response as { id: string });
-                    } else {
-                        reject(new Error(`Failed to submit import: ${xhr.status}`));
-                    }
-                };
-
-                xhr.onerror = () => reject(new Error('Failed to upload dataset archive'));
-                xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
-
-                const formData = new FormData();
-                formData.append('archive', file);
-                formData.append('source_hint', source);
-                xhr.send(formData);
+            return await submitDatasetImportTwoPhase({
+                projectId: project_id,
+                file,
+                source,
+                abortRef,
+                onUploadProgress: setUploadProgress,
             });
         },
         onMutate: () => {
@@ -314,41 +366,14 @@ const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClo
         };
     }, []);
 
-    const uploadPath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets', {
-        params: { path: { project_id } },
-    });
-
     const retryMutation = useMutation({
         mutationFn: async ({ file, source }: { file: File; source: string }) => {
-            return await new Promise<{ id: string }>((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                abortRef.current = xhr;
-                xhr.open('POST', uploadPath);
-                xhr.responseType = 'json';
-
-                xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable && event.total > 0) {
-                        setUploadProgress(Math.round((event.loaded / event.total) * 100));
-                    } else {
-                        setUploadProgress(null);
-                    }
-                };
-
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve(xhr.response as { id: string });
-                    } else {
-                        reject(new Error(`Failed to submit import: ${xhr.status}`));
-                    }
-                };
-
-                xhr.onerror = () => reject(new Error('Failed to upload dataset archive'));
-                xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
-
-                const formData = new FormData();
-                formData.append('archive', file);
-                formData.append('source_hint', source);
-                xhr.send(formData);
+            return await submitDatasetImportTwoPhase({
+                projectId: project_id,
+                file,
+                source,
+                abortRef,
+                onUploadProgress: setUploadProgress,
             });
         },
         onMutate: () => {
