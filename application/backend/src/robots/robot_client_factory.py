@@ -92,12 +92,30 @@ class RobotClientFactory:
 
     @staticmethod
     def _convert_to_so101_calibration(calibration: Calibration) -> SO101Calibration:
-        """Convert a backend Calibration schema to a physicalai SO101Calibration."""
+        """Convert a backend Calibration schema to a physicalai SO101Calibration.
+
+        Two calibration differences must be reconciled:
+
+        1. **Homing offset in firmware**: LeRobot writes ``homing_offset``
+           into each motor's EPROM so the firmware subtracts it from every
+           ``Present_Position`` read. The physicalai driver also subtracts
+           ``homing_offset`` in software, so we must not pass the original
+           value or it would be applied twice.
+
+        2. **Zero-point convention**: LeRobot normalizes positions to
+           ``[-100, +100]`` where 0 is the midpoint of ``[range_min, range_max]``.
+           The physicalai driver's zero is at ``ticks == homing_offset``.
+           To preserve the same zero-point, we set ``homing_offset`` to the
+           range midpoint so that the midpoint maps to 0 radians/degrees.
+
+        The ``range_min``/``range_max`` values are already in the
+        firmware-offset-corrected tick space and remain valid for clamping.
+        """
         joints = {
             name: SO101JointCalibration(
                 id=cal_value.id,
                 drive_mode=cal_value.drive_mode,
-                homing_offset=cal_value.homing_offset,
+                homing_offset=round((cal_value.range_min + cal_value.range_max) / 2),
                 range_min=cal_value.range_min,
                 range_max=cal_value.range_max,
             )
