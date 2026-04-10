@@ -47,10 +47,15 @@ class DatasetImportJob(BaseJob):
     payload: DatasetImportJobPayload
 
 
-JobPayload = TrainJobPayload | DatasetImportJobPayload 
+class ModelImportJob(BaseJob):
+    type: Literal[JobType.MODEL_IMPORT] = JobType.MODEL_IMPORT
+    payload: ModelImportJobPayload
+
+
+JobPayload = TrainJobPayload | DatasetImportJobPayload | ModelImportJobPayload
 
 Job = Annotated[
-    TrainJob | DatasetImportJob,
+    TrainJob | DatasetImportJob | ModelImportJob,
     Field(discriminator="type"),
 ]
 
