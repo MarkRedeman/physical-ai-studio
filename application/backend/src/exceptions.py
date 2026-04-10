@@ -88,3 +88,25 @@ class ResourceAlreadyExistsError(BaseException):
             error_code=f"{resource_name}_already_exists",
             http_status=http.HTTPStatus.CONFLICT,
         )
+
+
+class InvalidJobStateError(BaseException):
+    """Raised when a job action is not valid in the current state."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="invalid_job_state",
+            http_status=http.HTTPStatus.CONFLICT,
+        )
+
+
+class DuplicateImportSourceError(BaseException):
+    """Raised when importing an already imported source UUID."""
+
+    def __init__(self, resource_kind: str, source_uuid: str) -> None:
+        super().__init__(
+            message=f"{resource_kind} with original source UUID `{source_uuid}` was already imported.",
+            error_code="duplicate_import_source",
+            http_status=http.HTTPStatus.CONFLICT,
+        )
