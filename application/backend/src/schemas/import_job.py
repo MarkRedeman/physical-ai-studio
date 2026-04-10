@@ -28,6 +28,11 @@ class DatasetImportSource(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ModelImportSource(StrEnum):
+    STUDIO = "studio"
+    UNKNOWN = "unknown"
+
+
 class ImportValidationIssue(BaseModel):
     code: str
     message: str
@@ -102,3 +107,23 @@ class DatasetImportJobPayload(BaseModel):
     @field_serializer("result_dataset_id")
     def serialize_result_dataset_id(self, result_dataset_id: UUID | None, _info) -> str | None:
         return str(result_dataset_id) if result_dataset_id else None
+
+
+class ModelImportJobPayload(BaseModel):
+    type: Literal[JobType.MODEL_IMPORT] = JobType.MODEL_IMPORT
+    project_id: UUID
+    step: ImportStep = ImportStep.UPLOADED
+    uploaded_archive_path: str
+    uploaded_archive_name: str
+    source_hint: ModelImportSource | Literal["auto"] = "auto"
+
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: UUID, _info) -> str:
+        return str(project_id)
+
+
+class ModelImportFinalizeInput(BaseModel):
+    model_name: str
+    policy: str
+    linking: dict = Field(default_factory=dict)
+    user_overrides: dict = Field(default_factory=dict)
