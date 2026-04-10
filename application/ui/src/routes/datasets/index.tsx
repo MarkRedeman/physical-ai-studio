@@ -1,4 +1,6 @@
-import { Content, Flex, Heading, IllustratedMessage, Item, TabPanels, Tabs, Text, View } from '@geti-ui/ui';
+import { Suspense } from 'react';
+
+import { Content, Flex, Heading, IllustratedMessage, Item, Loading, TabPanels, Tabs, Text, View } from '@geti-ui/ui';
 import { useParams } from 'react-router';
 
 import { SchemaDatasetOutput } from '../../api/openapi-spec';
@@ -7,6 +9,8 @@ import { useProject, useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
 import { DatasetProvider } from './dataset-provider';
 import { DatasetViewer } from './dataset-viewer';
+import { DatasetImportButton } from './import/dataset-import-button';
+import { DatasetImportJobs } from './import/dataset-import-jobs.component';
 import { NewDatasetLink } from './new-dataset.component';
 
 interface DatasetsProps {
@@ -20,15 +24,18 @@ const Datasets = ({ datasets }: DatasetsProps) => {
 
     if (datasets.length === 0) {
         return (
-            <Flex margin={'size-200'} direction={'column'} flex>
+            <Flex marginX={'size-200'} direction={'column'} height='100%'>
+                <DatasetImportJobs />
+
                 <IllustratedMessage>
                     <EmptyIllustration />
                     <Content> Currently there are datasets available. </Content>
                     <Text>It&apos;s time to begin recording a dataset. </Text>
                     <Heading>No datasets yet</Heading>
-                    <View margin={'size-100'}>
+                    <Flex gap='size-100' marginTop={'size-200'}>
                         <NewDatasetLink project_id={project_id} />
-                    </View>
+                        <DatasetImportButton />
+                    </Flex>
                 </IllustratedMessage>
             </Flex>
         );
@@ -45,6 +52,7 @@ const Datasets = ({ datasets }: DatasetsProps) => {
                     '--spectrum-tabs-item-gap': 'var(--spectrum-global-dimension-size-100)',
                 }}
             >
+                <DatasetImportJobs />
                 <DatasetTabs datasets={datasets} selectedDatasetId={dataset_id} />
                 <TabPanels UNSAFE_style={{ border: 'none' }} marginTop={'size-200'} minHeight={0}>
                     <Item key={dataset_id}>
@@ -52,9 +60,11 @@ const Datasets = ({ datasets }: DatasetsProps) => {
                             {dataset_id === undefined ? (
                                 <Text>No datasets yet...</Text>
                             ) : (
-                                <DatasetProvider dataset_id={dataset_id}>
-                                    <DatasetViewer />
-                                </DatasetProvider>
+                                <Suspense fallback={<Loading />}>
+                                    <DatasetProvider dataset_id={dataset_id}>
+                                        <DatasetViewer />
+                                    </DatasetProvider>
+                                </Suspense>
                             )}
                         </Flex>
                     </Item>
