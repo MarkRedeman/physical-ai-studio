@@ -25,7 +25,6 @@ import { $api, fetchClient } from '../../../api/client';
 import type {
     SchemaDatasetImportJob,
     SchemaDatasetImportJobPayload,
-    SchemaDatasetImportSource,
     SchemaImportStep,
     SchemaJobStatus,
 } from '../../../api/openapi-spec';
@@ -34,7 +33,7 @@ import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { isAbortError } from '../../utils/download';
 
-const VALID_SOURCE_HINTS = ['auto', 'studio', 'lerobot_v2', 'lerobot_v3', 'trossen_sdk'] as const;
+const VALID_SOURCE_HINTS = ['auto', 'lerobot_v2', 'lerobot_v3'] as const;
 type SourceHint = (typeof VALID_SOURCE_HINTS)[number];
 type EnvironmentOption = { id: string; name: string };
 
@@ -49,6 +48,20 @@ interface DatasetFields {
     datasetName: string;
     defaultTask: string;
     environmentId: string | undefined;
+}
+
+interface DraftManifestSummary {
+    source?: {
+        source_type?: string;
+        source_format_version?: string;
+    };
+    capture?: {
+        episode_count?: number;
+        frame_count?: number;
+        fps?: number;
+    };
+    warnings?: string[];
+    missing_fields?: string[];
 }
 
 /** Narrow the job union to the dataset import variant. */
@@ -472,6 +485,22 @@ const ConfirmDatasetImport = ({
     onFieldsChange,
     onFinalized,
 }: ConfirmDatasetImportProps) => {
+    const importJobQuery = $api.useQuery(
+        'get',
+        '/api/jobs/{job_id}',
+        {
+            params: { path: { job_id: jobId } },
+        },
+        {
+            refetchInterval: 1000,
+        }
+    );
+    const job = importJobQuery.data;
+    const payload = getImportPayload(job);
+    const draft = payload?.dataset_manifest_draft as DraftManifestSummary | undefined;
+    const detectedFormat = draft?.source?.source_type ?? 'unknown';
+    const formatVersion = draft?.source?.source_format_version;
+
     const finalizeMutation = $api.useMutation('post', '/api/projects/{project_id}/imports/datasets/{job_id}:finalize');
     const [finalizeError, setFinalizeError] = useState<string | undefined>(undefined);
     const canFinalize = fields.environmentId !== undefined && fields.datasetName.trim().length > 0;
@@ -508,6 +537,25 @@ const ConfirmDatasetImport = ({
             <Content>
                 <Text>Dataset analyzed. Review fields and click &quot;Finalize import&quot;.</Text>
                 {finalizeError ? <Text>{finalizeError}</Text> : null}
+
+                {draft && (
+                    <Flex direction='column' gap='size-50'>
+                        <Text><strong>Analyzed Dataset Info</strong></Text>
+                        <Text>
+                            Format: {detectedFormat}
+                            {formatVersion ? ` (${formatVersion})` : ''}
+                        </Text>
+                        <Text>Episodes: {draft.capture?.episode_count ?? 'unknown'}</Text>
+                        <Text>Frames: {draft.capture?.frame_count ?? 'unknown'}</Text>
+                        <Text>FPS: {draft.capture?.fps ?? 'unknown'}</Text>
+                        {draft.warnings && draft.warnings.length > 0 && (
+                            <Text>Warnings: {draft.warnings.join(', ')}</Text>
+                        )}
+                        {draft.missing_fields && draft.missing_fields.length > 0 && (
+                            <Text>Missing Fields: {draft.missing_fields.join(', ')}</Text>
+                        )}
+                    </Flex>
+                )}
 
                 <Picker
                     items={environments}
