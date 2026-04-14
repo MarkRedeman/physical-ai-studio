@@ -1,9 +1,8 @@
-from .base_job import JobStatus, JobType
 from .calibration import CalibrationConfig
 from .camera import Camera, CameraProfile
 from .dataset import Dataset, Episode, EpisodeInfo, EpisodeVideo, LeRobotDatasetInfo, Snapshot
 from .hardware import DeviceInfo, DeviceType
-from .job import DatasetImportJob, Job, TrainJob
+from .job import DatasetImportJob, ExportJob, ImportJob, Job, TrainJob
 from .model import Model
 from .project import Project
 from .robot import LeRobotConfig, NetworkIpRobotConfig, Robot, SerialPortInfo
@@ -19,9 +18,9 @@ __all__ = [
     "Episode",
     "EpisodeInfo",
     "EpisodeVideo",
+    "ExportJob",
+    "ImportJob",
     "Job",
-    "JobStatus",
-    "JobType",
     "LeRobotConfig",
     "LeRobotDatasetInfo",
     "Model",
@@ -30,5 +29,6 @@ __all__ = [
     "Robot",
     "SerialPortInfo",
     "Snapshot",
+    "TrainJob",
     "TrainJob",
 ]

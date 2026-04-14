@@ -88,6 +88,7 @@ class DatasetImportWorker(BaseProcessWorker):
         if archive_path is None:
             raise ValueError("No archive path associated with dataset import job")
 
+    async def _run_detection(self, job_id: UUID, project_id: UUID, payload: DatasetImportJobPayload) -> None:
         logger.info(
             "Starting source detection for job_id='{}' with staging_id='{}', archive='{}'",
             job_id,

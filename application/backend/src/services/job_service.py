@@ -11,12 +11,17 @@ from exceptions import (
     ResourceNotFoundError,
     ResourceType,
     UnsupportedDeviceError,
+    ModelNotRetrainableError,
+    ResourceInUseError,
+    ResourceNotFoundError,
+    ResourceType,
 )
 from repositories import JobRepository
 from schemas import Job
 from schemas.base_job import JobStatus, JobType
-from schemas.job import JobPayload, TrainJob, TrainJobPayload
+from schemas.job import ExportJob, ExportJobPayload, ImportJob, ImportJobPayload, JobPayload, TrainJob, TrainJobPayload
 from services.system_service import SystemService
+from services.model_service import ModelService
 
 
 class JobService:
@@ -53,6 +58,12 @@ class JobService:
                 device_type=payload.device.type,
                 supported=SystemService.supported_training_device_types(),
             )
+
+        # Validate that the base model (if any) supports retraining.
+        if payload.base_model_id is not None:
+            base_model = await ModelService.get_model_by_id(payload.base_model_id)
+            if base_model.properties.get("source") == "huggingface":
+                raise ModelNotRetrainableError(base_model.name)
 
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
@@ -104,6 +115,39 @@ class JobService:
                 updates["end_time"] = datetime.datetime.now(tz=datetime.UTC)
 
             return await repo.update(job, updates)
+
+    async def submit_import_job(self, payload: ImportJobPayload) -> ImportJob:
+        async with get_async_db_session_ctx() as session:
+            repo = JobRepository(session)
+            try:
+                job = ImportJob(
+                    project_id=payload.project_id,
+                    payload=payload,
+                    message="Import job submitted",
+                )
+                return await repo.save(job)
+            except IntegrityError:
+                raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
+
+    @staticmethod
+    async def submit_export_job(payload: ExportJobPayload) -> ExportJob:
+        async with get_async_db_session_ctx() as session:
+            repo = JobRepository(session)
+            try:
+                job = ExportJob(
+                    project_id=payload.project_id,
+                    payload=payload,
+                    message="Export job submitted",
+                )
+                return await repo.save(job)
+            except IntegrityError:
+                raise ResourceNotFoundError(resource_type=ResourceType.PROJECT, resource_id=payload.project_id)
+
+    @staticmethod
+    async def get_pending_import_export_job() -> Job | None:
+        async with get_async_db_session_ctx() as session:
+            repo = JobRepository(session)
+            return await repo.get_pending_job_by_types([JobType.IMPORT, JobType.EXPORT])
 
     @staticmethod
     async def update_job_status(

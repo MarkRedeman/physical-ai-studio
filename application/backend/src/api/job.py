@@ -9,7 +9,7 @@ from api.dependencies import get_event_processor_ws, get_job_id, get_job_service
 from core.scheduler import Scheduler
 from schemas import Job
 from schemas.base_job import JobStatus
-from schemas.job import TrainJobPayload
+from schemas.job import DatasetImportJob, ExportJob, ImportJob, JobType, TrainJob, TrainJobPayload
 from services.event_processor import EventProcessor, EventType
 from services.job_service import JobService
 
@@ -46,7 +46,7 @@ async def delete_job(
 async def submit_train_job(
     job_service: Annotated[JobService, Depends(get_job_service)],
     payload: Annotated[TrainJobPayload, Body()],
-) -> Job:
+) -> TrainJob:
     """Endpoint to submit a training job"""
     return await job_service.submit_train_job(payload=payload)
 
@@ -60,7 +60,7 @@ async def interrupt_job(
     """Endpoint to interrupt job"""
     job = await job_service.get_job_by_id(job_id)
     if job is not None:
-        if job.status == JobStatus.RUNNING:
+        if job.status == JobStatus.RUNNING and job.type == JobType.TRAINING:
             scheduler.training_interrupt_event.set()
         await job_service.update_job_status(job_id, status=JobStatus.CANCELED)
 
@@ -79,7 +79,7 @@ async def jobs_websocket(
     """Robot control websocket."""
     await websocket.accept()
 
-    async def send_data(event: EventType, payload: Job):
+    async def send_data(event: EventType, payload: TrainJob | DatasetImportJob | ImportJob | ExportJob):
         """Pass job update through to websocket."""
         await websocket.send_json(
             {
@@ -88,7 +88,7 @@ async def jobs_websocket(
             }
         )
 
-    event_processor.subscribe([EventType.JOB_UPDATE], send_data)
+    event_processor.subscribe([EventType.JOB_UPDATE, EventType.MODEL_UPDATE], send_data)
 
     try:
         while True:
@@ -99,5 +99,5 @@ async def jobs_websocket(
     except WebSocketDisconnect:
         logger.info("Except: disconnected!")
 
-    event_processor.unsubscribe([EventType.JOB_UPDATE], send_data)
+    event_processor.unsubscribe([EventType.JOB_UPDATE, EventType.MODEL_UPDATE], send_data)
     logger.info("Jobs Websocket handling done...")

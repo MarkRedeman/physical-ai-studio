@@ -11,7 +11,6 @@ from uuid import uuid4
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
-from core.logging.utils import job_logging_ctx
 from models.utils import load_policy, setup_policy
 from services.snapshot_service import SnapshotService
 from settings import get_settings
@@ -26,9 +25,9 @@ from physicalai.data import LeRobotDataModule
 from physicalai.export import ExportablePolicyMixin
 from physicalai.train import Trainer
 
-from schemas import Job, Model, Snapshot
+from schemas import Model, Snapshot
 from schemas.base_job import JobStatus
-from schemas.job import TrainJobPayload
+from schemas.job import TrainJob, TrainJobPayload
 from services import DatasetService, ModelService
 from services.event_processor import EventType
 from services.job_service import JobService
@@ -59,35 +58,34 @@ class TrainingWorker(BaseProcessWorker):
             settings = get_settings()
 
             job = await job_service.get_pending_train_job()
-            if job is not None:
-                with job_logging_ctx(job_id=str(job.id)):
-                    payload = TrainJobPayload.model_validate(job.payload)
-                    id = uuid4()
+            if job is not None and isinstance(job, TrainJob):
+                payload = job.payload
+                id = uuid4()
 
-                    base_model = None
-                    if payload.base_model_id is not None:
-                        base_model = await ModelService.get_model_by_id(payload.base_model_id)
+                base_model = None
+                if payload.base_model_id is not None:
+                    base_model = await ModelService.get_model_by_id(payload.base_model_id)
 
-                    dataset = await DatasetService.get_dataset_by_id(payload.dataset_id)
-                    model_dir = Path(str(settings.models_dir / str(id)))
-                    model_dir.mkdir(parents=True)
-                    snapshot_dir = model_dir / SnapshotService.generate_snapshot_folder_name()
-                    snapshot = await SnapshotService.create_snapshot_for_dataset(dataset, destination=snapshot_dir)
+                dataset = await DatasetService.get_dataset_by_id(payload.dataset_id)
+                model_dir = Path(str(settings.models_dir / str(id)))
+                model_dir.mkdir(parents=True)
+                snapshot_dir = model_dir / SnapshotService.generate_snapshot_folder_name()
+                snapshot = await SnapshotService.create_snapshot_for_dataset(dataset, destination=snapshot_dir)
 
-                    model = Model(
-                        id=id,
-                        project_id=payload.project_id,
-                        dataset_id=payload.dataset_id,
-                        path=str(model_dir),
-                        name=payload.model_name,
-                        snapshot_id=snapshot.id,
-                        policy=payload.policy,
-                        properties={},
-                        train_job_id=job.id,
-                        parent_model_id=payload.base_model_id,
-                        version=base_model.version + 1 if base_model else 1,
-                        created_at=None,
-                    )
+                model = Model(
+                    id=id,
+                    project_id=payload.project_id,
+                    dataset_id=payload.dataset_id,
+                    path=str(model_dir),
+                    name=payload.model_name,
+                    snapshot_id=snapshot.id,
+                    policy=payload.policy,
+                    properties={},
+                    train_job_id=job.id,
+                    parent_model_id=payload.base_model_id,
+                    version=base_model.version + 1 if base_model else 1,
+                    created_at=None,
+                )
 
                     self.interrupt_event.clear()
                     await asyncio.create_task(self._train_model(job, model, snapshot, payload, base_model))
@@ -104,7 +102,7 @@ class TrainingWorker(BaseProcessWorker):
             await TrainingService.abort_orphan_jobs()
 
     async def _train_model(
-        self, job: Job, model: Model, snapshot: Snapshot, payload: TrainJobPayload, base_model: Model | None = None
+        self, job: TrainJob, model: Model, snapshot: Snapshot, payload: TrainJobPayload, base_model: Model | None = None
     ):
         settings = get_settings()
         await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Training started")
@@ -172,6 +170,7 @@ class TrainingWorker(BaseProcessWorker):
             job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.COMPLETED, message="Training finished"
             )
+
             model = await ModelService.create_model(model)
             self.queue.put((EventType.MODEL_UPDATE, model))
         except Exception as e:

@@ -12,6 +12,7 @@ from services import (
     DatasetService,
     EpisodeThumbnailService,
     ModelDownloadService,
+    ModelImportService,
     ModelService,
     ProjectCameraService,
     ProjectService,
@@ -24,6 +25,7 @@ from services.job_service import JobService
 from services.log_service import LogService
 from services.robot_calibration_service import RobotCalibrationService
 from services.system_service import SystemService
+from services.snapshot_service import SnapshotService
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
@@ -123,6 +125,25 @@ def get_model_service() -> ModelService:
 def get_model_download_service() -> ModelDownloadService:
     """Provides a ModelDownloadService instance for model exports."""
     return ModelDownloadService()
+
+
+@lru_cache
+def get_snapshot_service() -> SnapshotService:
+    """Provides a SnapshotService instance for managing snapshots."""
+    return SnapshotService()
+
+
+def get_model_import_service(
+    model_service: Annotated[ModelService, Depends(get_model_service)],
+    dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
+    snapshot_service: Annotated[SnapshotService, Depends(get_snapshot_service)],
+) -> ModelImportService:
+    """Provides a ModelImportService instance for importing models."""
+    return ModelImportService(
+        model_service=model_service,
+        dataset_service=dataset_service,
+        snapshot_service=snapshot_service,
+    )
 
 
 @lru_cache
