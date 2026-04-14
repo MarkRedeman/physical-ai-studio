@@ -1,11 +1,15 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
 from api.dependencies import get_camera_id, get_camera_service, get_project_id
 from schemas.project_camera import Camera
-from services import ProjectCameraService
+
+if TYPE_CHECKING:
+    from services.project_camera_service import ProjectCameraService
+else:
+    ProjectCameraService = Any
 
 router = APIRouter(prefix="/api/projects/{project_id}/cameras", tags=["Project Cameras"])
 

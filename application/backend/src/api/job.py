@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, WebSocket, WebSocketDisconnect
@@ -6,11 +6,19 @@ from fastapi.responses import Response
 from loguru import logger
 
 from api.dependencies import get_event_processor_ws, get_job_id, get_job_service, get_scheduler
-from core.scheduler import Scheduler
 from schemas import Job
 from schemas.job import JobStatus, TrainJobPayload
-from services.event_processor import EventProcessor, EventType
-from services.job_service import JobService
+
+if TYPE_CHECKING:
+    from core.scheduler import Scheduler
+    from services.event_processor import EventProcessor, EventType
+    from services.job_service import JobService
+else:
+    EventProcessor = Any
+    JobService = Any
+    Scheduler = Any
+
+from services.event_processor import EventType
 
 router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 

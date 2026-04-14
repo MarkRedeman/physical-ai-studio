@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, status
 from api.dependencies import get_model_service, get_project_id, get_project_service
 from internal_datasets.utils import get_internal_dataset
 from schemas import Model, Project
-from services import ModelService, ProjectService
+
+if TYPE_CHECKING:
+    from services.model_service import ModelService
+    from services.project_service import ProjectService
+else:
+    ModelService = Any
+    ProjectService = Any
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 

@@ -1,11 +1,15 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
 from api.dependencies import get_environment_id, get_environment_service, get_project_id
 from schemas.environment import Environment, EnvironmentWithRelations
-from services.environment_service import EnvironmentService
+
+if TYPE_CHECKING:
+    from services.environment_service import EnvironmentService
+else:
+    EnvironmentService = Any
 
 router = APIRouter(prefix="/api/projects/{project_id}/environments", tags=["Project Environments"])
 

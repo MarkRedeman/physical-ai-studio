@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, WebSocket, status
@@ -13,8 +13,12 @@ from api.dependencies import (
     get_robot_id,
     get_robot_service,
 )
-from services import RobotService
 from workers.transport.websocket_transport import WebSocketTransport
+
+if TYPE_CHECKING:
+    from robots.robot_service import RobotService
+else:
+    RobotService = Any
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
 

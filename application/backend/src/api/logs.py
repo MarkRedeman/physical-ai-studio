@@ -12,14 +12,18 @@ Source types:
     - job: Per-job logs created during training/import/export runs
 """
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sse_starlette import EventSourceResponse
 
 from api.dependencies import get_log_service
 from schemas.logs import LogSource
-from services.log_service import LogService
+
+if TYPE_CHECKING:
+    from services.log_service import LogService
+else:
+    LogService = Any
 
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
 

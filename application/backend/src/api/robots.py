@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, status
 from api.dependencies import get_project_id, get_robot_id, get_robot_service
 from schemas import Robot
 from schemas.robot import RobotWithConnectionState
-from services import RobotService
+
+if TYPE_CHECKING:
+    from robots.robot_service import RobotService
+else:
+    RobotService = Any
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
 

@@ -1,33 +1,47 @@
 from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, status
 from fastapi.exceptions import HTTPException
 from fastapi.requests import HTTPConnection
 
-from services import (
-    DatasetDownloadService,
-    DatasetService,
-    EpisodeThumbnailService,
-    ModelDownloadService,
-    ModelService,
-    ProjectCameraService,
-    ProjectService,
-    RobotService,
-)
-from services.environment_service import EnvironmentService
-from services.event_processor import EventProcessor
-from services.job_service import JobService
-from services.log_service import LogService
-from services.robot_calibration_service import RobotCalibrationService
 from settings import get_settings
-from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
 from workers.robot_worker_registry import RobotWorkerRegistry
 
 if TYPE_CHECKING:
     from core.scheduler import Scheduler
+    from robots.robot_service import RobotService
+    from services.dataset_download_service import DatasetDownloadService
+    from services.dataset_service import DatasetService
+    from services.environment_service import EnvironmentService
+    from services.episode_thumbnail_service import EpisodeThumbnailService
+    from services.event_processor import EventProcessor
+    from services.job_service import JobService
+    from services.log_service import LogService
+    from services.model_download_service import ModelDownloadService
+    from services.model_service import ModelService
+    from services.project_camera_service import ProjectCameraService
+    from services.project_service import ProjectService
+    from services.robot_calibration_service import RobotCalibrationService
+    from utils.serial_robot_tools import RobotConnectionManager
+else:
+    DatasetDownloadService = Any
+    DatasetService = Any
+    EnvironmentService = Any
+    EpisodeThumbnailService = Any
+    EventProcessor = Any
+    JobService = Any
+    LogService = Any
+    ModelDownloadService = Any
+    ModelService = Any
+    ProjectCameraService = Any
+    ProjectService = Any
+    RobotCalibrationService = Any
+    RobotConnectionManager = Any
+    RobotService = Any
+    Scheduler = Any
 
 
 def is_valid_uuid(identifier: str) -> bool:
@@ -46,12 +60,16 @@ def is_valid_uuid(identifier: str) -> bool:
 @lru_cache
 def get_project_service() -> ProjectService:
     """Provide a ProjectService instance for managing projects."""
+    from services.project_service import ProjectService
+
     return ProjectService()
 
 
 @lru_cache
 def get_robot_service() -> RobotService:
     """Provide a RobotService instance for managing robots in a project."""
+    from robots.robot_service import RobotService
+
     return RobotService()
 
 
@@ -70,6 +88,8 @@ RobotConnectionManagerDep = Annotated[RobotConnectionManager, Depends(get_robot_
 
 def get_robot_calibration_service(robot_manager: RobotConnectionManagerDep) -> RobotCalibrationService:
     """Provide a RobotCalibrationService instance for managing robot calibrations."""
+    from services.robot_calibration_service import RobotCalibrationService
+
     return RobotCalibrationService(robot_manager, settings=get_settings())
 
 
@@ -79,53 +99,72 @@ RobotCalibrationServiceDep = Annotated[RobotCalibrationService, Depends(get_robo
 @lru_cache
 def get_camera_service() -> ProjectCameraService:
     """Provide a ProjectCameraService instance for managing cameras in a project."""
+    from services.project_camera_service import ProjectCameraService
+
     return ProjectCameraService()
 
 
 @lru_cache
 def get_environment_service() -> EnvironmentService:
     """Provide a EnvironmentService instance for managing environments in a project."""
+    from services.environment_service import EnvironmentService
+
     return EnvironmentService()
 
 
 @lru_cache
 def get_dataset_service() -> DatasetService:
     """Provides a DatasetService instance for managing datasets."""
+    from services.dataset_service import DatasetService
+
     return DatasetService()
 
 
 @lru_cache
 def get_dataset_download_service() -> DatasetDownloadService:
     """Provides a DatasetDownloadService instance for dataset exports."""
+    from services.dataset_download_service import DatasetDownloadService
+
     return DatasetDownloadService()
 
 
 @lru_cache
 def get_episode_thumbnail_service() -> EpisodeThumbnailService:
     """Provides a service for building episode thumbnails."""
+    from services.episode_thumbnail_service import EpisodeThumbnailService
+
     return EpisodeThumbnailService()
 
 
 @lru_cache
 def get_model_service() -> ModelService:
     """Provides a ModelService instance for managing models."""
+    from services.model_service import ModelService
+
     return ModelService()
 
 
 @lru_cache
 def get_model_download_service() -> ModelDownloadService:
     """Provides a ModelDownloadService instance for model exports."""
+    from services.model_download_service import ModelDownloadService
+
     return ModelDownloadService()
 
 
 @lru_cache
 def get_job_service() -> JobService:
     """Provides a JobService instance for managing jobs."""
+    from services.job_service import JobService
+
     return JobService()
 
 
 def get_log_service(request: HTTPConnection) -> LogService:
     """Provides a LogService instance for managing logs."""
+    from services.job_service import JobService
+    from services.log_service import LogService
+
     settings = getattr(request.app.state, "settings", None)
     if settings is None:
         settings = get_settings()
@@ -195,12 +234,12 @@ def validate_uuid(uuid: str) -> UUID:
     return UUID(uuid)
 
 
-def get_scheduler(request: HTTPConnection) -> "Scheduler":
+def get_scheduler(request: HTTPConnection) -> Scheduler:
     """Provide the global Scheduler instance."""
     return request.app.state.scheduler
 
 
-def get_scheduler_ws(request: HTTPConnection) -> "Scheduler":
+def get_scheduler_ws(request: HTTPConnection) -> Scheduler:
     """Provide the global Scheduler instance for WebSocket."""
     return request.app.state.scheduler
 

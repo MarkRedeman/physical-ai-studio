@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
@@ -18,7 +18,15 @@ from api.utils import safe_archive_name
 from internal_datasets.mutations.delete_episode_mutation import DeleteEpisodesMutation
 from internal_datasets.utils import get_internal_dataset
 from schemas import Dataset, Episode, EpisodeInfo
-from services import DatasetDownloadService, DatasetService, EpisodeThumbnailService
+
+if TYPE_CHECKING:
+    from services.dataset_download_service import DatasetDownloadService
+    from services.dataset_service import DatasetService
+    from services.episode_thumbnail_service import EpisodeThumbnailService
+else:
+    DatasetDownloadService = Any
+    DatasetService = Any
+    EpisodeThumbnailService = Any
 
 router = APIRouter(prefix="/api/dataset", tags=["Dataset"])
 

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -13,7 +13,15 @@ from api.utils import safe_archive_name
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
 from schemas import Model
-from services import DatasetService, ModelDownloadService, ModelService
+
+if TYPE_CHECKING:
+    from services.dataset_service import DatasetService
+    from services.model_download_service import ModelDownloadService
+    from services.model_service import ModelService
+else:
+    DatasetService = Any
+    ModelDownloadService = Any
+    ModelService = Any
 
 router = APIRouter(prefix="/api/models", tags=["Models"])
 

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -11,10 +11,13 @@ from api.dependencies import (
     get_robot_service,
 )
 from schemas.calibration import Calibration
-from services import RobotService
 
 if TYPE_CHECKING:
     from lerobot.motors import MotorCalibration
+    from robots.robot_service import RobotService
+else:
+    MotorCalibration = Any
+    RobotService = Any
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Robot Calibration"])
 
@@ -49,7 +52,7 @@ async def get_project_robot_motor_calibration(
     robot_id: Annotated[UUID, Depends(get_robot_id)],
     robot_service: Annotated[RobotService, Depends(get_robot_service)],
     robot_calibration_service: RobotCalibrationServiceDep,
-) -> "dict[str, MotorCalibration]":
+) -> dict[str, MotorCalibration]:
     """Get available calibrations for robot."""
     robot = await robot_service.get_robot_by_id(project_id, robot_id)
 

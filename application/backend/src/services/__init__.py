@@ -1,12 +1,5 @@
-from robots.robot_service import RobotService
-
-from .dataset_download_service import DatasetDownloadService
-from .dataset_service import DatasetService
-from .episode_thumbnail_service import EpisodeThumbnailService
-from .model_download_service import ModelDownloadService
-from .model_service import ModelService
-from .project_camera_service import ProjectCameraService
-from .project_service import ProjectService
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "DatasetDownloadService",
@@ -16,5 +9,25 @@ __all__ = [
     "ModelService",
     "ProjectCameraService",
     "ProjectService",
-    "RobotService",
 ]
+
+_EXPORTS = {
+    "DatasetDownloadService": "services.dataset_download_service",
+    "DatasetService": "services.dataset_service",
+    "EpisodeThumbnailService": "services.episode_thumbnail_service",
+    "ModelDownloadService": "services.model_download_service",
+    "ModelService": "services.model_service",
+    "ProjectCameraService": "services.project_camera_service",
+    "ProjectService": "services.project_service",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_path = _EXPORTS.get(name)
+    if module_path is None:
+        raise AttributeError(f"module 'services' has no attribute {name!r}")
+
+    module = import_module(module_path)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
