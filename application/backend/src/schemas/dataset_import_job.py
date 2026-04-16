@@ -42,6 +42,7 @@ class ImportStep(StrEnum):
 
 
 class DatasetImportSource(StrEnum):
+    LEROBOT_V2 = "lerobot_v2"
     LEROBOT_V3 = "lerobot_v3"
     UNKNOWN = "unknown"
 
