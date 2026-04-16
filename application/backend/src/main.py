@@ -15,6 +15,7 @@ from api.dataset import router as dataset_router
 from api.dependencies import CameraRegistryDep, RobotRegistryDep
 from api.environments import router as project_environments_router
 from api.hardware import router as hardware_router
+from api.imports import router as imports_router
 from api.job import router as job_router
 from api.logs import router as logs_router
 from api.models import router as models_router
@@ -59,6 +60,7 @@ app.include_router(settings_router)
 app.include_router(models_router)
 app.include_router(policies_router)
 app.include_router(job_router)
+app.include_router(imports_router)
 app.include_router(logs_router)
 app.include_router(system_router)
 
