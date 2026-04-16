@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .base import DatasetImportAdapter
+from .lerobot_v3 import LeRobotV3Adapter
 
 if TYPE_CHECKING:
     from services.archive_safety import SafeZipArchive
 
 REGISTERED_DATASET_IMPORT_ADAPTERS: tuple[DatasetImportAdapter, ...] = (
-    # Will be added in separate PR
+    LeRobotV3Adapter(),
 )
 
 
@@ -55,6 +56,7 @@ def select_dataset_import_adapter(
 
 __all__ = [
     "DatasetImportAdapter",
+    "LeRobotV3Adapter",
     "get_registered_dataset_import_adapters",
     "get_supported_dataset_import_sources",
     "select_dataset_import_adapter",
