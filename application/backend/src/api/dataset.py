@@ -22,6 +22,7 @@ from schemas import Dataset, Episode, EpisodeInfo
 from services import DatasetDownloadService, DatasetService, EpisodeThumbnailService
 
 router = APIRouter(prefix="/api/dataset", tags=["Dataset"])
+CLIENT_CLOSED_REQUEST = 499
 
 
 @router.get("/{dataset_id}")
@@ -74,6 +75,9 @@ async def get_episode_thumbnail(  # noqa: PLR0913
     if not isinstance(internal_dataset, InternalLeRobotDataset):
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Thumbnail is unsupported")
 
+    if await request.is_disconnected():
+        return Response(status_code=CLIENT_CLOSED_REQUEST)
+
     thumbnail = thumbnail_service.get_thumbnail(
         dataset_id=dataset_id,
         dataset=internal_dataset,
@@ -82,6 +86,9 @@ async def get_episode_thumbnail(  # noqa: PLR0913
         width=width,
         height=height,
     )
+
+    if await request.is_disconnected():
+        return Response(status_code=CLIENT_CLOSED_REQUEST)
 
     if thumbnail is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Episode thumbnail not found")
