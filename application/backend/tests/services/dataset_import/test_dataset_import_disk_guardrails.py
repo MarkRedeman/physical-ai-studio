@@ -81,7 +81,7 @@ def test_worker_run_commit_raises_when_datasets_dir_has_insufficient_space(tmp_p
     the datasets directory filesystem reports no free space."""
     import multiprocessing as mp
 
-    from schemas.import_job import (
+    from schemas.dataset_import_job import (
         DatasetImportFinalizeInput,
         DatasetImportJobPayload,
         DatasetImportSource,

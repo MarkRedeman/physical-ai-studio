@@ -26,7 +26,7 @@ import pytest
 
 from exceptions import InvalidJobStateError, ResourceNotFoundError
 from schemas.base_job import JobStatus
-from schemas.import_job import DatasetImportFinalizeInput, DatasetImportJobPayload, ImportStep
+from schemas.dataset_import_job import DatasetImportFinalizeInput, DatasetImportJobPayload, ImportStep
 from schemas.job import DatasetImportJob
 from services.dataset_import.service import DatasetImportService
 
@@ -407,7 +407,7 @@ async def test_cancel_cleanup_called_with_none_when_no_archive() -> None:
 def test_dataset_manifest_slim_shape_no_legacy_fields() -> None:
     """DatasetManifest no longer carries manifest_version, resource_type, integrity,
     warnings, or missing_fields."""
-    from schemas.import_job import DatasetImportSource, DatasetManifest, DatasetManifestCapture
+    from schemas.dataset_import_job import DatasetImportSource, DatasetManifest, DatasetManifestCapture
 
     manifest = DatasetManifest(
         source_type=DatasetImportSource.UNKNOWN,
@@ -427,7 +427,7 @@ def test_dataset_manifest_slim_shape_no_legacy_fields() -> None:
 
 def test_dataset_manifest_source_slim_shape_no_legacy_fields() -> None:
     """DatasetManifest.source_type is a direct field; no nested DatasetManifestSource wrapper."""
-    from schemas.import_job import DatasetImportSource, DatasetManifest
+    from schemas.dataset_import_job import DatasetImportSource, DatasetManifest
 
     manifest = DatasetManifest(source_type=DatasetImportSource.LEROBOT_V3)
     dumped = manifest.model_dump()
@@ -440,7 +440,7 @@ def test_dataset_manifest_source_slim_shape_no_legacy_fields() -> None:
 
 def test_dataset_manifest_identity_slim_shape_no_default_task() -> None:
     """DatasetManifest.suggested_name is a direct field; no nested DatasetManifestIdentity wrapper."""
-    from schemas.import_job import DatasetManifest
+    from schemas.dataset_import_job import DatasetManifest
 
     manifest = DatasetManifest(suggested_name="my-dataset")
     dumped = manifest.model_dump()
@@ -461,7 +461,7 @@ def test_finalize_input_slim_shape_no_user_overrides() -> None:
 
 def test_import_step_includes_completed() -> None:
     """ImportStep now includes COMPLETED as a terminal enum value."""
-    from schemas.import_job import ImportStep
+    from schemas.dataset_import_job import ImportStep
 
     assert hasattr(ImportStep, "COMPLETED")
     assert ImportStep.COMPLETED == "completed"
@@ -480,7 +480,7 @@ def test_dataset_import_job_payload_validation_report_defaults_to_none() -> None
 
 def test_dataset_import_job_payload_validation_report_is_none_when_no_issues() -> None:
     """validation_report should be set to None when there are no issues (waiting for user input)."""
-    from schemas.import_job import ImportValidationReport
+    from schemas.dataset_import_job import ImportValidationReport
 
     payload = DatasetImportJobPayload(step=ImportStep.WAITING_FOR_USER_INPUT)
     # Simulate the worker behaviour: clean report -> None
@@ -493,7 +493,7 @@ def test_dataset_import_job_payload_validation_report_is_none_when_no_issues() -
 
 def test_dataset_import_job_payload_validation_report_is_set_when_issues_present() -> None:
     """validation_report is preserved when there are blocking_errors, warnings, or required_user_inputs."""
-    from schemas.import_job import ImportValidationIssue, ImportValidationReport
+    from schemas.dataset_import_job import ImportValidationIssue, ImportValidationReport
 
     payload = DatasetImportJobPayload(step=ImportStep.WAITING_FOR_USER_INPUT)
     report = ImportValidationReport(
@@ -514,7 +514,7 @@ def test_dataset_import_job_payload_validation_report_is_set_when_issues_present
 
 def test_completed_payload_step_is_completed() -> None:
     """A completed import job payload must use ImportStep.COMPLETED, not REGISTERING_RESOURCE."""
-    from schemas.import_job import ImportStep
+    from schemas.dataset_import_job import ImportStep
 
     payload = DatasetImportJobPayload(step=ImportStep.COMPLETED)
     assert payload.step == ImportStep.COMPLETED
