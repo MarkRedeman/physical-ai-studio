@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from api.dependencies import get_dataset_import_service
 from main import app
 from schemas.base_job import JobStatus, JobType
-from schemas.import_job import DatasetImportJobPayload, ImportStep
+from schemas.dataset_import_job import DatasetImportJobPayload, ImportStep
 from schemas.job import DatasetImportJob
 
 
