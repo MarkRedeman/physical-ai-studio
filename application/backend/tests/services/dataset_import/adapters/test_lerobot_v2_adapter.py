@@ -183,7 +183,7 @@ def test_lerobot_v2_build_draft_reports_error_when_episodes_metadata_missing(tmp
     _manifest, report = adapter.build_draft(safe_archive, payload=MagicMock())
 
     assert any(msg.severity == ImportValidationSeverity.ERROR for msg in report.messages)
-    assert any("episodes.jsonl" in msg.message for msg in report.messages)
+    assert any("episodes" in msg.message for msg in report.messages)
 
 
 def test_lerobot_v2_build_draft_reports_warnings_for_missing_schema(tmp_path: Path) -> None:

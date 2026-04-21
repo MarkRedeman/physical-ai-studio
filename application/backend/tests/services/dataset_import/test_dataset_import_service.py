@@ -86,10 +86,15 @@ def _patch_repo(stub: _StubJobRepository):
 
 
 def _patch_db():
-    """Return a context manager that replaces the DB session factory."""
+    """Return a context manager that replaces the DB session factory.
+
+    Uses ``new=_fake_db_session_ctx`` so each call to the patched symbol
+    produces a *fresh* async context manager instead of reusing a single
+    pre-created instance.
+    """
     return patch(
         "services.dataset_import.service.get_async_db_session_ctx",
-        return_value=_fake_db_session_ctx(),
+        new=_fake_db_session_ctx,
     )
 
 
@@ -375,6 +380,35 @@ async def test_cancel_succeeds_for_non_blocked_steps_with_staging_id(allowed_ste
     assert called_path.name == f"{_STAGING_ID}.zip"
 
 
+@pytest.mark.anyio
+async def test_cancel_succeeds_at_completed_step() -> None:
+    """Cancel at COMPLETED step is allowed (only IMPORTING/REGISTERING are blocked).
+
+    The service must set status=CANCELED and end_time, and trigger archive cleanup.
+    """
+    project_id = uuid4()
+    job = _make_job(project_id=project_id, step=ImportStep.COMPLETED, archive_staging_id=_STAGING_ID)
+    stub = _StubJobRepository(job=job)
+
+    with _patch_db(), _patch_repo(stub), _patch_cleanup() as mock_cleanup:
+        result = await DatasetImportService.cancel_dataset_import_job(
+            project_id=project_id,
+            job_id=job.id,
+        )
+
+    assert result is not None
+    assert len(stub.updated) == 1
+    _, updates = stub.updated[0]
+    assert updates["status"] == JobStatus.CANCELED
+    assert "end_time" in updates
+    assert updates["end_time"] is not None
+    from pathlib import Path
+
+    called_path = mock_cleanup.call_args[0][0]
+    assert isinstance(called_path, Path)
+    assert called_path.name == f"{_STAGING_ID}.zip"
+
+
 # ---------------------------------------------------------------------------
 # Schema shape and validation_report optionality
 # ---------------------------------------------------------------------------
@@ -426,13 +460,16 @@ def test_dataset_manifest_identity_slim_shape_no_default_task() -> None:
 
 
 def test_finalize_input_slim_shape_no_user_overrides() -> None:
-    """DatasetImportFinalizeInput no longer carries user_overrides."""
+    """DatasetImportFinalizeInput no longer carries user_overrides; default_task must be present."""
     env_id = uuid4()
     finalize_input = DatasetImportFinalizeInput(dataset_name="test", environment_id=env_id)
     dumped = finalize_input.model_dump(mode="json")
 
     assert "user_overrides" not in dumped
     assert dumped["dataset_name"] == "test"
+    # default_task is a first-class field and must always be serialized
+    assert "default_task" in dumped
+    assert dumped["default_task"] == ""
 
 
 def test_import_step_includes_completed() -> None:

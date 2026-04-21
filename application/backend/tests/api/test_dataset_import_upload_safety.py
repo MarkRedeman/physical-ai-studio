@@ -146,7 +146,7 @@ def test_upload_rejects_archive_with_too_large_uncompressed_size_and_does_not_at
     assert stub.calls == []
 
 
-def test_upload_accepts_valid_zip_and_attaches_archive() -> None:
+def test_upload_accepts_valid_zip_and_attaches_archive(tmp_path: Path) -> None:
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
@@ -162,22 +162,39 @@ def test_upload_accepts_valid_zip_and_attaches_archive() -> None:
         compression=zipfile.ZIP_STORED,
     )
 
-    try:
-        client = TestClient(app)
-        response = client.put(
-            f"/api/projects/{project_id}/imports/datasets/{job_id}:upload",
-            files={"archive": ("dataset.zip", archive_bytes, "application/zip")},
-        )
-    finally:
-        app.dependency_overrides.clear()
+    def _make_settings(cache_dir: Path):
+        from unittest.mock import MagicMock
+
+        s = MagicMock()
+        s.cache_dir = cache_dir
+        s.data_import_max_upload_bytes = 100 * 1024 * 1024 * 1024
+        s.data_import_min_free_bytes = 0
+        s.data_import_max_uncompressed_bytes = 200 * 1024 * 1024 * 1024
+        return s
+
+    with (
+        patch("api.imports.get_settings", return_value=_make_settings(tmp_path)),
+        patch("services.dataset_import.staging.get_settings", return_value=_make_settings(tmp_path)),
+    ):
+        try:
+            client = TestClient(app)
+            response = client.put(
+                f"/api/projects/{project_id}/imports/datasets/{job_id}:upload",
+                files={"archive": ("dataset.zip", archive_bytes, "application/zip")},
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+        # Resolve the staging path while patches are still active so get_settings
+        # returns the same tmp_path-based cache_dir used during the upload.
+        from services.dataset_import.staging import resolve_payload_archive_path
+
+        staged_path = resolve_payload_archive_path(job_stub._job.payload)
 
     assert response.status_code == 202
     assert len(stub.calls) == 1
     assert stub.calls[0]["uploaded_archive_name"] == "dataset.zip"
     # The file should have been written to the staging path derived from the job's archive_staging_id.
-    from services.dataset_import.staging import resolve_payload_archive_path
-
-    staged_path = resolve_payload_archive_path(job_stub._job.payload)
     assert staged_path.exists()
     staged_path.unlink(missing_ok=True)
 
@@ -234,7 +251,9 @@ def test_upload_rejects_when_content_length_exceeds_max() -> None:
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
+    job_stub = _StubJobService(project_id, job_id)
     app.dependency_overrides[get_dataset_import_service] = lambda: stub
+    app.dependency_overrides[get_job_service] = lambda: job_stub
 
     # A tiny but valid ZIP - the rejection must happen purely on the header value.
     archive_bytes = _make_zip_bytes(
@@ -270,7 +289,9 @@ def test_upload_rejects_when_cache_dir_has_insufficient_free_space() -> None:
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
+    job_stub = _StubJobService(project_id, job_id)
     app.dependency_overrides[get_dataset_import_service] = lambda: stub
+    app.dependency_overrides[get_job_service] = lambda: job_stub
 
     archive_bytes = _make_zip_bytes(
         {"meta/info.json": b"{}"},
