@@ -9,9 +9,9 @@ Dataset import is implemented as an **asynchronous, multi-step job flow**:
 1. API creates an import job (`awaiting_upload`)
 2. API receives and stores uploaded ZIP, then marks job `pending` (`uploaded`)
 3. Worker picks up the job, detects adapter compatibility, and builds a draft manifest
-4. Worker pauses for user input (`waiting_for_user_input`)
+4. Worker runs **pre-finalize assessment** (post-parse checks), then pauses for user input (`waiting_for_user_input`)
 5. API finalizes with required input (dataset name + environment), marks job `pending` (`ready_to_commit`)
-6. Worker commits import and creates the dataset
+6. Worker runs **pre-commit validation** and, if valid, commits import and creates the dataset
 
 Core files:
 
@@ -92,7 +92,7 @@ JSON body (`DatasetImportFinalizeInput`):
 Response:
 
 - Job becomes `status=pending`, `payload.step=ready_to_commit`
-- Worker resumes and performs commit
+- Worker resumes, runs pre-commit validation, then performs commit
 
 ### 5) Completion
 
@@ -117,10 +117,37 @@ Dataset import uses a pluggable adapter model.
 Contract (`adapters/base.py`):
 
 - `detect(archive: SafeZipArchive) -> bool`
-- `parse_to_draft_manifest(archive: SafeZipArchive, payload: DatasetImportJobPayload) -> DatasetManifest`
-- `validate_pre_finalize(manifest: DatasetManifest, payload: DatasetImportJobPayload) -> ImportValidationReport`
+- `build_draft(archive: SafeZipArchive, payload: DatasetImportJobPayload) -> tuple[DatasetManifest, ImportValidationReport]`
 - `validate_pre_commit(payload: DatasetImportJobPayload) -> ImportValidationReport`
 - `commit(payload: DatasetImportJobPayload, project_id: UUID, archive: SafeZipArchive) -> Dataset`
+
+### Stage semantics (important)
+
+`build_draft` and `validate_pre_commit` happen at different points for different purposes:
+
+| Method | When it runs | Purpose |
+|---|---|---|
+| `build_draft` | After adapter detection, before user finalization input | Parse canonical draft manifest and return user-facing assessment messages |
+| `validate_pre_commit` | Immediately before `commit(...)` | Final gate: block execution if required data is missing or invalid |
+
+### Suggested naming (conceptual)
+
+Current names are kept for code stability, but conceptually:
+
+- `build_draft` ≈ **`parse_and_assess_draft`**
+- `validate_pre_commit` ≈ **`validate_ready_to_commit`**
+
+These names better communicate intent than "pre_*" alone.
+
+### "Parse, don't validate" in current design
+
+We follow this by combining draft parsing and user-facing draft assessment into one operation:
+
+- `build_draft(...)` returns `(manifest, report)`
+- hard parse failures still raise exceptions
+- soft issues are returned as validation messages for UX
+
+`validate_pre_commit(...)` remains separate as the strict execution gate immediately before import.
 
 Worker behavior:
 
@@ -168,7 +195,9 @@ Additional adapter behavior:
 - Prefer `source_hint=auto` unless user explicitly chooses `lerobot_v3`
 - Show progress and status messages from job updates
 - Wait for `waiting_for_user_input` before enabling final submit
-- Surface worker validation errors (`payload.validation_report.blocking_errors`) clearly to users
+- Surface worker validation messages (`payload.validation_report.messages`) clearly to users
+  - treat `severity=error` as blocking
+  - treat `severity=warning` as non-blocking
 
 ---
 
