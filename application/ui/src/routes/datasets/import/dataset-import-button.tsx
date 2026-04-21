@@ -51,14 +51,25 @@ interface DatasetFields {
 }
 
 interface DraftManifestSummary {
-    source?: {
-        source_type?: string;
-        source_format_version?: string;
-    };
-    capture?: {
+    source_type?: string;
+    source_format_version?: string;
+    suggested_name?: string;
+    statistics?: {
         episode_count?: number;
         frame_count?: number;
-        fps?: number;
+    };
+    dataset_schema?: {
+        cameras?: Array<{
+            name?: string;
+            width?: number;
+            height?: number;
+            fps?: number;
+        }>;
+        robots?: Array<{
+            name?: string;
+            type?: string;
+            joints?: string[];
+        }>;
     };
     warnings?: string[];
     missing_fields?: string[];
@@ -498,12 +509,21 @@ const ConfirmDatasetImport = ({
     const job = importJobQuery.data;
     const payload = getImportPayload(job);
     const draft = payload?.dataset_manifest_draft as DraftManifestSummary | undefined;
-    const detectedFormat = draft?.source?.source_type ?? 'unknown';
-    const formatVersion = draft?.source?.source_format_version;
+    const detectedFormat = draft?.source_type ?? 'unknown';
+    const formatVersion = draft?.source_format_version;
+    const cameras = draft?.dataset_schema?.cameras ?? [];
+    const robots = draft?.dataset_schema?.robots ?? [];
 
     const finalizeMutation = $api.useMutation('post', '/api/projects/{project_id}/imports/datasets/{job_id}:finalize');
     const [finalizeError, setFinalizeError] = useState<string | undefined>(undefined);
     const canFinalize = fields.environmentId !== undefined && fields.datasetName.trim().length > 0;
+
+    useEffect(() => {
+        const suggestedName = draft?.suggested_name?.trim();
+        if (suggestedName && fields.datasetName.trim().length === 0) {
+            onFieldsChange({ ...fields, datasetName: suggestedName });
+        }
+    }, [draft?.suggested_name, fields, onFieldsChange]);
 
     const onFinalize = async () => {
         if (!canFinalize || fields.environmentId === undefined) {
@@ -535,26 +555,96 @@ const ConfirmDatasetImport = ({
     return (
         <>
             <Content>
-                <Text>Dataset analyzed. Review fields and click &quot;Finalize import&quot;.</Text>
+                <Text>
+                    Analysis complete. Review the detected metadata below, then provide a dataset name and environment
+                    to finalize the import.
+                </Text>
                 {finalizeError ? <Text>{finalizeError}</Text> : null}
 
                 {draft && (
-                    <Flex direction='column' gap='size-50'>
-                        <Text><strong>Analyzed Dataset Info</strong></Text>
-                        <Text>
-                            Format: {detectedFormat}
-                            {formatVersion ? ` (${formatVersion})` : ''}
-                        </Text>
-                        <Text>Episodes: {draft.capture?.episode_count ?? 'unknown'}</Text>
-                        <Text>Frames: {draft.capture?.frame_count ?? 'unknown'}</Text>
-                        <Text>FPS: {draft.capture?.fps ?? 'unknown'}</Text>
-                        {draft.warnings && draft.warnings.length > 0 && (
-                            <Text>Warnings: {draft.warnings.join(', ')}</Text>
-                        )}
-                        {draft.missing_fields && draft.missing_fields.length > 0 && (
-                            <Text>Missing Fields: {draft.missing_fields.join(', ')}</Text>
-                        )}
-                    </Flex>
+                    <View backgroundColor='gray-50' borderColor='gray-200' borderWidth='thick' padding='size-200'>
+                        <Flex direction='column' gap='size-150'>
+                            <Heading level={4}>Detected dataset summary</Heading>
+
+                            <Flex direction='row' wrap='wrap' gap='size-300'>
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Source format</strong>
+                                    </Text>
+                                    <Text>
+                                        {detectedFormat}
+                                        {formatVersion ? ` (${formatVersion})` : ''}
+                                    </Text>
+                                </Flex>
+
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Statistics</strong>
+                                    </Text>
+                                    <Text>Episodes: {draft.statistics?.episode_count ?? '—'}</Text>
+                                    <Text>Frames: {draft.statistics?.frame_count ?? '—'}</Text>
+                                </Flex>
+
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Schema overview</strong>
+                                    </Text>
+                                    <Text>Cameras: {cameras.length}</Text>
+                                    <Text>Robots: {robots.length}</Text>
+                                </Flex>
+                            </Flex>
+
+                            {cameras.length > 0 && (
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Cameras</strong>
+                                    </Text>
+                                    {cameras.map((camera, index) => (
+                                        <Text key={`${camera.name ?? 'camera'}-${index}`}>
+                                            {camera.name ?? `Camera ${index + 1}`}: {camera.width ?? '—'}×
+                                            {camera.height ?? '—'} @ {camera.fps ?? '—'} FPS
+                                        </Text>
+                                    ))}
+                                </Flex>
+                            )}
+
+                            {robots.length > 0 && (
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Robots</strong>
+                                    </Text>
+                                    {robots.map((robot, index) => (
+                                        <Text key={`${robot.name ?? 'robot'}-${index}`}>
+                                            {robot.name ?? `Robot ${index + 1}`} ({robot.type ?? 'unknown'}) — joints:{' '}
+                                            {robot.joints?.length ?? 0}
+                                        </Text>
+                                    ))}
+                                </Flex>
+                            )}
+
+                            {draft.warnings && draft.warnings.length > 0 && (
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Warnings</strong>
+                                    </Text>
+                                    {draft.warnings.map((warning, index) => (
+                                        <Text key={`${warning}-${index}`}>• {warning}</Text>
+                                    ))}
+                                </Flex>
+                            )}
+
+                            {draft.missing_fields && draft.missing_fields.length > 0 && (
+                                <Flex direction='column' gap='size-50'>
+                                    <Text>
+                                        <strong>Missing fields</strong>
+                                    </Text>
+                                    {draft.missing_fields.map((field, index) => (
+                                        <Text key={`${field}-${index}`}>• {field}</Text>
+                                    ))}
+                                </Flex>
+                            )}
+                        </Flex>
+                    </View>
                 )}
 
                 <Picker
