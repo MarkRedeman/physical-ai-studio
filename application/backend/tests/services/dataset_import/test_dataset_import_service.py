@@ -41,7 +41,7 @@ def _make_job(
     *,
     project_id=None,
     step: ImportStep = ImportStep.AWAITING_UPLOAD,
-    archive_staging_id: str | None = None,
+    archive_staging_id: str = _STAGING_ID,
 ) -> DatasetImportJob:
     """Build a minimal ``DatasetImportJob`` with the given step."""
     return DatasetImportJob(
@@ -121,7 +121,6 @@ async def test_attach_raises_resource_not_found_when_job_not_found() -> None:
         await DatasetImportService.attach_dataset_import_archive(
             project_id=project_id,
             job_id=uuid4(),
-            archive_staging_id=_STAGING_ID,
             uploaded_archive_name="dataset.zip",
         )
 
@@ -138,7 +137,6 @@ async def test_attach_raises_resource_not_found_when_project_mismatch() -> None:
         await DatasetImportService.attach_dataset_import_archive(
             project_id=project_id,
             job_id=job.id,
-            archive_staging_id=_STAGING_ID,
             uploaded_archive_name="dataset.zip",
         )
 
@@ -154,7 +152,6 @@ async def test_attach_raises_invalid_job_state_when_wrong_step() -> None:
         await DatasetImportService.attach_dataset_import_archive(
             project_id=project_id,
             job_id=job.id,
-            archive_staging_id=_STAGING_ID,
             uploaded_archive_name="dataset.zip",
         )
 
@@ -170,7 +167,6 @@ async def test_attach_succeeds_when_step_is_awaiting_upload() -> None:
         result = await DatasetImportService.attach_dataset_import_archive(
             project_id=project_id,
             job_id=job.id,
-            archive_staging_id=_STAGING_ID,
             uploaded_archive_name="dataset.zip",
         )
 
@@ -379,26 +375,6 @@ async def test_cancel_succeeds_for_non_blocked_steps_with_staging_id(allowed_ste
     assert called_path.name == f"{_STAGING_ID}.zip"
 
 
-@pytest.mark.anyio
-async def test_cancel_cleanup_called_with_none_when_no_archive() -> None:
-    """Archive cleanup is called with None when archive_staging_id is absent."""
-    project_id = uuid4()
-    job = _make_job(
-        project_id=project_id,
-        step=ImportStep.AWAITING_UPLOAD,
-        archive_staging_id=None,
-    )
-    stub = _StubJobRepository(job=job)
-
-    with _patch_db(), _patch_repo(stub), _patch_cleanup() as mock_cleanup:
-        await DatasetImportService.cancel_dataset_import_job(
-            project_id=project_id,
-            job_id=job.id,
-        )
-
-    mock_cleanup.assert_called_once_with(None)
-
-
 # ---------------------------------------------------------------------------
 # Schema shape and validation_report optionality
 # ---------------------------------------------------------------------------
@@ -407,12 +383,12 @@ async def test_cancel_cleanup_called_with_none_when_no_archive() -> None:
 def test_dataset_manifest_slim_shape_no_legacy_fields() -> None:
     """DatasetManifest no longer carries manifest_version, resource_type, integrity,
     warnings, or missing_fields."""
-    from schemas.dataset_import_job import DatasetImportSource, DatasetManifest, DatasetManifestCapture
+    from schemas.dataset_import_job import DatasetImportSource, DatasetManifest, DatasetManifestStatistics
 
     manifest = DatasetManifest(
         source_type=DatasetImportSource.UNKNOWN,
         suggested_name="test",
-        capture=DatasetManifestCapture(fps=30, episode_count=5, frame_count=150),
+        statistics=DatasetManifestStatistics(episode_count=5, frame_count=150),
     )
     dumped = manifest.model_dump(by_alias=True)
 
@@ -421,8 +397,8 @@ def test_dataset_manifest_slim_shape_no_legacy_fields() -> None:
     assert "integrity" not in dumped
     assert "warnings" not in dumped
     assert "missing_fields" not in dumped
-    # schema must still be present (via alias)
-    assert "schema" in dumped
+    # dataset_schema must still be present
+    assert "dataset_schema" in dumped
 
 
 def test_dataset_manifest_source_slim_shape_no_legacy_fields() -> None:
@@ -474,7 +450,7 @@ def test_import_step_includes_completed() -> None:
 
 def test_dataset_import_job_payload_validation_report_defaults_to_none() -> None:
     """A freshly created DatasetImportJobPayload has validation_report=None."""
-    payload = DatasetImportJobPayload(step=ImportStep.AWAITING_UPLOAD)
+    payload = DatasetImportJobPayload(step=ImportStep.AWAITING_UPLOAD, archive_staging_id=_STAGING_ID)
     assert payload.validation_report is None
 
 
@@ -482,29 +458,28 @@ def test_dataset_import_job_payload_validation_report_is_none_when_no_issues() -
     """validation_report should be set to None when there are no issues (waiting for user input)."""
     from schemas.dataset_import_job import ImportValidationReport
 
-    payload = DatasetImportJobPayload(step=ImportStep.WAITING_FOR_USER_INPUT)
-    # Simulate the worker behaviour: clean report -> None
-    report = ImportValidationReport(is_valid=True)
-    has_issues = bool(report.blocking_errors or report.warnings or report.required_user_inputs)
+    payload = DatasetImportJobPayload(step=ImportStep.WAITING_FOR_USER_INPUT, archive_staging_id=_STAGING_ID)
+    # Simulate the worker behaviour: clean report (no messages) -> None
+    report = ImportValidationReport()
+    has_issues = bool(report.messages)
     payload.validation_report = report if has_issues else None
 
     assert payload.validation_report is None
 
 
 def test_dataset_import_job_payload_validation_report_is_set_when_issues_present() -> None:
-    """validation_report is preserved when there are blocking_errors, warnings, or required_user_inputs."""
-    from schemas.dataset_import_job import ImportValidationIssue, ImportValidationReport
+    """validation_report is preserved when there are messages (e.g. errors)."""
+    from schemas.dataset_import_job import ImportValidationReport, ImportValidationSeverity
 
-    payload = DatasetImportJobPayload(step=ImportStep.WAITING_FOR_USER_INPUT)
-    report = ImportValidationReport(
-        is_valid=False,
-        blocking_errors=[ImportValidationIssue(code="missing_field", message="env is required")],
-    )
-    has_issues = bool(report.blocking_errors or report.warnings or report.required_user_inputs)
+    payload = DatasetImportJobPayload(step=ImportStep.WAITING_FOR_USER_INPUT, archive_staging_id=_STAGING_ID)
+    report = ImportValidationReport()
+    report.add_error("env is required")
+    has_issues = bool(report.messages)
     payload.validation_report = report if has_issues else None
 
     assert payload.validation_report is not None
-    assert len(payload.validation_report.blocking_errors) == 1
+    assert len(payload.validation_report.messages) == 1
+    assert payload.validation_report.messages[0].severity == ImportValidationSeverity.ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +491,7 @@ def test_completed_payload_step_is_completed() -> None:
     """A completed import job payload must use ImportStep.COMPLETED, not REGISTERING_RESOURCE."""
     from schemas.dataset_import_job import ImportStep
 
-    payload = DatasetImportJobPayload(step=ImportStep.COMPLETED)
+    payload = DatasetImportJobPayload(step=ImportStep.COMPLETED, archive_staging_id=_STAGING_ID)
     assert payload.step == ImportStep.COMPLETED
     assert payload.step != ImportStep.REGISTERING_RESOURCE
 
@@ -537,7 +512,6 @@ async def test_attach_archive_does_not_set_end_time_for_pending_status() -> None
         await DatasetImportService.attach_dataset_import_archive(
             project_id=project_id,
             job_id=job.id,
-            archive_staging_id=_STAGING_ID,
             uploaded_archive_name="dataset.zip",
         )
 

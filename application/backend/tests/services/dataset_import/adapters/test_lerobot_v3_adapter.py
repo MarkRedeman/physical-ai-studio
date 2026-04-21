@@ -124,9 +124,8 @@ def test_lerobot_v3_parse_manifest_reads_stats_from_nested_root_zip(tmp_path: Pa
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    assert manifest.capture.fps == 20
-    assert manifest.capture.episode_count == 3
-    assert manifest.capture.frame_count == 23
+    assert manifest.statistics.episode_count == 3
+    assert manifest.statistics.frame_count == 23
 
 
 def test_lerobot_v3_parse_manifest_schema_empty_when_no_features(tmp_path: Path) -> None:
@@ -145,8 +144,8 @@ def test_lerobot_v3_parse_manifest_schema_empty_when_no_features(tmp_path: Path)
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    assert manifest.schema_.cameras == []
-    assert manifest.schema_.robots == []
+    assert manifest.dataset_schema.cameras == []
+    assert manifest.dataset_schema.robots == []
 
 
 def test_lerobot_v3_parse_manifest_schema_two_cameras_six_joints(tmp_path: Path) -> None:
@@ -207,7 +206,7 @@ def test_lerobot_v3_parse_manifest_schema_two_cameras_six_joints(tmp_path: Path)
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    schema = manifest.schema_
+    schema = manifest.dataset_schema
 
     # Two cameras
     assert len(schema.cameras) == 2
@@ -267,7 +266,7 @@ def test_lerobot_v3_parse_manifest_schema_joints_deduped_across_action_and_state
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    assert manifest.schema_.robots[0].joints == ["joint_a", "joint_b"]
+    assert manifest.dataset_schema.robots[0].joints == ["joint_a", "joint_b"]
 
 
 def test_lerobot_v3_parse_manifest_schema_camera_falls_back_to_shape_dims(tmp_path: Path) -> None:
@@ -297,7 +296,7 @@ def test_lerobot_v3_parse_manifest_schema_camera_falls_back_to_shape_dims(tmp_pa
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    cameras = manifest.schema_.cameras
+    cameras = manifest.dataset_schema.cameras
     assert len(cameras) == 1
     cam = cameras[0]
     assert cam.name == "front"

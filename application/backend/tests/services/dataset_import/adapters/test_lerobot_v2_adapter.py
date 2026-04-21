@@ -67,9 +67,8 @@ def test_lerobot_v2_parse_manifest_reads_stats_from_nested_root_zip(tmp_path: Pa
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    assert manifest.capture.fps == 30
-    assert manifest.capture.episode_count == 2
-    assert manifest.capture.frame_count == 25
+    assert manifest.statistics.episode_count == 2
+    assert manifest.statistics.frame_count == 25
 
 
 def test_lerobot_v2_parse_manifest_schema_empty_when_no_features(tmp_path: Path) -> None:
@@ -90,8 +89,8 @@ def test_lerobot_v2_parse_manifest_schema_empty_when_no_features(tmp_path: Path)
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    assert manifest.schema_.cameras == []
-    assert manifest.schema_.robots == []
+    assert manifest.dataset_schema.cameras == []
+    assert manifest.dataset_schema.robots == []
 
 
 def test_lerobot_v2_parse_manifest_schema_cameras_and_joints(tmp_path: Path) -> None:
@@ -131,7 +130,7 @@ def test_lerobot_v2_parse_manifest_schema_cameras_and_joints(tmp_path: Path) -> 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    schema = manifest.schema_
+    schema = manifest.dataset_schema
 
     assert len(schema.cameras) == 1
     cam = schema.cameras[0]

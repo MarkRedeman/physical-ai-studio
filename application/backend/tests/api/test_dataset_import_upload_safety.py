@@ -6,11 +6,13 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from api.dependencies import get_dataset_import_service
+from api.dependencies import get_dataset_import_service, get_job_service
 from main import app
 from schemas.base_job import JobStatus, JobType
 from schemas.dataset_import_job import DatasetImportJobPayload, ImportStep
 from schemas.job import DatasetImportJob
+
+_FIXED_STAGING_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
 class _StubDatasetImportService:
@@ -18,12 +20,11 @@ class _StubDatasetImportService:
         self.project_id = project_id
         self.calls: list[dict] = []
 
-    async def attach_dataset_import_archive(self, project_id, job_id, archive_staging_id, uploaded_archive_name):
+    async def attach_dataset_import_archive(self, project_id, job_id, uploaded_archive_name):
         self.calls.append(
             {
                 "project_id": project_id,
                 "job_id": job_id,
-                "archive_staging_id": archive_staging_id,
                 "uploaded_archive_name": uploaded_archive_name,
             }
         )
@@ -36,11 +37,32 @@ class _StubDatasetImportService:
             payload=DatasetImportJobPayload(
                 type=JobType.DATASET_IMPORT,
                 step=ImportStep.UPLOADED,
-                archive_staging_id=archive_staging_id,
+                archive_staging_id=_FIXED_STAGING_ID,
                 uploaded_archive_name=uploaded_archive_name,
                 source_hint="auto",
             ),
         )
+
+
+class _StubJobService:
+    """Minimal stub for JobService that returns a valid AWAITING_UPLOAD job."""
+
+    def __init__(self, project_id, job_id):
+        self.project_id = project_id
+        self.job_id = job_id
+        self._job = DatasetImportJob(
+            id=job_id,
+            project_id=project_id,
+            status=JobStatus.PENDING,
+            payload=DatasetImportJobPayload(
+                step=ImportStep.AWAITING_UPLOAD,
+                archive_staging_id=_FIXED_STAGING_ID,
+                source_hint="auto",
+            ),
+        )
+
+    async def get_job_by_id(self, job_id):
+        return self._job
 
 
 def _make_zip_bytes(files: dict[str, bytes], *, compression=zipfile.ZIP_DEFLATED) -> bytes:
@@ -55,7 +77,9 @@ def test_upload_rejects_nested_zip_and_does_not_attach_archive() -> None:
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
+    job_stub = _StubJobService(project_id, job_id)
     app.dependency_overrides[get_dataset_import_service] = lambda: stub
+    app.dependency_overrides[get_job_service] = lambda: job_stub
 
     nested_zip_bytes = _make_zip_bytes({"payload.txt": b"hello"})
     outer_zip_bytes = _make_zip_bytes(
@@ -86,7 +110,9 @@ def test_upload_rejects_archive_with_too_large_uncompressed_size_and_does_not_at
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
+    job_stub = _StubJobService(project_id, job_id)
     app.dependency_overrides[get_dataset_import_service] = lambda: stub
+    app.dependency_overrides[get_job_service] = lambda: job_stub
 
     large_payload = b"A" * 10_000
     archive_bytes = _make_zip_bytes(
@@ -124,7 +150,9 @@ def test_upload_accepts_valid_zip_and_attaches_archive() -> None:
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
+    job_stub = _StubJobService(project_id, job_id)
     app.dependency_overrides[get_dataset_import_service] = lambda: stub
+    app.dependency_overrides[get_job_service] = lambda: job_stub
 
     archive_bytes = _make_zip_bytes(
         {
@@ -145,14 +173,11 @@ def test_upload_accepts_valid_zip_and_attaches_archive() -> None:
 
     assert response.status_code == 202
     assert len(stub.calls) == 1
-    # The API now passes archive_staging_id (a UUID string) to the service.
-    staging_id = stub.calls[0]["archive_staging_id"]
-    assert staging_id is not None
     assert stub.calls[0]["uploaded_archive_name"] == "dataset.zip"
-    # The file should have been written to the staging path derived from that id.
-    from services.dataset_import.staging import staging_path_for_id
+    # The file should have been written to the staging path derived from the job's archive_staging_id.
+    from services.dataset_import.staging import resolve_payload_archive_path
 
-    staged_path = staging_path_for_id(staging_id)
+    staged_path = resolve_payload_archive_path(job_stub._job.payload)
     assert staged_path.exists()
     staged_path.unlink(missing_ok=True)
 
@@ -161,7 +186,9 @@ def test_upload_rejects_archive_with_too_many_entries() -> None:
     project_id = uuid4()
     job_id = uuid4()
     stub = _StubDatasetImportService(project_id)
+    job_stub = _StubJobService(project_id, job_id)
     app.dependency_overrides[get_dataset_import_service] = lambda: stub
+    app.dependency_overrides[get_job_service] = lambda: job_stub
 
     archive_bytes = _make_zip_bytes(
         {
