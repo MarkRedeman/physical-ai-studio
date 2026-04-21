@@ -11,6 +11,7 @@ import {
     FileTrigger,
     Flex,
     Heading,
+    InlineAlert,
     Item,
     Loading,
     Picker,
@@ -40,7 +41,7 @@ type EnvironmentOption = { id: string; name: string };
 type ImportPhase =
     | { step: 'editing'; errorMessage?: string }
     | { step: 'awaiting_detection' }
-    | { step: 'detection_failed'; errorMessage: string }
+    | { step: 'detection_failed'; errorMessage: string; errorTitle?: string }
     | { step: 'ready_to_finalize' }
     | { step: 'awaiting_import' };
 
@@ -259,7 +260,12 @@ const ImportDatasetForm = ({
     return (
         <>
             <Content>
-                {errorMessage ? <Text>{errorMessage}</Text> : null}
+                {errorMessage ? (
+                    <InlineAlert variant='negative'>
+                        <Heading>Import setup error</Heading>
+                        <Content>{errorMessage}</Content>
+                    </InlineAlert>
+                ) : null}
 
                 <DropZone
                     isFilled={archive !== null}
@@ -319,7 +325,7 @@ interface DatasetAnalysisInProgressProps {
     onReady: () => void;
     onImporting: () => void;
     onCompleted: (datasetId: string) => void;
-    onDetectionFailed: (message: string) => void;
+    onDetectionFailed: (message: string, errorTitle?: string) => void;
     onFailed: (message: string) => void;
     onClose: () => void;
 }
@@ -354,8 +360,15 @@ const DatasetAnalysisInProgress = ({
             hasTransitionedRef.current = true;
 
             if (payload.step === ('detecting_source' satisfies SchemaImportStep)) {
+                const sourceHint = (payload as { source_hint?: string }).source_hint;
+                const usedAutoDetection = sourceHint === 'auto' || sourceHint === undefined;
+
                 onDetectionFailed(
-                    job.message ?? 'Could not automatically detect the dataset format. Please select a format manually.'
+                    job.message ??
+                        (usedAutoDetection
+                            ? 'Could not automatically detect the dataset format. Please select a format manually.'
+                            : 'Could not detect the selected dataset format. Please choose a different format and retry.'),
+                    usedAutoDetection ? 'Automatic format detection failed' : 'Selected format validation failed'
                 );
             } else {
                 onFailed(job.message ?? 'Import failed during processing.');
@@ -379,7 +392,12 @@ const DatasetAnalysisInProgress = ({
         <>
             <Content>
                 <Text>Upload accepted. Waiting for server-side dataset detection...</Text>
-                {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
+                {importJobQuery.isError ? (
+                    <InlineAlert variant='negative'>
+                        <Heading>Status update failed</Heading>
+                        <Content>Could not fetch the latest import job status. Please try again.</Content>
+                    </InlineAlert>
+                ) : null}
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={onClose}>
@@ -403,11 +421,19 @@ interface DetectionFailedFormProps {
     project_id: string;
     archive: File | null;
     errorMessage: string;
+    errorTitle?: string;
     onRetry: (jobId: string) => void;
     onClose: () => void;
 }
 
-const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClose }: DetectionFailedFormProps) => {
+const DetectionFailedForm = ({
+    project_id,
+    archive,
+    errorMessage,
+    errorTitle,
+    onRetry,
+    onClose,
+}: DetectionFailedFormProps) => {
     const [sourceHint, setSourceHint] = useState<SourceHint>(USER_SOURCE_HINTS[0]);
     const { upload, abort, progress, mutation } = useDatasetUpload(project_id);
 
@@ -432,7 +458,10 @@ const DetectionFailedForm = ({ project_id, archive, errorMessage, onRetry, onClo
     return (
         <>
             <Content>
-                <Text>{errorMessage}</Text>
+                <InlineAlert variant='negative'>
+                    <Heading>{errorTitle ?? 'Format detection failed'}</Heading>
+                    <Content>{errorMessage}</Content>
+                </InlineAlert>
 
                 {archive !== null ? <Text>Archive: {archive.name}</Text> : null}
 
@@ -559,7 +588,12 @@ const ConfirmDatasetImport = ({
                     Analysis complete. Review the detected metadata below, then provide a dataset name and environment
                     to finalize the import.
                 </Text>
-                {finalizeError ? <Text>{finalizeError}</Text> : null}
+                {finalizeError ? (
+                    <InlineAlert variant='negative'>
+                        <Heading>Finalize import failed</Heading>
+                        <Content>{finalizeError}</Content>
+                    </InlineAlert>
+                ) : null}
 
                 {draft && (
                     <View backgroundColor='gray-50' borderColor='gray-200' borderWidth='thick' padding='size-200'>
@@ -732,7 +766,12 @@ const DatasetImportInProgress = ({ jobId, onClose, onCompleted }: DatasetImportI
         <>
             <Content>
                 <Text>Waiting for import to complete...</Text>
-                {importJobQuery.isError ? <Text>Failed to query import job status.</Text> : null}
+                {importJobQuery.isError ? (
+                    <InlineAlert variant='negative'>
+                        <Heading>Status update failed</Heading>
+                        <Content>Could not fetch the latest import job status. Please try again.</Content>
+                    </InlineAlert>
+                ) : null}
                 <Loading mode='inline' variant='intel' size='L' />
             </Content>
 
@@ -836,8 +875,12 @@ const ImportDatasetDialog = ({
                         setImportPhase({ step: 'awaiting_import' });
                     }}
                     onCompleted={onImportDone}
-                    onDetectionFailed={(errorMessage) => {
-                        setImportPhase({ step: 'detection_failed', errorMessage });
+                    onDetectionFailed={(errorMessage, errorTitle) => {
+                        setImportPhase({
+                            step: 'detection_failed',
+                            errorMessage,
+                            errorTitle,
+                        });
                     }}
                     onFailed={(errorMessage) => {
                         setImportPhase({ step: 'editing', errorMessage });
@@ -851,6 +894,7 @@ const ImportDatasetDialog = ({
                     project_id={project_id}
                     archive={archive}
                     errorMessage={importPhase.errorMessage}
+                    errorTitle={importPhase.errorTitle}
                     onRetry={(jobId) => {
                         setImportJobId(jobId);
                         setImportPhase({ step: 'awaiting_detection' });

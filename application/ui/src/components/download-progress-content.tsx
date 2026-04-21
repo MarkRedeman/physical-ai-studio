@@ -1,4 +1,4 @@
-import { Flex, ProgressBar, ProgressCircle, Text } from '@geti-ui/ui';
+import { Content, Flex, Heading, InlineAlert, ProgressBar, ProgressCircle, Text } from '@geti-ui/ui';
 
 type DownloadProgressContentProps = {
     isError: boolean;
@@ -16,7 +16,12 @@ export const DownloadProgressContent = ({
     preparingMessage,
 }: DownloadProgressContentProps) => {
     if (isError) {
-        return <Text>{errorMessage}</Text>;
+        return (
+            <InlineAlert variant='negative'>
+                <Heading>Import error</Heading>
+                <Content>{errorMessage}</Content>
+            </InlineAlert>
+        );
     }
 
     if (!isPending) {

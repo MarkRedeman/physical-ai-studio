@@ -18,6 +18,7 @@ describe('DownloadProgressContent', () => {
 
     it('renders error message when error', () => {
         render(<DownloadProgressContent {...baseProps} isError />);
+        expect(screen.getByText('Import error')).toBeInTheDocument();
         expect(screen.getByText('Download failed')).toBeInTheDocument();
     });
 
@@ -33,6 +34,7 @@ describe('DownloadProgressContent', () => {
 
     it('prioritizes error over pending state', () => {
         render(<DownloadProgressContent {...baseProps} isError isPending progress={42} />);
+        expect(screen.getByText('Import error')).toBeInTheDocument();
         expect(screen.getByText('Download failed')).toBeInTheDocument();
         expect(screen.queryByText('42%')).not.toBeInTheDocument();
     });
