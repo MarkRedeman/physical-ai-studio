@@ -21,8 +21,12 @@ class DatasetImportAdapter(ABC):
     source: DatasetImportSource = DatasetImportSource.UNKNOWN
 
     @abstractmethod
-    def detect(self, archive: SafeZipArchive) -> bool:
-        """Return True if this adapter can process the archive."""
+    def detect(self, archive: SafeZipArchive) -> tuple[bool, ImportValidationReport]:
+        """Return (matched, report) where matched is True if this adapter can process the archive.
+
+        The report may contain error messages explaining why the archive did not match,
+        which callers may surface when the adapter was explicitly requested.
+        """
 
     @abstractmethod
     def build_draft(

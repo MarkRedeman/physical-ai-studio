@@ -10,6 +10,7 @@ from exceptions import InvalidArchiveError, ZipBombDetectedError
 from schemas import Job
 from schemas.base_job import JobType
 from schemas.dataset_import_job import DatasetImportFinalizeInput, DatasetImportJobPayload, ImportStep
+from schemas.job import DatasetImportJob
 from services.archive_safety import SafeZipArchive, check_disk_headroom, cleanup_staged_archive
 from services.dataset_import.adapters import get_supported_dataset_import_sources
 from services.dataset_import.service import DatasetImportService
@@ -39,6 +40,29 @@ async def _persist_uploaded_archive(file: UploadFile, payload: DatasetImportJobP
     return destination
 
 
+async def get_awaiting_upload_job(
+    project_id: ProjectID,
+    job_id: UUID,
+    job_service: Annotated[JobService, Depends(get_job_service)],
+) -> DatasetImportJob:
+    """Dependency: fetch and validate a dataset import job that is awaiting archive upload."""
+    job = await job_service.get_job_by_id(job_id)
+
+    if job.project_id != project_id or job.type != JobType.DATASET_IMPORT:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset import job not found")
+
+    if not isinstance(job.payload, DatasetImportJobPayload):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Dataset import job payload is invalid")
+
+    if job.payload.step != ImportStep.AWAITING_UPLOAD:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Archive can only be uploaded when job is in '{ImportStep.AWAITING_UPLOAD}' step",
+        )
+
+    return job
+
+
 @router.post("/datasets:prepare", status_code=status.HTTP_202_ACCEPTED)
 async def prepare_dataset_import_job(
     project_id: ProjectID,
@@ -65,8 +89,8 @@ async def upload_dataset_import_archive(
     project_id: ProjectID,
     job_id: UUID,
     archive: Annotated[UploadFile, File(description="Dataset archive ZIP")],
+    job: Annotated[DatasetImportJob, Depends(get_awaiting_upload_job)],
     dataset_import_service: Annotated[DatasetImportService, Depends(get_dataset_import_service)],
-    job_service: Annotated[JobService, Depends(get_job_service)],
 ) -> Job:
     """Phase 2: Upload the archive and attach it to an existing import job.
 
@@ -82,27 +106,14 @@ async def upload_dataset_import_archive(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only ZIP archives are supported"
         )
 
+    # Check if there is enough space for dataset import
     settings = get_settings()
-
-    # --- Guard 1: Cache-dir disk headroom ---
     cache_dir = settings.cache_dir / "imports" / "datasets"
     upload_size_estimate = settings.data_import_max_upload_bytes
     check_disk_headroom(cache_dir, upload_size_estimate, settings.data_import_min_free_bytes)
 
-    job = await job_service.get_job_by_id(job_id)
-    if job.project_id != project_id or job.type != JobType.DATASET_IMPORT:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset import job not found")
-    if not isinstance(job.payload, DatasetImportJobPayload):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Dataset import job payload is invalid")
-    if job.payload.step != ImportStep.AWAITING_UPLOAD:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Archive can only be uploaded when job is in '{ImportStep.AWAITING_UPLOAD}' step",
-        )
-
+    # Make sure we are safe against zip bomb attacks
     uploaded_archive_path = await _persist_uploaded_archive(archive, job.payload)
-
-    # --- Guard 2: Archive safety validation ---
     try:
         safe_archive = SafeZipArchive(
             uploaded_archive_path,

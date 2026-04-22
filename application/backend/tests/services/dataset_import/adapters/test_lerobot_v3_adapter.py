@@ -38,7 +38,8 @@ def test_lerobot_v3_detect_returns_true_for_v3_layout(tmp_path: Path) -> None:
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is True
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is True
 
 
 def test_lerobot_v3_detect_returns_true_for_nested_v3_layout(tmp_path: Path) -> None:
@@ -55,7 +56,8 @@ def test_lerobot_v3_detect_returns_true_for_nested_v3_layout(tmp_path: Path) -> 
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is True
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is True
 
 
 def test_lerobot_v3_detect_returns_false_for_v2_layout(tmp_path: Path) -> None:
@@ -73,7 +75,8 @@ def test_lerobot_v3_detect_returns_false_for_v2_layout(tmp_path: Path) -> None:
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is False
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is False
 
 
 def test_lerobot_v3_detect_returns_false_without_tasks_parquet(tmp_path: Path) -> None:
@@ -89,7 +92,8 @@ def test_lerobot_v3_detect_returns_false_without_tasks_parquet(tmp_path: Path) -
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is False
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is False
 
 
 def test_lerobot_v3_detect_returns_false_without_v3_data_files(tmp_path: Path) -> None:
@@ -105,7 +109,8 @@ def test_lerobot_v3_detect_returns_false_without_v3_data_files(tmp_path: Path) -
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is False
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is False
 
 
 def test_lerobot_v3_parse_manifest_reads_stats_from_nested_root_zip(tmp_path: Path) -> None:
@@ -366,3 +371,49 @@ def test_lerobot_v3_build_draft_reports_warning_when_stats_missing(tmp_path: Pat
 
     warning_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.WARNING]
     assert any("stats" in message for message in warning_messages)
+
+
+def test_lerobot_v3_detect_report_includes_v2_marker_error(tmp_path: Path) -> None:
+    """When detect returns False due to v2 markers, report should describe them."""
+    adapter = LeRobotV3Adapter()
+    archive_path = tmp_path / "v2-for-v3-check.zip"
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": b'{"codebase_version":"v2.1"}',
+            "meta/tasks.jsonl": b'{"task_index":0,"task":"pick"}\n',
+            "meta/episodes.jsonl": b'{"episode_index":0,"tasks":["pick"],"length":1}\n',
+            "data/chunk-000/episode_000000.parquet": b"PAR1",
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    matched, report = adapter.detect(safe_archive)
+
+    assert matched is False
+    error_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.ERROR]
+    assert error_messages, "Expected at least one error in detect report for v2 archive"
+    combined = " ".join(error_messages)
+    assert "v2" in combined.lower() or "lerobot" in combined.lower()
+
+
+def test_lerobot_v3_detect_report_includes_missing_markers_error(tmp_path: Path) -> None:
+    """When detect returns False due to missing markers, report should name them."""
+    adapter = LeRobotV3Adapter()
+    archive_path = tmp_path / "incomplete-v3.zip"
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": b'{"codebase_version":"v3.0"}',
+            # missing tasks.parquet and data files
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    matched, report = adapter.detect(safe_archive)
+
+    assert matched is False
+    error_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.ERROR]
+    assert error_messages
+    combined = " ".join(error_messages)
+    assert "tasks.parquet" in combined

@@ -28,7 +28,8 @@ def test_lerobot_v2_detect_returns_true_for_legacy_layout(tmp_path: Path) -> Non
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is True
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is True
 
 
 def test_lerobot_v2_detect_returns_false_without_legacy_markers(tmp_path: Path) -> None:
@@ -44,7 +45,8 @@ def test_lerobot_v2_detect_returns_false_without_legacy_markers(tmp_path: Path) 
     )
 
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
-    assert adapter.detect(safe_archive) is False
+    matched, _report = adapter.detect(safe_archive)
+    assert matched is False
 
 
 def test_lerobot_v2_parse_manifest_reads_stats_from_nested_root_zip(tmp_path: Path) -> None:
@@ -205,3 +207,26 @@ def test_lerobot_v2_build_draft_reports_warnings_for_missing_schema(tmp_path: Pa
     warning_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.WARNING]
     assert any("No camera streams" in message for message in warning_messages)
     assert any("No robot schema" in message for message in warning_messages)
+
+
+def test_lerobot_v2_detect_report_includes_error_when_markers_missing(tmp_path: Path) -> None:
+    """When detect returns False, the report should contain error messages naming missing markers."""
+    adapter = LeRobotV2Adapter()
+    archive_path = tmp_path / "not-v2.zip"
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": b'{"codebase_version":"v3.0"}',
+            "meta/tasks.parquet": b"PAR1",
+            "data/chunk-000/file-000.parquet": b"PAR1",
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    matched, report = adapter.detect(safe_archive)
+
+    assert matched is False
+    error_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.ERROR]
+    assert error_messages, "Expected at least one error message in detect report"
+    combined = " ".join(error_messages)
+    assert "episodes.jsonl" in combined or "tasks.jsonl" in combined

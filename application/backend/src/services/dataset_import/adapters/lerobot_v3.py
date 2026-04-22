@@ -53,8 +53,8 @@ class LeRobotV3Adapter(DatasetImportAdapter):
 
         return episode_count, frame_count
 
-    def detect(self, archive: SafeZipArchive) -> bool:
-        """Return True only for LeRobot v3 archives.
+    def detect(self, archive: SafeZipArchive) -> tuple[bool, ImportValidationReport]:
+        """Return (matched, report) for LeRobot v3 archives.
 
         v3 markers (all required):
           - ``meta/info.json``
@@ -65,16 +65,20 @@ class LeRobotV3Adapter(DatasetImportAdapter):
           - ``meta/episodes.jsonl``  (v2 only)
           - ``meta/tasks.jsonl``     (v2 only)
         """
+        report = ImportValidationReport()
         has_info = False
         has_tasks_parquet = False
         has_v3_data = False
+        rejected_v2_markers: list[str] = []
 
         for name in archive.iter_normalized_names():
             # Reject v2-only markers immediately (handle both flat and nested archives)
             if name == "meta/episodes.jsonl" or name.endswith("/meta/episodes.jsonl"):
-                return False
+                rejected_v2_markers.append("'meta/episodes.jsonl'")
+                break
             if name == "meta/tasks.jsonl" or name.endswith("/meta/tasks.jsonl"):
-                return False
+                rejected_v2_markers.append("'meta/tasks.jsonl'")
+                break
 
             if not has_info and (name == "meta/info.json" or name.endswith("/meta/info.json")):
                 has_info = True
@@ -90,9 +94,27 @@ class LeRobotV3Adapter(DatasetImportAdapter):
                 has_v3_data = True
 
             if has_info and has_tasks_parquet and has_v3_data:
-                return True
+                return True, report
 
-        return False
+        if rejected_v2_markers:
+            report.add_error(
+                f"Archive contains LeRobot v2 markers ({', '.join(rejected_v2_markers)}); "
+                "use the lerobot_v2 source format instead."
+            )
+            return False, report
+
+        missing = []
+        if not has_info:
+            missing.append("'meta/info.json'")
+        if not has_tasks_parquet:
+            missing.append("'meta/tasks.parquet'")
+        if not has_v3_data:
+            missing.append("v3 data files ('data/chunk-*/file-*.parquet')")
+
+        if missing:
+            report.add_error(f"LeRobot v3 markers not found: {', '.join(missing)}.")
+
+        return False, report
 
     def build_draft(
         self,

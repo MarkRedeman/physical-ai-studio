@@ -12,7 +12,6 @@ from schemas.dataset_import_job import DatasetImportFinalizeInput, DatasetImport
 from schemas.job import DatasetImportJob
 from services.archive_safety import cleanup_staged_archive
 from services.dataset_import.staging import generate_staging_id, resolve_payload_archive_path
-from services.environment_service import EnvironmentService
 
 
 class DatasetImportService:
@@ -109,10 +108,6 @@ class DatasetImportService:
                 raise InvalidJobStateError(
                     f"Dataset import can only be finalized from '{ImportStep.WAITING_FOR_USER_INPUT}' step"
                 )
-
-            await EnvironmentService.get_environment_by_id(
-                project_id=project_id, environment_id=finalize_input.environment_id
-            )
 
             payload.finalize_input = finalize_input
             payload.step = ImportStep.READY_TO_COMMIT

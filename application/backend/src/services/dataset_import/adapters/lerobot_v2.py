@@ -39,31 +39,45 @@ class LeRobotV2Adapter(DatasetImportAdapter):
 
     source = DatasetImportSource.LEROBOT_V2
 
-    def detect(self, archive: SafeZipArchive) -> bool:
+    def detect(self, archive: SafeZipArchive) -> tuple[bool, ImportValidationReport]:
+        report = ImportValidationReport()
         has_info = False
         has_legacy_episodes = False
         has_legacy_tasks = False
         has_episode_parquet = False
 
         for name in archive.iter_normalized_names():
-            if not has_info and name == "meta/info.json":
+            if not has_info and (name == "meta/info.json" or name.endswith("/meta/info.json")):
                 has_info = True
-            if not has_legacy_episodes and name == "meta/episodes.jsonl":
+            if not has_legacy_episodes and (name == "meta/episodes.jsonl" or name.endswith("/meta/episodes.jsonl")):
                 has_legacy_episodes = True
-            if not has_legacy_tasks and name == "meta/tasks.jsonl":
+            if not has_legacy_tasks and (name == "meta/tasks.jsonl" or name.endswith("/meta/tasks.jsonl")):
                 has_legacy_tasks = True
             if (
                 not has_episode_parquet
-                and name.startswith("data/")
+                and ("data/" in name or name.startswith("data/"))
                 and "episode_" in name
                 and name.endswith(".parquet")
             ):
                 has_episode_parquet = True
 
             if has_info and has_legacy_episodes and has_legacy_tasks and has_episode_parquet:
-                return True
+                return True, report
 
-        return False
+        missing = []
+        if not has_info:
+            missing.append("'meta/info.json'")
+        if not has_legacy_episodes:
+            missing.append("'meta/episodes.jsonl'")
+        if not has_legacy_tasks:
+            missing.append("'meta/tasks.jsonl'")
+        if not has_episode_parquet:
+            missing.append("episode parquet files under 'data/'")
+
+        if missing:
+            report.add_error(f"LeRobot v2 markers not found: {', '.join(missing)}.")
+
+        return False, report
 
     def build_draft(
         self,

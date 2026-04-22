@@ -7,7 +7,12 @@ from loguru import logger
 
 from core.logging.utils import job_logging_ctx
 from schemas.base_job import JobStatus
-from schemas.dataset_import_job import DatasetImportJobPayload, ImportStep, ImportValidationSeverity
+from schemas.dataset_import_job import (
+    DatasetImportJobPayload,
+    ImportStep,
+    ImportValidationReport,
+    ImportValidationSeverity,
+)
 from schemas.job import DatasetImportJob
 from services.archive_safety import SafeZipArchive, cleanup_staged_archive
 from services.dataset_import.adapters import (
@@ -67,13 +72,41 @@ class DatasetImportWorker(BaseProcessWorker):
             except Exception as e:
                 logger.exception(f"Dataset import failed: {e}")
                 if not pre_commit_handled:
-                    failed_job = await JobService.update_job_status(
+                    error_report = ImportValidationReport()
+                    error_report.add_error(f"Dataset import failed unexpectedly: {e}")
+                    await self._fail_job_with_validation_report(
                         job_id=job.id,
-                        status=JobStatus.FAILED,
+                        payload=payload,
+                        report=error_report,
                         message=f"Dataset import failed: {e}",
+                        cleanup_archive_path=resolve_payload_archive_path(payload),
                     )
-                    cleanup_staged_archive(resolve_payload_archive_path(payload))
-                    self.queue.put((EventType.JOB_UPDATE, failed_job))
+
+    async def _fail_job_with_validation_report(
+        self,
+        job_id: UUID,
+        payload: DatasetImportJobPayload,
+        report: ImportValidationReport,
+        message: str,
+        cleanup_archive_path: object = None,
+    ) -> None:
+        """Persist a failed job state with a structured validation report in the payload.
+
+        Sets ``payload.validation_report`` only when the report has messages, then
+        writes FAILED status via :meth:`JobService.update_job_payload` and queues a
+        ``JOB_UPDATE`` event.  If *cleanup_archive_path* is provided, the staged
+        archive is removed after the job is persisted.
+        """
+        payload.validation_report = report if report.messages else None
+        failed_job = await JobService.update_job_payload(
+            job_id=job_id,
+            payload=payload,
+            status=JobStatus.FAILED,
+            message=message,
+        )
+        if cleanup_archive_path is not None:
+            cleanup_staged_archive(cleanup_archive_path)
+        self.queue.put((EventType.JOB_UPDATE, failed_job))
 
     async def _run_detection(self, job_id: UUID, _project_id: UUID, payload: DatasetImportJobPayload) -> None:
         archive_path = resolve_payload_archive_path(payload)
@@ -98,14 +131,35 @@ class DatasetImportWorker(BaseProcessWorker):
             archive_path,
             max_uncompressed_bytes=get_settings().data_import_max_uncompressed_bytes,
         )
-        selected_adapter = select_dataset_import_adapter(
+        selection = select_dataset_import_adapter(
             adapters=self.adapters,
             source_hint=payload.source_hint,
             archive=archive,
         )
-        if selected_adapter is None:
-            logger.error("No dataset import adapter detected for archive='{}'", archive.path)
-            raise ValueError("Unable to detect source adapter for dataset archive")
+        if selection.adapter is None:
+            report = selection.report
+            if report is None:
+                report = ImportValidationReport()
+                report.add_error(
+                    "Dataset source detection did not produce a validation report; "
+                    "the archive may be malformed or unreadable."
+                )
+            error_count = sum(1 for msg in report.messages)
+            logger.warning(
+                "Dataset source detection failed for archive='{}': {} message(s)",
+                archive.path,
+                error_count,
+            )
+            await self._fail_job_with_validation_report(
+                job_id=job_id,
+                payload=payload,
+                report=report,
+                message="Dataset source detection failed",
+                cleanup_archive_path=resolve_payload_archive_path(payload),
+            )
+            return
+
+        selected_adapter = selection.adapter
 
         logger.info(
             "Auto-detected dataset format: adapter='{}', source='{}', archive='{}'",
