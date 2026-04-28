@@ -209,6 +209,38 @@ def test_lerobot_v2_build_draft_reports_warnings_for_missing_schema(tmp_path: Pa
     assert any("No robot schema" in message for message in warning_messages)
 
 
+def test_lerobot_v2_build_draft_reports_warning_when_counts_mismatch_info_json(tmp_path: Path) -> None:
+    adapter = LeRobotV2Adapter()
+    archive_path = tmp_path / "v2-count-mismatch.zip"
+    episodes = [
+        {"episode_index": 0, "tasks": ["pick"], "length": 3},
+        {"episode_index": 1, "tasks": ["pick"], "length": 5},
+    ]
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": json.dumps(
+                {
+                    "codebase_version": "v2.1",
+                    "fps": 20,
+                    "total_episodes": 99,
+                    "total_frames": 999,
+                }
+            ).encode("utf-8"),
+            "meta/tasks.jsonl": b'{"task_index":0,"task":"pick"}\n',
+            "meta/episodes.jsonl": "\n".join(json.dumps(item) for item in episodes).encode("utf-8") + b"\n",
+            "data/chunk-000/episode_000000.parquet": b"PAR1",
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    _manifest, report = adapter.build_draft(safe_archive, payload=MagicMock())
+
+    warning_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.WARNING]
+    assert any("Episode count mismatch" in message for message in warning_messages)
+    assert any("Frame count mismatch" in message for message in warning_messages)
+
+
 def test_lerobot_v2_detect_report_includes_error_when_markers_missing(tmp_path: Path) -> None:
     """When detect returns False, the report should contain error messages naming missing markers."""
     adapter = LeRobotV2Adapter()

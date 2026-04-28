@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 from io import BytesIO
 from pathlib import PurePath
@@ -27,6 +28,7 @@ from .recording_schema import extract_recording_schema
 
 class LeRobotV3Adapter(DatasetImportAdapter):
     source = DatasetImportSource.LEROBOT_V3
+    _EPISODE_PARQUET_PATTERN = re.compile(r"(?:^|/)meta/episodes/chunk-(\d+)/file-(\d+)\.parquet$")
 
     def _load_info(self, archive: SafeZipArchive, report: ImportValidationReport) -> dict:
         raw_info = archive.read_json("meta/info.json")
@@ -35,21 +37,102 @@ class LeRobotV3Adapter(DatasetImportAdapter):
             return {}
         return raw_info
 
-    def _load_episode_counts(self, archive: SafeZipArchive, report: ImportValidationReport) -> tuple[int, int]:
+    def _load_episode_counts(
+        self,
+        archive: SafeZipArchive,
+        report: ImportValidationReport,
+        info: dict | None = None,
+    ) -> tuple[int, int]:
         episode_count = 0
         frame_count = 0
 
-        episodes_bytes = archive.read_bytes("meta/episodes/chunk-000/file-000.parquet")
-        if episodes_bytes is None:
-            report.add_error("No episode parquet found under 'meta/episodes/chunk-000/file-000.parquet'.")
+        episode_shards: list[tuple[int, int, str]] = []
+        for name in archive.iter_normalized_names():
+            if match := self._EPISODE_PARQUET_PATTERN.search(name):
+                episode_shards.append((int(match.group(1)), int(match.group(2)), name))
+
+        if not episode_shards:
+            report.add_error("No episode parquet found under 'meta/episodes/chunk-*/file-*.parquet'.")
             return episode_count, frame_count
 
-        episodes_df = pd.read_parquet(BytesIO(episodes_bytes))
-        episode_count = len(episodes_df)
-        if "length" in episodes_df.columns:
-            frame_count = int(episodes_df["length"].fillna(0).sum())
+        episode_shards.sort(key=lambda item: (item[0], item[1], item[2]))
+
+        readable_shard_count = 0
+        shard_count_with_episode_index = 0
+        shard_count_without_episode_index = 0
+        shard_count_without_length = 0
+        episode_rows_total = 0
+        episode_rows_without_episode_index = 0
+        unique_episode_indices: set[int] = set()
+
+        for _chunk_index, _file_index, shard_name in episode_shards:
+            shard_bytes = archive.read_bytes(shard_name)
+            if shard_bytes is None:
+                report.add_warning(f"Could not read episode parquet '{shard_name}'.")
+                continue
+
+            try:
+                episodes_df = pd.read_parquet(BytesIO(shard_bytes))
+            except Exception as error:
+                report.add_warning(
+                    f"Could not parse episode parquet '{shard_name}' ({type(error).__name__}); skipping this shard."
+                )
+                continue
+
+            readable_shard_count += 1
+            row_count = len(episodes_df)
+            episode_rows_total += row_count
+
+            if "episode_index" in episodes_df.columns:
+                shard_count_with_episode_index += 1
+                episode_indexes = pd.to_numeric(episodes_df["episode_index"], errors="coerce").dropna()
+                unique_episode_indices.update(episode_indexes.astype("int64").tolist())
+            else:
+                shard_count_without_episode_index += 1
+                episode_rows_without_episode_index += row_count
+
+            if "length" in episodes_df.columns:
+                lengths = pd.to_numeric(episodes_df["length"], errors="coerce").fillna(0)
+                frame_count += int(lengths.sum())
+            else:
+                shard_count_without_length += 1
+
+        if readable_shard_count == 0:
+            report.add_error("No readable episode parquet found under 'meta/episodes/chunk-*/file-*.parquet'.")
+            return 0, 0
+
+        if shard_count_with_episode_index == 0:
+            episode_count = episode_rows_total
+            report.add_warning(
+                "Episode parquet shards are missing 'episode_index'; episode count is based on row count."
+            )
+        elif shard_count_without_episode_index == 0:
+            episode_count = len(unique_episode_indices)
         else:
-            report.add_warning("Episode parquet is missing 'length' column; frame count may be incomplete.")
+            episode_count = len(unique_episode_indices) + episode_rows_without_episode_index
+            report.add_warning(
+                "Some episode parquet shards are missing 'episode_index'; episode count may be approximate."
+            )
+
+        if shard_count_without_length > 0:
+            report.add_warning(
+                f"{shard_count_without_length} episode parquet shard(s) are missing 'length'; frame count may be incomplete."
+            )
+
+        if info:
+            expected_episode_count = info.get("total_episodes")
+            if isinstance(expected_episode_count, int) and expected_episode_count != episode_count:
+                report.add_warning(
+                    "Episode count mismatch: metadata reports "
+                    f"{expected_episode_count}, parsed episode shards report {episode_count}."
+                )
+
+            expected_frame_count = info.get("total_frames")
+            if isinstance(expected_frame_count, int) and expected_frame_count != frame_count:
+                report.add_warning(
+                    "Frame count mismatch: metadata reports "
+                    f"{expected_frame_count}, parsed episode shards report {frame_count}."
+                )
 
         return episode_count, frame_count
 
@@ -128,7 +211,7 @@ class LeRobotV3Adapter(DatasetImportAdapter):
 
         try:
             info = self._load_info(archive=archive, report=report)
-            episode_count, frame_count = self._load_episode_counts(archive=archive, report=report)
+            episode_count, frame_count = self._load_episode_counts(archive=archive, report=report, info=info)
 
             if archive.read_json("meta/stats.json") is None:
                 report.add_warning("No global stats metadata found in 'meta/stats.json'.")

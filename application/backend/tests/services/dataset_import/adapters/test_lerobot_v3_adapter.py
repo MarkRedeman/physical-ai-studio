@@ -17,8 +17,19 @@ def _write_zip(path: Path, files: dict[str, bytes]) -> None:
             archive.writestr(name, content)
 
 
-def _episodes_parquet_bytes(lengths: list[int]) -> bytes:
-    df = pd.DataFrame({"episode_index": list(range(len(lengths))), "length": lengths})
+def _episodes_parquet_bytes(
+    lengths: list[int],
+    *,
+    episode_start: int = 0,
+    include_episode_index: bool = True,
+    include_length: bool = True,
+) -> bytes:
+    data: dict[str, list[int]] = {}
+    if include_episode_index:
+        data["episode_index"] = list(range(episode_start, episode_start + len(lengths)))
+    if include_length:
+        data["length"] = lengths
+    df = pd.DataFrame(data)
     buffer = BytesIO()
     df.to_parquet(buffer, index=False)
     return buffer.getvalue()
@@ -131,6 +142,48 @@ def test_lerobot_v3_parse_manifest_reads_stats_from_nested_root_zip(tmp_path: Pa
 
     assert manifest.statistics.episode_count == 3
     assert manifest.statistics.frame_count == 23
+
+
+def test_lerobot_v3_parse_manifest_counts_all_episode_parquet_shards(tmp_path: Path) -> None:
+    adapter = LeRobotV3Adapter()
+    archive_path = tmp_path / "v3-multi-episodes.zip"
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": json.dumps({"codebase_version": "v3.0", "fps": 20}).encode("utf-8"),
+            "meta/tasks.parquet": b"PAR1",
+            "meta/episodes/chunk-000/file-000.parquet": _episodes_parquet_bytes([11, 7], episode_start=0),
+            "meta/episodes/chunk-000/file-001.parquet": _episodes_parquet_bytes([5], episode_start=2),
+            "meta/episodes/chunk-001/file-000.parquet": _episodes_parquet_bytes([13, 9], episode_start=3),
+            "data/chunk-000/file-000.parquet": b"PAR1",
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
+
+    assert manifest.statistics.episode_count == 5
+    assert manifest.statistics.frame_count == 45
+
+
+def test_lerobot_v3_parse_manifest_counts_episode_shards_when_file_000_is_missing(tmp_path: Path) -> None:
+    adapter = LeRobotV3Adapter()
+    archive_path = tmp_path / "v3-missing-first-shard.zip"
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": json.dumps({"codebase_version": "v3.0", "fps": 20}).encode("utf-8"),
+            "meta/tasks.parquet": b"PAR1",
+            "meta/episodes/chunk-000/file-001.parquet": _episodes_parquet_bytes([3, 4], episode_start=0),
+            "data/chunk-000/file-000.parquet": b"PAR1",
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
+
+    assert manifest.statistics.episode_count == 2
+    assert manifest.statistics.frame_count == 7
 
 
 def test_lerobot_v3_parse_manifest_schema_empty_when_no_features(tmp_path: Path) -> None:
@@ -371,6 +424,35 @@ def test_lerobot_v3_build_draft_reports_warning_when_stats_missing(tmp_path: Pat
 
     warning_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.WARNING]
     assert any("stats" in message for message in warning_messages)
+
+
+def test_lerobot_v3_build_draft_reports_warning_when_counts_mismatch_info_json(tmp_path: Path) -> None:
+    adapter = LeRobotV3Adapter()
+    archive_path = tmp_path / "v3-count-mismatch.zip"
+    _write_zip(
+        archive_path,
+        {
+            "meta/info.json": json.dumps(
+                {
+                    "codebase_version": "v3.0",
+                    "fps": 20,
+                    "total_episodes": 99,
+                    "total_frames": 999,
+                }
+            ).encode("utf-8"),
+            "meta/tasks.parquet": b"PAR1",
+            "meta/episodes/chunk-000/file-000.parquet": _episodes_parquet_bytes([3, 5], episode_start=0),
+            "meta/episodes/chunk-000/file-001.parquet": _episodes_parquet_bytes([7], episode_start=2),
+            "data/chunk-000/file-000.parquet": b"PAR1",
+        },
+    )
+
+    safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
+    _manifest, report = adapter.build_draft(safe_archive, payload=MagicMock())
+
+    warning_messages = [msg.message for msg in report.messages if msg.severity == ImportValidationSeverity.WARNING]
+    assert any("Episode count mismatch" in message for message in warning_messages)
+    assert any("Frame count mismatch" in message for message in warning_messages)
 
 
 def test_lerobot_v3_detect_report_includes_v2_marker_error(tmp_path: Path) -> None:

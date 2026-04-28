@@ -103,6 +103,20 @@ class LeRobotV2Adapter(DatasetImportAdapter):
             else:
                 report.add_error("No episode metadata found in 'meta/episodes.jsonl'.")
 
+            expected_episode_count = info.get("total_episodes")
+            if isinstance(expected_episode_count, int) and expected_episode_count != episode_count:
+                report.add_warning(
+                    "Episode count mismatch: metadata reports "
+                    f"{expected_episode_count}, parsed episodes metadata reports {episode_count}."
+                )
+
+            expected_frame_count = info.get("total_frames")
+            if isinstance(expected_frame_count, int) and expected_frame_count != frame_count:
+                report.add_warning(
+                    "Frame count mismatch: metadata reports "
+                    f"{expected_frame_count}, parsed episodes metadata reports {frame_count}."
+                )
+
             if not any(archive.read_jsonl("meta/tasks.jsonl")):
                 report.add_warning("No tasks metadata found in 'meta/tasks.jsonl'.")
         except (ValueError, InvalidArchiveError) as error:
