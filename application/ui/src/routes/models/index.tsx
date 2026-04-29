@@ -70,7 +70,13 @@ const ModelList = ({
     );
 };
 
-const JobList = ({ jobs, onViewLogs }: { jobs: SchemaTrainJob[]; onViewLogs: (job: SchemaTrainJob) => void }) => {
+export const JobList = ({
+    jobs,
+    onViewLogs,
+}: {
+    jobs: SchemaTrainJob[];
+    onViewLogs: (job: SchemaTrainJob) => void;
+}) => {
     const sortedJobs = jobs
         .filter((m) => m.status !== 'completed')
         .toSorted((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime());
@@ -247,5 +253,20 @@ export const Index = () => {
                 )}
             </DialogContainer>
         </Flex>
+    );
+};
+
+export const TrainingJobs = () => {
+    const { project_id } = useProjectId();
+
+    const jobs = useProjectTrainingJobs(project_id);
+
+    return (
+        <JobList
+            jobs={jobs.filter((m) => m.type === 'training') as SchemaTrainJob[]}
+            onViewLogs={(job) => {
+                alert(job.id);
+            }}
+        />
     );
 };

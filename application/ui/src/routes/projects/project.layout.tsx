@@ -1,8 +1,11 @@
 import { Suspense } from 'react';
 
-import { Flex, Grid, Item, Link, Loading, TabList, Tabs, View } from '@geti-ui/ui';
+import { ActionButton, DialogTrigger, Flex, Grid, Icon, Item, Link, Loading, TabList, Tabs, View } from '@geti-ui/ui';
+import { Bell, Manifest } from '@geti-ui/ui/icons';
 import { Outlet, useLocation } from 'react-router';
 
+import { JobsDialog } from '../../features/jobs/jobs-dialog';
+import { LogsDialog } from '../../features/logs/logs-dialog';
 import { ProjectsListPanel } from '../../features/projects/menu/projects-list-panel.component';
 import { useProjectId } from '../../features/projects/use-project';
 import { paths } from '../../router';
@@ -51,7 +54,40 @@ const Header = ({ project_id }: { project_id: string }) => {
                         </Flex>
                     </Item>
                 </TabList>
-                <Flex alignItems={'center'} height={'100%'} marginStart='auto'>
+                <Flex alignItems={'center'} height={'100%'} marginStart='auto' gap='size-100'>
+                    <View>
+                        <DialogTrigger type='fullscreen'>
+                            <ActionButton
+                                isQuiet
+                                UNSAFE_style={{
+                                    paddingRight: 'var(--spectrum-global-dimension-size-100)',
+                                }}
+                            >
+                                <Icon>
+                                    <Manifest />
+                                </Icon>
+                                Logs
+                            </ActionButton>
+                            {(close) => <LogsDialog close={close} />}
+                        </DialogTrigger>
+                    </View>
+                    <View>
+                        <DialogTrigger type='popover'>
+                            <ActionButton
+                                isQuiet
+                                UNSAFE_style={{
+                                    paddingRight: 'var(--spectrum-global-dimension-size-100)',
+                                }}
+                            >
+                                <Icon>
+                                    <Bell />
+                                </Icon>
+                                Jobs
+                            </ActionButton>
+                            <JobsDialog />
+                        </DialogTrigger>
+                    </View>
+
                     <ProjectsListPanel />
                 </Flex>
             </Flex>

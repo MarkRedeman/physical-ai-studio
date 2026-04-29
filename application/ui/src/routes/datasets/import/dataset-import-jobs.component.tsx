@@ -146,7 +146,7 @@ const ImportJobMenu = ({ job, onViewLogs }: { job: SchemaJob; onViewLogs: () => 
     );
 };
 
-const ImportJobRow = ({ job, onViewLogs }: { job: SchemaJob; onViewLogs: () => void }) => {
+export const ImportJobRow = ({ job, onViewLogs }: { job: SchemaJob; onViewLogs: () => void }) => {
     const payload = asImportPayload(job.payload);
     const canResume = payload.step === 'waiting_for_user_input' || payload.step === 'uploaded';
     const step = toStepLabel(payload.step);

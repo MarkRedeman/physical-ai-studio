@@ -193,3 +193,27 @@ export const ProjectsListPanel = () => {
         </>
     );
 };
+
+export const LogsButton = () => {
+    const [logsIsOpen, setLogsIsOpen] = useState(false);
+    const handleOpenLogs = () => {
+        //close();
+        setLogsIsOpen(true);
+    };
+
+    return (
+        <>
+            <ActionButton isQuiet onPress={handleOpenLogs} width='100%' height='size-700'>
+                <Flex gap='size-50' marginEnd='size-100' width='100%'>
+                    <Icon size='S'>
+                        <LogsIcon />
+                    </Icon>
+                </Flex>
+            </ActionButton>
+
+            <DialogContainer onDismiss={() => setLogsIsOpen(false)} type='fullscreen'>
+                {logsIsOpen && <LogsDialog close={() => setLogsIsOpen(false)} />}
+            </DialogContainer>
+        </>
+    );
+};

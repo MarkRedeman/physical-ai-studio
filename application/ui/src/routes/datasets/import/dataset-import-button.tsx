@@ -77,9 +77,7 @@ interface DraftManifestSummary {
 }
 
 /** Narrow the job union to the dataset import variant. */
-const isDatasetImportJob = (
-    job: { type: string; payload: unknown } | undefined
-): job is SchemaDatasetImportJob => {
+const isDatasetImportJob = (job: { type: string; payload: unknown } | undefined): job is SchemaDatasetImportJob => {
     return job?.type === 'dataset_import';
 };
 
@@ -144,10 +142,9 @@ const useDatasetUpload = (projectId: string): UseDatasetUploadResult => {
             }
 
             // Phase 2: upload archive via XHR (needs onprogress for large files)
-            const uploadPath = fetchClient.PATH(
-                '/api/projects/{project_id}/imports/datasets/{job_id}:upload',
-                { params: { path: { project_id: projectId, job_id: jobId } } }
-            );
+            const uploadPath = fetchClient.PATH('/api/projects/{project_id}/imports/datasets/{job_id}:upload', {
+                params: { path: { project_id: projectId, job_id: jobId } },
+            });
 
             return await new Promise<{ id: string }>((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
@@ -379,10 +376,7 @@ const DatasetAnalysisInProgress = ({
         } else if (payload.step === ('waiting_for_user_input' satisfies SchemaImportStep)) {
             hasTransitionedRef.current = true;
             onReady();
-        } else if (
-            IMPORTING_STEPS.includes(payload.step) ||
-            job.status === ('running' satisfies SchemaJobStatus)
-        ) {
+        } else if (IMPORTING_STEPS.includes(payload.step) || job.status === ('running' satisfies SchemaJobStatus)) {
             hasTransitionedRef.current = true;
             onImporting();
         }
@@ -924,6 +918,27 @@ const ImportDatasetDialog = ({
     );
 };
 
+export const ProjectDatasetImportDialog = ({
+    onClose,
+    existingJobId,
+    onPendingJobDismissed,
+    onImportCompleted,
+}: { onClose: () => void } & DatasetImportButtonProps) => {
+    const { project_id } = useProjectId();
+
+    return (
+        <Suspense>
+            <ImportDatasetDialog
+                project_id={project_id}
+                initialJobId={existingJobId}
+                onPendingJobDismissed={onPendingJobDismissed}
+                onImportCompleted={onImportCompleted}
+                onClose={onClose}
+            />
+        </Suspense>
+    );
+};
+
 // ---------------------------------------------------------------------------
 // DatasetImportButton — public export
 // ---------------------------------------------------------------------------
@@ -941,8 +956,6 @@ export const DatasetImportButton = ({
     onPendingJobDismissed,
     onImportCompleted,
 }: DatasetImportButtonProps = {}) => {
-    const { project_id } = useProjectId();
-
     return (
         <DialogTrigger>
             <Button variant='secondary' alignSelf={'center'}>
@@ -950,17 +963,12 @@ export const DatasetImportButton = ({
             </Button>
 
             {(close) => (
-                <Suspense>
-                    <ImportDatasetDialog
-                        project_id={project_id}
-                        initialJobId={existingJobId}
-                        onPendingJobDismissed={onPendingJobDismissed}
-                        onImportCompleted={onImportCompleted}
-                        onClose={() => {
-                            close();
-                        }}
-                    />
-                </Suspense>
+                <ProjectDatasetImportDialog
+                    existingJobId={existingJobId}
+                    onPendingJobDismissed={onPendingJobDismissed}
+                    onImportCompleted={onImportCompleted}
+                    onClose={close}
+                />
             )}
         </DialogTrigger>
     );
