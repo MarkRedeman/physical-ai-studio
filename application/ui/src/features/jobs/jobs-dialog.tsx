@@ -21,7 +21,7 @@ import {
     useDateFormatter,
     View,
 } from '@geti-ui/ui';
-import { Delete, DeleteOutline } from '@geti-ui/ui/icons';
+import { ChevronDownSmallLight, ChevronUpSmallLight, Delete, DeleteOutline } from '@geti-ui/ui/icons';
 import { countBy } from 'lodash-es';
 
 import { $api } from '../../api/client';
@@ -137,10 +137,89 @@ const JobContent = ({ job }: { job: SchemaJob }) => {
         );
     }
 
-    return job.message;
+    // if (job.type === 'dataset_import') {
+    //     return <Text UNSAFE_className={classes.message}>{job.message}</Text>;
+    // }
+
+    return <Text UNSAFE_className={classes.message}>{job.message}</Text>;
+};
+
+const JobWarning = () => {
+    return (
+        <>
+            <Flex alignItems={'center'} justifyContent={'end'} flexGrow={1} flexShrink={1}>
+                {jobWarning !== undefined ? (
+                    <TooltipTrigger placement={'bottom'}>
+                        <PressableElement UNSAFE_style={{ display: 'flex' }}>
+                            <Alert aria-label={'Job step alert'} className={classes.warningSectionIcon} />
+                        </PressableElement>
+                        <Tooltip>{jobWarning.warning?.trim()}</Tooltip>
+                    </TooltipTrigger>
+                ) : null}
+
+                {!jobStepsExpanded && stepToDisplay?.progress ? (
+                    <Text id={`job-scheduler-${job.id}-progress`} data-testid={`job-scheduler-${job.id}-progress`}>
+                        {getStepProgress(stepToDisplay.progress)}
+                    </Text>
+                ) : null}
+            </Flex>
+        </>
+    );
 };
 
 const JobSteps = ({ job }: { job: SchemaJob }) => {
+    const [jobStepsExpanded, setJobStepsExpanded] = useState(true);
+
+    const jobDuration = '10s';
+    const stepToDisplay = {
+        stepName: 'test',
+        index: 0,
+    };
+
+    const onExpandHandler = () => {
+        setJobStepsExpanded((expanded) => !expanded);
+    };
+
+    job.steps = [{}];
+
+    return (
+        <>
+            <Divider size='S' orientation='horizontal' />
+
+            <Flex paddingX='size-250' gap={'size-100'} width='100%' justifyContent={'space-between'}>
+                {!jobStepsExpanded && stepToDisplay !== undefined && (
+                    <Flex flexGrow={1} flexShrink={0} alignItems='center' gap='size-100'>
+                        <Loading mode='inline' size='S' />
+                        <Text>{`${stepToDisplay.stepName} (${stepToDisplay.index} of ${job.steps.length})`}</Text>
+                    </Flex>
+                )}
+                {jobDuration !== undefined && (
+                    <Flex alignItems={'center'}>
+                        <Text UNSAFE_className={classes.message}>Completed in: {jobDuration}</Text>
+                    </Flex>
+                )}
+                {job.steps.length > 0 && (
+                    <Flex justifyContent={'space-between'} alignItems={'center'}>
+                        <ActionButton
+                            isQuiet
+                            id={`job-scheduler-${job.id}-action-expand`}
+                            data-testid={`job-scheduler-${job.id}-action-expand`}
+                            onPress={onExpandHandler}
+                            aria-expanded={jobStepsExpanded}
+                        >
+                            <Icon>
+                                {jobStepsExpanded ? (
+                                    <ChevronDownSmallLight width={24} height={24} />
+                                ) : (
+                                    <ChevronUpSmallLight width={24} height={24} />
+                                )}
+                            </Icon>
+                        </ActionButton>
+                    </Flex>
+                )}
+            </Flex>
+        </>
+    );
     return null;
     return (
         <>
@@ -240,8 +319,9 @@ export const JobsDialog = () => {
 
     const jobs = (jobsQuery.data ?? [])
         .toSorted((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())
-        .filter((job) => job.project_id === project_id);
+        .filter((job) => true || job.project_id === project_id);
 
+    console.log(jobsQuery, jobs);
     const counts = countBy(jobs, (job) => job.status);
 
     return (
@@ -267,6 +347,11 @@ export const JobsDialog = () => {
                     height={'calc(100% - var(--spectrum-global-dimension-size-6000))'}
                 >
                     <TabList UNSAFE_className={classes.tab}>
+                        <Item key='all'>
+                            <StatusTab counts={Object.values(counts).reduce((x, y) => x + y, 0) ?? 0}>
+                                All jobs
+                            </StatusTab>
+                        </Item>
                         <Item key='running'>
                             <StatusTab counts={counts['running'] ?? 0}>Runninb jobs</StatusTab>
                         </Item>
@@ -283,7 +368,10 @@ export const JobsDialog = () => {
                             <StatusTab counts={counts['failed'] ?? 0}>Failed jobs</StatusTab>
                         </Item>
                     </TabList>
-                    <TabPanels>
+                    <TabPanels marginTop='size-100'>
+                        <Item key='all'>
+                            <JobsList jobs={jobs} />
+                        </Item>
                         <Item key='running'>
                             <JobsList jobs={jobs.filter((job) => job.status === 'running')} />
                         </Item>

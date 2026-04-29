@@ -71,7 +71,7 @@ export const DatasetTabs = ({
 
     return (
         <Flex>
-            <TabList>
+            <TabList width='100%'>
                 {datasets.map((dataset) => {
                     return (
                         <Item
@@ -124,12 +124,6 @@ export const DatasetTabs = ({
                         <Item key='import'>Import</Item>
                     </Menu>
                 </MenuTrigger>
-                <ActionMenu onAction={(key) => console.log(key)} isQuiet>
-                    <Item key='edit'>Edit</Item>
-                    <Item key='duplicate'>Duplicate</Item>
-                    <Item key='delete'>Delete</Item>
-                </ActionMenu>
-                <DatasetImportButton />
             </div>
 
             <DialogContainer
