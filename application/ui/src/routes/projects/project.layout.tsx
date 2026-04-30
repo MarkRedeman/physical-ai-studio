@@ -1,9 +1,11 @@
 import { Suspense } from 'react';
 
+import { Divider } from '@adobe/react-spectrum';
 import { ActionButton, DialogTrigger, Flex, Grid, Icon, Item, Link, Loading, TabList, Tabs, View } from '@geti-ui/ui';
 import { Manifest } from '@geti-ui/ui/icons';
 import { Outlet, useLocation } from 'react-router';
 
+import { JobStatus } from '../../features/jobs/footer/job-status';
 import { LogsDialog } from '../../features/logs/logs-dialog';
 import { ProjectsListPanel } from '../../features/projects/menu/projects-list-panel.component';
 import { useProjectId } from '../../features/projects/use-project';
@@ -103,6 +105,8 @@ const Footer = () => {
                         {(close) => <LogsDialog close={close} />}
                     </DialogTrigger>
                 </View>
+                <Divider orientation='vertical' size='S' />
+                <JobStatus />
             </Flex>
         </View>
     );
@@ -120,6 +124,7 @@ export const ProjectLayout = () => {
                 areas={['header', 'subheader', 'content', 'footer']}
                 UNSAFE_style={{
                     gridTemplateRows:
+                        // eslint-disable-next-line max-len
                         'var(--spectrum-global-dimension-size-800, 4rem) min-content auto var(--spectrum-global-dimension-size-400)',
                 }}
                 minHeight={0}
