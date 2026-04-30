@@ -113,10 +113,12 @@ const JobList = ({ jobs, onViewLogs }: { jobs: SchemaTrainJob[]; onViewLogs: (jo
     );
 };
 
-const useProjectJobs = (project_id: string): SchemaJob[] => {
-    const { data: allJobs } = $api.useQuery('get', '/api/jobs');
+const useProjectJobs = (project_id: string): SchemaTrainJob[] => {
+    const { data: allJobs = [] } = $api.useQuery('get', '/api/jobs');
 
-    return allJobs?.filter((j) => j.project_id === project_id) ?? [];
+    return allJobs
+        .filter((job) => job.project_id === project_id)
+        .filter((job): job is SchemaTrainJob => job.type === 'training');
 };
 
 export const Index = () => {
@@ -126,7 +128,6 @@ export const Index = () => {
     });
 
     const jobs = useProjectJobs(project_id);
-    const trainingJobs = jobs.filter((m) => m.type === 'training') as SchemaTrainJob[];
 
     const [retrainModel, setRetrainModel] = useState<SchemaModel | null>(null);
     const [logsSourceId, setLogsSourceId] = useState<string | undefined>();
@@ -173,7 +174,7 @@ export const Index = () => {
     };
 
     const hasModels = models.length > 0;
-    const hasJobs = trainingJobs.length > 0;
+    const hasJobs = jobs.length > 0;
     const showIllustratedMessage = !hasModels && !hasJobs;
 
     return (
@@ -210,7 +211,7 @@ export const Index = () => {
                             </DialogTrigger>
                         </Flex>
                         <JobList
-                            jobs={trainingJobs}
+                            jobs={jobs}
                             onViewLogs={(job) => {
                                 setLogsSourceId(job.id);
                             }}
@@ -218,7 +219,7 @@ export const Index = () => {
                         {hasModels && (
                             <ModelList
                                 models={models}
-                                jobs={trainingJobs}
+                                jobs={jobs}
                                 onRetrain={setRetrainModel}
                                 onViewLogs={handleViewLogs}
                             />
