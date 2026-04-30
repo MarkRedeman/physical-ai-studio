@@ -5,13 +5,11 @@ import {
     Content,
     DialogContainer,
     DialogTrigger,
-    Divider,
     Flex,
     Heading,
     IllustratedMessage,
     Text,
     View,
-    Well,
 } from '@geti-ui/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import useWebSocket from 'react-use-websocket';
@@ -128,6 +126,8 @@ export const Index = () => {
     });
 
     const jobs = useProjectJobs(project_id);
+    const trainingJobs = jobs.filter((m) => m.type === 'training') as SchemaTrainJob[];
+
     const [retrainModel, setRetrainModel] = useState<SchemaModel | null>(null);
     const [logsSourceId, setLogsSourceId] = useState<string | undefined>();
 
@@ -173,16 +173,14 @@ export const Index = () => {
     };
 
     const hasModels = models.length > 0;
-    const hasJobs = jobs.length > 0;
+    const hasJobs = trainingJobs.length > 0;
     const showIllustratedMessage = !hasModels && !hasJobs;
 
     return (
         <Flex height='100%'>
             <Flex margin={'size-200'} direction={'column'} flex>
-                <Heading level={4}>Models</Heading>
-                <Divider size='S' marginTop='size-100' marginBottom={'size-100'} />
                 {showIllustratedMessage ? (
-                    <Well flex UNSAFE_style={{ backgroundColor: 'rgb(60,62,66)' }}>
+                    <Flex margin={'size-200'} direction={'column'} flex height='100%'>
                         <IllustratedMessage>
                             <EmptyIllustration />
                             <Content> Currently there are no trained models available. </Content>
@@ -195,7 +193,7 @@ export const Index = () => {
                                 </DialogTrigger>
                             </View>
                         </IllustratedMessage>
-                    </Well>
+                    </Flex>
                 ) : (
                     <View margin={'size-300'}>
                         <Flex justifyContent={'end'} marginBottom='size-300'>
@@ -212,7 +210,7 @@ export const Index = () => {
                             </DialogTrigger>
                         </Flex>
                         <JobList
-                            jobs={jobs.filter((m) => m.type === 'training') as SchemaTrainJob[]}
+                            jobs={trainingJobs}
                             onViewLogs={(job) => {
                                 setLogsSourceId(job.id);
                             }}
@@ -220,7 +218,7 @@ export const Index = () => {
                         {hasModels && (
                             <ModelList
                                 models={models}
-                                jobs={jobs}
+                                jobs={trainingJobs}
                                 onRetrain={setRetrainModel}
                                 onViewLogs={handleViewLogs}
                             />
