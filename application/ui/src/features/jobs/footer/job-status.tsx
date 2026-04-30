@@ -4,32 +4,7 @@ import { Flex, ProgressCircle, Text, View } from '@geti-ui/ui';
 import useWebSocket from 'react-use-websocket';
 
 import { fetchClient } from '../../../api/client';
-import { SchemaDatasetImportJob, SchemaTrainJob } from '../../../api/openapi-spec';
-
-const DatasetImportJobStatus = ({ job }: { job: SchemaDatasetImportJob }) => {
-    if (job?.status !== 'pending' && job?.status !== 'running') {
-        return null;
-    }
-
-    return (
-        <Flex gap='size-100'>
-            <Text
-                UNSAFE_style={{
-                    color: 'var(--spectrum-global-color-gray-700)',
-                }}
-            >
-                Status:
-            </Text>
-            <Text
-                UNSAFE_style={{
-                    color: 'var(--spectrum-global-color-gray-800)',
-                }}
-            >
-                Importing dataset
-            </Text>
-        </Flex>
-    );
-};
+import { SchemaTrainJob } from '../../../api/openapi-spec';
 
 const TrainingJobStatus = ({ job }: { job: SchemaTrainJob }) => {
     if (job?.status !== 'pending' && job?.status !== 'running') {
@@ -67,13 +42,13 @@ const TrainingJobStatus = ({ job }: { job: SchemaTrainJob }) => {
 };
 
 export const JobStatus = () => {
-    const [job, setJob] = useState<null | SchemaTrainJob | SchemaDatasetImportJob>(null);
+    const [job, setJob] = useState<null | SchemaTrainJob>(null);
 
     const onMessage = ({ data }: WebSocketEventMap['message']) => {
         const message_data = JSON.parse(data);
 
         if (message_data.event === 'JOB_UPDATE') {
-            setJob(message_data.data as SchemaTrainJob | SchemaDatasetImportJob);
+            setJob(message_data.data as SchemaTrainJob);
         }
     };
 
@@ -84,10 +59,6 @@ export const JobStatus = () => {
 
     if (job?.type === 'training') {
         return <TrainingJobStatus job={job} />;
-    }
-
-    if (job?.type === 'dataset_import') {
-        return <DatasetImportJobStatus job={job} />;
     }
 
     return null;
