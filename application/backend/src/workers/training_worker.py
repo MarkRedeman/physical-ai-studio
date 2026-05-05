@@ -106,7 +106,6 @@ class TrainingWorker(BaseProcessWorker):
     async def _train_model(
         self, job: Job, model: Model, snapshot: Snapshot, payload: TrainJobPayload, base_model: Model | None = None
     ):
-        settings = get_settings()
         await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Training started")
         dispatcher = TrainingTrackingDispatcher(
             job_id=job.id,
@@ -172,10 +171,14 @@ class TrainingWorker(BaseProcessWorker):
             dispatcher.start()
             trainer.fit(model=policy, datamodule=l_dm)
 
-            for backend in settings.supported_backends:
-                export_dir = path / "exports" / backend
-                if isinstance(policy, ExportablePolicyMixin):
-                    policy.export(export_dir, backend=backend)
+            if isinstance(policy, ExportablePolicyMixin):
+                for backend in policy.get_supported_export_backends():
+                    try:
+                        export_dir = path / "exports" / backend
+                        policy.export(export_dir, backend=backend)
+                    except Exception as e:
+                        logger.error("Failed exporting to {}", backend)
+                        logger.exception(e)
 
             job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.COMPLETED, message="Training finished"
