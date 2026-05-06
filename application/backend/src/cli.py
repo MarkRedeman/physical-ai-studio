@@ -1,6 +1,9 @@
 """Command line interface for interacting with the Physical AI Studio application."""
 
+import asyncio
 import sys
+from pathlib import Path
+from uuid import UUID
 
 import click
 
@@ -16,6 +19,7 @@ from db.schema import (
     ProjectRobotDB,
     SnapshotDB,
 )
+from services import ModelImportService
 from settings import get_settings
 
 settings = get_settings()
@@ -106,6 +110,44 @@ def migrate() -> None:
         sys.exit(0)
     else:
         click.echo("✗ Migration failed!")
+        sys.exit(1)
+
+
+@cli.command("model-import")
+@click.option("--archive-path", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
+@click.option("--project-id", type=click.UUID, required=True)
+@click.option("--dataset-id", type=click.UUID, required=True)
+@click.option("--policy", type=str, required=True)
+@click.option("--model-name", type=str, required=True)
+@click.option("--base-model-id", type=click.UUID, default=None)
+@click.option("--version", type=int, default=1)
+def model_import(
+    archive_path: Path,
+    project_id: UUID,
+    dataset_id: UUID,
+    policy: str,
+    model_name: str,
+    base_model_id: UUID | None,
+    version: int,
+) -> None:
+    """Import a model archive and register it in the database."""
+
+    async def _run_import() -> None:
+        imported_model = await ModelImportService().import_model_archive(
+            archive_path=archive_path,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            policy=policy,
+            model_name=model_name,
+            base_model_id=base_model_id,
+            version=version,
+        )
+        click.echo(f"✓ Model imported successfully: {imported_model.id}")
+
+    try:
+        asyncio.run(_run_import())
+    except Exception as e:
+        click.echo(f"✗ Failed to import model: {e}")
         sys.exit(1)
 
 

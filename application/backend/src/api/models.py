@@ -1,8 +1,10 @@
+import asyncio
+import tempfile
 from pathlib import Path
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse
 from sse_starlette import EventSourceResponse
@@ -14,13 +16,23 @@ from api.dependencies import (
     get_model_download_service,
     get_model_id,
     get_model_metrics_service,
+    get_model_import_service,
     get_model_service,
 )
 from api.utils import safe_archive_name
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
 from schemas import Model
-from services import DatasetService, ModelDownloadService, ModelMetricsService, ModelService
+from services import DatasetService, ModelDownloadService, ModelImportService, ModelMetricsService, ModelService
+
+_UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
+
+
+def _write_archive_to_disk(file: UploadFile, destination: Path) -> None:
+    with destination.open("wb") as out:
+        while chunk := file.file.read(_UPLOAD_CHUNK_SIZE):
+            out.write(chunk)
+
 
 router = APIRouter(prefix="/api/models", tags=["Models"])
 
@@ -100,3 +112,41 @@ async def remove_model(
     if model is None:
         raise ResourceNotFoundError(ResourceType.MODEL, model_id)
     await model_service.delete_model(model)
+
+
+@router.post(":import", status_code=status.HTTP_201_CREATED)
+async def import_model(  # noqa: PLR0913
+    archive: Annotated[UploadFile, File(description="Model archive ZIP")],
+    project_id: Annotated[UUID, Form()],
+    dataset_id: Annotated[UUID, Form()],
+    policy: Annotated[str, Form()],
+    model_name: Annotated[str, Form()],
+    model_import_service: Annotated[ModelImportService, Depends(get_model_import_service)],
+    base_model_id: Annotated[UUID | None, Form()] = None,
+    version: Annotated[int, Form()] = 1,
+) -> Model:
+    """Import a model ZIP produced by the model download endpoint."""
+    if not archive.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing archive filename")
+
+    if not archive.filename.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only ZIP archives are supported",
+        )
+
+    temp_archive_path = Path(tempfile.gettempdir()) / f"model-import-{uuid4()}.zip"
+
+    try:
+        await asyncio.to_thread(_write_archive_to_disk, archive, temp_archive_path)
+        return await model_import_service.import_model_archive(
+            archive_path=temp_archive_path,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            policy=policy,
+            model_name=model_name,
+            base_model_id=base_model_id,
+            version=version,
+        )
+    finally:
+        temp_archive_path.unlink(missing_ok=True)

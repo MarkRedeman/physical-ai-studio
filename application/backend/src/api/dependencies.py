@@ -13,6 +13,7 @@ from services import (
     EpisodeThumbnailService,
     ModelDownloadService,
     ModelMetricsService,
+    ModelImportService,
     ModelService,
     ProjectCameraService,
     ProjectService,
@@ -134,6 +135,12 @@ def get_model_metrics_service(request: HTTPConnection) -> ModelMetricsService:
 def get_model_download_service() -> ModelDownloadService:
     """Provides a ModelDownloadService instance for model exports."""
     return ModelDownloadService()
+
+
+@lru_cache
+def get_model_import_service() -> ModelImportService:
+    """Provides a ModelImportService instance for model imports."""
+    return ModelImportService()
 
 
 @lru_cache
