@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     database_file: str = Field(default="physicalai.db", alias="DATABASE_FILE", description="Database filename")
     db_echo: bool = Field(default=False, alias="DB_ECHO")
 
+    # Telemetry
+    telemetry_enabled: bool = Field(default=True, alias="TELEMETRY_ENABLED")
+    telemetry_interval_seconds: float = Field(default=1.0, alias="TELEMETRY_INTERVAL_SECONDS")
+    telemetry_persist_to_db: bool = Field(default=True, alias="TELEMETRY_PERSIST_TO_DB")
+    telemetry_retention_raw_hours: int = Field(default=72, alias="TELEMETRY_RETENTION_RAW_HOURS")
+    telemetry_nvidia_enabled: bool = Field(default=True, alias="TELEMETRY_NVIDIA_ENABLED")
+
     # Alembic
     alembic_config_path: str = "src/alembic.ini"
     alembic_script_location: str = "src/alembic"

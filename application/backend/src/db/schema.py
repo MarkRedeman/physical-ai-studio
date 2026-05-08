@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -238,3 +238,37 @@ class JobDB(Base):
         uselist=False,
         lazy="selectin",
     )
+
+
+class TelemetrySeriesDB(Base):
+    __tablename__ = "telemetry_series"
+    __table_args__ = (
+        UniqueConstraint("module", "metric_name", "unit", "labels_json", "device_key", name="uq_telemetry_series_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    module: Mapped[str] = mapped_column(String(64), nullable=False)
+    metric_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    labels_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    device_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="local")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
+
+    points: Mapped[list["TelemetryPointDB"]] = relationship(
+        "TelemetryPointDB",
+        back_populates="series",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class TelemetryPointDB(Base):
+    __tablename__ = "telemetry_points"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    series_id: Mapped[int] = mapped_column(ForeignKey("telemetry_series.id", ondelete="CASCADE"), nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+
+    series: Mapped["TelemetrySeriesDB"] = relationship("TelemetrySeriesDB", back_populates="points")
