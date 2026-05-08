@@ -12,10 +12,10 @@ from starlette.middleware.base import RequestResponseEndpoint
 
 from api.camera import router as camera_router
 from api.dataset import router as dataset_router
+from api.dataset_import import router as imports_router
 from api.dependencies import CameraRegistryDep, RobotRegistryDep
 from api.environments import router as project_environments_router
 from api.hardware import router as hardware_router
-from api.imports import router as imports_router
 from api.job import router as job_router
 from api.logs import router as logs_router
 from api.models import router as models_router

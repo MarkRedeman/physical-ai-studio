@@ -12,7 +12,6 @@ from schemas.dataset_import_job import DatasetImportFinalizeInput, DatasetImport
 from schemas.job import DatasetImportJob
 from services.archive_safety import cleanup_staged_archive
 from services.dataset_import.staging import generate_staging_id, resolve_payload_archive_path
-from services.environment_service import EnvironmentService
 
 
 class DatasetImportService:
@@ -38,14 +37,16 @@ class DatasetImportService:
     @staticmethod
     async def prepare_dataset_import_job(
         project_id: UUID,
-        source_hint: str = "auto",
+        format_hint: str = "auto",
+        dataset_name: str = "",
     ) -> Job:
         async with get_async_db_session_ctx() as session:
             repo = JobRepository(session)
             payload = DatasetImportJobPayload(
                 archive_staging_id=generate_staging_id(),
-                source_hint=source_hint,
-                step=ImportStep.AWAITING_UPLOAD,
+                format_hint=format_hint,
+                dataset_name=dataset_name or None,
+                step=ImportStep.AWAITING_ARCHIVE_UPLOAD,
             )
             job = DatasetImportJob(
                 project_id=project_id,
@@ -70,18 +71,18 @@ class DatasetImportService:
                 project_id=project_id,
                 job_id=job_id,
             )
-            if payload.step != ImportStep.AWAITING_UPLOAD:
+            if payload.step != ImportStep.AWAITING_ARCHIVE_UPLOAD:
                 raise InvalidJobStateError(
-                    f"Archive can only be attached when job is in '{ImportStep.AWAITING_UPLOAD}' step"
+                    f"Archive can only be attached when job is in '{ImportStep.AWAITING_ARCHIVE_UPLOAD}' step"
                 )
 
             payload.uploaded_archive_name = uploaded_archive_name
-            payload.step = ImportStep.UPLOADED
+            payload.step = ImportStep.QUEUED_FOR_DETECTION
 
             updates = {
                 "payload": payload.model_dump(mode="json"),
                 "status": JobStatus.PENDING,
-                "message": "Dataset archive uploaded and queued",
+                "message": "Dataset queued for importing",
                 "progress": 5,
             }
             return await repo.update(job, updates)
@@ -105,17 +106,13 @@ class DatasetImportService:
                 project_id=project_id,
                 job_id=job_id,
             )
-            if payload.step != ImportStep.WAITING_FOR_USER_INPUT:
+            if payload.step != ImportStep.AWAITING_USER_REVIEW:
                 raise InvalidJobStateError(
-                    f"Dataset import can only be finalized from '{ImportStep.WAITING_FOR_USER_INPUT}' step"
+                    f"Dataset import can only be finalized from '{ImportStep.AWAITING_USER_REVIEW}' step"
                 )
 
-            await EnvironmentService.get_environment_by_id(
-                project_id=project_id, environment_id=finalize_input.environment_id
-            )
-
             payload.finalize_input = finalize_input
-            payload.step = ImportStep.READY_TO_COMMIT
+            payload.step = ImportStep.QUEUED_FOR_IMPORT
 
             updates = {
                 "payload": payload.model_dump(mode="json"),
@@ -135,12 +132,10 @@ class DatasetImportService:
                 project_id=project_id,
                 job_id=job_id,
             )
-            blocked_steps = {
-                ImportStep.IMPORTING_RESOURCE,
-                ImportStep.REGISTERING_RESOURCE,
-            }
-            if payload.step in blocked_steps:
-                raise InvalidJobStateError("Cannot cancel import once full import has started")
+            if payload.step != ImportStep.AWAITING_USER_REVIEW:
+                raise InvalidJobStateError(
+                    f"Dataset import can only be canceled from '{ImportStep.AWAITING_USER_REVIEW}' step"
+                )
 
             updates = {
                 "status": JobStatus.CANCELED,

@@ -23,21 +23,28 @@ class ManifestRobotEntry(BaseModel):
 
 
 class DatasetManifestRecordingSchema(BaseModel):
-    """Cameras and robots inferred from dataset source metadata."""
+    """Cameras and robots inferred from dataset format metadata."""
 
     cameras: list[ManifestCameraEntry] = Field(default_factory=list)
     robots: list[ManifestRobotEntry] = Field(default_factory=list)
 
 
 class ImportStep(StrEnum):
-    AWAITING_UPLOAD = "awaiting_upload"
-    UPLOADED = "uploaded"
-    DETECTING_SOURCE = "detecting_source"
-    GENERATING_DRAFT_MANIFEST = "generating_draft_manifest"
-    WAITING_FOR_USER_INPUT = "waiting_for_user_input"
-    READY_TO_COMMIT = "ready_to_commit"
-    REGISTERING_RESOURCE = "registering_resource"
-    IMPORTING_RESOURCE = "importing_resource"
+    # User created import job and archive upload is expected next.
+    AWAITING_ARCHIVE_UPLOAD = "awaiting_archive_upload"
+    # Archive is uploaded and queued for worker-side format detection.
+    QUEUED_FOR_DETECTION = "queued_for_detection"
+    # Worker is determining dataset format adapter.
+    DETECTING_FORMAT = "detecting_format"
+    # Worker is building draft manifest and validation report.
+    BUILDING_MANIFEST_DRAFT = "building_manifest_draft"
+    # Draft is ready and UI should present finalization form.
+    AWAITING_USER_REVIEW = "awaiting_user_review"
+    # User finalized input and import is queued.
+    QUEUED_FOR_IMPORT = "queued_for_import"
+    # Worker is importing/extracting/persisting dataset.
+    IMPORTING_DATASET = "importing_dataset"
+    # Import complete
     COMPLETED = "completed"
 
 
@@ -82,13 +89,11 @@ class DatasetManifest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     source_type: DatasetImportSource = DatasetImportSource.UNKNOWN
-    suggested_name: str | None = None
     statistics: DatasetManifestStatistics = Field(default_factory=DatasetManifestStatistics)
     dataset_schema: DatasetManifestRecordingSchema = Field(default_factory=DatasetManifestRecordingSchema)
 
 
 class DatasetImportFinalizeInput(BaseModel):
-    dataset_name: str
     environment_id: UUID
     default_task: str = ""
 
@@ -98,13 +103,15 @@ class DatasetImportFinalizeInput(BaseModel):
 
 
 class DatasetImportJobPayload(BaseModel):
-    step: ImportStep = ImportStep.AWAITING_UPLOAD
+    step: ImportStep = ImportStep.AWAITING_ARCHIVE_UPLOAD
     result_dataset_id: UUID | None = None
 
     # Opaque staging identifier - resolve the archive path via resolve_payload_archive_path().
     archive_staging_id: UUID
     uploaded_archive_name: str | None = None
-    source_hint: str = "auto"
+    format_hint: str = "auto"
+    # User-provided dataset name, captured at prepare time.
+    dataset_name: str | None = None
     dataset_manifest_draft: DatasetManifest | None = None
     validation_report: ImportValidationReport | None = None
     finalize_input: DatasetImportFinalizeInput | None = None

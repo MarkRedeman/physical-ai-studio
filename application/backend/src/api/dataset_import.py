@@ -10,8 +10,9 @@ from exceptions import InvalidArchiveError, ZipBombDetectedError
 from schemas import Job
 from schemas.base_job import JobType
 from schemas.dataset_import_job import DatasetImportFinalizeInput, DatasetImportJobPayload, ImportStep
+from schemas.job import DatasetImportJob
 from services.archive_safety import SafeZipArchive, check_disk_headroom, cleanup_staged_archive
-from services.dataset_import.adapters import get_supported_dataset_import_sources
+from services.dataset_import.adapters import get_supported_dataset_import_formats
 from services.dataset_import.service import DatasetImportService
 from services.dataset_import.staging import resolve_payload_archive_path
 from services.job_service import JobService
@@ -39,25 +40,57 @@ async def _persist_uploaded_archive(file: UploadFile, payload: DatasetImportJobP
     return destination
 
 
+async def get_awaiting_upload_job(
+    project_id: ProjectID,
+    job_id: UUID,
+    job_service: Annotated[JobService, Depends(get_job_service)],
+) -> DatasetImportJob:
+    """Dependency: fetch and validate a dataset import job that is awaiting archive upload."""
+    job = await job_service.get_job_by_id(job_id)
+
+    if job.project_id != project_id or job.type != JobType.DATASET_IMPORT:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset import job not found")
+
+    if not isinstance(job.payload, DatasetImportJobPayload):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Dataset import job payload is invalid")
+
+    if job.payload.step != ImportStep.AWAITING_ARCHIVE_UPLOAD:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Archive can only be uploaded when job is in '{ImportStep.AWAITING_ARCHIVE_UPLOAD}' step",
+        )
+
+    return job
+
+
 @router.post("/datasets:prepare", status_code=status.HTTP_202_ACCEPTED)
 async def prepare_dataset_import_job(
     project_id: ProjectID,
     dataset_import_service: Annotated[DatasetImportService, Depends(get_dataset_import_service)],
-    source_hint: Annotated[str, Form()] = "auto",
+    format_hint: Annotated[str, Form()] = "auto",
+    dataset_name: Annotated[str, Form()] = "",
 ) -> Job:
     """Phase 1: Create a dataset import job immediately, before the archive is uploaded.
 
-    Returns a Job with step=awaiting_upload. Use the returned job_id in the phase-2
+    Returns a Job with step=awaiting_archive_upload. Use the returned job_id in the phase-2
     upload endpoint to attach the archive and queue processing.
     """
-    supported_source_hints = get_supported_dataset_import_sources()
-    if source_hint not in supported_source_hints:
+    supported_format_hints = get_supported_dataset_import_formats()
+    if format_hint not in supported_format_hints:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid source_hint '{source_hint}'. Expected one of: {sorted(supported_source_hints)}",
+            detail=f"Invalid format_hint '{format_hint}'. Expected one of: {sorted(supported_format_hints)}",
         )
 
-    return await dataset_import_service.prepare_dataset_import_job(project_id=project_id, source_hint=source_hint)
+    if not dataset_name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="dataset_name must be a non-empty string",
+        )
+
+    return await dataset_import_service.prepare_dataset_import_job(
+        project_id=project_id, format_hint=format_hint, dataset_name=dataset_name.strip()
+    )
 
 
 @router.put("/datasets/{job_id}:upload", status_code=status.HTTP_202_ACCEPTED)
@@ -65,13 +98,13 @@ async def upload_dataset_import_archive(
     project_id: ProjectID,
     job_id: UUID,
     archive: Annotated[UploadFile, File(description="Dataset archive ZIP")],
+    job: Annotated[DatasetImportJob, Depends(get_awaiting_upload_job)],
     dataset_import_service: Annotated[DatasetImportService, Depends(get_dataset_import_service)],
-    job_service: Annotated[JobService, Depends(get_job_service)],
 ) -> Job:
     """Phase 2: Upload the archive and attach it to an existing import job.
 
-    The job must be in the awaiting_upload step (created via POST /datasets:prepare).
-    After this call the job transitions to step=uploaded and status=pending so the
+    The job must be in the awaiting_archive_upload step (created via POST /datasets:prepare).
+    After this call the job transitions to step=queued_for_detection and status=pending so the
     worker can pick it up for processing.
     """
     if not archive.filename:
@@ -82,27 +115,14 @@ async def upload_dataset_import_archive(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only ZIP archives are supported"
         )
 
+    # Check if there is enough space for dataset import
     settings = get_settings()
-
-    # --- Guard 1: Cache-dir disk headroom ---
     cache_dir = settings.cache_dir / "imports" / "datasets"
     upload_size_estimate = settings.data_import_max_upload_bytes
     check_disk_headroom(cache_dir, upload_size_estimate, settings.data_import_min_free_bytes)
 
-    job = await job_service.get_job_by_id(job_id)
-    if job.project_id != project_id or job.type != JobType.DATASET_IMPORT:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset import job not found")
-    if not isinstance(job.payload, DatasetImportJobPayload):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Dataset import job payload is invalid")
-    if job.payload.step != ImportStep.AWAITING_UPLOAD:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Archive can only be uploaded when job is in '{ImportStep.AWAITING_UPLOAD}' step",
-        )
-
+    # Make sure we are safe against zip bomb attacks
     uploaded_archive_path = await _persist_uploaded_archive(archive, job.payload)
-
-    # --- Guard 2: Archive safety validation ---
     try:
         safe_archive = SafeZipArchive(
             uploaded_archive_path,

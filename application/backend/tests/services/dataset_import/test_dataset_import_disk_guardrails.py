@@ -103,11 +103,11 @@ def test_worker_run_commit_raises_when_datasets_dir_has_insufficient_space(tmp_p
     # --- build a minimal payload that has a committed manifest draft ---
     manifest_draft = DatasetManifest(source_type=DatasetImportSource.LEROBOT_V3)
     payload = DatasetImportJobPayload(
-        step=ImportStep.READY_TO_COMMIT,
+        step=ImportStep.QUEUED_FOR_IMPORT,
         archive_staging_id=staging_id,
+        dataset_name="tmp",
         dataset_manifest_draft=manifest_draft,
         finalize_input=DatasetImportFinalizeInput(
-            dataset_name="tmp",
             environment_id=uuid4(),
         ),
     )

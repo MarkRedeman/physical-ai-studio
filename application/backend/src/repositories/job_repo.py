@@ -51,8 +51,8 @@ class JobRepository(BaseRepository):
 
     async def claim_pending_dataset_import_job(self) -> Job | None:
         pending_steps = [
-            ImportStep.UPLOADED.value,
-            ImportStep.READY_TO_COMMIT.value,
+            ImportStep.QUEUED_FOR_DETECTION.value,
+            ImportStep.QUEUED_FOR_IMPORT.value,
         ]
 
         query = (
@@ -80,7 +80,6 @@ class JobRepository(BaseRepository):
             .values(
                 status=JobStatus.RUNNING,
                 start_time=datetime.datetime.now(tz=datetime.UTC),
-                message="Dataset import job claimed by worker",
             )
         )
         await self.db.execute(claim)

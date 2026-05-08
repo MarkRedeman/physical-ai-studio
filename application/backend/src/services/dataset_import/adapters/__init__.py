@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from schemas.dataset_import_job import ImportValidationReport
 
 from .base import DatasetImportAdapter
 
@@ -17,45 +20,59 @@ def get_registered_dataset_import_adapters() -> list[DatasetImportAdapter]:
     return list(REGISTERED_DATASET_IMPORT_ADAPTERS)
 
 
-def get_supported_dataset_import_sources() -> set[str]:
-    """Single source of truth for currently supported import source hints."""
+def get_supported_dataset_import_formats() -> set[str]:
+    """Single source of truth for currently supported import format hints."""
     return {"auto", *[adapter.source.value for adapter in REGISTERED_DATASET_IMPORT_ADAPTERS]}
+
+
+@dataclass
+class DatasetAdapterSelectionResult:
+    """Structured result from :func:`select_dataset_import_adapter`.
+
+    Exactly one of *adapter* or *report* will be set:
+    - Success: ``adapter`` is the matched :class:`DatasetImportAdapter`, ``report`` is ``None``.
+    - Failure: ``adapter`` is ``None``, ``report`` carries the actionable error(s).
+    """
+
+    adapter: DatasetImportAdapter | None
+    report: ImportValidationReport | None
 
 
 def select_dataset_import_adapter(
     adapters: list[DatasetImportAdapter],
-    source_hint: str,
+    format_hint: str,
     archive: SafeZipArchive,
-) -> DatasetImportAdapter | None:
-    """Select the appropriate adapter given a *source_hint* and an open *archive*.
+) -> DatasetAdapterSelectionResult:
+    """Select the appropriate adapter given a *format_hint* and an open *archive*.
 
-    Behavior:
-    - If *source_hint* is ``"auto"``: iterate adapters and return the first
-      whose :meth:`detect` returns ``True``, or ``None`` if none match.
-    - If *source_hint* is a known adapter source value: require that adapter's
-      :meth:`detect` to pass; raise :class:`ValueError` if it does not.
-    - If *source_hint* is not recognized: raise :class:`ValueError` listing
-      the known source values.
+    Returns a :class:`DatasetAdapterSelectionResult` — never raises for semantic
+    mismatches or unknown hints.
     """
-    if source_hint == "auto":
-        for adapter in adapters:
-            if adapter.detect(archive):
-                return adapter
-        return None
+    for adapter in adapters:
+        if format_hint not in ("auto", adapter.source.value):
+            continue
 
-    hinted = next((a for a in adapters if a.source == source_hint), None)
-    if hinted is None:
-        known = [a.source.value for a in adapters]
-        raise ValueError(f"Source hint '{source_hint}' is not recognized. Known adapters: {known}")
+        matched, report = adapter.detect(archive)
+        if matched:
+            return DatasetAdapterSelectionResult(adapter=adapter, report=None)
 
-    if not hinted.detect(archive):
-        raise ValueError(f"The uploaded archive is not compatible with the selected format '{source_hint}'")
-    return hinted
+        if format_hint == adapter.source.value:
+            return DatasetAdapterSelectionResult(adapter=None, report=report)
+
+    report = ImportValidationReport()
+    report.add_error(
+        "No supported dataset format was detected. "
+        "Supported formats are LeRobot v2 and LeRobot v3. "
+        "Ensure the archive contains the required metadata (meta/info.json) "
+        "and the expected data layout (data/ directory with Parquet episode files)."
+    )
+    return DatasetAdapterSelectionResult(adapter=None, report=report)
 
 
 __all__ = [
+    "DatasetAdapterSelectionResult",
     "DatasetImportAdapter",
     "get_registered_dataset_import_adapters",
-    "get_supported_dataset_import_sources",
+    "get_supported_dataset_import_formats",
     "select_dataset_import_adapter",
 ]
