@@ -85,9 +85,9 @@ async def test_discover_job_sources_uses_staging_id_when_no_manifest(tmp_path) -
         project_id=uuid4(),
         payload={
             "type": "dataset_import",
-            "step": "uploaded",
+            "step": "queued_for_detection",
             "archive_staging_id": staging_id,
-            "source_hint": "auto",
+            "format_hint": "auto",
             "dataset_manifest_draft": None,
             "validation_report": None,
             "finalize_input": None,
@@ -108,8 +108,8 @@ async def test_discover_job_sources_uses_staging_id_when_no_manifest(tmp_path) -
 
 
 @pytest.mark.anyio
-async def test_discover_job_sources_prefers_manifest_suggested_name(tmp_path) -> None:
-    """Manifest suggested_name takes priority over staging id or legacy path."""
+async def test_discover_job_sources_prefers_dataset_name(tmp_path) -> None:
+    """Dataset name from prepare input takes priority for import job display names."""
     jobs_dir = tmp_path / "jobs"
     jobs_dir.mkdir(parents=True)
 
@@ -123,12 +123,12 @@ async def test_discover_job_sources_prefers_manifest_suggested_name(tmp_path) ->
         project_id=uuid4(),
         payload={
             "type": "dataset_import",
-            "step": "waiting_for_user_input",
+            "step": "awaiting_user_review",
             "archive_staging_id": staging_id,
-            "source_hint": "auto",
+            "format_hint": "auto",
+            "dataset_name": "My Preferred Dataset Name",
             "dataset_manifest_draft": {
                 "source_type": "lerobot_v3",
-                "suggested_name": "My Preferred Dataset Name",
                 "capture": {},
                 "schema": {},
             },

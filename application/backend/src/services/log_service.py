@@ -96,14 +96,10 @@ class LogService:
                 names[str(job.id)] = f"{payload.model_name} ({payload.policy})"
             elif job.type == JobType.DATASET_IMPORT:
                 payload = DatasetImportJobPayload.model_validate(job.payload)
-                # Prefer manifest suggested name, then staging-id-based fallback, then job short id.
-                suggested = (
-                    payload.dataset_manifest_draft.suggested_name
-                    if payload.dataset_manifest_draft is not None and payload.dataset_manifest_draft.suggested_name
-                    else None
-                )
-                if suggested:
-                    display_name = suggested
+                if payload.dataset_name:
+                    display_name = payload.dataset_name
+                elif payload.uploaded_archive_name:
+                    display_name = payload.uploaded_archive_name
                 elif payload.archive_staging_id:
                     display_name = f"{str(payload.archive_staging_id)[:8]}.zip"
                 else:
