@@ -6,8 +6,9 @@ import pytest
 from physicalai.robot.so101.calibration import SO101Calibration, SO101JointCalibration
 from physicalai.robot.so101.constants import RADIANS_PER_TICK, SO101_JOINT_ORDER
 
-from robots.so101.adapter import SO101Adapter, _clamp, _clamp_joints
+from robots.physicalai.adapter import PhysicalAIRobotAdapter, _clamp, _clamp_joints
 from schemas.calibration import Calibration, CalibrationValue
+from schemas.robot import RobotType
 
 
 def _make_calibration_value(joint_id: int, drive_mode: int = 0, homing_offset: int = 2048) -> CalibrationValue:
@@ -63,11 +64,17 @@ def _make_mock_robot(so101_cal: SO101Calibration | None = None) -> MagicMock:
 def _make_adapter(
     mode: str = "follower",
     drive_modes: dict[str, int] | None = None,
-) -> tuple[SO101Adapter, MagicMock]:
+) -> tuple[PhysicalAIRobotAdapter, MagicMock]:
     backend_cal = _make_backend_calibration(drive_modes)
     so101_cal = _make_so101_calibration(drive_modes)
     robot = _make_mock_robot(so101_cal)
-    adapter = SO101Adapter(robot=robot, mode=mode, calibration=backend_cal)
+    adapter = PhysicalAIRobotAdapter(
+        robot=robot,
+        mode=mode,
+        robot_type_follower=RobotType.SO101_FOLLOWER,
+        robot_type_leader=RobotType.SO101_LEADER,
+        calibration=backend_cal,
+    )
     return adapter, robot
 
 

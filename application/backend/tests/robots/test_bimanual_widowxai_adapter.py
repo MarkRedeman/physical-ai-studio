@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for BimanualWidowXAIAdapter."""
+"""Tests for bimanual PhysicalAIRobotAdapter."""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from physicalai.robot.trossen.constants import WIDOWXAI_JOINT_ORDER
 
-from robots.widowxai.bimanual_adapter import BimanualWidowXAIAdapter
+from robots.physicalai.adapter import PhysicalAIRobotAdapter
 from schemas.robot import RobotType
 
 # ---------------------------------------------------------------------------
@@ -41,9 +41,14 @@ def _make_bimanual_robot(mode: str = "follower") -> MagicMock:
     return robot
 
 
-def _make_adapter(mode: str = "follower") -> BimanualWidowXAIAdapter:
+def _make_adapter(mode: str = "follower") -> PhysicalAIRobotAdapter:
     robot = _make_bimanual_robot(mode)
-    return BimanualWidowXAIAdapter(robot=robot, mode=mode)
+    return PhysicalAIRobotAdapter(
+        robot=robot,
+        mode=mode,
+        robot_type_follower=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
+        robot_type_leader=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +72,12 @@ class TestProperties:
     def test_is_connected_false_when_robot_not_connected(self):
         robot = _make_bimanual_robot()
         robot.is_connected.return_value = False
-        adapter = BimanualWidowXAIAdapter(robot=robot, mode="follower")
+        adapter = PhysicalAIRobotAdapter(
+            robot=robot,
+            mode="follower",
+            robot_type_follower=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
+            robot_type_leader=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER,
+        )
         assert adapter.is_connected is False
 
     def test_features_prefixed(self):
@@ -86,15 +96,25 @@ class TestProperties:
 class TestConnectDisconnect:
     def test_connect_calls_robot(self):
         robot = _make_bimanual_robot()
-        adapter = BimanualWidowXAIAdapter(robot=robot, mode="follower")
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", new=AsyncMock()):
+        adapter = PhysicalAIRobotAdapter(
+            robot=robot,
+            mode="follower",
+            robot_type_follower=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
+            robot_type_leader=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER,
+        )
+        with patch("robots.physicalai.adapter.asyncio.to_thread", new=AsyncMock()):
             asyncio.run(adapter.connect())
         assert adapter.is_controlled is True
 
     def test_disconnect_calls_robot(self):
         robot = _make_bimanual_robot()
-        adapter = BimanualWidowXAIAdapter(robot=robot, mode="follower")
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", new=AsyncMock()):
+        adapter = PhysicalAIRobotAdapter(
+            robot=robot,
+            mode="follower",
+            robot_type_follower=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
+            robot_type_leader=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER,
+        )
+        with patch("robots.physicalai.adapter.asyncio.to_thread", new=AsyncMock()):
             asyncio.run(adapter.disconnect())
 
 
@@ -119,7 +139,7 @@ class TestReadState:
     def test_keys_are_prefixed(self):
         adapter = _make_adapter()
         obs = adapter._robot.get_observation()
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", new=AsyncMock(return_value=obs)):
+        with patch("robots.physicalai.adapter.asyncio.to_thread", new=AsyncMock(return_value=obs)):
             result = asyncio.run(adapter.read_state())
         assert result["event"] == "state_was_updated"
         for key in result["state"]:
@@ -128,7 +148,7 @@ class TestReadState:
     def test_merged_key_count(self):
         adapter = _make_adapter()
         obs = adapter._robot.get_observation()
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", new=AsyncMock(return_value=obs)):
+        with patch("robots.physicalai.adapter.asyncio.to_thread", new=AsyncMock(return_value=obs)):
             result = asyncio.run(adapter.read_state())
         # 14 pos + 14 vel = 28
         assert len(result["state"]) == 28
@@ -143,7 +163,7 @@ class TestReadForces:
     def test_follower_returns_prefixed_forces(self):
         adapter = _make_adapter("follower")
         obs = adapter._robot.get_observation()
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", new=AsyncMock(return_value=obs)):
+        with patch("robots.physicalai.adapter.asyncio.to_thread", new=AsyncMock(return_value=obs)):
             result = asyncio.run(adapter.read_forces())
         assert result is not None
         assert result["event"] == "force_was_updated"
@@ -174,7 +194,7 @@ class TestSetJointsState:
         async def fake_to_thread(fn, *args, **kwargs):
             captured.append((fn, args, kwargs))
 
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", side_effect=fake_to_thread):
+        with patch("robots.physicalai.adapter.asyncio.to_thread", side_effect=fake_to_thread):
             asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
 
         assert len(captured) == 1
@@ -208,7 +228,7 @@ class TestSetForces:
         async def fake_to_thread(fn, *args, **kwargs):
             captured.append((fn, args, kwargs))
 
-        with patch("robots.widowxai.bimanual_adapter.asyncio.to_thread", side_effect=fake_to_thread):
+        with patch("robots.physicalai.adapter.asyncio.to_thread", side_effect=fake_to_thread):
             asyncio.run(adapter.set_forces(forces))
 
         assert len(captured) == 1

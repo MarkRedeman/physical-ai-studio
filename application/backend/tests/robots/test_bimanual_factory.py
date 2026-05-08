@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from robots.widowxai.bimanual_adapter import BimanualWidowXAIAdapter
+from robots.physicalai.adapter import PhysicalAIRobotAdapter
 from schemas.robot import RobotType, TrossenBimanualPayload, TrossenBimanualRobot
 
 
@@ -59,7 +59,7 @@ class TestRobotClientFactoryBimanual:
 
             result = asyncio.run(factory.build(robot))
 
-        assert isinstance(result, BimanualWidowXAIAdapter)
+        assert isinstance(result, PhysicalAIRobotAdapter)
 
     @pytest.mark.parametrize(
         "mode,expected_type",

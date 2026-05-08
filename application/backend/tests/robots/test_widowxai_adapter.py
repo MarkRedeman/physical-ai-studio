@@ -9,7 +9,7 @@ import pytest
 from physicalai.robot.trossen.constants import WIDOWXAI_JOINT_ORDER
 from physicalai.robot.trossen.widowxai import WidowXAI, WidowXAIObservation
 
-from robots.widowxai.adapter import WidowXAIAdapter
+from robots.physicalai.adapter import PhysicalAIRobotAdapter
 from schemas.robot import RobotType
 
 
@@ -23,7 +23,12 @@ def _make_mock_robot(role="follower"):
 
 def _make_adapter(mode="follower"):
     robot = _make_mock_robot(role=mode)
-    adapter = WidowXAIAdapter(robot=robot, mode=mode)
+    adapter = PhysicalAIRobotAdapter(
+        robot=robot,
+        mode=mode,
+        robot_type_follower=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
+        robot_type_leader=RobotType.TROSSEN_WIDOWXAI_LEADER,
+    )
     return adapter, robot
 
 
