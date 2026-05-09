@@ -13,11 +13,12 @@ import {
     Tabs,
     View,
 } from '@geti-ui/ui';
-import { Manifest } from '@geti-ui/ui/icons';
+import { Bell, Manifest } from '@geti-ui/ui/icons';
 import { Outlet, useLocation } from 'react-router';
 
 import { AppLogo } from '../../components/app-logo/app-logo';
 import { JobStatus } from '../../features/jobs/footer/job-status';
+import { JobsDialog } from '../../features/jobs/jobs-dialog';
 import { LogsDialog } from '../../features/logs/logs-dialog';
 import { ProjectsListPanel } from '../../features/projects/menu/projects-list-panel.component';
 import { useProjectId } from '../../features/projects/use-project';
@@ -94,6 +95,23 @@ const Footer = () => {
                             Logs
                         </ActionButton>
                         {(close) => <LogsDialog close={close} />}
+                    </DialogTrigger>
+                </View>
+                <Divider orientation='vertical' size='S' />
+                <View>
+                    <DialogTrigger type='popover'>
+                        <ActionButton
+                            isQuiet
+                            UNSAFE_style={{
+                                paddingRight: 'var(--spectrum-global-dimension-size-100)',
+                            }}
+                        >
+                            <Icon>
+                                <Bell />
+                            </Icon>
+                            Jobs
+                        </ActionButton>
+                        <JobsDialog />
                     </DialogTrigger>
                 </View>
                 <Divider orientation='vertical' size='S' />
