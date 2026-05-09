@@ -1,3 +1,4 @@
+from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 import asyncio
 import base64
 from typing import Any
@@ -16,30 +17,38 @@ from schemas.environment import EnvironmentWithRelations, TeleoperatorRobotWithR
 from schemas.project_camera import Camera
 from utils.async_camera_capture import AsyncCameraCapture
 from workers.camera_worker import create_frames_source_from_camera
+from workers.teleoperate_worker import TeleoperateWorker
 
 
 class EnvironmentIntegration:
     """Integration class for the inference version of an environment."""
 
     environment: EnvironmentWithRelations
+    teleoperate_worker_registry: TeleoperateWorkerRegistry
     robot_client_factory: RobotClientFactory
     action_keys: list[str] = []
-    follower: RobotClient | None = None
-    leader: RobotClient | None = None
+    robot_type: str  = "Unknown"
+    teleoperate_worker: TeleoperateWorker | None  = None
     frame_captures: dict[str, AsyncCameraCapture]
 
-    def __init__(self, environment: EnvironmentWithRelations, robot_client_factory: RobotClientFactory):
+    def __init__(self, environment: EnvironmentWithRelations, robot_client_factory: RobotClientFactory, teleoperate_worker_registry: TeleoperateWorkerRegistry):
         self.environment = environment
         self.robot_client_factory = robot_client_factory
+        self.teleoperate_worker_registry = teleoperate_worker_registry
         self.frame_captures = {}
 
     async def setup(self) -> None:
         robot = self.environment.robots[0]  # TODO: Handle multiple robots?
 
-        self.follower = await self.robot_client_factory.build(robot.robot)
+        follower = await self.robot_client_factory.build(robot.robot)
+        self.robot_type = follower.name
+        leader = None
+        if isinstance(robot.tele_operator, TeleoperatorRobotWithRobot) and robot.tele_operator.robot is not None:
+            leader = await self.robot_client_factory.build(robot.tele_operator.robot)
+        worker_id, self.teleoperate_worker = await self.teleoperate_worker_registry.acquire(leader, follower, 0.01)
         if isinstance(robot.tele_operator, TeleoperatorRobotWithRobot) and robot.tele_operator.robot is not None:
             self.leader = await self.robot_client_factory.build(robot.tele_operator.robot)
-        self.action_keys = self.follower.features()
+        self.action_keys = follower.features()
 
         self.frame_captures = {}
         for cam_cfg in self.environment.cameras:
@@ -54,20 +63,18 @@ class EnvironmentIntegration:
             await cap.start()
             self.frame_captures[cam_id] = cap
 
-        await asyncio.sleep(1)  # sleep for camera warmup
-        await self.follower.connect()
-        if self.leader:
-            await self.leader.connect()
+        if self.teleoperate_worker:
+            await self.teleoperate_worker.wait_for_loading_to_complete()
 
     def build_lerobot_dataset_features(self, use_videos: bool = True) -> dict:
         """Build lerobot dataset features."""
         teleop_action_processor, _robot_action_processor, robot_observation_processor = make_default_processors()
 
-        if self.follower is None:
+        if self.action_keys is None:
             raise ValueError("Can only build features with follower")
         action_features: dict[str, Any] = {}
         observation_features: dict[str, Any] = {}
-        for feature in self.follower.features():
+        for feature in self.action_keys:
             action_features[feature] = float
             observation_features[feature] = float
 
@@ -87,14 +94,9 @@ class EnvironmentIntegration:
             ),
         )
 
-    async def set_joints_state(self, actions: dict, goal_time: float) -> None:
-        """Set joints on robot"""
-        if self.follower:
-            await self.follower.set_joints_state(actions, goal_time)
-
     async def get_observation(self) -> dict | None:
-        if self.follower and self.frame_captures:
-            observation = (await self.follower.read_state())["state"]
+        if self.teleoperate_worker and self.frame_captures:
+            observation = self.teleoperate_worker.output_queue.get(timeout=1) # TODO: Handle slow teleoperate worker?
 
             for cam_id, cap in self.frame_captures.items():
                 frame, t_perf, ok, err, seq = await cap.get_latest()
@@ -103,20 +105,6 @@ class EnvironmentIntegration:
 
             return observation
 
-        return None
-
-    async def set_follower_position_from_leader(self, goal_time: float) -> dict | None:
-        """Directly set the follower position based on leader."""
-        if self.leader is not None:
-            actions = (await self.leader.read_state())["state"]
-            await self.set_joints_state(actions, goal_time)
-
-            if self.follower and self.leader:
-                forces = await self.follower.read_forces()
-                if forces and forces["state"] is not None:
-                    await self.leader.set_forces(forces["state"])
-
-            return actions
         return None
 
     def format_observation_for_reporting(self, observation: dict, timestamp: float) -> dict:
@@ -181,11 +169,8 @@ class EnvironmentIntegration:
         return (camera.payload.height, camera.payload.width, 3)
 
     async def teardown(self) -> None:
-        if self.follower:
-            await self.follower.disconnect()
-
-        if self.leader:
-            await self.leader.disconnect()
+        if self.teleoperate_worker:
+            await self.teleoperate_worker.disconnect_robots()
 
         for cap in self.frame_captures.values():
             try:

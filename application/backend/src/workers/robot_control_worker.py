@@ -1,5 +1,6 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
+from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 import asyncio
 import time
 from multiprocessing import Event, Queue
@@ -71,6 +72,7 @@ class RobotControlWorker(BaseThreadWorker):
         queue: Queue,
         robot_client_factory: RobotClientFactory,
         model_worker_registry: ModelWorkerRegistry,
+        teleoperate_worker_registry: TeleoperateWorkerRegistry,
     ):
         super().__init__(stop_event=stop_event)
         self.queue = queue
@@ -78,6 +80,7 @@ class RobotControlWorker(BaseThreadWorker):
         self.robot_client_factory = robot_client_factory
         self.events = WorkerEvents()
         self._model_worker_registry = model_worker_registry
+        self.teleoperate_worker_registry = teleoperate_worker_registry
         self._model_worker_id: UUID | None = None
         self._pending_model: Model | None = None
         self._pending_backend: str | None = None
@@ -129,7 +132,9 @@ class RobotControlWorker(BaseThreadWorker):
         """Setup environment."""
         try:
             self.environment_integration = EnvironmentIntegration(
-                environment=environment, robot_client_factory=self.robot_client_factory
+                environment=environment,
+                robot_client_factory=self.robot_client_factory,
+                teleoperate_worker_registry=self.teleoperate_worker_registry,
             )
             self.events.new_environment.set()
             self.state.environment_loaded = False
@@ -178,21 +183,21 @@ class RobotControlWorker(BaseThreadWorker):
                         )
 
                         actions = None
-                        match self.state.follower_source:
-                            case "teleoperation":
-                                actions = await self.environment_integration.set_follower_position_from_leader(
-                                    goal_time
-                                )
-                            case "model":
-                                if self.model_integration:
-                                    dataset_observation = self.environment_integration.format_model_input_observation(
-                                        observation, task=self.state.task
-                                    )
-                                    action = self.model_integration.select_action(dataset_observation)
-                                    if action is not None:
-                                        actions = dict(zip(self.environment_integration.action_keys, action))
-                                        report_observation["actions"] = actions
-                                        await self.environment_integration.set_joints_state(actions, goal_time)
+                        #match self.state.follower_source:
+                        #    case "teleoperation":
+                        #        actions = await self.environment_integration.set_follower_position_from_leader(
+                        #            goal_time
+                        #        )
+                        #    case "model":
+                        #        if self.model_integration:
+                        #            dataset_observation = self.environment_integration.format_model_input_observation(
+                        #                observation, task=self.state.task
+                        #            )
+                        #            action = self.model_integration.select_action(dataset_observation)
+                        #            if action is not None:
+                        #                actions = dict(zip(self.environment_integration.action_keys, action))
+                        #                report_observation["actions"] = actions
+                        #                await self.environment_integration.set_joints_state(actions, goal_time)
 
                         if (
                             self.state.is_recording
@@ -282,9 +287,7 @@ class RobotControlWorker(BaseThreadWorker):
             self.recording_mutation = self.dataset.start_recording_mutation(
                 fps=self.fps,
                 features=features,
-                robot_type=self.environment_integration.follower.name
-                if self.environment_integration.follower is not None
-                else "unknown",
+                robot_type=self.environment_integration.robot_type
             )
             self.state.dataset_loaded = True
             self._report_state()

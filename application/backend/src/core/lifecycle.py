@@ -7,10 +7,10 @@ from loguru import logger
 from core.logging import setup_logging, setup_uvicorn_logging
 from services.event_processor import EventProcessor
 from settings import get_settings
-from utils.serial_robot_tools import RobotConnectionManager
 from workers.camera_worker_registry import CameraWorkerRegistry
 from workers.model_worker_registry import ModelWorkerRegistry
 from workers.robot_worker_registry import RobotWorkerRegistry
+from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 
 from .scheduler import Scheduler
 
@@ -42,13 +42,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         max_workers=1,
         stop_event=app_scheduler.mp_stop_event,
     )
+
+
+    app.state.teleoperate_registry = TeleoperateWorkerRegistry(
+        max_workers=3,
+        stop_event=app_scheduler.mp_stop_event,
+    )
+
     app.state.scheduler = app_scheduler
     app.state.event_processor = EventProcessor(app_scheduler.event_queue)
     logger.info("Application startup completed")
-
-    # Initialize RobotHardwareManager
-    app.state.robot_manager = RobotConnectionManager()
-    await app.state.robot_manager.find_robots()
 
     yield
 
