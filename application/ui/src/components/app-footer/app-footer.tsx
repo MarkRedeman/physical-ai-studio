@@ -1,7 +1,8 @@
 import { ActionButton, DialogTrigger, Divider, Flex, Icon, View } from '@geti-ui/ui';
-import { Manifest } from '@geti-ui/ui/icons';
+import { Bell, Manifest } from '@geti-ui/ui/icons';
 
 import { JobStatus } from '../../features/jobs/footer/job-status';
+import { JobsDialog } from '../../features/jobs/jobs-dialog';
 import { LogsDialog } from '../../features/logs/logs-dialog';
 import { RuntimeSessionStatus } from '../../features/runtime-sessions/runtime-sessions';
 import { RestartRequiredBanner } from '../../features/system/restart-required-banner';
@@ -34,6 +35,23 @@ export const AppFooter = ({ gridArea = 'footer' }: { gridArea?: string }) => {
                                 Logs
                             </ActionButton>
                             {(close) => <LogsDialog close={close} />}
+                        </DialogTrigger>
+                    </View>
+                    <Divider orientation='vertical' size='S' />
+                    <View>
+                        <DialogTrigger type='popover'>
+                            <ActionButton
+                                isQuiet
+                                UNSAFE_style={{
+                                    paddingRight: 'var(--spectrum-global-dimension-size-100)',
+                                }}
+                            >
+                                <Icon>
+                                    <Bell />
+                                </Icon>
+                                Jobs
+                            </ActionButton>
+                            <JobsDialog />
                         </DialogTrigger>
                     </View>
                     <Divider orientation='vertical' size='S' />
