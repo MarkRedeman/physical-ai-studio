@@ -1,3 +1,4 @@
+from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
@@ -245,3 +246,12 @@ def get_model_registry(request: HTTPConnection) -> ModelWorkerRegistry:
 
 
 ModelRegistryDep = Annotated[ModelWorkerRegistry, Depends(get_model_registry)]
+
+def get_teleoperate_registry(request: HTTPConnection) -> TeleoperateWorkerRegistry:
+    """Dependency to get teleoperate worker registry."""
+    registry = getattr(request.app.state, "teleoperate_registry", None)
+    if registry is None:
+        raise RuntimeError("Teleoperator worker registry not initialized")
+    return registry
+
+TeleoperateRegistryDep = Annotated[TeleoperateWorkerRegistry, Depends(get_teleoperate_registry)]

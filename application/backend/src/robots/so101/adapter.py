@@ -154,8 +154,8 @@ class SO101Adapter(RobotClient):
     async def ping(self) -> dict:
         return self._create_event("pong")
 
-    async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
-        await self._move_to_target(joints, goal_time)
+    def set_joints_state(self, joints: dict, goal_time: float) -> dict:
+        self._move_to_target(joints, goal_time)
         return self._create_event("joints_state_was_set", joints=joints)
 
     async def enable_torque(self) -> dict:
@@ -172,9 +172,9 @@ class SO101Adapter(RobotClient):
         self.is_controlled = False
         return self._create_event("torque_was_disabled")
 
-    async def read_state(self, *, normalize: bool = True) -> dict:  # noqa: ARG002
+    def read_state(self, *, normalize: bool = True) -> dict:  # noqa: ARG002
         try:
-            state = await self._get_state()
+            state = self._get_state()
             return self._create_event(
                 "state_was_updated",
                 state=state,
@@ -202,12 +202,11 @@ class SO101Adapter(RobotClient):
             obs = await asyncio.to_thread(self._robot.get_observation)
         return self._radians_to_normalized(obs.joint_positions)
 
-    async def _move_to_target(self, joints: dict, goal_time: float) -> None:
+    def _move_to_target(self, joints: dict, goal_time: float) -> None:
         max_rad = MAX_SPEED_RAD_S * goal_time
 
         # Read current state in radians
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            obs = await asyncio.to_thread(self._robot.get_observation)
+        obs = self._robot.get_observation()
         current_rad = obs.joint_positions
 
         # Convert target from normalized to radians
@@ -226,6 +225,4 @@ class SO101Adapter(RobotClient):
         )
 
         self.previous_target = self._radians_to_normalized(clamped_rad)
-
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(self._robot.send_action, clamped_rad)
+        self._robot.send_action(clamped_rad)

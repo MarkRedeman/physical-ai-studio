@@ -1,3 +1,4 @@
+import ctypes
 import asyncio
 import multiprocessing as mp
 import queue
@@ -10,6 +11,7 @@ from robots.robot_client import RobotClient
 
 from .base import BaseProcessWorker
 
+BUFFER_LENGTH = 50
 
 class TeleoperateWorker(BaseProcessWorker):
     ROLE: str = "TeleoperateWorker"
@@ -18,20 +20,38 @@ class TeleoperateWorker(BaseProcessWorker):
     follower: RobotClient
 
     command_queue: mp.Queue
-    output_queue: mp.Queue
 
     robots_loaded_event: EventClass
     disconnect_robot_event: EventClass
 
     def __init__(self, stop_event: EventClass):
         self.command_queue = mp.Queue()
-        self.output_queue = mp.Queue(maxsize=1)
+        self._output_actions = mp.Array(ctypes.c_double, BUFFER_LENGTH)
+        self._output_state = mp.Array(ctypes.c_double, BUFFER_LENGTH)
         super().__init__(
             stop_event=stop_event,
-            queues_to_cancel=[self.command_queue, self.output_queue],
+            queues_to_cancel=[self.command_queue],
         )
         self.robots_loaded_event = mp.Event()
         self.disconnect_robot_event = mp.Event()
+
+    def get_state(self) -> list[float]:
+        with self._output_state.get_lock():
+            return list(self._output_state.get_obj())
+
+    def _set_state(self, data: list[float]) -> None:
+        with self._output_state.get_lock():
+            state =  data + [0] * (BUFFER_LENGTH - len(data))
+            self._output_state.get_obj()[:] = state
+
+    def get_actions(self) -> list[float]:
+        with self._output_actions.get_lock():
+            return list(self._output_actions.get_obj())
+
+    def _set_actions(self, data: list[float]) -> None:
+        with self._output_actions.get_lock():
+            actions =  data + [0] * (BUFFER_LENGTH - len(data))
+            self._output_actions.get_obj()[:] = actions
 
     @property
     def is_loaded(self) -> bool:
@@ -65,7 +85,9 @@ class TeleoperateWorker(BaseProcessWorker):
                 continue
 
             _, self.leader, self.follower, goal_time = cmd
+
             try:
+                features = self.follower.features()
                 if self.leader is not None:
                     await self.leader.connect()
                 await self.follower.connect()
@@ -77,9 +99,11 @@ class TeleoperateWorker(BaseProcessWorker):
                     start_loop_t = time.perf_counter()
 
                     if self.leader is not None:
-                        actions = (await self.leader.read_state())["state"]
-                        await self.follower.set_joints_state(actions, goal_time)
-                        self.output_queue.put(actions)
+                        state = (self.follower.read_state())["state"]
+                        actions = (self.leader.read_state())["state"]
+                        self.follower.set_joints_state(actions, goal_time * 3)
+                        self._set_actions([actions[key] for key in features])
+                        self._set_state([state[key] for key in features])
                     else:
                         pass
 
@@ -87,9 +111,10 @@ class TeleoperateWorker(BaseProcessWorker):
                     wait_time = goal_time - dt_s
 
                     if wait_time > 0:
-                        await asyncio.sleep(wait_time)
+                        time.sleep(wait_time)
                     else:
-                        await asyncio.sleep(0)
+                        logger.warning(f"Did not meet target framespeed by {0 - wait_time}, {dt_s * 1000}ms")
+                        time.sleep(0)
 
             finally:
                 logger.info("Teleoperating stopped, disconnecting robots.")
@@ -103,5 +128,4 @@ class TeleoperateWorker(BaseProcessWorker):
 
     async def teardown(self) -> None:
         self.command_queue.close()
-        self.output_queue.close()
         await super().teardown()

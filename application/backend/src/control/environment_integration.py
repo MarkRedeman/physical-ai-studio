@@ -42,13 +42,13 @@ class EnvironmentIntegration:
 
         follower = await self.robot_client_factory.build(robot.robot)
         self.robot_type = follower.name
+        self.action_keys = follower.features()
+
         leader = None
         if isinstance(robot.tele_operator, TeleoperatorRobotWithRobot) and robot.tele_operator.robot is not None:
             leader = await self.robot_client_factory.build(robot.tele_operator.robot)
+
         worker_id, self.teleoperate_worker = await self.teleoperate_worker_registry.acquire(leader, follower, 0.01)
-        if isinstance(robot.tele_operator, TeleoperatorRobotWithRobot) and robot.tele_operator.robot is not None:
-            self.leader = await self.robot_client_factory.build(robot.tele_operator.robot)
-        self.action_keys = follower.features()
 
         self.frame_captures = {}
         for cam_cfg in self.environment.cameras:
@@ -63,6 +63,7 @@ class EnvironmentIntegration:
             await cap.start()
             self.frame_captures[cam_id] = cap
 
+        await asyncio.sleep(1)  # sleep for camera warmup
         if self.teleoperate_worker:
             await self.teleoperate_worker.wait_for_loading_to_complete()
 
@@ -94,10 +95,16 @@ class EnvironmentIntegration:
             ),
         )
 
+    def get_actions(self) -> dict | None:
+        if self.teleoperate_worker:
+            raw_actions = self.teleoperate_worker.get_actions()
+            return {i: raw_actions[k] for k,i in enumerate(self.action_keys)}
+
+
     async def get_observation(self) -> dict | None:
         if self.teleoperate_worker and self.frame_captures:
-            observation = self.teleoperate_worker.output_queue.get(timeout=1) # TODO: Handle slow teleoperate worker?
-
+            raw_state = self.teleoperate_worker.get_state()
+            observation: dict[str, Any] = {i: raw_state[k] for k,i in enumerate(self.action_keys)}
             for cam_id, cap in self.frame_captures.items():
                 frame, t_perf, ok, err, seq = await cap.get_latest()
                 if ok and frame is not None:

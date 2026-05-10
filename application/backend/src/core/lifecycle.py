@@ -1,3 +1,4 @@
+from utils.serial_robot_tools import RobotConnectionManager
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -52,6 +53,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.scheduler = app_scheduler
     app.state.event_processor = EventProcessor(app_scheduler.event_queue)
     logger.info("Application startup completed")
+
+    # Initialize RobotHardwareManager
+    app.state.robot_manager = RobotConnectionManager()
+    await app.state.robot_manager.find_robots()
 
     yield
 

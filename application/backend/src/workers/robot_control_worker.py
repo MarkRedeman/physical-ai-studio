@@ -159,10 +159,9 @@ class RobotControlWorker(BaseThreadWorker):
 
     async def run_loop(self) -> None:
         """inference loop."""
-        try:
-            self.start_episode_t = time.perf_counter()
-
-            while not self.should_stop() and not self.events.interrupt.is_set():
+        self.start_episode_t = time.perf_counter()
+        while not self.should_stop() and not self.events.interrupt.is_set():
+            try:
                 await asyncio.gather(
                     self._handle_new_model_load(),
                     self._handle_setup_environment(),
@@ -183,21 +182,22 @@ class RobotControlWorker(BaseThreadWorker):
                         )
 
                         actions = None
-                        #match self.state.follower_source:
-                        #    case "teleoperation":
-                        #        actions = await self.environment_integration.set_follower_position_from_leader(
-                        #            goal_time
-                        #        )
-                        #    case "model":
-                        #        if self.model_integration:
-                        #            dataset_observation = self.environment_integration.format_model_input_observation(
-                        #                observation, task=self.state.task
-                        #            )
-                        #            action = self.model_integration.select_action(dataset_observation)
-                        #            if action is not None:
-                        #                actions = dict(zip(self.environment_integration.action_keys, action))
-                        #                report_observation["actions"] = actions
-                        #                await self.environment_integration.set_joints_state(actions, goal_time)
+                        match self.state.follower_source:
+                            case "teleoperation":
+                                actions = self.environment_integration.get_actions()
+                            case "model":
+                                #TODO: implement setting joint state in teleoperate worker.
+                                pass
+
+                                #if self.model_integration:
+                                #    dataset_observation = self.environment_integration.format_model_input_observation(
+                                #        observation, task=self.state.task
+                                #    )
+                                #    action = self.model_integration.select_action(dataset_observation)
+                                #    if action is not None:
+                                #        actions = dict(zip(self.environment_integration.action_keys, action))
+                                #        report_observation["actions"] = actions
+                                #        await self.environment_integration.set_joints_state(actions, goal_time)
 
                         if (
                             self.state.is_recording
@@ -217,10 +217,11 @@ class RobotControlWorker(BaseThreadWorker):
                 if wait_time > 0:
                     await asyncio.sleep(wait_time)
                 else:
+                    logger.warning(f"Did not meet target framespeed by {0 - wait_time}, {dt_s * 1000}ms")
                     await asyncio.sleep(0)
-        except Exception as e:
-            logger.exception(f"RobotControl loop error: {e}")
-            self._report_error(e)
+            except Exception as e:
+                logger.exception(f"RobotControl loop error: {e}")
+                self._report_error(e)
 
     async def _handle_new_model_load(self) -> None:
         if self._pending_model is not None and self.events.new_model.is_set():

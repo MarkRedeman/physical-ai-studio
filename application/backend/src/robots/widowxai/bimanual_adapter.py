@@ -118,10 +118,9 @@ class BimanualWidowXAIAdapter(RobotClient):
     # State read/write
     # ------------------------------------------------------------------
 
-    async def read_state(self, *, normalize: bool = True) -> dict:  # noqa: ARG002
+    def read_state(self, *, normalize: bool = True) -> dict:  # noqa: ARG002
         try:
-            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-                obs = await asyncio.to_thread(self._robot.get_observation)
+            obs = self._robot.get_observation()
             state = self._observation_to_state(obs)
             return self._create_event(
                 "state_was_updated",
@@ -153,15 +152,12 @@ class BimanualWidowXAIAdapter(RobotClient):
             is_controlled=self.is_controlled,
         )
 
-    async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
+    def set_joints_state(self, joints: dict, goal_time: float) -> dict:
         if self._mode == "leader":
             raise RuntimeError("Cannot send actions to a leader robot")
 
         positions = self._state_to_action(joints)
-
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(self._robot.send_action, positions, goal_time=goal_time)
-
+        self._robot.send_action(positions, goal_time=goal_time)
         return self._create_event("joints_state_was_set", joints=joints)
 
     async def set_forces(self, forces: dict) -> dict:

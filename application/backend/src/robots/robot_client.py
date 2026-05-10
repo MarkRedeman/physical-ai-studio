@@ -32,7 +32,7 @@ class RobotClient(ABC):
         """Send ping command. Returns event dict with timestamp."""
 
     @abstractmethod
-    async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
+    def set_joints_state(self, joints: dict, goal_time: float) -> dict:
         """Set joint positions. Returns event dict with timestamp."""
 
     @abstractmethod
@@ -44,7 +44,7 @@ class RobotClient(ABC):
         """Disable torque. Returns event dict with timestamp."""
 
     @abstractmethod
-    async def read_state(self, *, normalize: bool = True) -> dict:
+    def read_state(self, *, normalize: bool = True) -> dict:
         """Read current robot state. Returns state dict with timestamp."""
 
     @abstractmethod
