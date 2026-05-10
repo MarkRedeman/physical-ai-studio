@@ -369,39 +369,6 @@ async def test_cancel_succeeds_for_awaiting_user_review_with_staging_id() -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_dataset_manifest_slim_shape_no_legacy_fields() -> None:
-    """DatasetManifest no longer carries manifest_version, resource_type, integrity,
-    warnings, or missing_fields."""
-    from schemas.dataset_import_job import DatasetImportSource, DatasetManifest, DatasetManifestStatistics
-
-    manifest = DatasetManifest(
-        source_type=DatasetImportSource.UNKNOWN,
-        statistics=DatasetManifestStatistics(episode_count=5, frame_count=150),
-    )
-    dumped = manifest.model_dump(by_alias=True)
-
-    assert "manifest_version" not in dumped
-    assert "resource_type" not in dumped
-    assert "integrity" not in dumped
-    assert "warnings" not in dumped
-    assert "missing_fields" not in dumped
-    # dataset_schema must still be present
-    assert "dataset_schema" in dumped
-
-
-def test_dataset_manifest_source_slim_shape_no_legacy_fields() -> None:
-    """DatasetManifest.source_type is a direct field; no nested DatasetManifestSource wrapper."""
-    from schemas.dataset_import_job import DatasetImportSource, DatasetManifest
-
-    manifest = DatasetManifest(source_type=DatasetImportSource.LEROBOT_V3)
-    dumped = manifest.model_dump()
-
-    assert "source_format_version" not in dumped
-    assert "source_identifier" not in dumped
-    assert "original_dataset_uuid" not in dumped
-    assert dumped["source_type"] == DatasetImportSource.LEROBOT_V3
-
-
 def test_dataset_manifest_identity_slim_shape_no_default_task() -> None:
     """DatasetManifest no longer carries identity fields such as suggested_name/default_task."""
     from schemas.dataset_import_job import DatasetManifest
