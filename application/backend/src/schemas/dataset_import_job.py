@@ -17,7 +17,6 @@ class ManifestCameraEntry(BaseModel):
 class ManifestRobotEntry(BaseModel):
     """Recording schema entry describing a robot and its controllable joints."""
 
-    name: str
     type: str | None = None
     joints: list[str] = Field(default_factory=list)
 

@@ -278,7 +278,6 @@ def test_lerobot_v3_parse_manifest_schema_two_cameras_six_joints(tmp_path: Path)
     # One robot with six joints (set equality - ordering not contractual)
     assert len(schema.robots) == 1
     robot = schema.robots[0]
-    assert robot.name == "so100"
     assert robot.type == "so100"
     assert set(robot.joints) == {
         "shoulder_pan",

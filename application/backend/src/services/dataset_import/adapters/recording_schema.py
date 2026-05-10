@@ -29,8 +29,7 @@ def extract_recording_schema(info: dict) -> DatasetManifestRecordingSchema:
     (e.g. ``shoulder_pan.pos`` → ``shoulder_pan``), with duplicates removed
     while preserving insertion order.
 
-    The ``robot_type`` top-level field is used as both ``name`` and ``type``
-    when present.
+    The ``robot_type`` top-level field is used as ``type`` when present.
     """
     try:
         features: dict = {}
@@ -119,7 +118,6 @@ def _extract_robots(features: dict, robot_type: str | None) -> list[ManifestRobo
         return []
 
     robot = ManifestRobotEntry(
-        name=robot_type or "robot",
         type=robot_type,
         joints=joints,
     )
