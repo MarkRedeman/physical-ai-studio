@@ -11,9 +11,7 @@ from .lerobot_v3 import LeRobotV3Adapter
 if TYPE_CHECKING:
     from services.archive_safety import SafeZipArchive
 
-REGISTERED_DATASET_IMPORT_ADAPTERS: tuple[DatasetImportAdapter, ...] = (
-    LeRobotV3Adapter(),
-)
+REGISTERED_DATASET_IMPORT_ADAPTERS: tuple[DatasetImportAdapter, ...] = (LeRobotV3Adapter(),)
 
 
 def get_registered_dataset_import_adapters() -> list[DatasetImportAdapter]:

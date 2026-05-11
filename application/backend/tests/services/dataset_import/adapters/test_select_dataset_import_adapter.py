@@ -70,16 +70,6 @@ def _empty_archive(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_auto_selects_v2_adapter_for_v2_archive(tmp_path: Path) -> None:
-    adapters = get_registered_dataset_import_adapters()
-    archive = _open(_v2_archive(tmp_path))
-    result = select_dataset_import_adapter(adapters, "auto", archive)
-    assert isinstance(result, DatasetAdapterSelectionResult)
-    assert result.adapter is not None
-    assert result.adapter.source.value == "lerobot_v2"
-    assert result.report is None
-
-
 def test_auto_selects_v3_adapter_for_v3_archive(tmp_path: Path) -> None:
     adapters = get_registered_dataset_import_adapters()
     archive = _open(_v3_archive(tmp_path))
@@ -159,15 +149,6 @@ def test_auto_no_match_report_mentions_metadata_or_data_layout(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 
 
-def test_explicit_hint_returns_v2_adapter_for_v2_archive(tmp_path: Path) -> None:
-    adapters = get_registered_dataset_import_adapters()
-    archive = _open(_v2_archive(tmp_path))
-    result = select_dataset_import_adapter(adapters, "lerobot_v2", archive)
-    assert result.adapter is not None
-    assert result.adapter.source.value == "lerobot_v2"
-    assert result.report is None
-
-
 def test_explicit_hint_returns_v3_adapter_for_v3_archive(tmp_path: Path) -> None:
     adapters = get_registered_dataset_import_adapters()
     archive = _open(_v3_archive(tmp_path))
@@ -217,14 +198,14 @@ def test_explicit_hint_v2_mismatch_for_v3_archive_returns_no_adapter(tmp_path: P
     assert result.adapter is None
 
 
-def test_explicit_hint_v2_mismatch_report_includes_detect_details(tmp_path: Path) -> None:
-    """v2 mismatch report should include names of missing v2 markers."""
+def test_explicit_hint_v2_unknown_hint_report_has_generic_message(tmp_path: Path) -> None:
+    """'lerobot_v2' is not a registered adapter; the generic fallback message is returned."""
     adapters = get_registered_dataset_import_adapters()
     archive = _open(_v3_archive(tmp_path))
     result = select_dataset_import_adapter(adapters, "lerobot_v2", archive)
     assert result.report is not None
-    combined = " ".join(m.message for m in result.report.messages)
-    assert "episodes.jsonl" in combined or "tasks.jsonl" in combined
+    combined = " ".join(m.message for m in result.report.messages).lower()
+    assert "supported" in combined or "format" in combined or "detected" in combined
 
 
 # ---------------------------------------------------------------------------
