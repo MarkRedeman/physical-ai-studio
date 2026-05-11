@@ -101,7 +101,7 @@ class TeleoperateWorker(BaseProcessWorker):
                     if self.leader is not None:
                         state = (self.follower.read_state())["state"]
                         actions = (self.leader.read_state())["state"]
-                        self.follower.set_joints_state(actions, goal_time * 3)
+                        self.follower.set_joints_state(actions, goal_time * 5)
                         self._set_actions([actions[key] for key in features])
                         self._set_state([state[key] for key in features])
                     else:

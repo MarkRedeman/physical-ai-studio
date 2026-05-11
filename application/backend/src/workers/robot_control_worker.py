@@ -1,5 +1,6 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
+from lerobot.utils.utils import say
 from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 import asyncio
 import time
@@ -256,12 +257,14 @@ class RobotControlWorker(BaseThreadWorker):
 
     async def _handle_start_recording(self) -> None:
         if self.ready_for_recording and self.events.start_recording.is_set():
+            say(f"Start episode {self.state.episodes_recorded + 1}")
             self.events.start_recording.clear()
             self.state.is_recording = True
             self._report_state()
 
     async def _handle_save_episode(self) -> None:
         if self.recording_mutation is not None and self.events.save_episode.is_set():
+            say(f"Saving episode {self.state.episodes_recorded + 1}")
             self.events.save_episode.clear()
             self.recording_mutation.save_episode()
             self.state.is_recording = False
@@ -270,6 +273,7 @@ class RobotControlWorker(BaseThreadWorker):
 
     async def _handle_discard_episode(self) -> None:
         if self.recording_mutation is not None and self.events.discard_episode.is_set():
+            say("Discard episode")
             self.events.discard_episode.clear()
             self.recording_mutation.discard_buffer()
             self.state.is_recording = False
