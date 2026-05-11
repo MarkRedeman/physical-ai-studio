@@ -90,14 +90,23 @@ def test_upload_rejects_nested_zip_and_does_not_attach_archive() -> None:
         }
     )
 
-    try:
-        client = TestClient(app)
-        response = client.put(
-            f"/api/projects/{project_id}/imports/datasets/{job_id}:upload",
-            files={"archive": ("dataset.zip", outer_zip_bytes, "application/zip")},
-        )
-    finally:
-        app.dependency_overrides.clear()
+    # Use a small max_upload_bytes so disk-headroom check only requires a few MB,
+    # making the test deterministic regardless of available disk space.
+    with patch("api.dataset_import.get_settings") as mock_get_settings:
+        settings = mock_get_settings.return_value
+        settings.cache_dir = Path("~/.cache/physicalai").expanduser() / "cache"
+        settings.data_import_max_upload_bytes = 5 * 1024 * 1024  # 5 MB
+        settings.data_import_min_free_bytes = 0
+        settings.data_import_max_uncompressed_bytes = 10 * 1024 * 1024
+
+        try:
+            client = TestClient(app)
+            response = client.put(
+                f"/api/projects/{project_id}/imports/datasets/{job_id}:upload",
+                files={"archive": ("dataset.zip", outer_zip_bytes, "application/zip")},
+            )
+        finally:
+            app.dependency_overrides.clear()
 
     assert response.status_code == 413
     body = response.json()
@@ -126,7 +135,7 @@ def test_upload_rejects_archive_with_too_large_uncompressed_size_and_does_not_at
     with patch("api.dataset_import.get_settings") as mock_get_settings:
         settings = mock_get_settings.return_value
         settings.cache_dir = Path("~/.cache/physicalai").expanduser() / "cache"
-        settings.data_import_max_upload_bytes = 100 * 1024 * 1024 * 1024
+        settings.data_import_max_upload_bytes = 5 * 1024 * 1024  # 5 MB - deterministic on CI
         settings.data_import_min_free_bytes = 0
         settings.data_import_max_uncompressed_bytes = 2_000
 
@@ -167,7 +176,7 @@ def test_upload_accepts_valid_zip_and_attaches_archive(tmp_path: Path) -> None:
 
         s = MagicMock()
         s.cache_dir = cache_dir
-        s.data_import_max_upload_bytes = 100 * 1024 * 1024 * 1024
+        s.data_import_max_upload_bytes = 5 * 1024 * 1024  # 5 MB - deterministic on CI
         s.data_import_min_free_bytes = 0
         s.data_import_max_uncompressed_bytes = 200 * 1024 * 1024 * 1024
         return s
@@ -221,7 +230,7 @@ def test_upload_rejects_archive_with_too_many_entries() -> None:
     ):
         settings = mock_get_settings.return_value
         settings.cache_dir = Path("~/.cache/physicalai").expanduser() / "cache"
-        settings.data_import_max_upload_bytes = 100 * 1024 * 1024 * 1024
+        settings.data_import_max_upload_bytes = 5 * 1024 * 1024  # 5 MB - deterministic on CI
         settings.data_import_min_free_bytes = 0
         settings.data_import_max_uncompressed_bytes = 200 * 1024 * 1024 * 1024
 
