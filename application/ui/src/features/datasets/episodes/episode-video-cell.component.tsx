@@ -24,23 +24,28 @@ export const EpisodeVideoCell = ({
 
     const videoRef = useRef<HTMLVideoElement>(null);
 
-    // Seek and play/pause on explicit player state changes only — not on every time tick.
-    // `seekId` increments when the user seeks/rewinds; `isPlaying` changes on play/pause.
-    // Reading `player.time` inside the effect is safe: React batches the state updates
-    // that trigger seekId/isPlaying changes together with the time update.
     useEffect(() => {
         const video = videoRef.current;
         const start = episodeVideo.start;
         if (!video || !Number.isFinite(start)) return;
 
-        video.currentTime = player.time + start;
+        video.currentTime = player.timeRef.current + start;
         if (player.isPlaying) {
             video.play();
         } else {
             video.pause();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [player.isPlaying, player.seekId, episodeVideo.start]);
+    }, [player, episodeVideo.start, videoRef]);
+
+    useEffect(() => {
+        const video = videoRef.current;
+        if (video && player.isSeeking) {
+            const interval = setInterval(() => {
+                video.currentTime = player.timeRef.current;
+            }, 1000 / 60);
+            return () => clearInterval(interval);
+        }
+    }, [player, videoRef]);
 
     const { containerRef, width, height } = useFittedMediaSize(
         videoRef.current?.videoWidth,
