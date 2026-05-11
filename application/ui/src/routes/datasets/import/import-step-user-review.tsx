@@ -14,22 +14,43 @@ import {
 import { isNumber } from 'lodash-es';
 
 import { $api } from '../../../api/client';
-import { SchemaDatasetImportJob, SchemaDatasetManifest } from '../../../api/openapi-spec';
+import { SchemaDatasetImportJob, SchemaManifestCameraEntry, SchemaManifestRobotEntry } from '../../../api/openapi-spec';
+import { formatDuration } from '../../models/utils';
 import type { FinalizeFields } from './use-dataset-import-job-state';
 
-const formatDuration = (seconds: number): string => {
-    const units = [
-        { unit: 'days', seconds: 86400 },
-        { unit: 'hours', seconds: 3600 },
-        { unit: 'minutes', seconds: 60 },
-        { unit: 'seconds', seconds: 1 },
-    ];
+const RobotsSummary = ({ robots }: { robots: Array<SchemaManifestRobotEntry> }) => {
+    return (
+        <Flex direction='column' gap='size-50'>
+            <Text>
+                <strong>Robots</strong>
+            </Text>
+            {robots.map((robot, index) => (
+                <Text key={`${robot.type ?? 'robot'}-${index}`}>
+                    {robot.type ?? `Robot ${index + 1}`} with <strong>{robot.joints?.length ?? 0}</strong>
+                    joints
+                </Text>
+            ))}
+        </Flex>
+    );
+};
 
-    const { unit, seconds: unitSeconds } = units.find(({ seconds: s }) => seconds >= s) ?? units[units.length - 1];
-
-    const value = Math.round(seconds / unitSeconds);
-
-    return new Intl.DurationFormat('en', { style: 'long' }).format({ [unit]: value });
+const CamerasSummary = ({ cameras }: { cameras: Array<SchemaManifestCameraEntry> }) => {
+    return (
+        <Flex direction='column' gap='size-50'>
+            <Text>
+                <strong>Cameras</strong>
+            </Text>
+            {cameras.map((camera, index) => (
+                <Text key={`${camera.name ?? 'camera'}-${index}`}>
+                    {camera.name ?? `Camera ${index + 1}`}:{' '}
+                    <strong>
+                        {camera.width ?? '—'}×{camera.height ?? '—'}
+                    </strong>{' '}
+                    @ <strong>{camera.fps ?? '-'}</strong> FPS
+                </Text>
+            ))}
+        </Flex>
+    );
 };
 
 const DatasetManifestSummary = ({ importJob }: { importJob: SchemaDatasetImportJob }) => {
@@ -40,7 +61,6 @@ const DatasetManifestSummary = ({ importJob }: { importJob: SchemaDatasetImportJ
         return null;
     }
 
-    const detectedFormat = draft.source_type ?? 'unknown';
     const cameras = draft.dataset_schema?.cameras ?? [];
     const robots = draft.dataset_schema?.robots ?? [];
 
@@ -53,40 +73,14 @@ const DatasetManifestSummary = ({ importJob }: { importJob: SchemaDatasetImportJ
         <Flex direction='column' gap='size-150'>
             <Heading level={4}>Dataset import summary</Heading>
             <Text>
-                Found <strong>{episodeCount}</strong> episodes with total length of {formatDuration(time)}.
+                Found <strong>{episodeCount}</strong> episodes{' '}
+                {time !== null ? <>with total length of {formatDuration(1000 * time)}</> : null}.
             </Text>
 
             <Flex direction='column' gap='size-100'>
-                {robots.length > 0 && (
-                    <Flex direction='column' gap='size-50'>
-                        <Text>
-                            <strong>Robots</strong>
-                        </Text>
-                        {robots.map((robot, index) => (
-                            <Text key={`${robot.type ?? 'robot'}-${index}`}>
-                                {robot.type ?? `Robot ${index + 1}`} with <strong>{robot.joints?.length ?? 0}</strong>{' '}
-                                joints
-                            </Text>
-                        ))}
-                    </Flex>
-                )}
+                {robots.length > 0 && <RobotsSummary robots={robots} />}
 
-                {cameras.length > 0 && (
-                    <Flex direction='column' gap='size-50'>
-                        <Text>
-                            <strong>Cameras</strong>
-                        </Text>
-                        {cameras.map((camera, index) => (
-                            <Text key={`${camera.name ?? 'camera'}-${index}`}>
-                                {camera.name ?? `Camera ${index + 1}`}:{' '}
-                                <strong>
-                                    {camera.width ?? '—'}×{camera.height ?? '—'}
-                                </strong>{' '}
-                                @ <strong>{camera.fps ?? '-'}</strong> FPS
-                            </Text>
-                        ))}
-                    </Flex>
-                )}
+                {cameras.length > 0 && <CamerasSummary cameras={cameras} />}
             </Flex>
         </Flex>
     );
