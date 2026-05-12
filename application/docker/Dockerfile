@@ -169,7 +169,9 @@ RUN groupadd --gid "${APP_GID}" appuser \
     && useradd --uid "${APP_UID}" --gid "${APP_GID}" --create-home appuser
 
 # Common runtime system dependencies (OpenCV, USB access, video decoding)
+# Includes runtime toolchain/linker deps required by torch.compile (Inductor/Triton)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
         ffmpeg \
         libgl1 \
         libglib2.0-0 \
@@ -190,6 +192,8 @@ ENV PATH="/app/application/backend/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONFAULTHANDLER=1 \
+    CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++ \
     UV_NO_SYNC=1 \
     STATIC_FILES_DIR="/app/application/ui/" \
     DATA_DIR="/app/data" \
