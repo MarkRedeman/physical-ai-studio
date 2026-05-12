@@ -73,6 +73,10 @@ and others), configure `HF_TOKEN` to avoid unauthenticated Hub access warnings. 
 
 Run the application in development mode, using [uv package manager](https://docs.astral.sh/uv/getting-started/installation/) and [node v24](https://nodejs.org/en/download) (we recommend using nvm)
 
+Note: native setup requires additional OS-level libraries (OpenCV/video/USB and Python
+build dependencies). See the **Prerequisites** section in
+[Application Documentation](./application/README.md#prerequisites).
+
 ```bash
 # Clone the repository
 git clone https://github.com/open-edge-platform/physical-ai-studio.git
