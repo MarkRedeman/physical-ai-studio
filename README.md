@@ -80,14 +80,18 @@ cd physical-ai-studio
 
 # Install and run backend
 cd application/backend && uv sync --extra xpu # or --extra cpu, --extra cuda
-./run.sh
 
+# Start the backend
+./run.sh
+```
+
+```bash
 # In a new terminal: install and run UI
 cd application/ui
-nvm use
 npm install
-# Fetch the api from the backend and build the types and start the frontend.
-npm run build:api:download && npm run build:api && npm run start
+
+# Start the UI
+npm run start
 ```
 
 Open http://localhost:3000 in your browser.
