@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ActionButton, Flex, Text } from '@geti-ui/ui';
 import { Play, StepBackward, Close as Stop } from '@geti-ui/ui/icons';
@@ -10,18 +10,31 @@ interface TimelineControlsProps {
     player: Player;
 }
 export const TimelineControls = ({
-    player: { isPlaying, rewind, pause, play, duration, timeRef },
+    player: { isPlaying, isSeeking, rewind, pause, play, duration, timeRef },
 }: TimelineControlsProps) => {
-    const [timeText, setTimeText] = useState<string>('00:00');
+    const [timeText, setTimeText] = useState<string>(`00:00/${toMMSS(duration)}`);
+
+    const updateTime = useCallback(() => {
+        setTimeText(`${toMMSS(timeRef.current)}/${toMMSS(duration)}`);
+    }, [setTimeText, timeRef, duration]);
 
     useEffect(() => {
         if (isPlaying) {
             const interval = setInterval(() => {
-                setTimeText(`${toMMSS(timeRef.current)}/${toMMSS(duration)}`);
+                updateTime();
             }, 1000);
             return () => clearInterval(interval);
         }
-    }, [timeRef, isPlaying, duration]);
+    }, [isPlaying, updateTime]);
+
+    useEffect(() => {
+        if (isSeeking) {
+            const interval = setInterval(() => {
+                updateTime();
+            }, 1000 / 60);
+            return () => clearInterval(interval);
+        }
+    }, [isSeeking, updateTime]);
 
     return (
         <Flex direction={'row'}>
