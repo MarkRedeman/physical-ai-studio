@@ -176,11 +176,11 @@ class RobotControlWorker(BaseThreadWorker):
                 start_loop_t = time.perf_counter()
                 if self.environment_integration:
                     observation = await self.environment_integration.get_observation()
-                    timestamp = time.perf_counter() - self.start_episode_t
+                    #timestamp = time.perf_counter() - self.start_episode_t
                     if observation:
-                        report_observation = self.environment_integration.format_observation_for_reporting(
-                            observation, timestamp
-                        )
+                        #report_observation = self.environment_integration.format_observation_for_reporting(
+                        #    observation, timestamp
+                        #)
 
                         actions = None
                         match self.state.follower_source:
@@ -211,7 +211,7 @@ class RobotControlWorker(BaseThreadWorker):
                                 observation
                             )
                             self.recording_mutation.add_frame(dataset_observation, actions, self.state.task)
-                        self._report_observation(report_observation)
+                        #self._report_observation(report_observation)
                 dt_s = time.perf_counter() - start_loop_t
                 wait_time = goal_time - dt_s
 
