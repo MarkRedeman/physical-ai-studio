@@ -15,7 +15,7 @@ export const RobotFormContext = createContext<RobotFormState>(null);
 export const SetRobotFormContext = createContext<Dispatch<SetStateAction<RobotForm>> | null>(null);
 
 export const buildRobotBodyFromForm = (robotForm: RobotForm, robot_id: string): SchemaRobotInput | null => {
-    if (!robotForm.type || !robotForm.name) {
+    if (!robotForm.type) {
         return null;
     }
 
