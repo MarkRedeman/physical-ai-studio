@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from physicalai.robot.so101 import SO101, SO101Calibration
 from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
@@ -6,8 +7,10 @@ from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
+from robots.so101.adapter import SO101Adapter
+from robots.so101.bimanual_adapter import BimanualSO101Adapter
 from schemas.calibration import Calibration
-from schemas.robot import Robot, RobotType, SO101Robot, TrossenBimanualRobot
+from schemas.robot import Robot, RobotType, SO101BimanualRobot, SO101Robot, TrossenBimanualRobot
 from services.robot_calibration_service import RobotCalibrationService, find_robot_port
 from utils.serial_robot_tools import RobotConnectionManager
 
@@ -52,6 +55,10 @@ class RobotClientFactory:
                 return self._build_bimanual_widowxai(robot, mode="follower")
             case RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER:
                 return self._build_bimanual_widowxai(robot, mode="leader")
+            case RobotType.SO101_BIMANUAL_FOLLOWER:
+                return await self._build_bimanual_so101(robot, mode="follower")
+            case RobotType.SO101_BIMANUAL_LEADER:
+                return await self._build_bimanual_so101(robot, mode="teleoperator")
             case RobotType.SO101_FOLLOWER:
                 return await self._build_so101(robot)
             case RobotType.SO101_LEADER:
@@ -116,6 +123,36 @@ class RobotClientFactory:
             ),
         )
 
+    async def _build_bimanual_so101(
+        self,
+        robot: SO101BimanualRobot,
+        mode: Literal["follower", "teleoperator"],
+    ) -> BimanualSO101Adapter:
+        left_port = await self._find_port_by_serial(robot.payload.serial_number_left)
+        right_port = await self._find_port_by_serial(robot.payload.serial_number_right)
+
+        left_calibration = await self._get_calibration_by_id(robot.payload.active_calibration_id_left)
+        right_calibration = await self._get_calibration_by_id(robot.payload.active_calibration_id_right)
+
+        if left_calibration is None:
+            raise ResourceNotFoundError(ResourceType.ROBOT_CALIBRATION, robot.payload.serial_number_left)
+        if right_calibration is None:
+            raise ResourceNotFoundError(ResourceType.ROBOT_CALIBRATION, robot.payload.serial_number_right)
+        if left_port is None:
+            raise ResourceNotFoundError(ResourceType.ROBOT, robot.payload.serial_number_left)
+        if right_port is None:
+            raise ResourceNotFoundError(ResourceType.ROBOT, robot.payload.serial_number_right)
+
+        role = "follower" if mode == "follower" else "leader"
+
+        left_driver = SO101(port=left_port, calibration=self._to_so101_calibration(left_calibration), role=role)
+        right_driver = SO101(port=right_port, calibration=self._to_so101_calibration(right_calibration), role=role)
+
+        left_adapter = SO101Adapter(robot=left_driver, mode=mode, calibration=left_calibration)
+        right_adapter = SO101Adapter(robot=right_driver, mode=mode, calibration=right_calibration)
+
+        return BimanualSO101Adapter(left=left_adapter, right=right_adapter, mode=mode)
+
     async def _find_robot_port(self, robot: SO101Robot) -> str:
         port = await find_robot_port(self.robot_manager, robot)
         if port is None:
@@ -128,3 +165,29 @@ class RobotClientFactory:
             return None
 
         return await self.calibration_service.get_calibration(robot.active_calibration_id)
+
+    async def _find_port_by_serial(self, serial_number: str) -> str | None:
+        for managed_robot in self.robot_manager.robots:
+            if managed_robot.serial_number == serial_number:
+                return managed_robot.connection_string
+        return None
+
+    async def _get_calibration_by_id(self, calibration_id: UUID | None) -> Calibration | None:
+        if calibration_id is None:
+            return None
+        return await self.calibration_service.get_calibration(calibration_id)
+
+    @staticmethod
+    def _to_so101_calibration(calibration: Calibration) -> SO101Calibration:
+        return SO101Calibration.from_dict(
+            {
+                name: {
+                    "id": val.id,
+                    "drive_mode": val.drive_mode,
+                    "homing_offset": val.homing_offset,
+                    "range_min": val.range_min,
+                    "range_max": val.range_max,
+                }
+                for name, val in calibration.values.items()
+            }
+        )

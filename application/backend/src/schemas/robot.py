@@ -36,6 +36,8 @@ class NetworkIpRobotConfig(BaseRobotConfig):
 class RobotType(StrEnum):
     SO101_FOLLOWER = "SO101_Follower"
     SO101_LEADER = "SO101_Leader"
+    SO101_BIMANUAL_FOLLOWER = "SO101_Bimanual_Follower"
+    SO101_BIMANUAL_LEADER = "SO101_Bimanual_Leader"
     TROSSEN_WIDOWXAI_LEADER = "Trossen_WidowXAI_Leader"
     TROSSEN_WIDOWXAI_FOLLOWER = "Trossen_WidowXAI_Follower"
     TROSSEN_BIMANUAL_WIDOWXAI_LEADER = "Trossen_Bimanual_WidowXAI_Leader"
@@ -72,12 +74,30 @@ class TrossenBimanualPayload(BaseModel):
     serial_number: str = Field(default="", description="Serial number (unused for IP robots)")
 
 
+class SO101BimanualPayload(BaseModel):
+    """Connection configuration for SO-101 bimanual robots."""
+
+    connection_string_left: str = Field(
+        default="",
+        description="Left arm serial port path; leave empty to auto-discover via serial_number_left",
+    )
+    connection_string_right: str = Field(
+        default="",
+        description="Right arm serial port path; leave empty to auto-discover via serial_number_right",
+    )
+    serial_number_left: str = Field(..., description="Unique serial number for the left arm")
+    serial_number_right: str = Field(..., description="Unique serial number for the right arm")
+    active_calibration_id_left: UUID | None = Field(default=None, description="Active calibration ID for left arm")
+    active_calibration_id_right: UUID | None = Field(default=None, description="Active calibration ID for right arm")
+
+
 # ============================================================================
 # Concrete Robot Models
 # ============================================================================
 
 
 _SO101Types = Literal[RobotType.SO101_FOLLOWER, RobotType.SO101_LEADER]
+_SO101BimanualTypes = Literal[RobotType.SO101_BIMANUAL_FOLLOWER, RobotType.SO101_BIMANUAL_LEADER]
 _TrossenTypes = Literal[RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER]
 _TrossenBimanualTypes = Literal[
     RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER, RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER
@@ -141,6 +161,34 @@ class TrossenSingleArmRobot(BaseRobot):
     )
 
 
+class SO101BimanualRobot(BaseRobot):
+    """SO-101 bimanual robot composed of left and right serial arms."""
+
+    type: _SO101BimanualTypes = Field(..., description="Type of robot configuration")
+    payload: SO101BimanualPayload = Field(..., description="SO-101 bimanual connection configuration")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "a5e2cde6-936b-4a9e-a213-08dda0afa455",
+                "name": "SO101 Bimanual Robot 1",
+                "type": "SO101_Bimanual_Follower",
+                "payload": {
+                    "connection_string_left": "",
+                    "connection_string_right": "",
+                    "serial_number_left": "SO101-LEFT-001",
+                    "serial_number_right": "SO101-RIGHT-001",
+                    "active_calibration_id_left": "b7f3d9e2-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
+                    "active_calibration_id_right": "c8a4e0f3-2b3c-5d4e-9f0a-1b2c3d4e5f6a",
+                },
+                "active_calibration_id": None,
+                "created_at": "2024-01-15T10:30:00Z",
+                "updated_at": "2024-01-15T10:30:00Z",
+            },
+        },
+    )
+
+
 class TrossenBimanualRobot(BaseRobot):
     """Trossen Bimanual WidowX AI robot using two IP connections (left + right)."""
 
@@ -168,7 +216,7 @@ class TrossenBimanualRobot(BaseRobot):
 
 # Discriminated union of all robot types
 Robot = Annotated[
-    SO101Robot | TrossenSingleArmRobot | TrossenBimanualRobot,
+    SO101Robot | SO101BimanualRobot | TrossenSingleArmRobot | TrossenBimanualRobot,
     Field(discriminator="type"),
 ]
 
@@ -186,6 +234,10 @@ class SO101RobotWithConnectionState(SO101Robot):
     connection_status: _ConnectionStatus = "unknown"
 
 
+class SO101BimanualRobotWithConnectionState(SO101BimanualRobot):
+    connection_status: _ConnectionStatus = "unknown"
+
+
 class TrossenSingleArmRobotWithConnectionState(TrossenSingleArmRobot):
     connection_status: _ConnectionStatus = "unknown"
 
@@ -195,7 +247,10 @@ class TrossenBimanualRobotWithConnectionState(TrossenBimanualRobot):
 
 
 RobotWithConnectionState = Annotated[
-    SO101RobotWithConnectionState | TrossenSingleArmRobotWithConnectionState | TrossenBimanualRobotWithConnectionState,
+    SO101RobotWithConnectionState
+    | SO101BimanualRobotWithConnectionState
+    | TrossenSingleArmRobotWithConnectionState
+    | TrossenBimanualRobotWithConnectionState,
     Field(discriminator="type"),
 ]
 
