@@ -72,6 +72,91 @@ export const SO101FormFields = () => {
     );
 };
 
+export const BiManualSO101FormFields = () => {
+    const serialDevicesQuery = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
+    const robotForm = useRobotForm();
+    const setRobotForm = useSetRobotForm();
+
+    return (
+        <Flex direction='column' gap='size-100'>
+            <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
+                <Picker
+                    label='Select left robot'
+                    isRequired
+                    width='100%'
+                    selectedKey={robotForm.serial_number_left}
+                    onSelectionChange={(serial_number_left) => {
+                        const device = serialDevicesQuery.data.find((d) => d.serial_number === serial_number_left);
+
+                        setRobotForm((oldForm) => ({
+                            ...oldForm,
+                            serial_number_left: String(serial_number_left),
+                            connection_string_left: device?.connection_string ?? '',
+                        }));
+                    }}
+                >
+                    {serialDevicesQuery.data.map((serial_device) => {
+                        return (
+                            <Item key={serial_device.serial_number} textValue={serial_device.serial_number}>
+                                <Text>{serial_device.serial_number}</Text>
+                                <Text slot='description'>{serial_device.connection_string}</Text>
+                            </Item>
+                        );
+                    })}
+                </Picker>
+                <TextField
+                    isRequired
+                    label='Left calibration ID'
+                    width='100%'
+                    value={robotForm.active_calibration_id_left}
+                    onChange={(active_calibration_id_left) => {
+                        setRobotForm((oldForm) => ({ ...oldForm, active_calibration_id_left }));
+                    }}
+                    placeholder='UUID'
+                />
+            </Flex>
+
+            <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
+                <Picker
+                    label='Select right robot'
+                    isRequired
+                    width='100%'
+                    selectedKey={robotForm.serial_number_right}
+                    onSelectionChange={(serial_number_right) => {
+                        const device = serialDevicesQuery.data.find((d) => d.serial_number === serial_number_right);
+
+                        setRobotForm((oldForm) => ({
+                            ...oldForm,
+                            serial_number_right: String(serial_number_right),
+                            connection_string_right: device?.connection_string ?? '',
+                        }));
+                    }}
+                >
+                    {serialDevicesQuery.data.map((serial_device) => {
+                        return (
+                            <Item key={serial_device.serial_number} textValue={serial_device.serial_number}>
+                                <Text>{serial_device.serial_number}</Text>
+                                <Text slot='description'>{serial_device.connection_string}</Text>
+                            </Item>
+                        );
+                    })}
+                </Picker>
+                <TextField
+                    isRequired
+                    label='Right calibration ID'
+                    width='100%'
+                    value={robotForm.active_calibration_id_right}
+                    onChange={(active_calibration_id_right) => {
+                        setRobotForm((oldForm) => ({ ...oldForm, active_calibration_id_right }));
+                    }}
+                    placeholder='UUID'
+                />
+            </Flex>
+            <RefreshRobotsButton />
+        </Flex>
+    );
+};
+
 export const WidowxAIFormFields = () => {
     const robotForm = useRobotForm();
     const setRobotForm = useSetRobotForm();
@@ -191,6 +276,10 @@ const RobotType = () => {
                         ? {
                               // Only reset when switching families (SO -> Trossen, etc)
                               serial_number: '',
+                              serial_number_left: '',
+                              serial_number_right: '',
+                              active_calibration_id_left: '',
+                              active_calibration_id_right: '',
                               connection_string: '',
                               connection_string_left: '',
                               connection_string_right: '',
@@ -201,6 +290,8 @@ const RobotType = () => {
         >
             <Item key={'SO101_Follower'}>SO101 Follower</Item>
             <Item key={'SO101_Leader'}>SO101 Leader</Item>
+            <Item key={'SO101_Bimanual_Follower'}>SO101 Bimanual Follower</Item>
+            <Item key={'SO101_Bimanual_Leader'}>SO101 Bimanual Leader</Item>
             <Item key={'Trossen_WidowXAI_Follower'}>Trossen WidowX AI Follower</Item>
             <Item key={'Trossen_WidowXAI_Leader'}>Trossen WidowX AI Leader</Item>
             <Item key={'Trossen_Bimanual_WidowXAI_Follower'}>Trossen Bimanual WidowX AI Follower</Item>
@@ -263,6 +354,9 @@ const FormFields = ({ robotType }: { robotType: SchemaRobotType }) => {
         case 'SO101_Follower':
         case 'SO101_Leader':
             return <SO101FormFields />;
+        case 'SO101_Bimanual_Follower':
+        case 'SO101_Bimanual_Leader':
+            return <BiManualSO101FormFields />;
         case 'Trossen_WidowXAI_Follower':
         case 'Trossen_WidowXAI_Leader':
             return <WidowxAIFormFields />;

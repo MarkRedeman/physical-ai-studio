@@ -3,6 +3,7 @@ import { SchemaRobot, SchemaRobotType } from './robot-types';
 export const isFollower = (robot: SchemaRobot) => {
     return (
         robot.type === 'SO101_Follower' ||
+        robot.type === 'SO101_Bimanual_Follower' ||
         robot.type === 'Trossen_WidowXAI_Follower' ||
         robot.type === 'Trossen_Bimanual_WidowXAI_Follower'
     );
@@ -11,6 +12,7 @@ export const isFollower = (robot: SchemaRobot) => {
 export const isLeader = (robot: SchemaRobot) => {
     return (
         robot.type === 'SO101_Leader' ||
+        robot.type === 'SO101_Bimanual_Leader' ||
         robot.type === 'Trossen_WidowXAI_Leader' ||
         robot.type === 'Trossen_Bimanual_WidowXAI_Leader'
     );
@@ -64,9 +66,26 @@ const BIMANUAL_TROSSEN_TO_URDF = {
     'right_gripper.pos': ['follower_right_left_carriage_joint', 'follower_right_right_carriage_joint'],
 };
 
+const BIMANUAL_SO101_TO_URDF = {
+    'left_shoulder_pan.pos': ['shoulder_pan'],
+    'left_shoulder_lift.pos': ['shoulder_lift'],
+    'left_elbow_flex.pos': ['elbow_flex'],
+    'left_wrist_flex.pos': ['wrist_flex'],
+    'left_wrist_roll.pos': ['wrist_roll'],
+    'left_gripper.pos': ['gripper'],
+    'right_shoulder_pan.pos': ['shoulder_pan'],
+    'right_shoulder_lift.pos': ['shoulder_lift'],
+    'right_elbow_flex.pos': ['elbow_flex'],
+    'right_wrist_flex.pos': ['wrist_flex'],
+    'right_wrist_roll.pos': ['wrist_roll'],
+    'right_gripper.pos': ['gripper'],
+};
+
 export const ROBOT_TYPE_TO_URDF_MAP: Record<SchemaRobotType, Record<string, string[]>> = {
     SO101_Follower: SO101_TO_URDF,
     SO101_Leader: SO101_TO_URDF,
+    SO101_Bimanual_Follower: BIMANUAL_SO101_TO_URDF,
+    SO101_Bimanual_Leader: BIMANUAL_SO101_TO_URDF,
     Trossen_WidowXAI_Leader: TROSSEN_TO_URDF,
     Trossen_WidowXAI_Follower: TROSSEN_TO_URDF,
     Trossen_Bimanual_WidowXAI_Leader: BIMANUAL_TROSSEN_TO_URDF,

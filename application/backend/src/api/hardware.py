@@ -3,7 +3,7 @@ from frame_source import FrameSourceFactory
 from loguru import logger
 
 from schemas import CalibrationConfig, Camera, CameraProfile, Robot, SerialPortInfo
-from schemas.robot import RobotType
+from schemas.robot import RobotType, SO101BimanualRobot, SO101Robot
 from utils.calibration import get_calibrations
 from utils.serial_robot_tools import find_robots, identify_so101_robot_visually
 from utils.trossen_robot_tools import identify_trossen_robot_visually
@@ -50,6 +50,40 @@ async def identify_robot(robot: Robot, joint: str | None = None) -> None:
     """Visually identify the robot by moving given joint on robot"""
     if robot.type in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER}:
         await identify_so101_robot_visually(robot, joint)
+
+    if robot.type in {RobotType.SO101_BIMANUAL_LEADER, RobotType.SO101_BIMANUAL_FOLLOWER}:
+        if not isinstance(robot, SO101BimanualRobot):
+            return
+
+        single_type = (
+            RobotType.SO101_FOLLOWER if robot.type == RobotType.SO101_BIMANUAL_FOLLOWER else RobotType.SO101_LEADER
+        )
+
+        left_arm = SO101Robot.model_validate(
+            {
+                "id": robot.id,
+                "name": f"{robot.name} Left",
+                "type": single_type,
+                "payload": {
+                    "connection_string": robot.payload.connection_string_left,
+                    "serial_number": robot.payload.serial_number_left,
+                },
+            }
+        )
+        right_arm = SO101Robot.model_validate(
+            {
+                "id": robot.id,
+                "name": f"{robot.name} Right",
+                "type": single_type,
+                "payload": {
+                    "connection_string": robot.payload.connection_string_right,
+                    "serial_number": robot.payload.serial_number_right,
+                },
+            }
+        )
+
+        await identify_so101_robot_visually(left_arm, joint)
+        await identify_so101_robot_visually(right_arm, joint)
 
     if robot.type in {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}:
         await identify_trossen_robot_visually(robot)
