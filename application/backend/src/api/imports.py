@@ -35,7 +35,7 @@ async def import_model_archive(  # noqa: PLR0913
     base_model_id: Annotated[UUID | None, Form()] = None,
     version: Annotated[int, Form()] = 1,
 ) -> Model:
-    """Import a model archive in a single request without staging steps."""
+    """Import a model ZIP for a specific project."""
     if not archive.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing archive filename")
 
@@ -46,6 +46,7 @@ async def import_model_archive(  # noqa: PLR0913
         )
 
     temp_archive_path = Path(tempfile.gettempdir()) / f"model-import-{uuid4()}.zip"
+
     try:
         await asyncio.to_thread(_write_archive_to_disk, archive, temp_archive_path)
         return await model_import_service.import_model_archive(

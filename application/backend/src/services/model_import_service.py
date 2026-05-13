@@ -53,10 +53,6 @@ class ModelImportService:
             if extracted_count == 0:
                 raise InvalidArchiveError("Model archive does not contain any files")
 
-            checkpoint_path = model_dir / "model.ckpt"
-            if not checkpoint_path.exists() or not checkpoint_path.is_file():
-                raise InvalidArchiveError("Model archive must contain 'model.ckpt'")
-
             snapshot_dir = model_dir / SnapshotService.generate_snapshot_folder_name()
             snapshot = await SnapshotService.create_snapshot_for_dataset(dataset, destination=snapshot_dir)
 
