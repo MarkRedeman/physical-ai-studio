@@ -47,3 +47,24 @@ class TestProjectRobotMapperBimanualSO101:
         assert isinstance(result.payload, SO101BimanualPayload)
         assert result.payload.serial_number_left == "SN-L"
         assert result.payload.serial_number_right == "SN-R"
+
+    def test_to_schema_serializes_payload_uuids_as_strings(self):
+        left_cal = uuid4()
+        right_cal = uuid4()
+        robot = SO101BimanualRobot(
+            id=uuid4(),
+            name="SO101 Bimanual Test",
+            type=RobotType.SO101_BIMANUAL_FOLLOWER,
+            payload=SO101BimanualPayload(
+                connection_string_left="/dev/ttyACM0",
+                connection_string_right="/dev/ttyACM1",
+                serial_number_left="SN-L",
+                serial_number_right="SN-R",
+                active_calibration_id_left=left_cal,
+                active_calibration_id_right=right_cal,
+            ),
+        )
+
+        schema = ProjectRobotMapper.to_schema(robot)
+        assert schema.payload["active_calibration_id_left"] == str(left_cal)
+        assert schema.payload["active_calibration_id_right"] == str(right_cal)
