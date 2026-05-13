@@ -20,6 +20,7 @@ import { notify } from '../../components/notification/notification.component';
 import { LogsDialog } from '../../features/logs/logs-dialog';
 import { useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
+import { ImportModelButton } from './import-model-button';
 import { TrainingHeader, TrainingRow } from './job-table.component';
 import { ModelHeader, ModelRow } from './model-table.component';
 import { SchemaTrainJob, TrainModelDialog } from './train-model-dialog';
@@ -193,16 +194,20 @@ export const Index = () => {
                             <Text>If you&apos;ve recorded a dataset it&apos;s time to begin training your model. </Text>
                             <Heading>No trained models</Heading>
                             <View margin={'size-100'}>
-                                <DialogTrigger>
-                                    <Button variant='accent'>Train model</Button>
-                                    {(close) => <TrainModelDialog close={close} />}
-                                </DialogTrigger>
+                                <Flex direction='row' gap='size-100'>
+                                    <DialogTrigger>
+                                        <Button variant='accent'>Train model</Button>
+                                        {(close) => <TrainModelDialog close={close} />}
+                                    </DialogTrigger>
+                                    <ImportModelButton />
+                                </Flex>
                             </View>
                         </IllustratedMessage>
                     </Flex>
                 ) : (
                     <View margin={'size-300'}>
-                        <Flex justifyContent={'end'} marginBottom='size-300'>
+                        <Flex justifyContent={'end'} gap='size-100' marginBottom='size-300'>
+                            <ImportModelButton />
                             <DialogTrigger>
                                 <Button variant='secondary'>Train model</Button>
                                 {(close) => (
