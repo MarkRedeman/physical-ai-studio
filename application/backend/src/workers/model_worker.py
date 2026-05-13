@@ -4,6 +4,7 @@ import queue
 import time
 from multiprocessing.synchronize import Event as EventClass
 
+import numpy as np
 from loguru import logger
 from physicalai.inference import InferenceModel
 
@@ -73,7 +74,12 @@ class ModelWorker(BaseProcessWorker):
                 try:
                     observation = self.observation_queue.get(timeout=1)
                     start_time = time.perf_counter()
-                    output = self.inference_model.select_action(observation)[0]
+                    if self.inference_model.use_action_queue:
+                        action = self.inference_model.select_action(observation)
+                    else:
+                        action = self.inference_model.predict_action_chunk(observation)
+
+                    output = self._to_action_chunk(action)
                     elapsed_time = time.perf_counter() - start_time
                     logger.debug(f"Inference: ({elapsed_time}): {output.shape}")
                     self.output_queue.put(InferenceResult(time=elapsed_time, data=output))
@@ -84,6 +90,21 @@ class ModelWorker(BaseProcessWorker):
             self.unload_event.clear()
             self.model_loaded_event.clear()
             del self.inference_model
+
+    @staticmethod
+    def _to_action_chunk(action: np.ndarray) -> np.ndarray:
+        """Normalize action output to chunk shape ``(steps, action_dim)``."""
+        if action.ndim == 3:
+            return action[0]
+        if action.ndim == 2:
+            if action.shape[0] == 1:
+                return action
+            return action
+        if action.ndim == 1:
+            return np.expand_dims(action, axis=0)
+
+        msg = f"Unexpected action shape: {action.shape}"
+        raise ValueError(msg)
 
     async def teardown(self) -> None:
         self.command_queue.close()
