@@ -115,7 +115,8 @@ export const RobotFormProvider = ({ children, robot }: { children: ReactNode; ro
     const initialConnectionString =
         robot !== undefined && 'connection_string' in robot.payload ? robot.payload.connection_string : '';
     const initialSerialNumber = robot?.payload.serial_number ?? '';
-    const initialLeftSerial = robot !== undefined && 'serial_number_left' in robot.payload ? robot.payload.serial_number_left : '';
+    const initialLeftSerial =
+        robot !== undefined && 'serial_number_left' in robot.payload ? robot.payload.serial_number_left : '';
     const initialRightSerial =
         robot !== undefined && 'serial_number_right' in robot.payload ? robot.payload.serial_number_right : '';
     const initialLeftCalibration =

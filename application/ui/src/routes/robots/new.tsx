@@ -30,7 +30,7 @@ const NewRobotSubmitButton = () => {
 
     const isSO101 = robotForm.type?.toLowerCase().startsWith('so101') ?? false;
 
-    if (!isSO101) {
+    if (!isSO101 || robotForm.type?.includes('Bimanual')) {
         return <SubmitNewRobotButton />;
     }
 
