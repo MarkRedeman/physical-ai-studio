@@ -63,8 +63,8 @@ class RobotClientFactory:
             }
         )
 
-        so101 = SO101(port=port, calibration=so101_cal, role=role)
-        return SO101Adapter(robot=so101, mode=mode, calibration=calibration)
+        so101 = SO101(port=port, calibration=so101_cal, role=role, unit="normalized")
+        return SO101Adapter(robot=so101, mode=mode)
 
     async def _find_robot_port(self, robot: Robot) -> str:
         port = await find_robot_port(self.robot_manager, robot)

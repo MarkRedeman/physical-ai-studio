@@ -1,12 +1,7 @@
 """SO-101 protocol adapter.
 
-Wraps physicalai's ``SO101`` driver behind the backend's ``RobotClient`` ABC,
-converting between physicalai's radian-based interface and the application's
-normalized joint coordinates (body: [-100, 100], gripper: [0, 100]).
-
-This adapter is SO101-specific because the calibration conversion and
-normalization logic depend on SO101 joint structure.  A generic adapter can
-be extracted when a second robot type migrates to physicalai.
+Wraps physicalai's ``SO101`` driver behind the backend's ``RobotClient`` ABC.
+All unit conversion is handled by physicalai.
 """
 
 import asyncio
@@ -15,10 +10,8 @@ from typing import Literal
 import numpy as np
 from loguru import logger
 from physicalai.robot.so101 import SO101
-from physicalai.robot.so101.constants import MAX_SPEED_RAD_S, RADIANS_PER_TICK, SO101_JOINT_ORDER
 
 from robots.robot_client import RobotClient
-from schemas.calibration import Calibration
 from schemas.robot import RobotType
 
 HARDWARE_TIMEOUT_CONNECT = 10.0
@@ -36,12 +29,7 @@ def _clamp_joints(current: dict[str, float], target: dict[str, float], max_dista
 
 
 class SO101Adapter(RobotClient):
-    """Adapt physicalai's :class:`SO101` to the backend's :class:`RobotClient` interface.
-
-    Unit flow:
-        read:  physicalai (radians) → normalized
-        write: normalized → radians
-    """
+    """Adapt physicalai's :class:`SO101` to the backend's :class:`RobotClient` interface."""
 
     name = "So101"
 
@@ -49,7 +37,6 @@ class SO101Adapter(RobotClient):
         self,
         robot: SO101,
         mode: RobotMode,
-        calibration: Calibration,
     ) -> None:
         self._robot = robot
         self._mode = mode
@@ -58,41 +45,14 @@ class SO101Adapter(RobotClient):
         self.previous_target: dict[str, float] | None = None
         self.is_controlled: bool = False
 
-        self._joint_params: dict[str, dict] = {}
-        for name in SO101_JOINT_ORDER:
-            cal_val = calibration.values[name]
-            direction = -1 if cal_val.drive_mode == 1 else 1
-            rng = cal_val.range_max - cal_val.range_min
-            is_gripper = name == "gripper"
+    def _observation_to_state(self, values: np.ndarray) -> dict[str, float]:
+        return {f"{name}.pos": float(values[i]) for i, name in enumerate(self._robot.joint_names)}
 
-            # Precompute linear coefficients: norm = rad * scale + bias
-            # Derived from combining tick<->radian and tick<->normalized formulas:
-            #   tick = rad / (direction * RADIANS_PER_TICK) + homing_offset
-            #   norm_body = ((tick - min) / range) * 200 - 100
-            #   norm_grip = ((tick - min) / range) * 100
-            if rng == 0:
-                scale = 0.0
-                bias = 0.0
-            elif is_gripper:
-                scale = 100.0 / (direction * RADIANS_PER_TICK * rng)
-                bias = ((cal_val.homing_offset - cal_val.range_min) / rng) * 100.0
-            else:
-                scale = 200.0 / (direction * RADIANS_PER_TICK * rng)
-                bias = ((cal_val.homing_offset - cal_val.range_min) / rng) * 200.0 - 100.0
-
-            # drive_mode=1 flips: body → negate, gripper → 100-norm
-            if cal_val.drive_mode == 1 and not is_gripper:
-                scale = -scale
-                bias = -bias
-            elif cal_val.drive_mode == 1 and is_gripper:
-                scale = -scale
-                bias = 100.0 - bias
-
-            self._joint_params[name] = {
-                "scale": scale,
-                "bias": bias,
-                "is_gripper": is_gripper,
-            }
+    def _state_to_action(self, joints: dict[str, float]) -> np.ndarray:
+        result = np.empty(len(self._robot.joint_names), dtype=np.float32)
+        for i, name in enumerate(self._robot.joint_names):
+            result[i] = joints[f"{name}.pos"]
+        return result
 
     @property
     def robot_type(self) -> RobotType:
@@ -103,25 +63,6 @@ class SO101Adapter(RobotClient):
     @property
     def is_connected(self) -> bool:
         return self._robot.is_connected()
-
-    # Linear conversion between physicalai radians and backend normalized values.
-    # Body joints use [-100, 100], gripper uses [0, 100].
-    # Coefficients (scale, bias) are precomputed per joint in __init__.
-
-    def _radians_to_normalized(self, radians: np.ndarray) -> dict[str, float]:
-        result: dict[str, float] = {}
-        for i, name in enumerate(SO101_JOINT_ORDER):
-            p = self._joint_params[name]
-            norm = float(radians[i]) * p["scale"] + p["bias"]
-            result[f"{name}.pos"] = max(0.0, min(100.0, norm)) if p["is_gripper"] else max(-100.0, min(100.0, norm))
-        return result
-
-    def _normalized_to_radians(self, joints: dict[str, float]) -> np.ndarray:
-        result = np.empty(len(SO101_JOINT_ORDER), dtype=np.float32)
-        for i, name in enumerate(SO101_JOINT_ORDER):
-            p = self._joint_params[name]
-            result[i] = (joints[f"{name}.pos"] - p["bias"]) / p["scale"] if p["scale"] != 0 else 0.0
-        return result
 
     async def connect(self) -> None:
         logger.info(f"Connecting to SO101 {self._mode} on {self._robot.port}")
@@ -195,37 +136,33 @@ class SO101Adapter(RobotClient):
         raise NotImplementedError("Force control is not implemented for SO101")
 
     def features(self) -> list[str]:
-        return [f"{name}.pos" for name in SO101_JOINT_ORDER]
+        return [f"{name}.pos" for name in self._robot.joint_names]
 
     async def _get_state(self) -> dict[str, float]:
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
             obs = await asyncio.to_thread(self._robot.get_observation)
-        return self._radians_to_normalized(obs.joint_positions)
+        return self._observation_to_state(obs.joint_positions)
 
     async def _move_to_target(self, joints: dict, goal_time: float) -> None:
-        max_rad = MAX_SPEED_RAD_S * goal_time
+        max_delta = self._robot.max_speed * goal_time
 
-        # Read current state in radians
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
             obs = await asyncio.to_thread(self._robot.get_observation)
-        current_rad = obs.joint_positions
+        current = obs.joint_positions.astype(np.float32)
 
-        # Convert target from normalized to radians
-        target_rad = self._normalized_to_radians(joints)
+        target = self._state_to_action(joints)
 
-        # Clamp previous target blend in radian space
         if self.previous_target is not None:
-            prev_rad = self._normalized_to_radians(self.previous_target)
-            for i in range(len(current_rad)):
-                current_rad[i] = current_rad[i] + _clamp(prev_rad[i] - current_rad[i], max_rad * 2)
+            prev = self._state_to_action(self.previous_target)
+            for i in range(len(current)):
+                current[i] = current[i] + _clamp(prev[i] - current[i], max_delta * 2)
 
-        # Clamp velocity: limit per-joint movement to max_rad per cycle
-        clamped_rad = np.array(
-            [current_rad[i] + _clamp(target_rad[i] - current_rad[i], max_rad) for i in range(len(current_rad))],
+        clamped = np.array(
+            [current[i] + _clamp(target[i] - current[i], max_delta) for i in range(len(current))],
             dtype=np.float32,
         )
 
-        self.previous_target = self._radians_to_normalized(clamped_rad)
+        self.previous_target = self._observation_to_state(clamped)
 
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(self._robot.send_action, clamped_rad)
+            await asyncio.to_thread(self._robot.send_action, clamped)
