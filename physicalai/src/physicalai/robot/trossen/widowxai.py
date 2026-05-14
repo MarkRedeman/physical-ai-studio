@@ -65,6 +65,8 @@ class WidowXAI(Robot):
     JOINT_ORDER: ClassVar[list[str]] = list(WIDOWXAI_JOINT_ORDER)
     NUM_JOINTS: ClassVar[int] = len(JOINT_ORDER)
     MAX_RELATIVE_TARGET: ClassVar[float] = 0.25
+    TELEOP_GOAL_TIME_SCALE: ClassVar[float] = 3.0
+    FORCE_FEEDBACK_GAIN: ClassVar[float] = 0.1
 
     def __init__(self, ip: str, role: Literal["leader", "follower"] = "follower") -> None:
         """Initialize the WidowXAI driver.
@@ -235,6 +237,79 @@ class WidowXAI(Robot):
     def is_connected(self) -> bool:
         """Return True when the SDK driver is configured."""
         return self._driver is not None and self._driver.get_is_configured()
+
+    def _observation_to_state_dict(self, observation: WidowXAIObservation) -> dict[str, float]:
+        sensor_data = observation.sensor_data
+        if sensor_data is None:
+            msg = "Robot observation is missing sensor data"
+            raise RuntimeError(msg)
+        if "velocities" not in sensor_data:
+            msg = "Robot observation is missing velocity data"
+            raise RuntimeError(msg)
+
+        state: dict[str, float] = {}
+        velocities = sensor_data["velocities"]
+        for i, name in enumerate(self.joint_names):
+            if name == "gripper":
+                position = float(observation.joint_positions[i])
+            else:
+                position = float(np.rad2deg(observation.joint_positions[i]))
+
+            state[f"{name}.pos"] = position
+            state[f"{name}.vel"] = float(velocities[i])
+        return state
+
+    def _state_dict_to_action(self, joints: dict[str, float]) -> np.ndarray:
+        positions = np.zeros(len(self.joint_names), dtype=np.float32)
+        for i, name in enumerate(self.joint_names):
+            if name == "gripper":
+                positions[i] = joints[f"{name}.pos"]
+            else:
+                positions[i] = np.deg2rad(joints[f"{name}.pos"])
+        return positions
+
+    def feature_names(self) -> list[str]:
+        """Return backend-facing feature names for this robot."""
+        positions = [f"{name}.pos" for name in self.joint_names]
+        velocities = [f"{name}.vel" for name in self.joint_names]
+        return positions + velocities
+
+    def read_state_dict(self) -> dict[str, float]:
+        """Read robot state in backend dictionary format."""
+        observation = self.get_observation()
+        return self._observation_to_state_dict(observation)
+
+    def send_state_dict(self, joints: dict[str, float], goal_time: float) -> None:
+        """Send backend dictionary joint command to the robot."""
+        action = self._state_dict_to_action(joints)
+        self.send_action(action, goal_time=self.TELEOP_GOAL_TIME_SCALE * goal_time)
+
+    def read_force_dict(self) -> dict[str, float] | None:
+        """Read robot efforts in backend dictionary format."""
+        if self.role == "leader":
+            return None
+
+        observation = self.get_observation()
+        sensor_data = observation.sensor_data
+        if sensor_data is None or "efforts" not in sensor_data:
+            msg = "Robot observation is missing effort data"
+            raise RuntimeError(msg)
+
+        efforts = sensor_data["efforts"]
+        return {f"{name}.eff": float(efforts[i]) for i, name in enumerate(self.joint_names)}
+
+    def set_force_dict(self, forces: dict[str, float]) -> dict[str, float]:
+        """Apply backend dictionary force command."""
+        if self.role == "follower":
+            logger.warning("Cannot send forces to a follower arm")
+            return forces
+
+        efforts = np.zeros(len(self.joint_names), dtype=np.float32)
+        for i, name in enumerate(self.joint_names):
+            efforts[i] = forces.get(f"{name}.eff", 0.0)
+
+        self.set_external_efforts(efforts, self.FORCE_FEEDBACK_GAIN)
+        return forces
 
     def set_external_efforts(self, efforts: np.ndarray, gain: float = 1.0) -> None:
         """Apply force feedback (leader only).

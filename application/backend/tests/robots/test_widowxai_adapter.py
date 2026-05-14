@@ -4,10 +4,9 @@
 import asyncio
 from unittest.mock import MagicMock, PropertyMock
 
-import numpy as np
 import pytest
 from physicalai.robot.trossen.constants import WIDOWXAI_JOINT_ORDER
-from physicalai.robot.trossen.widowxai import WidowXAI, WidowXAIObservation
+from physicalai.robot.trossen.widowxai import WidowXAI
 
 from robots.widowxai.adapter import WidowXAIAdapter
 from schemas.robot import RobotType
@@ -17,6 +16,10 @@ def _make_mock_robot(role="follower"):
     robot = MagicMock(spec=WidowXAI)
     robot.is_connected.return_value = False
     robot.joint_names = list(WIDOWXAI_JOINT_ORDER)
+    robot.feature_names.return_value = [f"{n}.pos" for n in WIDOWXAI_JOINT_ORDER] + [
+        f"{n}.vel" for n in WIDOWXAI_JOINT_ORDER
+    ]
+    robot.read_force_dict.return_value = None if role == "leader" else {f"{n}.eff": 0.0 for n in WIDOWXAI_JOINT_ORDER}
     type(robot).ip = PropertyMock(return_value="192.168.1.2")
     return robot
 
@@ -25,17 +28,6 @@ def _make_adapter(mode="follower"):
     robot = _make_mock_robot(role=mode)
     adapter = WidowXAIAdapter(robot=robot, mode=mode)
     return adapter, robot
-
-
-def _make_observation(positions=None, velocities=None, efforts=None):
-    obs = MagicMock(spec=WidowXAIObservation)
-    obs.joint_positions = np.array(positions if positions is not None else [0.0] * 7, dtype=np.float32)
-    obs.timestamp = 1000.0
-    sensor_data = {"velocities": np.array(velocities if velocities is not None else [0.0] * 7, dtype=np.float32)}
-    if efforts is not None:
-        sensor_data["efforts"] = np.array(efforts, dtype=np.float32)
-    obs.sensor_data = sensor_data
-    return obs
 
 
 class TestProperties:
@@ -65,21 +57,19 @@ class TestProperties:
 
 
 class TestDegreeRadianConversion:
-    def test_read_state_converts_to_degrees_for_non_gripper(self):
+    def test_read_state_delegates_to_driver_state_dict(self):
         adapter, robot = _make_adapter()
-        radian_values = [1.0, 0.5, -0.5, 1.5, -1.0, 0.3, 0.02]
-        obs = _make_observation(positions=radian_values)
-        robot.get_observation.return_value = obs
+        robot.read_state_dict.return_value = {f"{name}.pos": float(i) for i, name in enumerate(WIDOWXAI_JOINT_ORDER)}
+        robot.read_state_dict.return_value.update({f"{name}.vel": 0.1 for name in WIDOWXAI_JOINT_ORDER})
 
         result = asyncio.run(adapter.read_state())
 
-        for i, name in enumerate(WIDOWXAI_JOINT_ORDER):
-            if name == "gripper":
-                assert result["state"]["gripper.pos"] == pytest.approx(0.02, abs=0.001)
-            else:
-                assert result["state"][f"{name}.pos"] == pytest.approx(np.rad2deg(radian_values[i]), abs=0.01)
+        robot.read_state_dict.assert_called_once()
+        for name in WIDOWXAI_JOINT_ORDER:
+            assert f"{name}.pos" in result["state"]
+            assert f"{name}.vel" in result["state"]
 
-    def test_set_joints_state_converts_degrees_to_radians(self):
+    def test_set_joints_state_delegates_to_driver_state_send(self):
         adapter, robot = _make_adapter()
 
         joints = {
@@ -101,22 +91,13 @@ class TestDegreeRadianConversion:
 
         asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
 
-        robot.send_action.assert_called_once()
-        positions_sent = robot.send_action.call_args[0][0]
-
-        expected_radians = [1.0, 0.5, -0.5, 1.5, -1.0, 0.3]
-        for i, expected_rad in enumerate(expected_radians):
-            assert positions_sent[i] == pytest.approx(expected_rad, abs=0.01)
-
-        # Gripper is unchanged (raw value)
-        assert positions_sent[6] == pytest.approx(0.05, abs=0.001)
+        robot.send_state_dict.assert_called_once_with(joints, 0.1)
 
     def test_roundtrip_conversion(self):
         adapter, robot = _make_adapter()
-        original_radians = [0.5, -0.3, 1.0, -1.0, 0.2, 0.8, 0.05]
-
-        obs = _make_observation(positions=original_radians)
-        robot.get_observation.return_value = obs
+        state = {f"{name}.pos": float(i) for i, name in enumerate(WIDOWXAI_JOINT_ORDER)}
+        state.update({f"{name}.vel": 0.0 for name in WIDOWXAI_JOINT_ORDER})
+        robot.read_state_dict.return_value = state
         result = asyncio.run(adapter.read_state())
 
         joints = {}
@@ -126,11 +107,7 @@ class TestDegreeRadianConversion:
 
         asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
 
-        robot.send_action.assert_called_once()
-        positions_sent = robot.send_action.call_args[0][0]
-
-        for i, expected_rad in enumerate(original_radians):
-            assert positions_sent[i] == pytest.approx(expected_rad, abs=0.01)
+        robot.send_state_dict.assert_called_once()
 
 
 class TestConnect:
@@ -166,7 +143,7 @@ class TestPing:
 
 
 class TestSetJointsState:
-    def test_calls_send_action_with_positions_and_goal_time(self):
+    def test_calls_send_state_dict(self):
         adapter, robot = _make_adapter()
         joints = {}
         for name in WIDOWXAI_JOINT_ORDER:
@@ -175,11 +152,7 @@ class TestSetJointsState:
 
         asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
 
-        robot.send_action.assert_called_once()
-        call_args = robot.send_action.call_args
-        assert call_args[0][0].shape == (7,)
-        # Goal time is set higher to prevent oscillations
-        assert call_args[1]["goal_time"] == 3 * 0.1
+        robot.send_state_dict.assert_called_once_with(joints, 0.1)
 
     def test_raises_for_leader(self):
         adapter, _ = _make_adapter(mode="leader")
@@ -192,8 +165,10 @@ class TestSetJointsState:
 class TestReadState:
     def test_returns_state_event(self):
         adapter, robot = _make_adapter()
-        obs = _make_observation()
-        robot.get_observation.return_value = obs
+        robot.read_state_dict.return_value = {
+            **{f"{name}.pos": 0.0 for name in WIDOWXAI_JOINT_ORDER},
+            **{f"{name}.vel": 0.0 for name in WIDOWXAI_JOINT_ORDER},
+        }
         result = asyncio.run(adapter.read_state())
         assert result["event"] == "state_was_updated"
         assert "state" in result
@@ -201,8 +176,10 @@ class TestReadState:
 
     def test_state_has_pos_and_vel_keys(self):
         adapter, robot = _make_adapter()
-        obs = _make_observation()
-        robot.get_observation.return_value = obs
+        robot.read_state_dict.return_value = {
+            **{f"{name}.pos": 0.0 for name in WIDOWXAI_JOINT_ORDER},
+            **{f"{name}.vel": 0.0 for name in WIDOWXAI_JOINT_ORDER},
+        }
         result = asyncio.run(adapter.read_state())
         state = result["state"]
         for name in WIDOWXAI_JOINT_ORDER:
@@ -213,9 +190,7 @@ class TestReadState:
 class TestReadForces:
     def test_follower_returns_forces(self):
         adapter, robot = _make_adapter(mode="follower")
-        efforts = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
-        obs = _make_observation(efforts=efforts)
-        robot.get_observation.return_value = obs
+        robot.read_force_dict.return_value = {f"{name}.eff": float(i) for i, name in enumerate(WIDOWXAI_JOINT_ORDER)}
         result = asyncio.run(adapter.read_forces())
         assert result is not None
         state = result["state"]
@@ -229,23 +204,18 @@ class TestReadForces:
 
 
 class TestSetForces:
-    def test_leader_calls_set_external_efforts(self):
+    def test_leader_calls_set_force_dict(self):
         adapter, robot = _make_adapter(mode="leader")
         forces = {f"{name}.eff": float(i) * 0.1 for i, name in enumerate(WIDOWXAI_JOINT_ORDER)}
+        robot.set_force_dict.return_value = forces
         asyncio.run(adapter.set_forces(forces))
 
-        robot.set_external_efforts.assert_called_once()
-        call_args = robot.set_external_efforts.call_args
-        efforts_sent = call_args[0][0]
-        gain = call_args[0][1]
-
-        assert gain == pytest.approx(0.1, abs=1e-6)
-        for i, name in enumerate(WIDOWXAI_JOINT_ORDER):
-            assert efforts_sent[i] == pytest.approx(forces[f"{name}.eff"], abs=1e-6)
+        robot.set_force_dict.assert_called_once_with(forces)
 
     def test_follower_returns_forces_unchanged(self):
-        adapter, _ = _make_adapter(mode="follower")
+        adapter, robot = _make_adapter(mode="follower")
         forces = {f"{name}.eff": 0.5 for name in WIDOWXAI_JOINT_ORDER}
+        robot.set_force_dict.return_value = forces
         result = asyncio.run(adapter.set_forces(forces))
         assert result == forces
 

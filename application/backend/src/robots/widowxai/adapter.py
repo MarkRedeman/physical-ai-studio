@@ -4,15 +4,14 @@
 """WidowXAI protocol adapter.
 
 Wraps physicalai's ``WidowXAI`` driver behind the backend's ``RobotClient``
-interface with joint/unit conversion and async-safe hardware access.
+interface with async-safe hardware access.
 """
 
 import asyncio
 from typing import Literal
 
-import numpy as np
 from loguru import logger
-from physicalai.robot.trossen import WidowXAI, WidowXAIObservation
+from physicalai.robot.trossen import WidowXAI
 
 from robots.robot_client import RobotClient
 from schemas.robot import RobotType
@@ -22,11 +21,7 @@ HARDWARE_TIMEOUT_COMMAND = 5.0
 
 
 class WidowXAIAdapter(RobotClient):
-    """Adapt physicalai's :class:`WidowXAI` to the backend's RobotClient API.
-
-    Read path converts radians to app-facing degrees (except gripper), and
-    write path converts app-facing degrees back to radians.
-    """
+    """Adapt physicalai's :class:`WidowXAI` to the backend's RobotClient API."""
 
     name = "WidowXAI"
 
@@ -45,35 +40,6 @@ class WidowXAIAdapter(RobotClient):
     @property
     def is_connected(self) -> bool:
         return self._robot.is_connected()
-
-    def _observation_to_state(self, obs: WidowXAIObservation) -> dict[str, float]:
-        result: dict[str, float] = {}
-        sensor_data = obs.sensor_data
-        if sensor_data is None:
-            raise RuntimeError("Robot observation is missing sensor data")
-
-        for i, name in enumerate(self._robot.joint_names):
-            if name == "gripper":
-                pos = float(obs.joint_positions[i])
-            else:
-                pos = float(np.rad2deg(obs.joint_positions[i]))
-
-            vel = float(sensor_data["velocities"][i])
-            result[f"{name}.pos"] = pos
-            result[f"{name}.vel"] = vel
-
-        return result
-
-    def _state_to_action(self, joints: dict) -> np.ndarray:
-        positions = np.zeros(len(self._robot.joint_names))
-
-        for i, name in enumerate(self._robot.joint_names):
-            if name == "gripper":
-                positions[i] = joints[f"{name}.pos"]
-            else:
-                positions[i] = np.deg2rad(joints[f"{name}.pos"])
-
-        return positions
 
     async def connect(self) -> None:
         logger.info(f"Connecting to WidowXAI {self._mode} at {self._robot.ip}")
@@ -109,16 +75,8 @@ class WidowXAIAdapter(RobotClient):
         if self._mode == "leader":
             raise RuntimeError("Cannot send actions to a leader arm")
 
-        positions = self._state_to_action(joints)
-
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(
-                self._robot.send_action,
-                positions,
-                # Increase default goal_time to reduce oscillations due to the application
-                # performing teleoperation at 30Hz
-                goal_time=3 * goal_time,
-            )
+            await asyncio.to_thread(self._robot.send_state_dict, joints, goal_time)
 
         return self._create_event("joints_state_was_set", joints=joints)
 
@@ -133,8 +91,7 @@ class WidowXAIAdapter(RobotClient):
     async def read_state(self, *, normalize: bool = True) -> dict:  # noqa: ARG002
         try:
             async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-                obs = await asyncio.to_thread(self._robot.get_observation)
-            state = self._observation_to_state(obs)
+                state = await asyncio.to_thread(self._robot.read_state_dict)
             return self._create_event(
                 "state_was_updated",
                 state=state,
@@ -145,19 +102,11 @@ class WidowXAIAdapter(RobotClient):
             raise
 
     async def read_forces(self) -> dict | None:
-        if self._mode == "leader":
-            return None
-
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            obs = await asyncio.to_thread(self._robot.get_observation)
+            forces = await asyncio.to_thread(self._robot.read_force_dict)
 
-        sensor_data = obs.sensor_data
-        if sensor_data is None:
-            raise RuntimeError("Robot observation is missing sensor data")
-
-        forces = {}
-        for i, name in enumerate(self._robot.joint_names):
-            forces[f"{name}.eff"] = float(sensor_data["efforts"][i])
+        if forces is None:
+            return None
 
         return self._create_event(
             "force_was_updated",
@@ -166,20 +115,8 @@ class WidowXAIAdapter(RobotClient):
         )
 
     async def set_forces(self, forces: dict) -> dict:
-        if self._mode == "follower":
-            logger.warning("Cannot send forces to a follower arm")
-            return forces
-
-        efforts = np.zeros(len(self._robot.joint_names))
-        for i, name in enumerate(self._robot.joint_names):
-            efforts[i] = forces.get(f"{name}.eff", 0.0)
-
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(self._robot.set_external_efforts, efforts, 0.1)
-
-        return forces
+            return await asyncio.to_thread(self._robot.set_force_dict, forces)
 
     def features(self) -> list[str]:
-        positions: list[str] = [f"{name}.pos" for name in self._robot.joint_names]
-        velocities: list[str] = [f"{name}.vel" for name in self._robot.joint_names]
-        return positions + velocities
+        return self._robot.feature_names()
