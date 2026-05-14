@@ -14,11 +14,14 @@ HARDWARE_TIMEOUT_COMMAND = 5.0
 
 @dataclass(frozen=True)
 class PhysicalAIRobotAdapterConfig:
+    # Include ``<joint>.vel`` values from observation sensor data.
     include_velocities: bool = False
-    pass_goal_time: bool = False
-    goal_time_scale: float = 1.0
-    emit_force_event_when_none: bool = False
-    external_effort_gain: float = 0.1
+    # Optional multiplier for ``goal_time`` when forwarding actions;
+    # ``None`` means do not pass ``goal_time`` at all.
+    goal_time_scale: float | None = None
+    # Optional gain for ``set_external_efforts``; ``None`` disables force writes.
+    # When ``None``, missing effort observations emit a force event with ``state=None``.
+    external_effort_gain: float | None = 0.1
 
 
 class PhysicalAIRobotAdapter(RobotClient):
@@ -105,7 +108,7 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
         action = self._state_to_action(joints)
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            if self._config.pass_goal_time:
+            if self._config.goal_time_scale is not None:
                 await asyncio.to_thread(
                     self._robot.send_action,
                     action,
@@ -145,7 +148,7 @@ class PhysicalAIRobotAdapter(RobotClient):
 
         sensor_data = observation.sensor_data
         if sensor_data is None or "efforts" not in sensor_data:
-            if self._config.emit_force_event_when_none:
+            if self._config.external_effort_gain is None:
                 return self._create_event(
                     "force_was_updated",
                     state=None,
@@ -167,6 +170,10 @@ class PhysicalAIRobotAdapter(RobotClient):
             logger.warning("Cannot send forces to a follower arm")
             return forces
 
+        gain = self._config.external_effort_gain
+        if gain is None:
+            return forces
+
         set_external_efforts = getattr(self._robot, "set_external_efforts", None)
         if not callable(set_external_efforts):
             return forces
@@ -176,7 +183,7 @@ class PhysicalAIRobotAdapter(RobotClient):
             efforts[i] = float(forces.get(f"{name}.eff", 0.0))
 
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(set_external_efforts, efforts, gain=self._config.external_effort_gain)
+            await asyncio.to_thread(set_external_efforts, efforts, gain=gain)
         return forces
 
     def features(self) -> list[str]:

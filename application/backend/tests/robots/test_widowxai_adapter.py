@@ -35,9 +35,7 @@ def _make_adapter(mode="follower"):
         robot_type=robot_type,
         config=PhysicalAIRobotAdapterConfig(
             include_velocities=True,
-            pass_goal_time=True,
             goal_time_scale=1.0,
-            emit_force_event_when_none=False,
             external_effort_gain=0.1,
         ),
     )

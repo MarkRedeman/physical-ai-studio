@@ -31,9 +31,7 @@ class RobotClientFactory:
                     robot_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
                     config=PhysicalAIRobotAdapterConfig(
                         include_velocities=True,
-                        pass_goal_time=True,
                         goal_time_scale=1.0,
-                        emit_force_event_when_none=False,
                         external_effort_gain=0.1,
                     ),
                 )
@@ -44,9 +42,7 @@ class RobotClientFactory:
                     robot_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
                     config=PhysicalAIRobotAdapterConfig(
                         include_velocities=True,
-                        pass_goal_time=True,
                         goal_time_scale=1.0,
-                        emit_force_event_when_none=False,
                         external_effort_gain=0.1,
                     ),
                 )
@@ -87,10 +83,8 @@ class RobotClientFactory:
             robot_type=robot.type,
             config=PhysicalAIRobotAdapterConfig(
                 include_velocities=False,
-                pass_goal_time=False,
-                goal_time_scale=1.0,
-                emit_force_event_when_none=True,
-                external_effort_gain=0.1,
+                goal_time_scale=None,
+                external_effort_gain=None,
             ),
         )
 

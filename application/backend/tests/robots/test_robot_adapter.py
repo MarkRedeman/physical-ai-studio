@@ -29,10 +29,8 @@ def _make_adapter(
         robot_type=robot_type,
         config=PhysicalAIRobotAdapterConfig(
             include_velocities=False,
-            pass_goal_time=False,
-            goal_time_scale=1.0,
-            emit_force_event_when_none=True,
-            external_effort_gain=0.1,
+            goal_time_scale=None,
+            external_effort_gain=None,
         ),
     )
     return adapter, robot
