@@ -14,6 +14,11 @@ The driver supports two roles:
 
 * **follower** (default) — position control, used for inference / deployment.
 * **leader** — external effort mode, used for teleoperation.
+
+Unit contract at the driver boundary:
+
+* Non-gripper joints are exposed in **degrees** for both observations and actions.
+* The gripper is a **native scalar passthrough** (no degree/radian conversion).
 """
 
 from __future__ import annotations
@@ -41,7 +46,8 @@ class WidowXAIObservation:
     """Observation from the WidowX AI robot arm.
 
     Attributes:
-        joint_positions: Array of shape ``(7,)`` with joint positions in radians.
+        joint_positions: Array of shape ``(7,)`` with non-gripper joints in
+            degrees and gripper in native scalar units.
         timestamp: ``time.monotonic()`` at the moment of capture.
         sensor_data: Velocities and (for follower) external efforts.
         images: Always ``None`` — no built-in camera support.
@@ -60,6 +66,11 @@ class WidowXAI(Robot):
         ip: IP address of the robot arm (e.g. ``"192.168.1.2"``).
         role: ``"follower"`` (position control) or ``"leader"``
             (external effort mode for teleoperation).
+
+    Note:
+        Non-gripper joint positions are exposed in degrees for read/write at
+        this API boundary. Gripper values are passed through in native scalar
+        units without degree/radian conversion.
     """
 
     JOINT_ORDER: ClassVar[list[str]] = list(WIDOWXAI_JOINT_ORDER)
@@ -181,6 +192,8 @@ class WidowXAI(Robot):
 
         Returns:
             Observation containing joint positions, timestamp, and sensor data.
+            Non-gripper joint positions are returned in degrees, while gripper
+            remains in native scalar units.
         """
         driver = self._require_driver()
 
@@ -212,7 +225,7 @@ class WidowXAI(Robot):
 
         Args:
             action: Array of shape ``(7,)`` with target joint positions in degrees
-                for non-gripper joints, and native gripper scalar value.
+            for non-gripper joints, and native gripper scalar value.
             goal_time: Minimum time (seconds) for the arm to reach the target.
                 The backend control loop typically sets this to ``1 / fps``.
                 Not part of the :class:`~physicalai.robot.Robot` protocol.
