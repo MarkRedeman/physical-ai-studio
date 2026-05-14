@@ -117,6 +117,7 @@ all = [
 
 [tool.uv]
 default-groups = ["all"]
+exclude-newer = "7 days"
 # The pytorch-xpu index is non-explicit (explicit = false) because
 # transitive deps like pytorch-triton-xpu only exist on the XPU index.
 # unsafe-best-match is required because the XPU index also hosts stale

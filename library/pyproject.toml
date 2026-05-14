@@ -139,6 +139,7 @@ dev = [
 # UV CONFIGURATION                                                             #
 # ============================================================================ #
 [tool.uv]
+exclude-newer = "7 days"
 
 
 conflicts = [
