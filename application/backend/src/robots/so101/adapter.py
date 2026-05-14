@@ -17,6 +17,10 @@ class SO101Adapter(PhysicalAIRobotAdapter):
             mode=mode,
             follower_type=RobotType.SO101_FOLLOWER,
             leader_type=RobotType.SO101_LEADER,
+            include_velocities=False,
+            convert_non_gripper_rad_to_deg=False,
+            pass_goal_time=False,
+            goal_time_scale=1.0,
             emit_force_event_when_none=True,
-            delegate_torque=True,
+            external_effort_gain=0.1,
         )

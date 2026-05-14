@@ -1,7 +1,6 @@
 import asyncio
 from unittest.mock import MagicMock
 
-import pytest
 from physicalai.robot.so101.constants import SO101_JOINT_ORDER
 
 from robots.physicalai_adapter import PhysicalAIRobotAdapter
@@ -12,10 +11,10 @@ def _make_mock_robot() -> MagicMock:
     robot = MagicMock()
     robot.port = "/dev/ttyUSB0"
     robot.joint_names = list(SO101_JOINT_ORDER)
-    robot.feature_names.return_value = [f"{name}.pos" for name in SO101_JOINT_ORDER]
-    robot.read_state_dict.return_value = {f"{name}.pos": 0.0 for name in SO101_JOINT_ORDER}
-    robot.read_force_dict.return_value = None
-    robot.set_torque = MagicMock()
+    obs = MagicMock()
+    obs.joint_positions = [0.0] * len(SO101_JOINT_ORDER)
+    obs.sensor_data = None
+    robot.get_observation.return_value = obs
     robot.is_connected.return_value = False
     return robot
 
@@ -29,8 +28,12 @@ def _make_adapter(
         mode=mode,
         follower_type=RobotType.SO101_FOLLOWER,
         leader_type=RobotType.SO101_LEADER,
+        include_velocities=False,
+        convert_non_gripper_rad_to_deg=False,
+        pass_goal_time=False,
+        goal_time_scale=1.0,
         emit_force_event_when_none=True,
-        delegate_torque=True,
+        external_effort_gain=0.1,
     )
     return adapter, robot
 
@@ -92,7 +95,10 @@ class TestDisconnect:
 class TestReadState:
     def test_returns_normalized_state_dict(self):
         adapter, robot = _make_adapter()
-        robot.read_state_dict.return_value = {f"{name}.pos": 0.0 for name in SO101_JOINT_ORDER}
+        obs = MagicMock()
+        obs.joint_positions = [0.0] * len(SO101_JOINT_ORDER)
+        obs.sensor_data = None
+        robot.get_observation.return_value = obs
 
         result = asyncio.run(adapter.read_state())
 
@@ -103,7 +109,7 @@ class TestReadState:
         assert len(state) == 6
         for name in SO101_JOINT_ORDER:
             assert f"{name}.pos" in state
-        robot.read_state_dict.assert_called_once()
+        robot.get_observation.assert_called_once()
 
 
 class TestSetJointsState:
@@ -114,7 +120,7 @@ class TestSetJointsState:
         result = asyncio.run(adapter.set_joints_state(joints, goal_time=0.033))
 
         assert result["event"] == "joints_state_was_set"
-        robot.send_state_dict.assert_called_once_with(joints, 0.033)
+        robot.send_action.assert_called_once()
 
     def test_delegates_state_send_to_driver(self):
         adapter, robot = _make_adapter()
@@ -122,21 +128,21 @@ class TestSetJointsState:
         far_joints = {f"{name}.pos": 1000.0 for name in SO101_JOINT_ORDER}
         goal_time = 0.033
         asyncio.run(adapter.set_joints_state(far_joints, goal_time=goal_time))
-        robot.send_state_dict.assert_called_once_with(far_joints, goal_time)
+        robot.send_action.assert_called_once()
 
 
 class TestTorque:
     def test_enable_torque(self):
         adapter, robot = _make_adapter()
         result = asyncio.run(adapter.enable_torque())
-        robot.set_torque.assert_called_once_with(enabled=True)
+        robot.send_action.assert_not_called()
         assert result["event"] == "torque_was_enabled"
         assert adapter.is_controlled is True
 
     def test_disable_torque(self):
         adapter, robot = _make_adapter()
         result = asyncio.run(adapter.disable_torque())
-        robot.set_torque.assert_called_once_with(enabled=False)
+        robot.send_action.assert_not_called()
         assert result["event"] == "torque_was_disabled"
         assert adapter.is_controlled is False
 
@@ -152,7 +158,10 @@ class TestPing:
 class TestReadForces:
     def test_returns_force_event_with_none_state(self):
         adapter, robot = _make_adapter()
-        robot.read_force_dict.return_value = None
+        obs = MagicMock()
+        obs.joint_positions = [0.0] * len(SO101_JOINT_ORDER)
+        obs.sensor_data = None
+        robot.get_observation.return_value = obs
         result = asyncio.run(adapter.read_forces())
         assert result is not None
         assert result["event"] == "force_was_updated"
@@ -160,9 +169,9 @@ class TestReadForces:
 
 
 class TestSetForces:
-    def test_delegates_to_driver_force_write(self):
+    def test_noops_if_force_method_missing(self):
         adapter, robot = _make_adapter()
-        robot.set_force_dict.side_effect = NotImplementedError("Force control is not implemented for SO101")
+        forces = {"shoulder_pan.eff": 1.0}
+        result = asyncio.run(adapter.set_forces(forces))
 
-        with pytest.raises(NotImplementedError, match="not implemented"):
-            asyncio.run(adapter.set_forces({}))
+        assert result == forces

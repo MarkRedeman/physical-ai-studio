@@ -18,6 +18,10 @@ class WidowXAIAdapter(PhysicalAIRobotAdapter):
             mode=mode,
             follower_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
             leader_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
+            include_velocities=True,
+            convert_non_gripper_rad_to_deg=True,
+            pass_goal_time=True,
+            goal_time_scale=3.0,
             emit_force_event_when_none=False,
-            delegate_torque=False,
+            external_effort_gain=0.1,
         )

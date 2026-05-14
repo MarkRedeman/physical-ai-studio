@@ -2,8 +2,8 @@ from physicalai.robot.so101 import SO101, SO101Calibration
 from physicalai.robot.trossen import WidowXAI
 
 from exceptions import ResourceNotFoundError, ResourceType
-from robots.robot_client import RobotClient
 from robots.physicalai_adapter import PhysicalAIRobotAdapter
+from robots.robot_client import RobotClient
 from schemas.calibration import Calibration
 from schemas.robot import Robot, RobotType
 from services.robot_calibration_service import RobotCalibrationService, find_robot_port
@@ -31,8 +31,12 @@ class RobotClientFactory:
                     mode="follower",
                     follower_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
                     leader_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
+                    include_velocities=True,
+                    convert_non_gripper_rad_to_deg=True,
+                    pass_goal_time=True,
+                    goal_time_scale=3.0,
                     emit_force_event_when_none=False,
-                    delegate_torque=False,
+                    external_effort_gain=0.1,
                 )
             case RobotType.TROSSEN_WIDOWXAI_LEADER:
                 robot_driver = WidowXAI(ip=robot.payload.connection_string, role="leader")
@@ -41,8 +45,12 @@ class RobotClientFactory:
                     mode="leader",
                     follower_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
                     leader_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
+                    include_velocities=True,
+                    convert_non_gripper_rad_to_deg=True,
+                    pass_goal_time=True,
+                    goal_time_scale=3.0,
                     emit_force_event_when_none=False,
-                    delegate_torque=False,
+                    external_effort_gain=0.1,
                 )
             case RobotType.SO101_FOLLOWER:
                 return await self._build_so101(robot)
@@ -82,8 +90,12 @@ class RobotClientFactory:
             mode=mode,
             follower_type=RobotType.SO101_FOLLOWER,
             leader_type=RobotType.SO101_LEADER,
+            include_velocities=False,
+            convert_non_gripper_rad_to_deg=False,
+            pass_goal_time=False,
+            goal_time_scale=1.0,
             emit_force_event_when_none=True,
-            delegate_torque=True,
+            external_effort_gain=0.1,
         )
 
     async def _find_robot_port(self, robot: Robot) -> str:

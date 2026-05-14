@@ -228,29 +228,6 @@ class TestWidowXAIObservation:
         assert "velocities" in obs.sensor_data
         assert "efforts" not in obs.sensor_data
 
-    def test_read_state_dict_converts_non_gripper_to_degrees(self, mock_trossen_arm: MagicMock) -> None:
-        """read_state_dict converts radian joints to degrees except gripper."""
-        driver = mock_trossen_arm.TrossenArmDriver.return_value
-        driver.get_all_positions.return_value = [1.0, 0.5, -0.5, 1.5, -1.0, 0.3, 0.02]
-        driver.get_all_velocities.return_value = [0.1] * 7
-
-        robot = _create_robot(mock_trossen_arm, role="follower")
-        state = robot.read_state_dict()  # type: ignore[union-attr]
-
-        assert state["shoulder_pan.pos"] == pytest.approx(np.rad2deg(1.0), abs=0.01)
-        assert state["wrist_roll.pos"] == pytest.approx(np.rad2deg(0.3), abs=0.01)
-        assert state["gripper.pos"] == pytest.approx(0.02, abs=1e-6)
-        assert state["elbow_flex.vel"] == pytest.approx(0.1, abs=1e-6)
-
-    def test_feature_names_returns_pos_and_vel(self, mock_trossen_arm: MagicMock) -> None:
-        """feature_names exposes backend-facing position and velocity keys."""
-        robot = _create_robot(mock_trossen_arm, role="follower")
-        names = robot.feature_names()  # type: ignore[union-attr]
-
-        assert "shoulder_pan.pos" in names
-        assert "shoulder_pan.vel" in names
-        assert len(names) == 14
-
 
 # ---------------------------------------------------------------------------
 # Tests: action
@@ -273,29 +250,6 @@ class TestWidowXAIAction:
 
         with pytest.raises(ValueError, match="Expected action shape"):
             robot.send_action(np.zeros(3, dtype=np.float32))  # type: ignore[union-attr]
-
-    def test_send_state_dict_scales_goal_time(self, mock_trossen_arm: MagicMock) -> None:
-        """send_state_dict applies teleop goal_time scaling."""
-        driver = mock_trossen_arm.TrossenArmDriver.return_value
-        robot = _create_robot(mock_trossen_arm, role="follower")
-
-        driver.set_all_positions.reset_mock()
-        joints = {
-            "shoulder_pan.pos": 57.2958,
-            "shoulder_lift.pos": 0.0,
-            "elbow_flex.pos": 0.0,
-            "wrist_flex.pos": 0.0,
-            "wrist_yaw.pos": 0.0,
-            "wrist_roll.pos": 0.0,
-            "gripper.pos": 0.05,
-        }
-
-        robot.send_state_dict(joints, goal_time=0.1)  # type: ignore[union-attr]
-
-        # send_action internally calls driver.set_all_positions once.
-        call_args = driver.set_all_positions.call_args
-        assert call_args is not None
-        assert call_args.args[1] == pytest.approx(0.3, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -332,42 +286,3 @@ class TestWidowXAIExternalEfforts:
 
         with pytest.raises(RuntimeError, match="only available for leader"):
             robot.set_external_efforts(np.zeros(7, dtype=np.float32))  # type: ignore[union-attr]
-
-    def test_read_force_dict_follower(self, mock_trossen_arm: MagicMock) -> None:
-        """Follower read_force_dict returns efforts mapped to backend keys."""
-        driver = mock_trossen_arm.TrossenArmDriver.return_value
-        driver.get_all_external_efforts.return_value = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
-        robot = _create_robot(mock_trossen_arm, role="follower")
-
-        forces = robot.read_force_dict()  # type: ignore[union-attr]
-        assert forces is not None
-        assert forces["shoulder_pan.eff"] == pytest.approx(0.1, abs=1e-6)
-        assert forces["gripper.eff"] == pytest.approx(0.7, abs=1e-6)
-
-    def test_read_force_dict_leader_returns_none(self, mock_trossen_arm: MagicMock) -> None:
-        """Leader read_force_dict returns None."""
-        robot = _create_robot(mock_trossen_arm, role="leader")
-        assert robot.read_force_dict() is None  # type: ignore[union-attr]
-
-    def test_set_force_dict_uses_default_gain(self, mock_trossen_arm: MagicMock) -> None:
-        """set_force_dict applies forces through set_external_efforts with backend gain."""
-        robot = _create_robot(mock_trossen_arm, role="leader")
-        robot.set_external_efforts = MagicMock()  # type: ignore[union-attr]
-
-        payload = {
-            "shoulder_pan.eff": 1.0,
-            "shoulder_lift.eff": 2.0,
-            "elbow_flex.eff": 3.0,
-            "wrist_flex.eff": 4.0,
-            "wrist_yaw.eff": 5.0,
-            "wrist_roll.eff": 6.0,
-            "gripper.eff": 7.0,
-        }
-        returned = robot.set_force_dict(payload)  # type: ignore[union-attr]
-
-        assert returned == payload
-        robot.set_external_efforts.assert_called_once()
-        call_args = robot.set_external_efforts.call_args
-        assert call_args is not None
-        np.testing.assert_allclose(call_args.args[0], np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], dtype=np.float32))
-        assert call_args.args[1] == pytest.approx(0.1, abs=1e-6)
