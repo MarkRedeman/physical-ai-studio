@@ -74,83 +74,129 @@ export const SO101FormFields = () => {
 
 export const BiManualSO101FormFields = () => {
     const serialDevicesQuery = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
+    const { project_id } = useProjectId();
+    const robotsQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots', {
+        params: { path: { project_id } },
+    });
+
     const robotForm = useRobotForm();
     const setRobotForm = useSetRobotForm();
+
+    const requiredSingleType = robotForm.type === 'SO101_Bimanual_Leader' ? 'SO101_Leader' : 'SO101_Follower';
+    const eligibleRobots = robotsQuery.data.filter(
+        (robot) =>
+            robot.type === requiredSingleType &&
+            'serial_number' in robot.payload &&
+            Boolean(robot.payload.serial_number) &&
+            Boolean(robot.active_calibration_id)
+    );
+
+    const leftEligibleRobots = eligibleRobots.filter(
+        (robot) => !('serial_number' in robot.payload) || robot.payload.serial_number !== robotForm.serial_number_right
+    );
+    const rightEligibleRobots = eligibleRobots.filter(
+        (robot) => !('serial_number' in robot.payload) || robot.payload.serial_number !== robotForm.serial_number_left
+    );
+
+    const setFromExistingArm = (arm: 'left' | 'right', robotId: string | number | null) => {
+        if (robotId === null) {
+            return;
+        }
+        const selected = eligibleRobots.find((robot) => robot.id === String(robotId));
+        if (!selected || !('serial_number' in selected.payload)) {
+            return;
+        }
+
+        const serialDevice = serialDevicesQuery.data.find((device) => device.serial_number === selected.payload.serial_number);
+        const connectionString = selected.payload.connection_string || serialDevice?.connection_string || '';
+        const activeCalibration = selected.active_calibration_id ?? '';
+
+        if (arm === 'left') {
+            setRobotForm((oldForm) => ({
+                ...oldForm,
+                serial_number_left: selected.payload.serial_number,
+                connection_string_left: connectionString,
+                active_calibration_id_left: activeCalibration,
+            }));
+            return;
+        }
+
+        setRobotForm((oldForm) => ({
+            ...oldForm,
+            serial_number_right: selected.payload.serial_number,
+            connection_string_right: connectionString,
+            active_calibration_id_right: activeCalibration,
+        }));
+    };
+
+    const leftSelectedRobot = eligibleRobots.find(
+        (robot) =>
+            'serial_number' in robot.payload &&
+            robot.payload.serial_number === robotForm.serial_number_left &&
+            (robot.active_calibration_id ?? '') === robotForm.active_calibration_id_left
+    );
+
+    const rightSelectedRobot = eligibleRobots.find(
+        (robot) =>
+            'serial_number' in robot.payload &&
+            robot.payload.serial_number === robotForm.serial_number_right &&
+            (robot.active_calibration_id ?? '') === robotForm.active_calibration_id_right
+    );
 
     return (
         <Flex direction='column' gap='size-100'>
             <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
                 <Picker
-                    label='Select left robot'
+                    label='Select left arm source robot'
                     isRequired
                     width='100%'
-                    selectedKey={robotForm.serial_number_left}
-                    onSelectionChange={(serial_number_left) => {
-                        const device = serialDevicesQuery.data.find((d) => d.serial_number === serial_number_left);
-
-                        setRobotForm((oldForm) => ({
-                            ...oldForm,
-                            serial_number_left: String(serial_number_left),
-                            connection_string_left: device?.connection_string ?? '',
-                        }));
+                    selectedKey={leftSelectedRobot?.id}
+                    onSelectionChange={(robotId) => {
+                        setFromExistingArm('left', robotId);
                     }}
                 >
-                    {serialDevicesQuery.data.map((serial_device) => {
+                    {leftEligibleRobots.map((robot) => {
+                        if (!('serial_number' in robot.payload)) {
+                            return null;
+                        }
+
                         return (
-                            <Item key={serial_device.serial_number} textValue={serial_device.serial_number}>
-                                <Text>{serial_device.serial_number}</Text>
-                                <Text slot='description'>{serial_device.connection_string}</Text>
+                            <Item key={robot.id} textValue={robot.name}>
+                                <Text>{robot.name}</Text>
+                                <Text slot='description'>
+                                    {robot.payload.serial_number} {robot.active_calibration_id ? `| ${robot.active_calibration_id}` : ''}
+                                </Text>
                             </Item>
                         );
                     })}
                 </Picker>
-                <TextField
-                    isRequired
-                    label='Left calibration ID'
-                    width='100%'
-                    value={robotForm.active_calibration_id_left}
-                    onChange={(active_calibration_id_left) => {
-                        setRobotForm((oldForm) => ({ ...oldForm, active_calibration_id_left }));
-                    }}
-                    placeholder='UUID'
-                />
             </Flex>
 
             <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
                 <Picker
-                    label='Select right robot'
+                    label='Select right arm source robot'
                     isRequired
                     width='100%'
-                    selectedKey={robotForm.serial_number_right}
-                    onSelectionChange={(serial_number_right) => {
-                        const device = serialDevicesQuery.data.find((d) => d.serial_number === serial_number_right);
-
-                        setRobotForm((oldForm) => ({
-                            ...oldForm,
-                            serial_number_right: String(serial_number_right),
-                            connection_string_right: device?.connection_string ?? '',
-                        }));
+                    selectedKey={rightSelectedRobot?.id}
+                    onSelectionChange={(robotId) => {
+                        setFromExistingArm('right', robotId);
                     }}
                 >
-                    {serialDevicesQuery.data.map((serial_device) => {
+                    {rightEligibleRobots.map((robot) => {
+                        if (!('serial_number' in robot.payload)) {
+                            return null;
+                        }
+
                         return (
-                            <Item key={serial_device.serial_number} textValue={serial_device.serial_number}>
-                                <Text>{serial_device.serial_number}</Text>
-                                <Text slot='description'>{serial_device.connection_string}</Text>
+                            <Item key={robot.id} textValue={robot.name}>
+                                <Text>{robot.name}</Text>
+                                <Text slot='description'>
+                                    {robot.payload.serial_number} {robot.active_calibration_id ? `| ${robot.active_calibration_id}` : ''}
+                                </Text>
                             </Item>
                         );
                     })}
                 </Picker>
-                <TextField
-                    isRequired
-                    label='Right calibration ID'
-                    width='100%'
-                    value={robotForm.active_calibration_id_right}
-                    onChange={(active_calibration_id_right) => {
-                        setRobotForm((oldForm) => ({ ...oldForm, active_calibration_id_right }));
-                    }}
-                    placeholder='UUID'
-                />
             </Flex>
             <RefreshRobotsButton />
         </Flex>
