@@ -3,6 +3,7 @@ from physicalai.robot.trossen import WidowXAI
 
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.robot_client import RobotClient
+from robots.so101.so101 import So101
 from robots.so101.adapter import SO101Adapter
 from robots.widowxai.adapter import WidowXAIAdapter
 from schemas.calibration import Calibration
@@ -10,6 +11,8 @@ from schemas.robot import Robot, RobotType
 from services.robot_calibration_service import RobotCalibrationService, find_robot_port
 from utils.serial_robot_tools import RobotConnectionManager
 
+
+from loguru import logger
 
 class RobotClientFactory:
     calibration_service: RobotCalibrationService
@@ -37,6 +40,19 @@ class RobotClientFactory:
                 return await self._build_so101(robot)
             case _:
                 raise ValueError(f"Unsupported robot type: {robot.type}")
+
+    # Keep this for now to make sure we get the same input/output for both implementations
+    # async def _build_so101_old(self, robot: Robot) -> So101:
+    #     port = await self._find_robot_port(robot)
+    #     calibration = await self._get_robot_calibration(robot)
+
+    #     if calibration is None:
+    #         raise ResourceNotFoundError(ResourceType.ROBOT_CALIBRATION, robot.serial_number)
+    #     if port is None:
+    #         raise ResourceNotFoundError(ResourceType.ROBOT, robot.serial_number)
+    #     logger.info("Building the old one")
+    #     mode = "follower" if robot.type == RobotType.SO101_FOLLOWER else "teleoperator"
+    #     return So101(port=port, id=robot.name.lower(), mode=mode, calibration=calibration)
 
     async def _build_so101(self, robot: Robot) -> SO101Adapter:
         port = await self._find_robot_port(robot)
