@@ -433,6 +433,67 @@ class TestSO101Action:
         # Just verify it didn't crash — the clamping is internal
         mock_sdk.GroupSyncWrite.return_value.txPacket.assert_called_once()
 
+    def test_feature_names_returns_backend_position_keys(self, mock_sdk: MagicMock) -> None:
+        """feature_names returns backend-facing position key names."""
+        robot = _create_robot(mock_sdk)
+        assert robot.feature_names() == [
+            "shoulder_pan.pos",
+            "shoulder_lift.pos",
+            "elbow_flex.pos",
+            "wrist_flex.pos",
+            "wrist_roll.pos",
+            "gripper.pos",
+        ]
+
+    def test_read_state_dict_maps_joint_array_to_backend_dict(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
+        """read_state_dict exposes current state in backend key format."""
+        robot = _create_robot(mock_sdk, calibration=calibration_obj)
+        robot.connect()
+
+        state = robot.read_state_dict()
+
+        assert set(state.keys()) == {f"{name}.pos" for name in robot.joint_names}
+
+    def test_send_state_dict_limits_delta_by_goal_time(self, mock_sdk: MagicMock) -> None:
+        """send_state_dict clamps movement magnitude by speed * goal_time."""
+        from physicalai.robot.so101.so101 import SO101Observation
+
+        robot = _create_robot(mock_sdk)
+        robot.get_observation = MagicMock(
+            return_value=SO101Observation(joint_positions=np.zeros(6, dtype=np.float32), timestamp=0.0)
+        )
+        robot.send_action = MagicMock()
+
+        target = {f"{name}.pos": 100.0 for name in robot.joint_names}
+        goal_time = 0.033
+        robot.send_state_dict(target, goal_time)
+
+        robot.send_action.assert_called_once()
+        action = robot.send_action.call_args.args[0]
+        max_delta = robot.max_speed * goal_time
+        assert action.shape == (6,)
+        assert np.all(np.abs(action) <= max_delta + 1e-6)
+
+    def test_read_force_dict_returns_none(self, mock_sdk: MagicMock) -> None:
+        """SO101 driver does not expose force feedback."""
+        robot = _create_robot(mock_sdk)
+        assert robot.read_force_dict() is None
+
+    def test_set_force_dict_raises_not_implemented(self, mock_sdk: MagicMock) -> None:
+        """SO101 driver rejects force write requests."""
+        robot = _create_robot(mock_sdk)
+        with pytest.raises(NotImplementedError, match="not implemented"):
+            robot.set_force_dict({})
+
+    def test_set_torque_delegates_to_driver_impl(self, mock_sdk: MagicMock) -> None:
+        """set_torque forwards to internal torque register writes."""
+        robot = _create_robot(mock_sdk)
+        robot.connect()
+        robot._set_torque = MagicMock()  # noqa: SLF001
+
+        robot.set_torque(enabled=True)
+        robot._set_torque.assert_called_once_with(enabled=True)  # noqa: SLF001
+
 
 # ---------------------------------------------------------------------------
 # Tests: calibration

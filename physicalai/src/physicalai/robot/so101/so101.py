@@ -509,6 +509,51 @@ class SO101(Robot):
         ticks = self._unit_to_ticks(action) if self._calibration is not None else np.round(action).astype(np.int32)
         self._write_joint_positions(ticks)
 
+    def _observation_to_state_dict(self, values: np.ndarray) -> dict[str, float]:
+        return {f"{name}.pos": float(values[i]) for i, name in enumerate(self.joint_names)}
+
+    def _state_dict_to_action(self, joints: dict[str, float]) -> np.ndarray:
+        result = np.empty(len(self.joint_names), dtype=np.float32)
+        for i, name in enumerate(self.joint_names):
+            result[i] = joints[f"{name}.pos"]
+        return result
+
+    def feature_names(self) -> list[str]:
+        """Return backend-facing feature names for this robot."""
+        return [f"{name}.pos" for name in self.joint_names]
+
+    def read_state_dict(self) -> dict[str, float]:
+        """Read robot state in backend dictionary format."""
+        observation = self.get_observation()
+        return self._observation_to_state_dict(observation.joint_positions)
+
+    def send_state_dict(self, joints: dict[str, float], goal_time: float) -> None:
+        """Send backend dictionary joint command with speed clamping."""
+        max_delta = self.max_speed * goal_time
+
+        observation = self.get_observation()
+        current = observation.joint_positions.astype(np.float32)
+        target = self._state_dict_to_action(joints)
+
+        clamped = np.array(
+            [current[i] + np.clip(target[i] - current[i], -max_delta, max_delta) for i in range(len(current))],
+            dtype=np.float32,
+        )
+        self.send_action(clamped)
+
+    def read_force_dict(self) -> dict[str, float] | None:
+        """SO101 has no force read support."""
+        return None
+
+    def set_force_dict(self, forces: dict[str, float]) -> dict[str, float]:
+        """SO101 has no force control support."""
+        msg = "Force control is not implemented for SO101"
+        raise NotImplementedError(msg)
+
+    def set_torque(self, *, enabled: bool) -> None:
+        """Set SO101 torque state."""
+        self._set_torque(enabled=enabled)
+
     def is_connected(self) -> bool:
         """Check if robot is connected.
 
