@@ -185,10 +185,10 @@ class TestSO101Construction:
             "gripper": 6,
         }
 
-    def test_default_unit_is_degrees(self, mock_sdk: MagicMock) -> None:
-        """Calibrated SO101 defaults to degrees for observation/action units."""
+    def test_default_unit_is_normalized(self, mock_sdk: MagicMock) -> None:
+        """Calibrated SO101 defaults to normalized for observation/action units."""
         robot = _create_robot(mock_sdk)
-        assert robot.unit == "degrees"
+        assert robot.unit == "normalized"
 
     def test_normalized_unit_allowed_in_calibrated_mode(self, mock_sdk: MagicMock) -> None:
         """calibrated mode accepts normalized unit."""
@@ -202,7 +202,7 @@ class TestSO101Construction:
         from physicalai.robot.so101 import SO101
 
         with pytest.raises(ValueError, match="only supports unit='ticks'"):
-            SO101.uncalibrated(port="/dev/ttyUSB0", unit="degrees")  # pyrefly: ignore[bad-argument-type]
+            SO101.uncalibrated(port="/dev/ttyUSB0", unit="normalized")  # pyrefly: ignore[bad-argument-type]
 
     def test_calibrated_rejects_ticks_unit(self, mock_sdk: MagicMock) -> None:
         """calibrated mode does not accept ticks as unit."""
@@ -380,30 +380,18 @@ class TestSO101Observation:
         assert isinstance(obs.timestamp, float)
 
     def test_observation_calibrated(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
-        """Calibrated observation returns degrees by default."""
+        """Calibrated observation returns normalized values by default."""
         robot = _create_robot(mock_sdk, calibration=calibration_obj)
         robot.connect()
         obs = robot.get_observation()
 
-        # All servos return 2048 ticks. For joints with homing_offset=2048,
-        # the result should be 0.0 radians.
+        # All servos return 2048 ticks.
         state = obs.joint_positions
         assert state.shape == (6,)
         assert state.dtype == np.float32
-        # shoulder_pan: (2048 - 2048) * 1 * radians_per_tick = 0.0
-        assert state[0] == pytest.approx(0.0, abs=1e-6)
-        # shoulder_lift: (2048 - 1024) * -1 * radians_per_tick = -pi/2 = -90deg
-        assert state[1] == pytest.approx(-90.0, abs=1e-3)
-
-    def test_observation_calibrated_in_radians(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
-        """Calibrated observation can be configured for radians."""
-        from physicalai.robot.so101 import SO101
-
-        robot = SO101(port="/dev/ttyUSB0", role="follower", calibration=calibration_obj, unit="radians")
-        robot.connect()
-        obs = robot.get_observation()
-
-        assert obs.joint_positions[1] == pytest.approx(-1024 * 2 * np.pi / 4096, abs=1e-4)
+        # shoulder_pan and shoulder_lift are mapped by calibration range.
+        assert state[0] == pytest.approx(-1.83, abs=0.1)
+        assert state[1] == pytest.approx(5.15, abs=0.1)
 
 
 class TestSO101Action:
@@ -438,7 +426,7 @@ class TestSO101Action:
         """Calibrated send_action clamps to joint range limits."""
         robot = _create_robot(mock_sdk, role="follower", calibration=calibration_obj)
         robot.connect()
-        # gripper range_max is 3074 ticks; sending 10.0 rad should be clamped internally
+        # Sending a large normalized value should be clamped internally.
         action = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 10.0], dtype=np.float32)
         robot.send_action(action)
 
@@ -499,25 +487,6 @@ class TestSO101Calibration:
 
         with pytest.raises(ValueError, match="drive_mode must be 0 or 1"):
             SO101Calibration.from_path(path)
-
-    def test_tick_radian_roundtrip(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
-        """Converting ticks → radians → ticks should roundtrip."""
-        robot = _create_robot(mock_sdk, calibration=calibration_obj)
-
-        original_ticks = np.array([2048, 1524, 2048, 2048, 2048, 2200], dtype=np.int32)
-        radians = robot._ticks_to_radians(original_ticks)  # noqa: SLF001
-        recovered_ticks = robot._radians_to_ticks(radians)  # noqa: SLF001
-        np.testing.assert_array_almost_equal(original_ticks, recovered_ticks, decimal=0)
-
-    def test_tick_degree_roundtrip(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
-        """Converting ticks → degrees → ticks should roundtrip."""
-        from physicalai.robot.so101 import SO101
-
-        robot = SO101(port="/dev/ttyUSB0", role="follower", calibration=calibration_obj, unit="degrees")
-        original_ticks = np.array([2048, 1524, 2048, 2048, 2048, 2200], dtype=np.int32)
-        degrees = robot._ticks_to_unit(original_ticks)  # noqa: SLF001
-        recovered_ticks = robot._unit_to_ticks(degrees)  # noqa: SLF001
-        np.testing.assert_array_almost_equal(original_ticks, recovered_ticks, decimal=0)
 
     def test_tick_normalized_roundtrip(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
         """Converting ticks → normalized → ticks should roundtrip."""
