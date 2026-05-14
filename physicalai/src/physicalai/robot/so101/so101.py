@@ -486,12 +486,14 @@ class SO101(Robot):
             timestamp=time.monotonic(),
         )
 
-    def send_action(self, action: np.ndarray) -> None:
+    def send_action(self, action: np.ndarray, *, goal_time: float = 0.1) -> None:  # noqa: ARG002
         """Send joint position commands to all servos.
 
         Args:
             action: Array of shape ``(6,)`` with target joint positions in
                 the configured :attr:`unit`, or raw ticks in explicit uncalibrated mode.
+            goal_time: Optional minimum time (seconds) to reach target.
+                SO101 currently ignores this value.
 
         Raises:
             RuntimeError: If the robot is in ``"leader"`` role.

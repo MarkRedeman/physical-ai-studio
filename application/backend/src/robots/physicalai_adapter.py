@@ -16,9 +16,8 @@ HARDWARE_TIMEOUT_COMMAND = 5.0
 class PhysicalAIRobotAdapterConfig:
     # Include ``<joint>.vel`` values from observation sensor data.
     include_velocities: bool = False
-    # Optional multiplier for ``goal_time`` when forwarding actions;
-    # ``None`` means do not pass ``goal_time`` at all.
-    goal_time_scale: float | None = None
+    # Multiplier for ``goal_time`` when forwarding actions.
+    goal_time_scale: float = 1.0
     # Optional gain for ``set_external_efforts``; ``None`` disables force writes.
     # When ``None``, missing effort observations emit a force event with ``state=None``.
     external_effort_gain: float | None = 0.1
@@ -108,14 +107,11 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
         action = self._state_to_action(joints)
         async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            if self._config.goal_time_scale is not None:
-                await asyncio.to_thread(
-                    self._robot.send_action,
-                    action,
-                    goal_time=self._config.goal_time_scale * goal_time,
-                )
-            else:
-                await asyncio.to_thread(self._robot.send_action, action)
+            await asyncio.to_thread(
+                self._robot.send_action,
+                action,
+                goal_time=self._config.goal_time_scale * goal_time,
+            )
 
         return self._create_event("joints_state_was_set", joints=joints)
 

@@ -83,7 +83,7 @@ class RobotClientFactory:
             robot_type=robot.type,
             config=PhysicalAIRobotAdapterConfig(
                 include_velocities=False,
-                goal_time_scale=None,
+                goal_time_scale=1.0,
                 external_effort_gain=None,
             ),
         )
