@@ -292,6 +292,15 @@ class TestSO101Lifecycle:
         with pytest.raises(ConnectionError, match="did not respond"):
             robot.connect()
 
+    def test_set_torque_delegates_to_internal_impl(self, mock_sdk: MagicMock) -> None:
+        """Public set_torque forwards to internal torque implementation."""
+        robot = _create_robot(mock_sdk)
+        robot.connect()
+        robot._set_torque = MagicMock()  # noqa: SLF001
+
+        robot.set_torque(enabled=True)
+        robot._set_torque.assert_called_once_with(enabled=True)  # noqa: SLF001
+
 
 # ---------------------------------------------------------------------------
 # Tests: servo configuration

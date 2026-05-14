@@ -669,6 +669,13 @@ class SO101(Robot):
             if error != 0:
                 logger.warning(f"Torque write error on servo '{name}' (ID {servo_id}): err={error}")
 
+    def set_torque(self, *, enabled: bool) -> None:
+        """Enable or disable torque on all servos.
+
+        Public wrapper for adapter-level torque control.
+        """
+        self._set_torque(enabled=enabled)
+
     def _hold_position(self) -> None:
         """Command all servos to hold their current position.
 

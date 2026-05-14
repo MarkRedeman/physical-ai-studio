@@ -120,10 +120,18 @@ class PhysicalAIRobotAdapter(RobotClient):
         return self._create_event("joints_state_was_set", joints=joints)
 
     async def enable_torque(self) -> dict:
+        set_torque = getattr(self._robot, "set_torque", None)
+        if callable(set_torque):
+            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+                await asyncio.to_thread(set_torque, enabled=True)
         self.is_controlled = True
         return self._create_event("torque_was_enabled")
 
     async def disable_torque(self) -> dict:
+        set_torque = getattr(self._robot, "set_torque", None)
+        if callable(set_torque):
+            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+                await asyncio.to_thread(set_torque, enabled=False)
         self.is_controlled = False
         return self._create_event("torque_was_disabled")
 

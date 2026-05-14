@@ -132,17 +132,30 @@ class TestSetJointsState:
 class TestTorque:
     def test_enable_torque(self):
         adapter, robot = _make_adapter()
+        robot.set_torque = MagicMock()
         result = asyncio.run(adapter.enable_torque())
-        robot.send_action.assert_not_called()
+        robot.set_torque.assert_called_once_with(enabled=True)
         assert result["event"] == "torque_was_enabled"
         assert adapter.is_controlled is True
 
     def test_disable_torque(self):
         adapter, robot = _make_adapter()
+        robot.set_torque = MagicMock()
         result = asyncio.run(adapter.disable_torque())
-        robot.send_action.assert_not_called()
+        robot.set_torque.assert_called_once_with(enabled=False)
         assert result["event"] == "torque_was_disabled"
         assert adapter.is_controlled is False
+
+    def test_torque_noops_when_driver_has_no_set_torque(self):
+        adapter, robot = _make_adapter()
+        if hasattr(robot, "set_torque"):
+            delattr(robot, "set_torque")
+
+        enable = asyncio.run(adapter.enable_torque())
+        disable = asyncio.run(adapter.disable_torque())
+
+        assert enable["event"] == "torque_was_enabled"
+        assert disable["event"] == "torque_was_disabled"
 
 
 class TestPing:
