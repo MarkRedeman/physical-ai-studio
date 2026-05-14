@@ -1,5 +1,5 @@
 import asyncio
-from typing import Literal
+from dataclasses import dataclass
 
 import numpy as np
 from loguru import logger
@@ -11,7 +11,15 @@ from schemas.robot import RobotType
 HARDWARE_TIMEOUT_CONNECT = 10.0
 HARDWARE_TIMEOUT_COMMAND = 5.0
 
-RobotMode = Literal["follower", "leader", "teleoperator"]
+
+@dataclass(frozen=True)
+class PhysicalAIRobotAdapterConfig:
+    include_velocities: bool = False
+    convert_non_gripper_rad_to_deg: bool = False
+    pass_goal_time: bool = False
+    goal_time_scale: float = 1.0
+    emit_force_event_when_none: bool = False
+    external_effort_gain: float = 0.1
 
 
 class PhysicalAIRobotAdapter(RobotClient):
@@ -21,36 +29,29 @@ class PhysicalAIRobotAdapter(RobotClient):
         self,
         *,
         robot: Robot,
-        mode: RobotMode,
-        follower_type: RobotType,
-        leader_type: RobotType,
-        include_velocities: bool = False,
-        convert_non_gripper_rad_to_deg: bool = False,
-        pass_goal_time: bool = False,
-        goal_time_scale: float = 1.0,
-        emit_force_event_when_none: bool = False,
-        external_effort_gain: float = 0.1,
+        robot_type: RobotType,
+        config: PhysicalAIRobotAdapterConfig | None = None,
     ) -> None:
+        resolved_config = config or PhysicalAIRobotAdapterConfig()
         self._robot = robot
-        self._mode = mode
-        self._follower_type = follower_type
-        self._leader_type = leader_type
-        self._include_velocities = include_velocities
-        self._convert_non_gripper_rad_to_deg = convert_non_gripper_rad_to_deg
-        self._pass_goal_time = pass_goal_time
-        self._goal_time_scale = goal_time_scale
-        self._emit_force_event_when_none = emit_force_event_when_none
-        self._external_effort_gain = external_effort_gain
+        self._robot_type = robot_type
+        self._config = resolved_config
         self._bus_lock = asyncio.Lock()
         self.is_controlled = False
 
+    def _is_follower(self) -> bool:
+        return self._robot_type in {
+            RobotType.SO101_FOLLOWER,
+            RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
+        }
+
     def _position_from_robot(self, name: str, value: float) -> float:
-        if self._convert_non_gripper_rad_to_deg and name != "gripper":
+        if self._config.convert_non_gripper_rad_to_deg and name != "gripper":
             return float(np.rad2deg(value))
         return value
 
     def _position_to_robot(self, name: str, value: float) -> float:
-        if self._convert_non_gripper_rad_to_deg and name != "gripper":
+        if self._config.convert_non_gripper_rad_to_deg and name != "gripper":
             return float(np.deg2rad(value))
         return value
 
@@ -60,7 +61,7 @@ class PhysicalAIRobotAdapter(RobotClient):
             raw_position = float(observation.joint_positions[i])
             state[f"{name}.pos"] = self._position_from_robot(name, raw_position)
 
-        if self._include_velocities:
+        if self._config.include_velocities:
             sensor_data = observation.sensor_data
             if sensor_data is None or "velocities" not in sensor_data:
                 msg = "Robot observation is missing velocity data"
@@ -79,20 +80,18 @@ class PhysicalAIRobotAdapter(RobotClient):
 
     @property
     def robot_type(self) -> RobotType:
-        if self._mode == "follower":
-            return self._follower_type
-        return self._leader_type
+        return self._robot_type
 
     @property
     def is_connected(self) -> bool:
         return self._robot.is_connected()
 
     async def connect(self) -> None:
-        logger.info(f"Connecting physicalai robot in {self._mode} mode")
+        logger.info(f"Connecting physicalai robot type={self._robot_type}")
         try:
             async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_CONNECT):
                 await asyncio.to_thread(self._robot.connect)
-            self.is_controlled = self._mode == "follower"
+            self.is_controlled = self._is_follower()
         except TimeoutError:
             logger.error("Timeout connecting to robot")
             raise
@@ -101,7 +100,7 @@ class PhysicalAIRobotAdapter(RobotClient):
             raise
 
     async def disconnect(self) -> None:
-        logger.info(f"Disconnecting physicalai robot in {self._mode} mode")
+        logger.info(f"Disconnecting physicalai robot type={self._robot_type}")
         try:
             async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
                 await asyncio.to_thread(self._robot.disconnect)
@@ -117,8 +116,12 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
         action = self._state_to_action(joints)
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            if self._pass_goal_time:
-                await asyncio.to_thread(self._robot.send_action, action, goal_time=self._goal_time_scale * goal_time)
+            if self._config.pass_goal_time:
+                await asyncio.to_thread(
+                    self._robot.send_action,
+                    action,
+                    goal_time=self._config.goal_time_scale * goal_time,
+                )
             else:
                 await asyncio.to_thread(self._robot.send_action, action)
 
@@ -153,7 +156,7 @@ class PhysicalAIRobotAdapter(RobotClient):
 
         sensor_data = observation.sensor_data
         if sensor_data is None or "efforts" not in sensor_data:
-            if self._emit_force_event_when_none:
+            if self._config.emit_force_event_when_none:
                 return self._create_event(
                     "force_was_updated",
                     state=None,
@@ -171,7 +174,7 @@ class PhysicalAIRobotAdapter(RobotClient):
         )
 
     async def set_forces(self, forces: dict) -> dict:
-        if self._mode == "follower":
+        if self._is_follower():
             logger.warning("Cannot send forces to a follower arm")
             return forces
 
@@ -184,12 +187,12 @@ class PhysicalAIRobotAdapter(RobotClient):
             efforts[i] = float(forces.get(f"{name}.eff", 0.0))
 
         async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            await asyncio.to_thread(set_external_efforts, efforts, gain=self._external_effort_gain)
+            await asyncio.to_thread(set_external_efforts, efforts, gain=self._config.external_effort_gain)
         return forces
 
     def features(self) -> list[str]:
         position_features = [f"{name}.pos" for name in self._robot.joint_names]
-        if not self._include_velocities:
+        if not self._config.include_velocities:
             return position_features
         velocity_features = [f"{name}.vel" for name in self._robot.joint_names]
         return position_features + velocity_features

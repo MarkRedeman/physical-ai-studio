@@ -8,7 +8,7 @@ import pytest
 from physicalai.robot.trossen.constants import WIDOWXAI_JOINT_ORDER
 from physicalai.robot.trossen.widowxai import WidowXAI
 
-from robots.physicalai_adapter import PhysicalAIRobotAdapter
+from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from schemas.robot import RobotType
 
 
@@ -29,17 +29,18 @@ def _make_mock_robot(role="follower"):
 
 def _make_adapter(mode="follower"):
     robot = _make_mock_robot(role=mode)
+    robot_type = RobotType.TROSSEN_WIDOWXAI_FOLLOWER if mode == "follower" else RobotType.TROSSEN_WIDOWXAI_LEADER
     adapter = PhysicalAIRobotAdapter(
         robot=robot,
-        mode=mode,
-        follower_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
-        leader_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
-        include_velocities=True,
-        convert_non_gripper_rad_to_deg=True,
-        pass_goal_time=True,
-        goal_time_scale=3.0,
-        emit_force_event_when_none=False,
-        external_effort_gain=0.1,
+        robot_type=robot_type,
+        config=PhysicalAIRobotAdapterConfig(
+            include_velocities=True,
+            convert_non_gripper_rad_to_deg=True,
+            pass_goal_time=True,
+            goal_time_scale=3.0,
+            emit_force_event_when_none=False,
+            external_effort_gain=0.1,
+        ),
     )
     return adapter, robot
 

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from physicalai.robot.so101.constants import SO101_JOINT_ORDER
 
-from robots.physicalai_adapter import PhysicalAIRobotAdapter
+from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from schemas.robot import RobotType
 
 
@@ -23,17 +23,18 @@ def _make_adapter(
     mode: str = "follower",
 ) -> tuple[PhysicalAIRobotAdapter, MagicMock]:
     robot = _make_mock_robot()
+    robot_type = RobotType.SO101_FOLLOWER if mode == "follower" else RobotType.SO101_LEADER
     adapter = PhysicalAIRobotAdapter(
         robot=robot,
-        mode=mode,
-        follower_type=RobotType.SO101_FOLLOWER,
-        leader_type=RobotType.SO101_LEADER,
-        include_velocities=False,
-        convert_non_gripper_rad_to_deg=False,
-        pass_goal_time=False,
-        goal_time_scale=1.0,
-        emit_force_event_when_none=True,
-        external_effort_gain=0.1,
+        robot_type=robot_type,
+        config=PhysicalAIRobotAdapterConfig(
+            include_velocities=False,
+            convert_non_gripper_rad_to_deg=False,
+            pass_goal_time=False,
+            goal_time_scale=1.0,
+            emit_force_event_when_none=True,
+            external_effort_gain=0.1,
+        ),
     )
     return adapter, robot
 
