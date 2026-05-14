@@ -38,7 +38,7 @@ class PhysicalAIRobotAdapter(RobotClient):
         self._robot = robot
         self._robot_type = robot_type
         self._config = resolved_config
-        self._bus_lock = asyncio.Lock()
+        self._robot_lock = asyncio.Lock()
         self.is_controlled = False
 
     def _is_follower(self) -> bool:
@@ -81,7 +81,7 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def connect(self) -> None:
         logger.info(f"Connecting physicalai robot type={self._robot_type}")
         try:
-            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_CONNECT):
+            async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_CONNECT):
                 await asyncio.to_thread(self._robot.connect)
             self.is_controlled = self._is_follower()
         except TimeoutError:
@@ -94,7 +94,7 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def disconnect(self) -> None:
         logger.info(f"Disconnecting physicalai robot type={self._robot_type}")
         try:
-            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+            async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
                 await asyncio.to_thread(self._robot.disconnect)
             logger.info("Robot disconnected")
         except TimeoutError:
@@ -107,7 +107,7 @@ class PhysicalAIRobotAdapter(RobotClient):
 
     async def set_joints_state(self, joints: dict, goal_time: float) -> dict:
         action = self._state_to_action(joints)
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+        async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
             if self._config.goal_time_scale is not None:
                 await asyncio.to_thread(
                     self._robot.send_action,
@@ -122,7 +122,7 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def enable_torque(self) -> dict:
         set_torque = getattr(self._robot, "set_torque", None)
         if callable(set_torque):
-            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+            async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
                 await asyncio.to_thread(set_torque, enabled=True)
         self.is_controlled = True
         return self._create_event("torque_was_enabled")
@@ -130,14 +130,14 @@ class PhysicalAIRobotAdapter(RobotClient):
     async def disable_torque(self) -> dict:
         set_torque = getattr(self._robot, "set_torque", None)
         if callable(set_torque):
-            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+            async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
                 await asyncio.to_thread(set_torque, enabled=False)
         self.is_controlled = False
         return self._create_event("torque_was_disabled")
 
     async def read_state(self, *, normalize: bool = True) -> dict:  # noqa: ARG002
         try:
-            async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+            async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
                 observation = await asyncio.to_thread(self._robot.get_observation)
             state = self._observation_to_state(observation)
 
@@ -151,7 +151,7 @@ class PhysicalAIRobotAdapter(RobotClient):
             raise
 
     async def read_forces(self) -> dict | None:
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+        async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
             observation = await asyncio.to_thread(self._robot.get_observation)
 
         sensor_data = observation.sensor_data
@@ -190,7 +190,7 @@ class PhysicalAIRobotAdapter(RobotClient):
         for i, name in enumerate(self._robot.joint_names):
             efforts[i] = float(forces.get(f"{name}.eff", 0.0))
 
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
+        async with self._robot_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
             await asyncio.to_thread(set_external_efforts, efforts, gain=gain)
         return forces
 
