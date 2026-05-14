@@ -35,9 +35,8 @@ def _make_adapter(mode="follower"):
         robot_type=robot_type,
         config=PhysicalAIRobotAdapterConfig(
             include_velocities=True,
-            convert_non_gripper_rad_to_deg=True,
             pass_goal_time=True,
-            goal_time_scale=3.0,
+            goal_time_scale=1.0,
             emit_force_event_when_none=False,
             external_effort_gain=0.1,
         ),
@@ -75,7 +74,7 @@ class TestDegreeRadianConversion:
     def test_read_state_delegates_to_driver_state_dict(self):
         adapter, robot = _make_adapter()
         obs = MagicMock()
-        obs.joint_positions = [1.0, 0.5, -0.5, 1.5, -1.0, 0.3, 0.02]
+        obs.joint_positions = [57.2958, 28.6479, -28.6479, 85.9437, -57.2958, 17.1887, 0.02]
         obs.sensor_data = {
             "velocities": [0.1] * len(WIDOWXAI_JOINT_ORDER),
             "efforts": [0.0] * len(WIDOWXAI_JOINT_ORDER),
@@ -115,10 +114,10 @@ class TestDegreeRadianConversion:
         robot.send_action.assert_called_once()
         call_args = robot.send_action.call_args
         sent = call_args.args[0]
-        assert sent[0] == pytest.approx(1.0, abs=0.01)
-        assert sent[1] == pytest.approx(0.5, abs=0.01)
+        assert sent[0] == pytest.approx(57.2958, abs=0.01)
+        assert sent[1] == pytest.approx(28.6479, abs=0.01)
         assert sent[6] == pytest.approx(0.05, abs=1e-6)
-        assert call_args.kwargs["goal_time"] == pytest.approx(0.3, abs=1e-6)
+        assert call_args.kwargs["goal_time"] == pytest.approx(0.1, abs=1e-6)
 
     def test_roundtrip_conversion(self):
         adapter, robot = _make_adapter()
@@ -184,11 +183,19 @@ class TestSetJointsState:
         for name in WIDOWXAI_JOINT_ORDER:
             joints[f"{name}.pos"] = 0.0
             joints[f"{name}.vel"] = 0.1
+        joints["shoulder_pan.pos"] = 57.2958
+        joints["shoulder_lift.pos"] = 28.6479
+        joints["gripper.pos"] = 0.05
 
         asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
 
         robot.send_action.assert_called_once()
-        assert robot.send_action.call_args.kwargs["goal_time"] == pytest.approx(0.3, abs=1e-6)
+        call_args = robot.send_action.call_args
+        sent = call_args.args[0]
+        assert sent[0] == pytest.approx(57.2958, abs=0.01)
+        assert sent[1] == pytest.approx(28.6479, abs=0.01)
+        assert sent[6] == pytest.approx(0.05, abs=1e-6)
+        assert robot.send_action.call_args.kwargs["goal_time"] == pytest.approx(0.1, abs=1e-6)
 
     def test_leader_forwards_to_driver(self):
         adapter, robot = _make_adapter(mode="leader")

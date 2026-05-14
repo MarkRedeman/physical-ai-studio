@@ -15,7 +15,6 @@ HARDWARE_TIMEOUT_COMMAND = 5.0
 @dataclass(frozen=True)
 class PhysicalAIRobotAdapterConfig:
     include_velocities: bool = False
-    convert_non_gripper_rad_to_deg: bool = False
     pass_goal_time: bool = False
     goal_time_scale: float = 1.0
     emit_force_event_when_none: bool = False
@@ -45,21 +44,11 @@ class PhysicalAIRobotAdapter(RobotClient):
             RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
         }
 
-    def _position_from_robot(self, name: str, value: float) -> float:
-        if self._config.convert_non_gripper_rad_to_deg and name != "gripper":
-            return float(np.rad2deg(value))
-        return value
-
-    def _position_to_robot(self, name: str, value: float) -> float:
-        if self._config.convert_non_gripper_rad_to_deg and name != "gripper":
-            return float(np.deg2rad(value))
-        return value
-
     def _observation_to_state(self, observation: RobotObservation) -> dict[str, float]:
         state: dict[str, float] = {}
         for i, name in enumerate(self._robot.joint_names):
             raw_position = float(observation.joint_positions[i])
-            state[f"{name}.pos"] = self._position_from_robot(name, raw_position)
+            state[f"{name}.pos"] = raw_position
 
         if self._config.include_velocities:
             sensor_data = observation.sensor_data
@@ -75,7 +64,7 @@ class PhysicalAIRobotAdapter(RobotClient):
     def _state_to_action(self, joints: dict[str, float]) -> np.ndarray:
         action = np.empty(len(self._robot.joint_names), dtype=np.float32)
         for i, name in enumerate(self._robot.joint_names):
-            action[i] = self._position_to_robot(name, float(joints[f"{name}.pos"]))
+            action[i] = float(joints[f"{name}.pos"])
         return action
 
     @property
