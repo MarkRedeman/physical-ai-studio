@@ -8,7 +8,7 @@ import pytest
 from physicalai.robot.trossen.constants import WIDOWXAI_JOINT_ORDER
 from physicalai.robot.trossen.widowxai import WidowXAI
 
-from robots.widowxai.adapter import WidowXAIAdapter
+from robots.physicalai_adapter import PhysicalAIRobotAdapter
 from schemas.robot import RobotType
 
 
@@ -26,14 +26,21 @@ def _make_mock_robot(role="follower"):
 
 def _make_adapter(mode="follower"):
     robot = _make_mock_robot(role=mode)
-    adapter = WidowXAIAdapter(robot=robot, mode=mode)
+    adapter = PhysicalAIRobotAdapter(
+        robot=robot,
+        mode=mode,
+        follower_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
+        leader_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
+        emit_force_event_when_none=False,
+        delegate_torque=False,
+    )
     return adapter, robot
 
 
 class TestProperties:
     def test_name(self):
         adapter, _ = _make_adapter()
-        assert adapter.name == "WidowXAI"
+        assert adapter.name == "PhysicalAIRobot"
 
     def test_robot_type_follower(self):
         adapter, _ = _make_adapter(mode="follower")
@@ -154,12 +161,12 @@ class TestSetJointsState:
 
         robot.send_state_dict.assert_called_once_with(joints, 0.1)
 
-    def test_raises_for_leader(self):
-        adapter, _ = _make_adapter(mode="leader")
+    def test_leader_forwards_to_driver(self):
+        adapter, robot = _make_adapter(mode="leader")
         joints = {f"{name}.pos": 0.0 for name in WIDOWXAI_JOINT_ORDER}
         joints.update({f"{name}.vel": 0.0 for name in WIDOWXAI_JOINT_ORDER})
-        with pytest.raises(RuntimeError):
-            asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
+        asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
+        robot.send_state_dict.assert_called_once_with(joints, 0.1)
 
 
 class TestReadState:
