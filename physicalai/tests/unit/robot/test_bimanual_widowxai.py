@@ -179,14 +179,40 @@ class TestBimanualWidowXAIObservation:
     def test_observation_merges_left_right(self, mock_trossen_arm: MagicMock) -> None:
         robot = _make_bimanual(mock_trossen_arm, role="follower")
 
-        left_pos = [float(i) for i in range(7)]
-        right_pos = [float(i + 10) for i in range(7)]
+        left_pos = [1.0, 0.5, -0.5, 1.5, -1.0, 0.3, 0.02]
+        right_pos = [0.8, -0.4, 0.6, -1.2, 0.9, -0.2, 0.03]
         robot._left._driver.get_all_positions.return_value = left_pos  # type: ignore[attr-defined]
         robot._right._driver.get_all_positions.return_value = right_pos  # type: ignore[attr-defined]
 
         obs = robot.get_observation()
-        np.testing.assert_array_almost_equal(obs.joint_positions[:7], left_pos)
-        np.testing.assert_array_almost_equal(obs.joint_positions[7:], right_pos)
+
+        expected_left = np.array(
+            [
+                np.rad2deg(1.0),
+                np.rad2deg(0.5),
+                np.rad2deg(-0.5),
+                np.rad2deg(1.5),
+                np.rad2deg(-1.0),
+                np.rad2deg(0.3),
+                0.02,
+            ],
+            dtype=np.float32,
+        )
+        expected_right = np.array(
+            [
+                np.rad2deg(0.8),
+                np.rad2deg(-0.4),
+                np.rad2deg(0.6),
+                np.rad2deg(-1.2),
+                np.rad2deg(0.9),
+                np.rad2deg(-0.2),
+                0.03,
+            ],
+            dtype=np.float32,
+        )
+
+        np.testing.assert_allclose(obs.joint_positions[:7], expected_left, atol=1e-5)
+        np.testing.assert_allclose(obs.joint_positions[7:], expected_right, atol=1e-5)
 
     def test_observation_merges_sensor_data_by_key_not_order(self, mock_trossen_arm: MagicMock) -> None:
         robot = _make_bimanual(mock_trossen_arm, role="follower")
