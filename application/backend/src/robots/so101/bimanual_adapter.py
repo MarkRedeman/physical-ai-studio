@@ -2,7 +2,6 @@ import asyncio
 from typing import Literal
 
 from robots.robot_client import RobotClient
-from robots.so101.adapter import SO101Adapter
 from schemas.robot import RobotType
 
 
@@ -11,8 +10,8 @@ class BimanualSO101Adapter(RobotClient):
 
     def __init__(
         self,
-        left: SO101Adapter,
-        right: SO101Adapter,
+        left: RobotClient,
+        right: RobotClient,
         mode: Literal["follower", "teleoperator"],
     ) -> None:
         self._left = left
