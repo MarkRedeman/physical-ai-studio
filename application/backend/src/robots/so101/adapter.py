@@ -197,9 +197,8 @@ class SO101Adapter(RobotClient):
     def features(self) -> list[str]:
         return [f"{name}.pos" for name in SO101_JOINT_ORDER]
 
-    async def _get_state(self) -> dict[str, float]:
-        async with self._bus_lock, asyncio.timeout(HARDWARE_TIMEOUT_COMMAND):
-            obs = await asyncio.to_thread(self._robot.get_observation)
+    def _get_state(self) -> dict[str, float]:
+        obs = self._robot.get_observation()
         return self._radians_to_normalized(obs.joint_positions)
 
     def _move_to_target(self, joints: dict, goal_time: float) -> None:
