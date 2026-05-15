@@ -10,5 +10,6 @@ Public API::
 
 from physicalai.robot.so101.calibration import SO101Calibration, SO101JointCalibration
 from physicalai.robot.so101.so101 import SO101
+from physicalai.robot.so101.bimanual_so101 import BimanualSO101
 
-__all__ = ["SO101", "SO101Calibration", "SO101JointCalibration"]
+__all__ = ["SO101", "BimanualSO101", "SO101Calibration", "SO101JointCalibration"]
