@@ -7,7 +7,6 @@ from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
-from robots.so101.adapter import SO101Adapter
 from robots.so101.bimanual_adapter import BimanualSO101Adapter
 from schemas.calibration import Calibration
 from schemas.robot import Robot, RobotType, SO101BimanualRobot, SO101Robot, TrossenBimanualRobot
@@ -99,20 +98,7 @@ class RobotClientFactory:
 
         role = "follower" if robot.type == RobotType.SO101_FOLLOWER else "leader"
 
-        so101_cal = SO101Calibration.from_dict(
-            {
-                name: {
-                    "id": val.id,
-                    "drive_mode": val.drive_mode,
-                    "homing_offset": val.homing_offset,
-                    "range_min": val.range_min,
-                    "range_max": val.range_max,
-                }
-                for name, val in calibration.values.items()
-            }
-        )
-
-        so101 = SO101(port=port, calibration=so101_cal, role=role, unit="normalized")
+        so101 = SO101(port=port, calibration=self._to_so101_calibration(calibration), role=role, unit="normalized")
         return PhysicalAIRobotAdapter(
             robot=so101,
             robot_type=robot.type,
@@ -145,11 +131,17 @@ class RobotClientFactory:
 
         role = "follower" if mode == "follower" else "leader"
 
-        left_driver = SO101(port=left_port, calibration=self._to_so101_calibration(left_calibration), role=role)
-        right_driver = SO101(port=right_port, calibration=self._to_so101_calibration(right_calibration), role=role)
+        left_driver = SO101(port=left_port, calibration=self._to_so101_calibration(left_calibration), role=role, unit="normalized")
+        right_driver = SO101(port=right_port, calibration=self._to_so101_calibration(right_calibration), role=role, unit="normalized")
+        config = PhysicalAIRobotAdapterConfig(
+            include_velocities=False,
+            goal_time_scale=1.0,
+            external_effort_gain=None,
+        )
+        robot_type = RobotType.SO101_FOLLOWER if role == "follower" else RobotType.SO101_LEADER
 
-        left_adapter = SO101Adapter(robot=left_driver, mode=mode, calibration=left_calibration)
-        right_adapter = SO101Adapter(robot=right_driver, mode=mode, calibration=right_calibration)
+        left_adapter = PhysicalAIRobotAdapter(robot=left_driver, robot_type=robot_type, config=config,)
+        right_adapter = PhysicalAIRobotAdapter(robot=right_driver, robot_type=robot_type, config=config,)
 
         return BimanualSO101Adapter(left=left_adapter, right=right_adapter, mode=mode)
 
