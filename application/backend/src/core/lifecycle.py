@@ -1,4 +1,3 @@
-from utils.serial_robot_tools import RobotConnectionManager
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,10 +7,8 @@ from loguru import logger
 from core.logging import setup_logging, setup_uvicorn_logging
 from services.event_processor import EventProcessor
 from settings import get_settings
-from workers.camera_worker_registry import CameraWorkerRegistry
-from workers.model_worker_registry import ModelWorkerRegistry
-from workers.robot_worker_registry import RobotWorkerRegistry
-from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
+from workers.worker_pool import WorkerPool
+from utils.serial_robot_tools import RobotConnectionManager
 
 from .scheduler import Scheduler
 
@@ -26,29 +23,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     app.state.settings = settings
 
-    app.state.camera_registry = CameraWorkerRegistry(
-        max_workers=10,
-        shutdown_timeout_s=10.0,
-    )
-    app.state.robot_registry = RobotWorkerRegistry(
-        max_workers=10,
-        shutdown_timeout_s=10.0,
-    )
+    app.state.worker_pool = WorkerPool(number_of_workers=5)
 
     logger.info("Starting %s application...", settings.app_name)
     app_scheduler = Scheduler()
     app_scheduler.start_workers()
-
-    app.state.model_registry = ModelWorkerRegistry(
-        max_workers=1,
-        stop_event=app_scheduler.mp_stop_event,
-    )
-
-
-    app.state.teleoperate_registry = TeleoperateWorkerRegistry(
-        max_workers=3,
-        stop_event=app_scheduler.mp_stop_event,
-    )
 
     app.state.scheduler = app_scheduler
     app.state.event_processor = EventProcessor(app_scheduler.event_queue)
@@ -63,11 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Shutdown
     logger.info("Shutting down %s application...", settings.app_name)
 
-    camera_registry: CameraWorkerRegistry = app.state.camera_registry
-    await camera_registry.shutdown_all()
-
-    robot_registry: RobotWorkerRegistry = app.state.robot_registry
-    await robot_registry.shutdown_all()
+    app.state.worker_pool.teardown()
 
     # We might want to shutdown the hardware manager too, though releasing workers should handle it.
     # But a global cleanup is safe.

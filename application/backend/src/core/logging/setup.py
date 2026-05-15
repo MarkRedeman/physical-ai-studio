@@ -50,7 +50,11 @@ def setup_logging(config: LogConfig | None = None) -> None:
     global_log_config = config
 
     logger.remove()
-    logger.add(sys.stderr, level=global_log_config.level)
+    logger.add(
+        sys.stderr,
+        level=global_log_config.level,
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {process.name} | {name}:{function}:{line} - {message}",
+    )
 
     for worker_name, log_file in global_log_config.worker_log_info.items():
 

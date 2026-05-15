@@ -7,15 +7,18 @@ import os
 import signal
 import threading
 from abc import ABC, abstractmethod
+from multiprocessing import Queue, current_process, Event
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from multiprocessing.queues import Queue
-    from multiprocessing.synchronize import Event
+    from multiprocessing.synchronize import EventClass
 
 import loguru
 from loguru import logger
+
+from core.logging import setup_logging
 
 
 def log_threads(log_level="DEBUG") -> None:  # noqa: ANN001
@@ -70,7 +73,7 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
     def __init__(
         self,
         *,
-        stop_event: Event,
+        stop_event: EventClass,
         queues_to_cancel: Iterable[Queue] | None = None,
         logger_: loguru.Logger | None = None,
     ) -> None:
@@ -91,8 +94,6 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
         """Allocate resources and initialize settings. Called once in the child process."""
         # Logging must be re-setup in child processes because loguru sinks don't
         # transfer across process boundaries and settings are non-picklable.
-        from core.logging import setup_logging
-
         setup_logging()
 
     @abstractmethod
@@ -165,7 +166,7 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
 class BaseThreadWorker(threading.Thread, StoppableMixin, abc.ABC):
     ROLE: str = "Worker"
 
-    def __init__(self, *, stop_event: Event, daemon: bool = False):
+    def __init__(self, *, stop_event: EventClass, daemon: bool = False):
         super().__init__(daemon=daemon)
         self._stop_event = stop_event
         self.name = f"{self.ROLE}-{os.getpid()}-thread"
@@ -201,3 +202,39 @@ class BaseThreadWorker(threading.Thread, StoppableMixin, abc.ABC):
                     self.loop.close()
                     log_threads()
                     logger.info(f"Stopped {self.name}")
+
+
+class BaseWorker(ABC):
+    ROLE: str = "Worker"
+
+    def __init__(self):
+        self._parent_pid = os.getpid()
+        self._interrupt_event = Event() #worker specific interrupt event
+
+    def start(self, terminate_event: EventClass) -> None:
+        logger.info("Starting a new  worker...")
+        self._terminate_event = terminate_event #global interrupt event
+        self.name = self._auto_name()
+        current_process().name = self.name
+        setup_logging()
+        with logger.contextualize(worker=self.name):
+            self.setup()
+            self.run_loop()
+
+    @abstractmethod
+    def setup(self) -> None:
+        pass
+
+    @abstractmethod
+    def run_loop(self) -> None:
+        pass
+
+    def should_stop(self) -> bool:
+        return self._terminate_event.is_set() or self._interrupt_event.is_set()
+
+    def stop(self) -> None:
+        self._interrupt_event.set()
+
+    def _auto_name(self) -> str:
+        """Generate a name for the process based on its role and PIDs."""
+        return "-".join([self.ROLE, str(self._parent_pid), str(os.getpid())])

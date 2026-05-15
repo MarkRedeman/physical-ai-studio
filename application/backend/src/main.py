@@ -1,5 +1,6 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
+from api.dependencies import WorkerPoolDep
 
 import multiprocessing as mp
 import os
@@ -12,7 +13,6 @@ from starlette.middleware.base import RequestResponseEndpoint
 
 from api.camera import router as camera_router
 from api.dataset import router as dataset_router
-from api.dependencies import CameraRegistryDep, RobotRegistryDep
 from api.environments import router as project_environments_router
 from api.hardware import router as hardware_router
 from api.job import router as job_router
@@ -29,7 +29,7 @@ from api.robots import router as project_robots_router
 from api.settings import router as settings_router
 from api.system import system_router
 from api.webui import SPAStaticFiles
-from core import lifespan
+from core.lifecycle import lifespan
 from exception_handlers import register_application_exception_handlers
 from middleware.upload_size_guard import upload_size_guard_middleware
 from settings import get_settings
@@ -71,12 +71,11 @@ async def _upload_size_guard(request: Request, call_next: RequestResponseEndpoin
 
 
 @app.get("/api/health")
-async def health_check(camera_registry: CameraRegistryDep, robot_registry: RobotRegistryDep) -> dict:
+async def health_check(worker_pool: WorkerPoolDep) -> dict:
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "camera_workers": camera_registry.get_status_summary(),
-        "robot_workers": robot_registry.get_status_summary(),
+        "workers": worker_pool.get_status_summary(),
     }
 
 

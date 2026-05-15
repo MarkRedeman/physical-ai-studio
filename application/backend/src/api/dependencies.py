@@ -1,3 +1,4 @@
+from workers.worker_pool import WorkerPool
 from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 from functools import lru_cache
 from typing import Annotated
@@ -217,41 +218,12 @@ def get_event_processor_ws(request: HTTPConnection) -> EventProcessor:
     return request.app.state.event_processor
 
 
-def get_camera_registry(request: HTTPConnection) -> CameraWorkerRegistry:
-    """Dependency to get camera worker registry."""
-    registry = getattr(request.app.state, "camera_registry", None)
-    if registry is None:
-        raise RuntimeError("Camera worker registry not initialized")
-    return registry
-
-
-def get_robot_registry(request: HTTPConnection) -> RobotWorkerRegistry:
+def get_worker_pool(request: HTTPConnection) -> WorkerPool:
     """Dependency to get robot worker registry."""
-    registry = getattr(request.app.state, "robot_registry", None)
+    registry = getattr(request.app.state, "worker_pool", None)
     if registry is None:
-        raise RuntimeError("Robot worker registry not initialized")
+        raise RuntimeError("Worker pool not initialized")
     return registry
 
 
-CameraRegistryDep = Annotated[CameraWorkerRegistry, Depends(get_camera_registry)]
-RobotRegistryDep = Annotated[RobotWorkerRegistry, Depends(get_robot_registry)]
-
-
-def get_model_registry(request: HTTPConnection) -> ModelWorkerRegistry:
-    """Dependency to get model worker registry."""
-    registry = getattr(request.app.state, "model_registry", None)
-    if registry is None:
-        raise RuntimeError("Model worker registry not initialized")
-    return registry
-
-
-ModelRegistryDep = Annotated[ModelWorkerRegistry, Depends(get_model_registry)]
-
-def get_teleoperate_registry(request: HTTPConnection) -> TeleoperateWorkerRegistry:
-    """Dependency to get teleoperate worker registry."""
-    registry = getattr(request.app.state, "teleoperate_registry", None)
-    if registry is None:
-        raise RuntimeError("Teleoperator worker registry not initialized")
-    return registry
-
-TeleoperateRegistryDep = Annotated[TeleoperateWorkerRegistry, Depends(get_teleoperate_registry)]
+WorkerPoolDep = Annotated[WorkerPool, Depends(get_worker_pool)]

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import Response
 from loguru import logger
 
-from api.dependencies import ModelRegistryDep, TeleoperateRegistryDep, RobotCalibrationServiceDep, RobotConnectionManagerDep, get_scheduler_ws
+from api.dependencies import WorkerPoolDep, RobotCalibrationServiceDep, RobotConnectionManagerDep, get_scheduler_ws
 from core.scheduler import Scheduler
 from robots.robot_client_factory import RobotClientFactory
 from schemas import Dataset, Model
@@ -71,44 +71,44 @@ async def handle_outgoing(websocket: WebSocket, queue: mp.Queue) -> None:
         logger.error(f"Outgoing task stopped: {e}")
 
 
-@router.websocket("/robot_control/ws")
-async def robot_control_websocket(
-    websocket: WebSocket,
-    robot_manager: RobotConnectionManagerDep,
-    calibration_service: RobotCalibrationServiceDep,
-    scheduler: Annotated[Scheduler, Depends(get_scheduler_ws)],
-    model_registry: ModelRegistryDep,
-    teleoperate_registry: TeleoperateRegistryDep,
-) -> None:
-    """Robot control websocket."""
-    await websocket.accept()
-    queue: mp.Queue = mp.Queue()
-    process = RobotControlWorker(
-        stop_event=scheduler.mp_stop_event,
-        robot_client_factory=RobotClientFactory(
-            robot_manager=robot_manager,
-            calibration_service=calibration_service,
-        ),
-        queue=queue,
-        model_worker_registry=model_registry,
-        teleoperate_worker_registry=teleoperate_registry
-    )
-    process.start()
-
-    incoming_task = asyncio.create_task(handle_incoming(websocket, process))
-    outgoing_task = asyncio.create_task(handle_outgoing(websocket, queue))
-
-    _, pending = await asyncio.wait(
-        {incoming_task, outgoing_task},
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-    for task in pending:
-        task.cancel()
-
-    if process is not None:
-        process.disconnect()
-        process.join(10)
-
-    queue.close()
-    logger.info("websocket handling done...")
+# TODO: Implement
+#@router.websocket("/robot_control/ws")
+#async def robot_control_websocket(
+#    websocket: WebSocket,
+#    robot_manager: RobotConnectionManagerDep,
+#    calibration_service: RobotCalibrationServiceDep,
+#    scheduler: Annotated[Scheduler, Depends(get_scheduler_ws)],
+#    worker_pool: WorkerPoolDep,
+#) -> None:
+#    """Robot control websocket."""
+#    await websocket.accept()
+#    queue: mp.Queue = mp.Queue()
+#    process = RobotControlWorker(
+#        stop_event=scheduler.mp_stop_event,
+#        robot_client_factory=RobotClientFactory(
+#            robot_manager=robot_manager,
+#            calibration_service=calibration_service,
+#        ),
+#        queue=queue,
+#        model_worker_registry=model_registry,
+#        teleoperate_worker_registry=teleoperate_registry
+#    )
+#    process.start()
+#
+#    incoming_task = asyncio.create_task(handle_incoming(websocket, process))
+#    outgoing_task = asyncio.create_task(handle_outgoing(websocket, queue))
+#
+#    _, pending = await asyncio.wait(
+#        {incoming_task, outgoing_task},
+#        return_when=asyncio.FIRST_COMPLETED,
+#    )
+#
+#    for task in pending:
+#        task.cancel()
+#
+#    if process is not None:
+#        process.disconnect()
+#        process.join(10)
+#
+#    queue.close()
+#    logger.info("websocket handling done...")
