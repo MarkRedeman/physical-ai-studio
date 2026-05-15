@@ -7,7 +7,7 @@ from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
-from robots.so101.bimanual_adapter import BimanualSO101Adapter
+from robots.so101.bimanual_so101 import BimanualSO101
 from schemas.calibration import Calibration
 from schemas.robot import Robot, RobotType, SO101BimanualRobot, SO101Robot, TrossenBimanualRobot
 from services.robot_calibration_service import RobotCalibrationService, find_robot_port
@@ -103,7 +103,6 @@ class RobotClientFactory:
             robot=so101,
             robot_type=robot.type,
             config=PhysicalAIRobotAdapterConfig(
-                include_velocities=False,
                 goal_time_scale=1.0,
                 external_effort_gain=None,
             ),
@@ -113,7 +112,7 @@ class RobotClientFactory:
         self,
         robot: SO101BimanualRobot,
         mode: Literal["follower", "teleoperator"],
-    ) -> BimanualSO101Adapter:
+    ) -> PhysicalAIRobotAdapter:
         left_port = await self._find_port_by_serial(robot.payload.serial_number_left)
         right_port = await self._find_port_by_serial(robot.payload.serial_number_right)
 
@@ -133,17 +132,22 @@ class RobotClientFactory:
 
         left_driver = SO101(port=left_port, calibration=self._to_so101_calibration(left_calibration), role=role, unit="normalized")
         right_driver = SO101(port=right_port, calibration=self._to_so101_calibration(right_calibration), role=role, unit="normalized")
-        config = PhysicalAIRobotAdapterConfig(
-            include_velocities=False,
-            goal_time_scale=1.0,
-            external_effort_gain=None,
+        bimanual_driver = BimanualSO101(left_driver, right_driver)
+
+        robot_type = (
+            RobotType.SO101_BIMANUAL_FOLLOWER
+            if mode == "follower"
+            else RobotType.SO101_BIMANUAL_LEADER
         )
-        robot_type = RobotType.SO101_FOLLOWER if role == "follower" else RobotType.SO101_LEADER
 
-        left_adapter = PhysicalAIRobotAdapter(robot=left_driver, robot_type=robot_type, config=config,)
-        right_adapter = PhysicalAIRobotAdapter(robot=right_driver, robot_type=robot_type, config=config,)
-
-        return BimanualSO101Adapter(left=left_adapter, right=right_adapter, mode=mode)
+        return PhysicalAIRobotAdapter(
+            robot=bimanual_driver,
+            robot_type=robot_type,
+            config=PhysicalAIRobotAdapterConfig(
+                goal_time_scale=1.0,
+                external_effort_gain=None,
+            ),
+        )
 
     async def _find_robot_port(self, robot: SO101Robot) -> str:
         port = await find_robot_port(self.robot_manager, robot)
