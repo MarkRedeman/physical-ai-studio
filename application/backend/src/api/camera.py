@@ -1,16 +1,16 @@
 import asyncio
-from queue import Empty
-import time
 import json
+import time
+from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, WebSocket
 from fastapi.responses import Response
+from fastapi.websockets import WebSocketDisconnect
 from frame_source import FrameSourceFactory
-from loguru import logger
 
-from api.dependencies import WorkerPoolDep
+from api.dependencies import SchedulerDep
 from schemas.camera import SupportedCameraFormat
 from schemas.project_camera import Camera as ProjectCamera
 from schemas.project_camera import CameraAdapter
@@ -59,10 +59,20 @@ async def camera_websocket_openapi(
     return Response(status_code=426)
 
 
+@asynccontextmanager
+async def run_at_target_fps(target_dt):
+    t0 = time.perf_counter()
+    yield
+    elapsed = time.perf_counter() - t0
+    sleep_time = target_dt - elapsed
+    if sleep_time > 0:
+        await asyncio.sleep(sleep_time)
+
+
 @router.websocket("/ws")
 async def camera_websocket(
     websocket: WebSocket,
-    worker_pool: WorkerPoolDep,
+    scheduler: SchedulerDep,
     camera: Annotated[ProjectCamera, Depends(get_camera_from_query)],
 ) -> None:
     """
@@ -81,17 +91,17 @@ async def camera_websocket(
     """
     await websocket.accept()
 
-    worker_id = uuid4()
-    camera.id = worker_id
+    worker = None
     try:
-        worker = CameraWorker(camera)
-        worker_pool.start_process(worker)
+        worker = CameraWorker(camera, scheduler.mp_stop_event)
+        worker.start()
         while True:
-            try:
-                message = worker.frame_queue.get_nowait()
-                await websocket.send_json(message)
-            except Empty:
-                await asyncio.sleep(0.01)
+            async with run_at_target_fps(1 / camera.payload.fps):
+                if not worker.frame_queue.empty():
+                    message = worker.frame_queue.get_nowait()
+                    await websocket.send_bytes(message)
+    except WebSocketDisconnect:
+        pass
     finally:
         if worker:
             worker.stop()

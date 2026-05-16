@@ -212,18 +212,8 @@ def get_scheduler_ws(request: HTTPConnection) -> Scheduler:
     """Provide the global Scheduler instance for WebSocket."""
     return request.app.state.scheduler
 
+SchedulerDep = Annotated[Scheduler, Depends(get_scheduler)]
 
 def get_event_processor_ws(request: HTTPConnection) -> EventProcessor:
     """Provide the global event_processor instance for WebSocket."""
     return request.app.state.event_processor
-
-
-def get_worker_pool(request: HTTPConnection) -> WorkerPool:
-    """Dependency to get robot worker registry."""
-    registry = getattr(request.app.state, "worker_pool", None)
-    if registry is None:
-        raise RuntimeError("Worker pool not initialized")
-    return registry
-
-
-WorkerPoolDep = Annotated[WorkerPool, Depends(get_worker_pool)]

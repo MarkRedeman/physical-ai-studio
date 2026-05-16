@@ -1,18 +1,16 @@
-from workers.base import BaseWorker
+from workers.base import BaseProcessWorker
 import asyncio
+import time
 
 import cv2
 import numpy as np
-from fastapi.websockets import WebSocketDisconnect
 from frame_source import FrameSourceFactory
 from frame_source.video_capture_base import VideoCaptureBase
 from loguru import logger
 from multiprocessing import Queue, Event
 
+from multiprocessing.synchronize import Event as EventClass
 from schemas.project_camera import Camera
-from utils.async_camera_capture import AsyncCameraCapture
-from workers.transport.worker_transport import WorkerTransport
-from workers.transport_worker import TransportWorker, WorkerState, WorkerStatus
 
 
 def create_frames_source_from_camera(camera: Camera) -> VideoCaptureBase:
@@ -28,36 +26,50 @@ class EmptyFrameError(Exception):
     pass
 
 
-class CameraWorker(BaseWorker):
+class CameraWorker(BaseProcessWorker):
     """Orchestrates camera streaming over configurable transport."""
     ROLE="Camera"
 
     def __init__(
         self,
         config: Camera,
+        mp_stop_event: EventClass
     ):
-        super().__init__()
+        super().__init__(stop_event=mp_stop_event)
+        self.stop_event = Event()
         self.config = config
         self.frame_queue = Queue()
 
-    def setup(self) -> None:
-        logger.info("Setting up camera...")
+    async def setup(self) -> None:
         self.camera = create_frames_source_from_camera(self.config)
         self.camera.connect()
 
-    def run_loop(self) -> None:
+    async def run_loop(self) -> None:
         """Main worker loop."""
         try:
+            target_dt = 1 / self.config.payload.fps
             while not self.should_stop():
+                t0 = time.perf_counter()
                 success, frame = self.camera.read()
                 success, jpeg = cv2.imencode(".jpg", frame) #TODO just send bytes instead?
                 if not success or jpeg is None:
                     raise RuntimeError("Failed to encode frame")
-                self.frame_queue.put_nowait(jpeg)
+                self.frame_queue.put_nowait(jpeg.tobytes())
+
+                elapsed = time.perf_counter() - t0
+                sleep_time = target_dt - elapsed
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
         except Exception as e:
             logger.error(f"Frame capture error: {e}")
-            self._stop_requested = True
             raise
 
-    def teardown(self) -> None:
+    def should_stop(self) -> bool:
+        return super().should_stop() or self.stop_event.is_set()
+
+    def stop(self) -> None:
+        self.stop_event.set()
+
+    async def teardown(self) -> None:
+        self.frame_queue.close()
         self.camera.disconnect()

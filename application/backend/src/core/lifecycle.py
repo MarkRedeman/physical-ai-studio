@@ -7,7 +7,6 @@ from loguru import logger
 from core.logging import setup_logging, setup_uvicorn_logging
 from services.event_processor import EventProcessor
 from settings import get_settings
-from workers.worker_pool import WorkerPool
 from utils.serial_robot_tools import RobotConnectionManager
 
 from .scheduler import Scheduler
@@ -22,8 +21,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     settings = get_settings()
     app.state.settings = settings
-
-    app.state.worker_pool = WorkerPool(number_of_workers=5)
 
     logger.info("Starting %s application...", settings.app_name)
     app_scheduler = Scheduler()
@@ -41,8 +38,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Shutdown
     logger.info("Shutting down %s application...", settings.app_name)
-
-    app.state.worker_pool.teardown()
 
     # We might want to shutdown the hardware manager too, though releasing workers should handle it.
     # But a global cleanup is safe.

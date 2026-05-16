@@ -8,7 +8,6 @@ from loguru import logger
 from api.dependencies import (
     RobotCalibrationServiceDep,
     RobotConnectionManagerDep,
-    WorkerPoolDep,
     get_project_id,
     get_robot_id,
     get_robot_service,

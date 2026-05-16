@@ -1,7 +1,5 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
-from api.dependencies import WorkerPoolDep
-
 import multiprocessing as mp
 import os
 from pathlib import Path
@@ -71,11 +69,10 @@ async def _upload_size_guard(request: Request, call_next: RequestResponseEndpoin
 
 
 @app.get("/api/health")
-async def health_check(worker_pool: WorkerPoolDep) -> dict:
+async def health_check() -> dict:
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "workers": worker_pool.get_status_summary(),
     }
 
 
@@ -90,7 +87,7 @@ if (
     app.mount("/", static_files, name="webui")
 
 if __name__ == "__main__":
-    if get_torch_device() == "xpu" and mp.get_start_method(allow_none=True) != "spawn":
+    if mp.get_start_method(allow_none=True) != "spawn":
         mp.set_start_method("spawn", force=True)
     uvicorn_port = int(os.environ.get("HTTP_SERVER_PORT", settings.port))
     uvicorn.run(app, host=settings.host, port=uvicorn_port)
