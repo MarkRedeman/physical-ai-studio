@@ -1,3 +1,4 @@
+from workers.base import run_at_frequency
 import asyncio
 import json
 import time
@@ -58,17 +59,6 @@ async def camera_websocket_openapi(
     """This endpoint requires a WebSocket connection. Use `wss://` to connect."""
     return Response(status_code=426)
 
-
-@asynccontextmanager
-async def run_at_target_fps(target_dt):
-    t0 = time.perf_counter()
-    yield
-    elapsed = time.perf_counter() - t0
-    sleep_time = target_dt - elapsed
-    if sleep_time > 0:
-        await asyncio.sleep(sleep_time)
-
-
 @router.websocket("/ws")
 async def camera_websocket(
     websocket: WebSocket,
@@ -96,7 +86,7 @@ async def camera_websocket(
         worker = CameraWorker(camera, scheduler.mp_stop_event)
         worker.start()
         while True:
-            async with run_at_target_fps(1 / camera.payload.fps):
+            async with run_at_frequency(camera.payload.fps):
                 if not worker.frame_queue.empty():
                     message = worker.frame_queue.get_nowait()
                     await websocket.send_bytes(message)

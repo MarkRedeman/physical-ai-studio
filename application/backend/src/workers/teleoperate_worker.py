@@ -16,7 +16,7 @@ BUFFER_LENGTH = 50
 class TeleoperateWorker(BaseProcessWorker):
     ROLE: str = "TeleoperateWorker"
 
-    leader: RobotClient
+    leader: RobotClient | None
     follower: RobotClient
 
     command_queue: mp.Queue
@@ -95,26 +95,24 @@ class TeleoperateWorker(BaseProcessWorker):
                 self.robots_loaded_event.set()
 
                 # Teleoperate loop until unload is requested
-                while not self.should_stop() and not self.disconnect_robot_event.is_set():
+                while not self.should_stop():
                     start_loop_t = time.perf_counter()
 
+                    state = (self.follower.read_state())["state"]
+                    self._set_state([state[key] for key in features])
                     if self.leader is not None:
-                        state = (self.follower.read_state())["state"]
                         actions = (self.leader.read_state())["state"]
                         self.follower.set_joints_state(actions, goal_time * 5)
                         self._set_actions([actions[key] for key in features])
-                        self._set_state([state[key] for key in features])
-                    else:
-                        pass
 
                     dt_s = time.perf_counter() - start_loop_t
                     wait_time = goal_time - dt_s
 
                     if wait_time > 0:
-                        time.sleep(wait_time)
+                        await asyncio.sleep(wait_time)
                     else:
                         logger.warning(f"Did not meet target framespeed by {0 - wait_time}, {dt_s * 1000}ms")
-                        time.sleep(0)
+                        await asyncio.sleep(0)
 
             finally:
                 logger.info("Teleoperating stopped, disconnecting robots.")
@@ -125,6 +123,9 @@ class TeleoperateWorker(BaseProcessWorker):
                     await self.leader.disconnect()
                 if self.follower:
                     await self.follower.disconnect()
+
+    def should_stop(self) -> bool:
+        return super().should_stop() or self.disconnect_robot_event.is_set()
 
     async def teardown(self) -> None:
         self.command_queue.close()

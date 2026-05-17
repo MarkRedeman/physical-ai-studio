@@ -27,9 +27,6 @@ from services.robot_calibration_service import RobotCalibrationService
 from services.system_service import SystemService
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
-from workers.camera_worker_registry import CameraWorkerRegistry
-from workers.model_worker_registry import ModelWorkerRegistry
-from workers.robot_worker_registry import RobotWorkerRegistry
 
 
 def is_valid_uuid(identifier: str) -> bool:

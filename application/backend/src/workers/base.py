@@ -1,4 +1,6 @@
 from __future__ import annotations
+from collections.abc import AsyncGenerator
+from fastapi.concurrency import asynccontextmanager
 
 import abc
 import asyncio
@@ -19,6 +21,30 @@ import loguru
 from loguru import logger
 
 from core.logging import setup_logging
+
+import time
+
+
+@asynccontextmanager
+async def run_at_frequency(frequency: float) -> AsyncGenerator[None]:
+    """Run a function at a specified frequency.
+
+    Note: This is a frequency, not time (1/s vs s).
+    Example:
+
+    fps = 30
+    async with run_at_target_frequency(fps):
+       get_frame_from_camera()
+    """
+
+    t0 = time.perf_counter()
+    yield
+    target_dt = 1 / frequency
+    elapsed = time.perf_counter() - t0
+    sleep_time = target_dt - elapsed
+    if sleep_time > 0:
+        await asyncio.sleep(sleep_time)
+
 
 
 def log_threads(log_level="DEBUG") -> None:  # noqa: ANN001
