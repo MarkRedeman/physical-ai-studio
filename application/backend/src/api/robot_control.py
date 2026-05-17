@@ -61,28 +61,28 @@ async def robot_websocket(
     follower_id = get_robot_id(settings["follower_id"])
     robot_client_factory = RobotClientFactory(robot_manager, calibration_service)
     follower = await robot_service.get_robot_by_id(project_id, follower_id)
-    follower = await robot_client_factory.build(follower)
+    follower_client = await robot_client_factory.build(follower)
 
-    leader = None
+    leader_client = None
     if "leader_id" in settings:
         leader_id = get_robot_id(settings["leader_id"])
         leader = await robot_service.get_robot_by_id(project_id, leader_id)
-        leader = await robot_client_factory.build(leader)
+        leader_client = await robot_client_factory.build(leader)
 
 
     worker = None
     try:
         # Create worker
         worker = TeleoperateWorker(
-            follower=follower,
-            leader=leader,
+            follower=follower_client,
+            leader=leader_client,
             frequency=fps,
             mp_stop_event=scheduler.mp_stop_event
         )
         worker.start()
         while True:
             async with run_at_frequency(fps):
-                action_keys = follower.features()
+                action_keys = follower_client.features()
                 raw_state = worker.get_state()
                 observation: dict[str, Any] = {i: raw_state[k] for k, i in enumerate(action_keys)}
                 await websocket.send_json({"event": "state_was_updated", "state": observation, "is_controlled": True})
