@@ -1,3 +1,4 @@
+from fastapi.exceptions import HTTPException
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -12,7 +13,7 @@ from api.dependencies import (
     SchedulerDep,
     get_project_id,
     get_robot_id,
-    get_robot_service,
+    get_robot_service, is_valid_uuid,
 )
 from robots.robot_client_factory import RobotClientFactory
 from services import RobotService
@@ -24,16 +25,15 @@ router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Ro
 ProjectID = Annotated[UUID, Depends(get_project_id)]
 
 
-@router.get("/{robot_id}/ws", tags=["WebSocket"], summary="Robot control (WebSocket)", status_code=426)
+@router.get("/ws", tags=["WebSocket"], summary="Robot control (WebSocket)", status_code=426)
 async def robot_websocket_openapi(project_id: UUID, robot_id: UUID) -> Response:  # noqa: ARG001
     """This endpoint requires a WebSocket connection. Use `wss://` to connect."""
     return Response(status_code=426)
 
 
-@router.websocket("/{robot_id}/ws")
-async def robot_websocket(  # noqa: PLR0913
+@router.websocket("/ws")
+async def robot_websocket(
     project_id: Annotated[UUID, Depends(get_project_id)],
-    robot_id: Annotated[UUID, Depends(get_robot_id)],
     robot_service: Annotated[RobotService, Depends(get_robot_service)],
     robot_manager: RobotConnectionManagerDep,
     calibration_service: RobotCalibrationServiceDep,
@@ -56,25 +56,33 @@ async def robot_websocket(  # noqa: PLR0913
         fps: Target frequency for state updates.
     """
     await websocket.accept()
+    settings = await websocket.receive_json("text")
+    print(settings)
+    follower_id = get_robot_id(settings["follower_id"])
+    robot_client_factory = RobotClientFactory(robot_manager, calibration_service)
+    follower = await robot_service.get_robot_by_id(project_id, follower_id)
+    follower = await robot_client_factory.build(follower)
 
-    robot = await robot_service.get_robot_by_id(project_id, robot_id)
-    logger.info("Found robot with websocket {}", robot)
+    leader = None
+    if "leader_id" in settings:
+        leader_id = get_robot_id(settings["leader_id"])
+        leader = await robot_service.get_robot_by_id(project_id, leader_id)
+        leader = await robot_client_factory.build(leader)
+
 
     worker = None
     try:
         # Create worker
-        robot_client_factory = RobotClientFactory(robot_manager, calibration_service)
-        robot = await robot_client_factory.build(robot)
         worker = TeleoperateWorker(
-            leader=None,
-            follower=robot,
+            follower=follower,
+            leader=leader,
             frequency=fps,
             mp_stop_event=scheduler.mp_stop_event
         )
         worker.start()
         while True:
             async with run_at_frequency(fps):  # TODO add frequency in robot.
-                action_keys = robot.features()
+                action_keys = follower.features()
                 raw_state = worker.get_state()
                 observation: dict[str, Any] = {i: raw_state[k] for k, i in enumerate(action_keys)}
                 await websocket.send_json({"event": "state_was_updated", "state": observation, "is_controlled": True})

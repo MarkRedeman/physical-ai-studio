@@ -195,8 +195,15 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
                     logger.info(f"Stopped {self.name}.")
 
     def stop(self) -> None:
+        timeout = 10
         self._stop_event.set()
-        self.join()
+        if not self.is_alive():
+            return
+        self.join(timeout=timeout)
+        if self.is_alive():
+            logger.warning(f"Process {self.name} did not stop within {timeout}s, terminating")
+            self.terminate()
+            self.join(timeout=2.0)
 
 
 class BaseThreadWorker(threading.Thread, StoppableMixin, abc.ABC):
