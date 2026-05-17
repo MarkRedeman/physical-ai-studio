@@ -8,11 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import CSVLogger
-
 from core.logging.utils import job_logging_ctx
-from models.utils import load_policy, setup_policy
 from services.snapshot_service import SnapshotService
 from settings import get_settings
 
@@ -22,9 +18,6 @@ if TYPE_CHECKING:
 
 
 from loguru import logger
-from physicalai.data import LeRobotDataModule
-from physicalai.export import ExportablePolicyMixin
-from physicalai.train import Trainer
 
 from schemas import Job, Model, Snapshot
 from schemas.base_job import JobStatus
@@ -32,12 +25,7 @@ from schemas.job import TrainJobPayload
 from services import DatasetService, ModelService
 from services.event_processor import EventType
 from services.job_service import JobService
-from services.training_service import (
-    TrainingLogCallback,
-    TrainingService,
-    TrainingTrackingCallback,
-    TrainingTrackingDispatcher,
-)
+from services.training_service import TrainingService
 from utils.device import get_lightning_strategy, get_torch_device
 from workers.base import BaseProcessWorker
 
@@ -106,6 +94,14 @@ class TrainingWorker(BaseProcessWorker):
     async def _train_model(
         self, job: Job, model: Model, snapshot: Snapshot, payload: TrainJobPayload, base_model: Model | None = None
     ):
+        from lightning.pytorch.callbacks import ModelCheckpoint
+        from lightning.pytorch.loggers import CSVLogger
+        from physicalai.data import LeRobotDataModule
+        from physicalai.train import Trainer
+
+        from models.utils import load_policy, setup_policy
+        from workers.training.utils import TrainingLogCallback, TrainingTrackingCallback, TrainingTrackingDispatcher
+
         await JobService.update_job_status(job_id=job.id, status=JobStatus.RUNNING, message="Training started")
         dispatcher = TrainingTrackingDispatcher(
             job_id=job.id,
@@ -189,6 +185,8 @@ class TrainingWorker(BaseProcessWorker):
         self.queue.put((EventType.JOB_UPDATE, job))
 
     async def _export_policy(self, policy: object, path: Path, job: Job) -> None:
+        from physicalai.export import ExportablePolicyMixin
+
         if not isinstance(policy, ExportablePolicyMixin):
             logger.info("Skipping export: policy does not support export backends")
             return

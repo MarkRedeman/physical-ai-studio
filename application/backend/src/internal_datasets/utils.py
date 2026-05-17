@@ -1,11 +1,10 @@
 from pathlib import Path
 
 from internal_datasets.dataset_client import DatasetClient
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from schemas import Dataset
 
 # path -> (dataset_instance, mtime_of_meta_info_json_at_load_time)
-_cache: dict[Path, tuple[InternalLeRobotDataset, float | None]] = {}
+_cache: dict[Path, tuple[DatasetClient, float | None]] = {}
 
 
 def _info_mtime(path: Path) -> float | None:
@@ -15,6 +14,8 @@ def _info_mtime(path: Path) -> float | None:
 
 def get_internal_dataset(dataset: Dataset) -> DatasetClient:
     """Load dataset from dataset data class, using a mtime-keyed cache."""
+    from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+
     path = Path(dataset.path)
     current_mtime = _info_mtime(path)
 

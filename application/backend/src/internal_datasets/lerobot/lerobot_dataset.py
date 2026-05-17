@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import cv2
 import numpy as np
-import torch
 from lerobot.datasets.dataset_tools import delete_episodes as lerobot_delete_episodes
 from lerobot.datasets.feature_utils import build_dataset_frame
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -323,8 +322,10 @@ class InternalLeRobotDataset(DatasetClient):
 
         return episode_buffer
 
-    def _get_episode_actions(self, episode: dict) -> torch.Tensor:
+    def _get_episode_actions(self, episode: dict) -> "torch.Tensor":
         """Get episode actions tensor from specific episode."""
+        import torch
+
         from_idx = episode["dataset_from_index"]
         to_idx = episode["dataset_to_index"]
         actions = self._dataset.hf_dataset["action"][from_idx:to_idx]

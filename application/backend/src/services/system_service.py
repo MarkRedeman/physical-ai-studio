@@ -3,7 +3,6 @@
 
 """Service for querying system hardware information."""
 
-import torch
 from loguru import logger
 
 from schemas.hardware import DeviceInfo, DeviceType
@@ -23,6 +22,8 @@ class SystemService:
             list[DeviceInfo]: Available training devices with name, type,
                 memory (where available), and device index.
         """
+        import torch
+
         devices: list[DeviceInfo] = [
             DeviceInfo(type=DeviceType.CPU, name="CPU", memory=None, index=None),
         ]
