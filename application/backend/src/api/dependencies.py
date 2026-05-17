@@ -1,5 +1,3 @@
-from workers.worker_pool import WorkerPool
-from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
 from functools import lru_cache
 from typing import Annotated
 from uuid import UUID

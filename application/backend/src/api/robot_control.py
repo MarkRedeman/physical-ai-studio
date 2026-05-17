@@ -63,12 +63,15 @@ async def robot_websocket(  # noqa: PLR0913
     worker = None
     try:
         # Create worker
-        worker = TeleoperateWorker(scheduler.mp_stop_event)
-        worker.start()
-        goal_time = 1 / fps
         robot_client_factory = RobotClientFactory(robot_manager, calibration_service)
         robot = await robot_client_factory.build(robot)
-        worker.load_teleoperator(None, robot, goal_time)
+        worker = TeleoperateWorker(
+            leader=None,
+            follower=robot,
+            frequency=fps,
+            mp_stop_event=scheduler.mp_stop_event
+        )
+        worker.start()
         while True:
             async with run_at_frequency(fps):  # TODO add frequency in robot.
                 action_keys = robot.features()
@@ -94,4 +97,4 @@ async def robot_websocket(  # noqa: PLR0913
 
     finally:
         if worker:
-            await worker.disconnect_robots()
+            worker.stop()

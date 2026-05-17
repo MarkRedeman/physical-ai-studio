@@ -63,12 +63,17 @@ class StoppableMixin:
 
     def should_stop(self) -> bool:
         """Check if a stop has been requested."""
+        if not hasattr(self, "_interrupt_event"):
+            raise AttributeError("StoppableMixin requires a '_interrupt_event' to be set.")
+
         if not hasattr(self, "_stop_event"):
             raise AttributeError("StoppableMixin requires a '_stop_event' to be set.")
+
         # Stop if parent process died
         parent_process = mp.parent_process()
         parent_died = parent_process is not None and not parent_process.is_alive()
-        return self._stop_event.is_set() or parent_died  # type: ignore
+
+        return self._interrupt_event.is_set() or self._stop_event.is_set() or parent_died  # type: ignore
 
     def stop_aware_sleep(self, seconds: float) -> bool:
         """
@@ -104,7 +109,8 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
         logger_: loguru.Logger | None = None,
     ) -> None:
         super().__init__()
-        self._stop_event = stop_event
+        self._interrupt_event = stop_event
+        self._stop_event = Event()
         self._parent_pid = os.getpid()
         self._queues_to_cancel = list(queues_to_cancel or [])
 
@@ -141,7 +147,7 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
         Ignore shutdown signals (SIGINT) in child processes.
 
         This function prevents child processes from handling shutdown signals directly,
-        ensuring that cleanup is coordinated through the parent process via the stop_event
+        ensuring that cleanup is coordinated through the parent process via the interrupt_event
         mechanism.
         """
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -188,13 +194,18 @@ class BaseProcessWorker(mp.Process, StoppableMixin, ABC):
                     log_threads()
                     logger.info(f"Stopped {self.name}.")
 
+    def stop(self) -> None:
+        self._stop_event.set()
+        self.join()
+
 
 class BaseThreadWorker(threading.Thread, StoppableMixin, abc.ABC):
     ROLE: str = "Worker"
 
     def __init__(self, *, stop_event: EventClass, daemon: bool = False):
         super().__init__(daemon=daemon)
-        self._stop_event = stop_event
+        self._interrupt_event = stop_event
+        self._stop_event = Event()
         self.name = f"{self.ROLE}-{os.getpid()}-thread"
         self.loop: asyncio.AbstractEventLoop | None = None
 
@@ -229,38 +240,6 @@ class BaseThreadWorker(threading.Thread, StoppableMixin, abc.ABC):
                     log_threads()
                     logger.info(f"Stopped {self.name}")
 
-
-class BaseWorker(ABC):
-    ROLE: str = "Worker"
-
-    def __init__(self):
-        self._parent_pid = os.getpid()
-        self._interrupt_event = Event() #worker specific interrupt event
-
-    def start(self, terminate_event: EventClass) -> None:
-        logger.info("Starting a new  worker...")
-        self._terminate_event = terminate_event #global interrupt event
-        self.name = self._auto_name()
-        current_process().name = self.name
-        setup_logging()
-        with logger.contextualize(worker=self.name):
-            self.setup()
-            self.run_loop()
-
-    @abstractmethod
-    def setup(self) -> None:
-        pass
-
-    @abstractmethod
-    def run_loop(self) -> None:
-        pass
-
-    def should_stop(self) -> bool:
-        return self._terminate_event.is_set() or self._interrupt_event.is_set()
-
     def stop(self) -> None:
-        self._interrupt_event.set()
-
-    def _auto_name(self) -> str:
-        """Generate a name for the process based on its role and PIDs."""
-        return "-".join([self.ROLE, str(self._parent_pid), str(os.getpid())])
+        self._stop_event.set()
+        self.join()

@@ -64,12 +64,6 @@ class CameraWorker(BaseProcessWorker):
             logger.error(f"Frame capture error: {e}")
             raise
 
-    def should_stop(self) -> bool:
-        return super().should_stop() or self.stop_event.is_set()
-
-    def stop(self) -> None:
-        self.stop_event.set()
-
     async def teardown(self) -> None:
         self.frame_queue.close()
         self.camera.disconnect()
