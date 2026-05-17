@@ -13,7 +13,7 @@ from api.dependencies import (
     SchedulerDep,
     get_project_id,
     get_robot_id,
-    get_robot_service, is_valid_uuid,
+    get_robot_service,
 )
 from robots.robot_client_factory import RobotClientFactory
 from services import RobotService
@@ -81,7 +81,7 @@ async def robot_websocket(
         )
         worker.start()
         while True:
-            async with run_at_frequency(fps):  # TODO add frequency in robot.
+            async with run_at_frequency(fps):
                 action_keys = follower.features()
                 raw_state = worker.get_state()
                 observation: dict[str, Any] = {i: raw_state[k] for k, i in enumerate(action_keys)}

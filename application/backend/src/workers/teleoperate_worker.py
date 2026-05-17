@@ -1,8 +1,6 @@
 import ctypes
 import asyncio
 import multiprocessing as mp
-import queue
-import time
 from multiprocessing.synchronize import Event as EventClass
 
 from loguru import logger
@@ -35,7 +33,6 @@ class TeleoperateWorker(BaseProcessWorker):
         self.leader = leader
         self.frequency = frequency
         self.robots_loaded_event = mp.Event()
-        self.stop_event = mp.Event()
 
     def get_state(self) -> list[float]:
         with self._output_state.get_lock():

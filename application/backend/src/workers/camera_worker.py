@@ -35,10 +35,10 @@ class CameraWorker(BaseProcessWorker):
         config: Camera,
         mp_stop_event: EventClass
     ):
-        super().__init__(stop_event=mp_stop_event)
-        self.stop_event = Event()
+        frame_queue: Queue = Queue()
+        super().__init__(stop_event=mp_stop_event, queues_to_cancel=[frame_queue])
         self.config = config
-        self.frame_queue = Queue()
+        self.frame_queue = frame_queue
 
     async def setup(self) -> None:
         self.camera = create_frames_source_from_camera(self.config)
