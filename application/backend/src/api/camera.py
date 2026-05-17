@@ -79,6 +79,7 @@ async def camera_websocket(
         Server sends JSON-encoded messages with status updates:
             {"event": "status", "state": "running", ...}
     """
+    import cv2
     await websocket.accept()
 
     worker = None
@@ -87,9 +88,10 @@ async def camera_websocket(
         worker.start()
         while True:
             async with run_at_frequency(camera.payload.fps):
-                if not worker.frame_queue.empty():
-                    message = worker.frame_queue.get_nowait()
-                    await websocket.send_bytes(message)
+                frame = worker.get_frame()
+                success, jpeg = cv2.imencode(".jpg", frame) #TODO just send bytes instead?
+                if success and jpeg is not None:
+                    await websocket.send_bytes(jpeg.tobytes())
     except WebSocketDisconnect:
         pass
     finally:

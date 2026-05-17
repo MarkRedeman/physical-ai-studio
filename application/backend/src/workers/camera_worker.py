@@ -1,3 +1,4 @@
+import ctypes
 from workers.base import BaseProcessWorker
 import asyncio
 import time
@@ -7,7 +8,7 @@ import numpy as np
 from frame_source import FrameSourceFactory
 from frame_source.video_capture_base import VideoCaptureBase
 from loguru import logger
-from multiprocessing import Queue, Event
+from multiprocessing import Queue, Event, Array
 
 from multiprocessing.synchronize import Event as EventClass
 from schemas.project_camera import Camera
@@ -35,10 +36,21 @@ class CameraWorker(BaseProcessWorker):
         config: Camera,
         mp_stop_event: EventClass
     ):
-        frame_queue: Queue = Queue()
-        super().__init__(stop_event=mp_stop_event, queues_to_cancel=[frame_queue])
+        super().__init__(stop_event=mp_stop_event, queues_to_cancel=[])
+        self._width = config.payload.width or 640
+        self._height = config.payload.height or 480
+        self._frame_data = Array(ctypes.c_uint8, self._width * self._height * 3)
         self.config = config
-        self.frame_queue = frame_queue
+
+    def get_frame(self) -> np.ndarray:
+        with self._frame_data.get_lock():
+            return np.frombuffer(self._frame_data.get_obj(), dtype=np.uint8).reshape(self._height, self._width, 3).copy()
+
+    def _set_frame(self, data: np.ndarray) -> None:
+        if data.shape[:2] != (self._height, self._width):
+            data = cv2.resize(data, (self._width, self._height))
+        with self._frame_data.get_lock():
+            np.frombuffer(self._frame_data.get_obj(), dtype=np.uint8)[:] = data.reshape(-1)
 
     async def setup(self) -> None:
         self.camera = create_frames_source_from_camera(self.config)
@@ -51,11 +63,8 @@ class CameraWorker(BaseProcessWorker):
             while not self.should_stop():
                 t0 = time.perf_counter()
                 success, frame = self.camera.read()
-                success, jpeg = cv2.imencode(".jpg", frame) #TODO just send bytes instead?
-                if not success or jpeg is None:
-                    raise RuntimeError("Failed to encode frame")
-                self.frame_queue.put_nowait(jpeg.tobytes())
-
+                if success and frame is not None:
+                    self._set_frame(frame)
                 elapsed = time.perf_counter() - t0
                 sleep_time = target_dt - elapsed
                 if sleep_time > 0:
@@ -65,5 +74,5 @@ class CameraWorker(BaseProcessWorker):
             raise
 
     async def teardown(self) -> None:
-        self.frame_queue.close()
+        #self.frame_queue.close()
         self.camera.disconnect()
