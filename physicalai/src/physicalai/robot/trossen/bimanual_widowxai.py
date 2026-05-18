@@ -36,7 +36,8 @@ class BimanualWidowXAIObservation:
 
     Attributes:
         joint_positions: Array of shape ``(14,)`` — left (7) then right (7)
-            joint positions in radians.
+            with non-gripper joints in degrees and grippers in native scalar
+            units.
         timestamp: ``time.monotonic()`` at the moment of capture (left arm).
         sensor_data: Merged velocities and (for follower) external efforts,
             each of shape ``(14,)``.
@@ -138,7 +139,8 @@ class BimanualWidowXAI(Robot):
 
         Args:
             action: Array of shape ``(14,)`` — left (7) then right (7) target
-                positions in radians.
+                positions in degrees for non-gripper joints, and native scalar
+                values for grippers.
             goal_time: Minimum time (seconds) for the arms to reach the target.
 
         Raises:
