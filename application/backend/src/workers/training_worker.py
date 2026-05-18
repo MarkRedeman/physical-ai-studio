@@ -177,7 +177,7 @@ class TrainingWorker(BaseProcessWorker):
             Path(moved).rename(path)
 
             export_policy = policy
-            if payload.compile_model:
+            if payload.compile_model and model.policy in ["act", "smolvla"]:
                 try:
                     logger.info("Reloading non-compiled policy for export")
                     export_policy = load_policy(model, compile_model=False)
