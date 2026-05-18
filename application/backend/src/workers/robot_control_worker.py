@@ -1,31 +1,156 @@
-# Copyright (C) 2026 Intel Corporation
-# SPDX-License-Identifier: Apache-2.0
-from lerobot.utils.utils import say
-from workers.teleoperate_worker_registry import TeleoperateWorkerRegistry
+from src.workers.base import BaseProcessWorker
+import base64
+import cv2
+from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 import asyncio
-import time
-from multiprocessing import Event, Queue
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event as EventClass
-from pathlib import Path
-from typing import Literal
-from uuid import UUID  # noqa: TC003
+from typing import Any, Literal
 
-from loguru import logger
+from pathlib import Path
 from pydantic import BaseModel
 
-from control.environment_integration import EnvironmentIntegration
-from control.sync_mixed_model_integration import SyncMixedModelIntegration
-from internal_datasets.dataset_client import DatasetClient
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
-from internal_datasets.mutations.recording_mutation import RecordingMutation
 from robots.robot_client_factory import RobotClientFactory
-from schemas import Model
-from schemas.dataset import Dataset, Episode
-from schemas.environment import EnvironmentWithRelations
+from schemas.dataset import Dataset
+from schemas.environment import EnvironmentWithRelations, TeleoperatorRobotWithRobot
+from schemas.model import Model
+from workers.camera_worker import CameraWorker
+from workers.teleoperate_worker import TeleoperateWorker
 
-from .base import BaseThreadWorker
-from .model_worker_registry import ModelWorkerRegistry
+@dataclass
+class CameraManifestEntry:
+    id: str
+    name: str
+    width: int
+    height: int
+    frame_data: Any  # mp.Array[c_uint8], shared with CameraWorker
 
+
+@dataclass
+class RobotManifestEntry:
+    name: str
+    type: str
+    features: list[str]
+    state: Any    # mp.Array[c_double], shared with TeleoperateWorker
+    actions: Any  # mp.Array[c_double], shared with TeleoperateWorker
+
+
+@dataclass
+class EnvironmentDataManifest:
+    """Describes all data streams produced by a loaded environment."""
+    robot: RobotManifestEntry
+    cameras: list[CameraManifestEntry] = field(default_factory=list)
+
+def build_lerobot_dataset_features(manifest: EnvironmentDataManifest, use_videos: bool = True) -> dict:
+    """Build lerobot dataset features."""
+    from lerobot.datasets.feature_utils import combine_feature_dicts
+    from lerobot.datasets.pipeline_features import aggregate_pipeline_dataset_features, create_initial_features
+    from lerobot.processor import make_default_processors
+
+    teleop_action_processor, _robot_action_processor, robot_observation_processor = make_default_processors()
+    action_features: dict[str, Any] = {}
+    observation_features: dict[str, Any] = {}
+    for feature in manifest.robot.features:
+        action_features[feature] = float
+        observation_features[feature] = float
+
+    for camera in manifest.cameras:
+        observation_features[camera.name.lower()] = (camera.height, camera.width, 3)
+
+    return combine_feature_dicts(
+        aggregate_pipeline_dataset_features(
+            pipeline=teleop_action_processor,
+            initial_features=create_initial_features(action=action_features),
+            use_videos=use_videos,
+        ),
+        aggregate_pipeline_dataset_features(
+            pipeline=robot_observation_processor,
+            initial_features=create_initial_features(observation=observation_features),
+            use_videos=use_videos,
+        ),
+    )
+
+def get_observation_from_manifest(manifest: EnvironmentDataManifest, timestamp: float = 0):
+    raw_actions = list(manifest.robot.actions.get_obj())
+    actions = {i: raw_actions[k] for k,i in enumerate(manifest.robot.features)}
+    raw_state = list(manifest.robot.state.get_obj())
+    state = {i: raw_state[k] for k,i in enumerate(manifest.robot.features)}
+
+    camera_images = {}
+    for camera in manifest.cameras:
+        frame = CameraWorker.frame_from_buffer(camera.frame_data.get_obj(), camera.width, camera.height)
+        _, imagebytes = cv2.imencode(".jpg", frame)
+        camera_images[camera.id] = base64.b64encode(imagebytes).decode()
+        #TODO  dont convert to jpg just yet, jsut for reporting
+
+    return {
+        "state": state,
+        "actions": actions,
+        "cameras": camera_images,
+        "timestamp": timestamp,
+    }
+
+
+class EnvironmentIntegration:
+    """Responsible for setting up the workers for the robots and cameras in an environment."""
+    manifest: EnvironmentDataManifest | None = None
+
+    def __init__(self, environment: EnvironmentWithRelations, robot_client_factory: RobotClientFactory, mp_terminate_event: EventClass):
+        self.robot = environment.robots[0]
+        self.cameras = environment.cameras
+        self.robot_client_factory = robot_client_factory
+        self._mp_terminate_event = mp_terminate_event
+        self._workers = []
+
+    async def setup_environment(self):
+        try:
+            follower = await self.robot_client_factory.build(self.robot.robot)
+            features = follower.features()
+
+            leader = None
+            if isinstance(self.robot.tele_operator, TeleoperatorRobotWithRobot) and self.robot.tele_operator.robot is not None:
+                leader = await self.robot_client_factory.build(self.robot.tele_operator.robot)
+
+            teleoperate_worker = TeleoperateWorker(follower, leader, 100, self._mp_terminate_event)
+            self._workers.append(teleoperate_worker)
+
+            robot_entry = RobotManifestEntry(
+                name=self.robot.robot.name,
+                type=self.robot.robot.type,
+                features=features,
+                state=teleoperate_worker._output_state,
+                actions=teleoperate_worker._output_actions,
+            )
+
+            camera_entries = []
+            for camera in self.cameras:
+                worker = CameraWorker(camera, self._mp_terminate_event)
+                self._workers.append(worker)
+                camera_entries.append(CameraManifestEntry(
+                    id=str(camera.id),
+                    name=camera.name,
+                    width=worker._width,
+                    height=worker._height,
+                    frame_data=worker._frame_data,
+                ))
+
+            for worker in self._workers:
+                worker.start()
+
+            for worker in self._workers:
+                if hasattr(worker, "loaded_event"):
+                    await asyncio.to_thread(worker.loaded_event.wait)
+
+            self.manifest = EnvironmentDataManifest(robot=robot_entry, cameras=camera_entries)
+        except Exception:
+            for worker in self._workers:
+                worker.stop()
+            raise
+
+    def teardown(self):
+        for worker in self._workers:
+            worker.stop()
 
 class RobotControlState(BaseModel):
     task: str | None = None
@@ -36,312 +161,92 @@ class RobotControlState(BaseModel):
     follower_source: Literal["model", "teleoperation"] | None = None
     episodes_recorded: int = 0
 
+RECORDING_FPS = 30
 
-class WorkerEvents:
-    def __init__(self):
-        self.interrupt = Event()
-        self.new_model = Event()
-        self.new_environment = Event()
-        self.start_recording = Event()
-        self.save_episode = Event()
-        self.discard_episode = Event()
-        self.start_recording_mutation = Event()
+class RobotControlOrchestrator:
+    environment: EnvironmentIntegration | None = None
+    dataset: InternalLeRobotDataset | None = None
 
-
-class RobotControlWorker(BaseThreadWorker):
-    ROLE: str = "RobotControlWorker"
-
-    robot_client_factory: RobotClientFactory
-
-    queue: Queue
-    state: RobotControlState
-    model_integration: SyncMixedModelIntegration | None = None
-    environment_integration: EnvironmentIntegration | None = None
-    dataset: DatasetClient | None = None
-    recording_mutation: RecordingMutation | None = None
-
-    fps: int = 30
-
-    action_keys: list[str] = []
-    camera_keys: list[str] = []
-
-    events: WorkerEvents
-
-    def __init__(
-        self,
-        stop_event: EventClass,
-        queue: Queue,
+    def __init__(self,
+        message_queue: asyncio.Queue,
         robot_client_factory: RobotClientFactory,
-        model_worker_registry: ModelWorkerRegistry,
-        teleoperate_worker_registry: TeleoperateWorkerRegistry,
+        mp_terminate_event: EventClass
     ):
-        super().__init__(stop_event=stop_event)
-        self.queue = queue
         self.state = RobotControlState()
+        self._mp_terminate_event = mp_terminate_event
         self.robot_client_factory = robot_client_factory
-        self.events = WorkerEvents()
-        self._model_worker_registry = model_worker_registry
-        self.teleoperate_worker_registry = teleoperate_worker_registry
-        self._model_worker_id: UUID | None = None
-        self._pending_model: Model | None = None
-        self._pending_backend: str | None = None
+        self.message_queue = message_queue
 
-    def start_task(self, task: str) -> None:
-        if self.state.model_loaded and self.state.environment_loaded:
-            if self.model_integration is not None:
-                self.model_integration.reset()
-            self.state.task = task
-            self.state.follower_source = "model"
-            self.start_episode_t = time.perf_counter()
-        self._report_state()
-
-    def load_dataset(self, dataset: Dataset) -> None:
-        self.dataset = InternalLeRobotDataset(Path(dataset.path))
-        self.events.start_recording_mutation.set()
-
-    def start_recording(self, task: str) -> None:
-        self.state.task = task
-        self.events.start_recording.set()
-
-    def save_episode(self) -> None:
-        self.events.save_episode.set()
-
-    def discard_episode(self) -> None:
-        self.events.discard_episode.set()
-
-    def stop(self) -> None:
-        """Stop inference."""
-        self.state.follower_source = None
-        self._report_state()
-
-    def disconnect(self) -> None:
-        """Stop inference and teardown."""
-        self.events.interrupt.set()
-
-    def set_follower_source(self, follower_source: Literal["model", "teleoperation"] | None) -> None:
-        self.state.follower_source = follower_source
-        self._report_state()
-
-    def load_model(self, model: Model, backend: str) -> None:
-        self._pending_model = model
-        self._pending_backend = backend
-        self.state.model_loaded = False
-        self.events.new_model.set()
-        self._report_state()
-
-    def load_environment(self, environment: EnvironmentWithRelations) -> None:
-        """Setup environment."""
+    async def load_environment(self, environment: EnvironmentWithRelations) -> None:
+        """Load environment with cameras and robots."""
         try:
-            self.environment_integration = EnvironmentIntegration(
+            environment_integration = EnvironmentIntegration(
                 environment=environment,
                 robot_client_factory=self.robot_client_factory,
-                teleoperate_worker_registry=self.teleoperate_worker_registry,
+                mp_terminate_event=self._mp_terminate_event,
             )
-            self.events.new_environment.set()
-            self.state.environment_loaded = False
-            self._report_state()
-        except Exception as e:
-            self.environment_integration = None
-            self._report_error(e)
-
-    def setup(self) -> None:
-        """Set up robots, cameras and dataset."""
-        self._report_state()
-
-    @property
-    def ready_for_inference(self) -> bool:
-        """Check if model and environment is loaded and no errors occurred."""
-        return self.state.environment_loaded and self.state.model_loaded and self.state.task is not None
-
-    @property
-    def ready_for_recording(self) -> bool:
-        """Check if model and environment is loaded and no errors occurred."""
-        return self.state.environment_loaded and self.recording_mutation is not None and self.state.task is not None
-
-    async def run_loop(self) -> None:
-        """inference loop."""
-        self.start_episode_t = time.perf_counter()
-        while not self.should_stop() and not self.events.interrupt.is_set():
-            try:
-                await asyncio.gather(
-                    self._handle_new_model_load(),
-                    self._handle_setup_environment(),
-                    self._handle_start_mutation(),
-                    self._handle_start_recording(),
-                    self._handle_save_episode(),
-                    self._handle_discard_episode(),
-                )
-
-                goal_time = 1 / self.fps
-                start_loop_t = time.perf_counter()
-                if self.environment_integration:
-                    observation = await self.environment_integration.get_observation()
-                    #timestamp = time.perf_counter() - self.start_episode_t
-                    if observation:
-                        #report_observation = self.environment_integration.format_observation_for_reporting(
-                        #    observation, timestamp
-                        #)
-
-                        actions = None
-                        match self.state.follower_source:
-                            case "teleoperation":
-                                actions = self.environment_integration.get_actions()
-                            case "model":
-                                #TODO: implement setting joint state in teleoperate worker.
-                                pass
-
-                                #if self.model_integration:
-                                #    dataset_observation = self.environment_integration.format_model_input_observation(
-                                #        observation, task=self.state.task
-                                #    )
-                                #    action = self.model_integration.select_action(dataset_observation)
-                                #    if action is not None:
-                                #        actions = dict(zip(self.environment_integration.action_keys, action))
-                                #        report_observation["actions"] = actions
-                                #        await self.environment_integration.set_joints_state(actions, goal_time)
-
-                        if (
-                            self.state.is_recording
-                            and self.ready_for_recording
-                            and self.state.task
-                            and actions
-                            and self.recording_mutation
-                        ):
-                            dataset_observation = self.environment_integration.format_observation_for_dataset(
-                                observation
-                            )
-                            self.recording_mutation.add_frame(dataset_observation, actions, self.state.task)
-                        #self._report_observation(report_observation)
-                dt_s = time.perf_counter() - start_loop_t
-                wait_time = goal_time - dt_s
-
-                if wait_time > 0:
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.warning(f"Did not meet target framespeed by {0 - wait_time}, {dt_s * 1000}ms")
-                    await asyncio.sleep(0)
-            except Exception as e:
-                logger.exception(f"RobotControl loop error: {e}")
-                self._report_error(e)
-
-    async def _handle_new_model_load(self) -> None:
-        if self._pending_model is not None and self.events.new_model.is_set():
-            self.events.new_model.clear()
-            try:
-                # Release any previously held worker slot
-                if self._model_worker_id is not None:
-                    await self._model_worker_registry.release(self._model_worker_id)
-                    self._model_worker_id = None
-
-                worker_id, worker = await self._model_worker_registry.acquire(
-                    self._pending_model, self._pending_backend or "torch"
-                )
-                self._model_worker_id = worker_id
-                self.model_integration = SyncMixedModelIntegration(model_worker=worker, fps=self.fps)
-                await self.model_integration.setup()
-                self.state.model_loaded = True
-                self._report_state()
-            except Exception as e:
-                self.model_integration = None
-                self._report_error(e)
-            finally:
-                self._pending_model = None
-                self._pending_backend = None
-
-    async def _handle_setup_environment(self) -> None:
-        if self.environment_integration and self.events.new_environment.is_set():
-            self.events.new_environment.clear()
-            await self.environment_integration.setup()
+            await environment_integration.setup_environment()
+            self.environment = environment_integration
             self.state.environment_loaded = True
+        except Exception as e:
+            self._report_error("environment", e)
+        finally:
             self._report_state()
 
-    async def _handle_start_recording(self) -> None:
-        if self.ready_for_recording and self.events.start_recording.is_set():
-            say(f"Start episode {self.state.episodes_recorded + 1}")
-            self.events.start_recording.clear()
-            self.state.is_recording = True
-            self._report_state()
+    def load_dataset(self, dataset: Dataset) -> None:
+        """Load dataset and setup recording."""
+        if self.environment and self.environment.manifest:
+            try:
+                self.dataset = InternalLeRobotDataset(Path(dataset.path))
+                features = build_lerobot_dataset_features(self.environment.manifest)
+                self.recording_mutation = self.dataset.start_recording_mutation(
+                    fps=RECORDING_FPS,
+                    features=features,
+                    robot_type=self.environment.manifest.robot.type,
+                )
+                self.state.dataset_loaded = True
+            except Exception as e:
+                self._report_error("dataset", e)
+            finally:
+                self._report_state()
+        else:
+            self._report_error("dataset", ValueError("Cannot load dataset without environment."))
 
-    async def _handle_save_episode(self) -> None:
-        if self.recording_mutation is not None and self.events.save_episode.is_set():
-            say(f"Saving episode {self.state.episodes_recorded + 1}")
-            self.events.save_episode.clear()
-            self.recording_mutation.save_episode()
-            self.state.is_recording = False
-            self.state.episodes_recorded += 1
-            self._report_state()
 
-    async def _handle_discard_episode(self) -> None:
-        if self.recording_mutation is not None and self.events.discard_episode.is_set():
-            say("Discard episode")
-            self.events.discard_episode.clear()
-            self.recording_mutation.discard_buffer()
-            self.state.is_recording = False
-            self._report_state()
+    def load_model(self, model: Model) -> None:
+        """Load model for inference."""
 
-    async def _handle_start_mutation(self):
-        if (
-            self.dataset
-            and self.environment_integration
-            and self.state.environment_loaded
-            and self.events.start_recording_mutation.is_set()
-        ):
-            self.events.start_recording_mutation.clear()
-            features = self.environment_integration.build_lerobot_dataset_features()
+    def start_recording(self, task: str) -> None:
+        """Start recording of specified task."""
 
-            self.recording_mutation = self.dataset.start_recording_mutation(
-                fps=self.fps,
-                features=features,
-                robot_type=self.environment_integration.robot_type
-            )
-            self.state.dataset_loaded = True
-            self._report_state()
+    def start_task(self, task: str) -> None:
+        """Start task on model."""
 
-    async def teardown(self) -> None:
-        """Disconnect robots and close queue."""
-        if self.environment_integration:
-            await self.environment_integration.teardown()
+    def stop_task(self) -> None:
+        """Stop executing actions from model."""
 
-        if self.model_integration is not None:
-            self.model_integration.teardown()
+    def set_follower_source(self, follower_source: Literal["model", "teleoperation"] | None) -> None:
+        """Sets teleoperation loop to follow either model or teleoperator."""
 
-        if self._model_worker_id is not None:
-            await self._model_worker_registry.release(self._model_worker_id)
-            self._model_worker_id = None
+    def teardown(self) -> None:
+        if self.environment:
+            self.environment.teardown()
 
-        if self.recording_mutation:
-            self.recording_mutation.teardown()
-
-        # Wait for .5 seconds before closing queue to allow messages through
-        await asyncio.sleep(0.5)
-        self.queue.close()
-        self.queue.cancel_join_thread()
+    def get_observation(self) -> dict | None:
+        if self.environment and self.environment.manifest:
+            return get_observation_from_manifest(self.environment.manifest)
+        return None
 
     def _report_state(self):
-        state = {"event": "state", "data": self.state.model_dump()}
-        self.queue.put(state)
+        self.message_queue.put_nowait({
+            "event": "state",
+            "data": self.state.model_dump(),
+        })
 
-    def _report_error(self, error: BaseException):
-        data = {
+    def _report_error(self, component: str, error: BaseException):
+        """Report error in application."""
+        self.message_queue.put_nowait({
             "event": "error",
+            "component": component,
             "data": str(error),
-        }
-        logger.error(f"error: {data}")
-        self.queue.put(data)
-
-    def _report_observation(self, data: dict):
-        """Report observation to queue."""
-        self.queue.put(
-            {
-                "event": "observations",
-                "data": data,
-            }
-        )
-
-    def _report_episode(self, episode: Episode):
-        self.queue.put(
-            {
-                "event": "episode",
-                "data": episode.model_dump(),
-            }
-        )
+        })

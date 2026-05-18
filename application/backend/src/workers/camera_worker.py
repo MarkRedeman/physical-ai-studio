@@ -37,6 +37,7 @@ class CameraWorker(BaseProcessWorker):
         mp_stop_event: EventClass
     ):
         super().__init__(stop_event=mp_stop_event, queues_to_cancel=[])
+        self.loaded_event = Event()
         self._width = config.payload.width or 640
         self._height = config.payload.height or 480
         self._frame_data = Array(ctypes.c_uint8, self._width * self._height * 3)
@@ -44,7 +45,7 @@ class CameraWorker(BaseProcessWorker):
 
     def get_frame(self) -> np.ndarray:
         with self._frame_data.get_lock():
-            return np.frombuffer(self._frame_data.get_obj(), dtype=np.uint8).reshape(self._height, self._width, 3).copy()
+            return self.frame_from_buffer(self._frame_data.get_obj(), self._width, self._height)
 
     def _set_frame(self, data: np.ndarray) -> None:
         if data.shape[:2] != (self._height, self._width):
@@ -52,9 +53,14 @@ class CameraWorker(BaseProcessWorker):
         with self._frame_data.get_lock():
             np.frombuffer(self._frame_data.get_obj(), dtype=np.uint8)[:] = data.reshape(-1)
 
+    @staticmethod
+    def frame_from_buffer(buffer, width: int, height: int) -> np.ndarray:
+        return np.frombuffer(buffer, dtype=np.uint8).reshape(height, width, 3).copy()
+
     async def setup(self) -> None:
         self.camera = create_frames_source_from_camera(self.config)
         self.camera.connect()
+        self.loaded_event.set()
 
     async def run_loop(self) -> None:
         """Main worker loop."""
