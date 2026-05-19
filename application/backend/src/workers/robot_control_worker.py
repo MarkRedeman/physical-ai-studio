@@ -127,7 +127,6 @@ class RecordingWorker(BaseProcessWorker):
         #self.discard_episode_event = TwoWayEvent()
         self.dataset_config = dataset
         self.data_manifest = data_manifest
-        self.fps = 50
         self._start_event = mp.Event()
         self._start_ack = mp.Event()
         self._save_event = mp.Event()
@@ -166,8 +165,9 @@ class RecordingWorker(BaseProcessWorker):
 
         self.dataset = InternalLeRobotDataset(Path(self.dataset_config.path))
         features = build_lerobot_dataset_features(self.data_manifest)
+        self.fps = self.dataset.get_fps() or RECORDING_FPS
         self.recording_mutation = self.dataset.start_recording_mutation(
-            fps=RECORDING_FPS,
+            fps=self.fps,
             features=features,
             robot_type=self.data_manifest.robot.type,
         )

@@ -34,6 +34,10 @@ class DatasetClient(ABC):
         """Find episode by index or return None."""
 
     @abstractmethod
+    def get_fps(self) -> int | None:
+        """Get fps of dataset."""
+
+    @abstractmethod
     def get_tasks(self) -> list[str]:
         """Get Tasks in dataset."""
 

@@ -89,6 +89,10 @@ class InternalLeRobotDataset(DatasetClient):
             return []
         return list(self._dataset.meta.tasks.to_dict()["task_index"].keys())
 
+    def get_fps(self) -> int | None:
+        if hasattr(self, "_dataset"):
+            return self._dataset.fps
+
     def get_video_path(self, episode: int, camera: str) -> Path:
         """Get Video path of specific episode and camera."""
         metadata = self._dataset.meta
