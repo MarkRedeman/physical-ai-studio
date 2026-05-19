@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import zipfile
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -134,6 +135,89 @@ def _mock_services(settings, dataset, job=None):
                 patch("services.model_import_service.ModelService.create_model", AsyncMock(side_effect=lambda m: m))
             )
         yield
+
+
+# ---------------------------------------------------------------------------
+# Archive import tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_import_model_archive_success(tmp_path, project_id, dataset_id, settings, dataset, snapshot, job):
+    archive_path = tmp_path / "model.zip"
+    archive_path.write_bytes(_make_zip(_base_files()))
+
+    with _mock_services(settings, dataset, snapshot, job):
+        model = await ModelImportService().import_model_archive(
+            archive_path=archive_path,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            model_name="imported",
+        )
+
+    assert model.project_id == project_id
+    assert model.dataset_id == dataset_id
+    assert model.policy == "act"
+    assert Path(model.path).is_dir()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "missing_file,error_match",
+    [
+        ("version_0/hparams.yaml", "version_0/hparams.yaml"),
+        ("version_0/metrics.csv", "version_0/metrics.csv"),
+        ("exports/torch/manifest.json", "exports/torch/manifest.json"),
+        ("exports/torch/act.pt", "missing torch artifact"),
+    ],
+)
+async def test_import_model_archive_rejects_missing_files(
+    tmp_path, project_id, dataset_id, settings, dataset, missing_file, error_match
+):
+    files = _base_files()
+    del files[missing_file]
+
+    archive_path = tmp_path / "model.zip"
+    archive_path.write_bytes(_make_zip(files))
+
+    with (
+        _mock_services(settings, dataset),
+        pytest.raises(InvalidArchiveError, match=re.escape(error_match)),
+    ):
+        await ModelImportService().import_model_archive(
+            archive_path=archive_path,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            model_name="imported",
+        )
+
+
+@pytest.mark.anyio
+async def test_import_model_archive_cleans_up_on_failure(tmp_path, project_id, dataset_id, settings, dataset):
+    archive_path = tmp_path / "model.zip"
+    archive_path.write_bytes(_make_zip(_base_files()))
+
+    with (
+        patch("services.model_import_service.get_settings", return_value=settings),
+        patch("services.model_import_service.DatasetService.get_dataset_by_id", AsyncMock(return_value=dataset)),
+        patch(
+            "services.model_import_service.SnapshotService.create_snapshot_for_dataset",
+            AsyncMock(side_effect=RuntimeError("fail")),
+        ),
+        patch(
+            "services.model_import_service.asyncio.to_thread", AsyncMock(side_effect=lambda fn, *a, **k: fn(*a, **k))
+        ),
+        pytest.raises(RuntimeError, match="fail"),
+    ):
+        await ModelImportService().import_model_archive(
+            archive_path=archive_path,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            model_name="imported",
+        )
+
+    # Model directory should be cleaned up
+    assert not settings.models_dir.exists() or not any(settings.models_dir.iterdir())
 
 
 # ---------------------------------------------------------------------------

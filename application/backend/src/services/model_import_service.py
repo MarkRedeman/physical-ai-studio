@@ -10,13 +10,12 @@ from schemas import Model, TrainJob
 from schemas.base_job import JobStatus
 from schemas.dataset import Dataset
 from schemas.job import TrainJobPayload
+from services.archive_safety import SafeZipArchive, flatten_single_root_directory
 from services.dataset_service import DatasetService
 from services.job_service import JobService
 from services.model_service import ModelService
 from settings import get_settings
 
-# We assume the directory/zip is taken directly from Physical AI Studio, either
-# by exporting the model from the UI, or by taking it from our storage dir
 _REQUIRED_FILES = (
     "version_0/hparams.yaml",
     "version_0/metrics.csv",
@@ -36,6 +35,22 @@ class ModelReader(Protocol):
     def read_json(self, path: str) -> dict[str, Any] | None:
         """Read and parse a JSON file. Returns None if not found or invalid."""
         ...
+
+
+class ZipModelReader:
+    """ModelReader implementation backed by a SafeZipArchive."""
+
+    def __init__(self, archive: SafeZipArchive) -> None:
+        self._archive = archive
+
+    def file_exists(self, path: str) -> bool:
+        return self._archive.resolve_member_name(path) is not None
+
+    def read_json(self, path: str) -> dict[str, Any] | None:
+        data = self._archive.read_json(path)
+        if isinstance(data, dict):
+            return data
+        return None
 
 
 class DirectoryModelReader:
@@ -62,6 +77,61 @@ class DirectoryModelReader:
 
 
 class ModelImportService:
+    async def import_model_archive(
+        self,
+        *,
+        archive_path: Path,
+        project_id: UUID,
+        dataset_id: UUID,
+        model_name: str,
+        base_model_id: UUID | None = None,
+        version: int = 1,
+    ) -> Model:
+        """Import a model from a ZIP archive."""
+        if not archive_path.exists() or not archive_path.is_file():
+            raise InvalidArchiveError(f"Model archive does not exist: {archive_path}")
+
+        settings = get_settings()
+        dataset = await DatasetService.get_dataset_by_id(dataset_id)
+        if dataset.project_id != project_id:
+            raise InvalidArchiveError("Dataset does not belong to the specified project")
+
+        model_dir = settings.models_dir / str(uuid4())
+
+        safe_archive = SafeZipArchive(
+            archive_path,
+            max_uncompressed_bytes=settings.data_import_max_uncompressed_bytes,
+        )
+        await asyncio.to_thread(safe_archive.validate)
+
+        # Validate structure and infer policy BEFORE extraction for early error detection.
+        reader = ZipModelReader(safe_archive)
+        policy = await asyncio.to_thread(self._inspect_model, reader)
+
+        model_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            extracted_count = await asyncio.to_thread(
+                safe_archive.extract_to,
+                model_dir,
+                min_free_bytes=settings.data_import_min_free_bytes,
+            )
+            await asyncio.to_thread(flatten_single_root_directory, model_dir)
+
+            if extracted_count == 0:
+                raise InvalidArchiveError("Model archive does not contain any files")
+
+            return await self._finalize_import(
+                model_dir=model_dir,
+                dataset=dataset,
+                model_name=model_name,
+                policy=policy,
+                base_model_id=base_model_id,
+                version=version,
+            )
+        except Exception:
+            shutil.rmtree(model_dir, ignore_errors=True)
+            raise
+
     async def import_model_directory(
         self,
         *,
