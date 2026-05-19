@@ -1,3 +1,5 @@
+from workers.async_model_worker import AsyncModelWorker
+from control.sync_mixed_model_integration import SyncMixedModelIntegration
 from workers.base import BaseProcessWorker, run_at_frequency, BaseThreadWorker
 import base64
 import cv2
@@ -103,6 +105,24 @@ def format_observation_for_dataset(observation: dict, manifest: EnvironmentDataM
         result[camera_name] = np.ascontiguousarray(observation["images"][camera.id][..., ::-1])
 
     return result, actions
+
+
+def format_observation_for_model(observation: dict, manifest: EnvironmentDataManifest):
+    from physicalai.data import Observation
+
+    images: dict = {}
+    for camera in manifest.cameras:
+        camera_name = camera.name.lower()
+        # SWAP HWC, RGB2BGR and in float 0..1 range.
+        images[camera_name] = np.ascontiguousarray(
+            observation["images"][camera.id][..., ::-1].transpose(2, 0, 1).astype(np.float32)[np.newaxis] / 255
+        )
+
+    return Observation(
+        state=np.array([observation["state"]], dtype=np.float32),
+        images=images,
+        # task=task, # TODO: Implement tasks.
+    )
 
 
 def format_observation_for_reporting(observation: dict, manifest: EnvironmentDataManifest) -> dict:
@@ -222,6 +242,55 @@ class RecordingWorker(BaseProcessWorker):
             )
 
 
+class ModelIntegration(BaseProcessWorker):
+    ROLE="ModelIntegrationWorker"
+    def __init__(
+            self,
+            model: Model,
+            backend: str,
+            data_manifest: EnvironmentDataManifest,
+            mp_terminate_event: EventClass,
+            event_queue: mp.Queue,
+    ):
+        super().__init__(stop_event=mp_terminate_event, queues_to_cancel=[])
+        self.loaded_event = mp.Event()
+        self.data_manifest = data_manifest
+        self.backend = backend
+        self.model = model
+        self.event_queue = event_queue
+        self.model_integration = None
+        self.is_running = False
+        self.fps = 30 #TODO FPS
+
+    async def setup(self) -> None:
+        async_worker = AsyncModelWorker()
+        async_worker.connect()
+        async_worker.load_model(self.model, self.backend)
+        self.model_integration = SyncMixedModelIntegration(model_worker=async_worker, fps=self.fps)
+        await self.model_integration.setup()
+        self.loaded_event.set()
+
+    async def run_loop(self):
+        while not self.should_stop():
+            async with run_at_frequency(self.fps):
+                if self.model_integration and self.is_running:
+                    obs = get_observation_from_manifest(self.data_manifest)
+                    observation = format_observation_for_model(obs, self.data_manifest)
+                    action = self.model_integration.select_action(observation)
+                    if action is not None:
+                        print(action)
+                        #self.data_manifest.robot.actions.get_obj()[:] = action
+                        #actions = dict(zip(self.environment_integration.action_keys, action))
+                        #report_observation["actions"] = actions
+                        #await self.environment_integration.set_joints_state(actions, goal_time)
+
+    async def teardown(self):
+        if self.model_integration:
+            self.model_integration.teardown()
+
+
+
+
 class EnvironmentIntegration:
     """Responsible for setting up the workers for the robots and cameras in an environment."""
 
@@ -311,6 +380,7 @@ MESSAGE_QUEUE_FREQUENCY = 10
 class RobotControlOrchestrator(BaseThreadWorker):
     environment: EnvironmentIntegration | None = None
     recording: RecordingWorker | None = None
+    model: ModelIntegration | None = None
 
     def __init__(
         self, message_queue: asyncio.Queue, robot_client_factory: RobotClientFactory, mp_terminate_event: EventClass
@@ -377,8 +447,25 @@ class RobotControlOrchestrator(BaseThreadWorker):
         else:
             self._report_error("dataset", ValueError("Cannot load dataset without environment."))
 
-    def load_model(self, model: Model, backend: str) -> None:
+    async def load_model(self, model: Model, backend: str) -> None:
         """Load model for inference."""
+        if self.environment and self.environment.manifest:
+            try:
+                worker = ModelIntegration(
+                    model=model,
+                    backend=backend,
+                    data_manifest=self.environment.manifest,
+                    mp_terminate_event=self._mp_terminate_event,
+                    event_queue=self.event_queue
+                )
+                worker.start()
+                await asyncio.to_thread(worker.loaded_event.wait)
+                self.model = worker
+                self.state.model_loaded = True
+            except Exception as e:
+                self._report_error("model", e)
+            finally:
+                self._report_state()
 
     def start_recording(self, task: str) -> None:
         """Start recording of specified task."""

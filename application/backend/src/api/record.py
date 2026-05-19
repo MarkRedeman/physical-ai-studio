@@ -34,7 +34,7 @@ async def handle_incoming(websocket: WebSocket, robot_control: RobotControlOrche
                 case "load_environment":
                     await robot_control.load_environment(EnvironmentWithRelations.model_validate(payload["environment"]))
                 case "load_model":
-                    robot_control.load_model(Model.model_validate(payload["model"]), payload["backend"])
+                    await robot_control.load_model(Model.model_validate(payload["model"]), payload["backend"])
                 case "load_dataset":
                     await robot_control.load_dataset(Dataset.model_validate(payload["dataset"]))
                 case "set_follower_source":
