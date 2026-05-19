@@ -34,6 +34,7 @@ class CameraManifestEntry:
 class RobotManifestEntry:
     name: str
     type: str
+    action_source: Any # mp.Value[c_int], shared with TeleoperateWorker
     features: list[str]
     state: Any  # mp.Array[c_double], shared with TeleoperateWorker
     actions: Any  # mp.Array[c_double], shared with TeleoperateWorker
@@ -367,6 +368,7 @@ class EnvironmentIntegration:
                 features=features,
                 state=teleoperate_worker._output_state,
                 actions=teleoperate_worker._output_actions,
+                action_source=teleoperate_worker._action_source,
             )
 
             camera_entries = []
@@ -530,14 +532,26 @@ class RobotControlOrchestrator(BaseThreadWorker):
         """Start task on model."""
         if self.model:
             self.model.start_task(task)
+            self.set_follower_source("model")
 
     def stop_task(self) -> None:
         """Stop executing actions from model."""
         if self.model:
             self.model.stop_task()
+            self.set_follower_source(None)
 
     def set_follower_source(self, follower_source: Literal["model", "teleoperation"] | None) -> None:
         """Sets teleoperation loop to follow either model or teleoperator."""
+        if self.environment and self.environment.manifest:
+            action_source = 0
+            if follower_source == "teleoperation":
+                action_source = 1
+            if follower_source == "model":
+                action_source = 2
+            self.environment.manifest.robot.action_source.value = action_source
+            self.state.follower_source = follower_source
+            self._report_state()
+
 
     async def teardown(self) -> None:
         if self.environment:

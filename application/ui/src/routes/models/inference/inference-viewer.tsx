@@ -30,7 +30,7 @@ export const InferenceViewer = ({ tasks }: InferenceViewerProps) => {
 
     const [task, setTask] = useState<string>(tasks[0] ?? '');
 
-    const { model, readyForInference, state, startTask, stopTask } = useRobotControl();
+    const { model, readyForInference, state, startTask, stopTask, setFollowerSource } = useRobotControl();
 
     if (state.error) {
         return <ErrorMessage message={'An error occurred during inference setup'} />;
@@ -68,6 +68,14 @@ export const InferenceViewer = ({ tasks }: InferenceViewerProps) => {
                         ))}
                     </ComboBox>
                     <ButtonGroup>
+
+                        <Button
+                            variant='primary'
+                            isPending={startTask.isPending}
+                            onPress={() => setFollowerSource.mutate("teleoperation")}
+                        >
+                            Take Control
+                        </Button>
                         {state.follower_source === 'model' ? (
                             <Button variant='primary' isPending={stopTask.isPending} onPress={() => stopTask.mutate()}>
                                 <Pause fill='white' />

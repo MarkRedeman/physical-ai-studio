@@ -1,5 +1,6 @@
 import ctypes
 import asyncio
+import enum
 import multiprocessing as mp
 from multiprocessing.synchronize import Event as EventClass
 
@@ -8,6 +9,13 @@ from loguru import logger
 from robots.robot_client import RobotClient
 
 from .base import BaseProcessWorker, run_at_frequency
+
+
+class ActionWriteState(enum.IntEnum):
+    NONE = 0
+    FROM_LEADER = 1
+    FROM_ACTIONS = 2
+
 
 class TeleoperateWorker(BaseProcessWorker):
     ROLE: str = "TeleoperateWorker"
@@ -22,7 +30,7 @@ class TeleoperateWorker(BaseProcessWorker):
                  mp_stop_event: EventClass):
         buffer_length = len(follower.features())
         self.loaded_event = mp.Event()
-        self.action_write_state = mp.Event() #decides if reading actions
+        self._action_source = mp.Value(ctypes.c_int, ActionWriteState.NONE)
         self._output_actions = mp.Array(ctypes.c_double, buffer_length)
         self._output_state = mp.Array(ctypes.c_double, buffer_length)
         super().__init__(
@@ -49,6 +57,13 @@ class TeleoperateWorker(BaseProcessWorker):
         with self._output_actions.get_lock():
             self._output_actions.get_obj()[:] = data
 
+    def get_action_source(self) -> int:
+        return self._action_source.value
+
+    def set_action_source(self, value: ActionWriteState) -> None:
+        with self._action_source.get_lock():
+            self._action_source.value = value
+
     async def wait_for_loading_to_complete(self) -> None:
         await asyncio.to_thread(self.loaded_event.wait)
 
@@ -67,14 +82,14 @@ class TeleoperateWorker(BaseProcessWorker):
                 async with run_at_frequency(self.frequency):
                     state = (self.follower.read_state())["state"]
                     self._set_state([state[key] for key in features])
-                    if self.action_write_state.is_set() and self.leader is not None:
+                    if self.get_action_source() == ActionWriteState.FROM_LEADER and self.leader is not None:
                         actions = (self.leader.read_state())["state"]
-                        self.follower.set_joints_state(actions, goal_time * 3)
+                        self.follower.set_joints_state(actions, goal_time * 2)
                         self._set_actions([actions[key] for key in features])
-                    else:
+                    elif self.get_action_source() == ActionWriteState.FROM_ACTIONS:
                         raw_actions = self.get_actions()
                         actions = {i: raw_actions[k] for k, i in enumerate(features)}
-                        self.follower.set_joints_state(actions, goal_time * 3)
+                        self.follower.set_joints_state(actions, goal_time * 2)
         finally:
             logger.info("Teleoperating stopped, disconnecting robots.")
             if self.leader:
