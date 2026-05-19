@@ -40,11 +40,11 @@ async def handle_incoming(websocket: WebSocket, robot_control: RobotControlOrche
                 case "set_follower_source":
                     robot_control.set_follower_source(payload["follower_source"])
                 case "start_recording":
-                    await robot_control.start_recording(payload["task"])
+                    robot_control.start_recording(payload["task"])
                 case "save_episode":
-                    await robot_control.save_episode()
+                    robot_control.save_episode()
                 case "discard_episode":
-                    await robot_control.discard_episode()
+                    robot_control.discard_episode()
                 #case "start_task":
                 #    robot_control.start_task(payload["task"])
                 #case "stop_task":
@@ -108,6 +108,7 @@ async def robot_control_websocket(
         ),
         mp_terminate_event=scheduler.mp_stop_event,
     )
+    robot_control.start()
     try:
         incoming_task = asyncio.create_task(handle_incoming(websocket, robot_control))
         outgoing_task = asyncio.create_task(handle_outgoing(websocket, queue))
@@ -121,7 +122,7 @@ async def robot_control_websocket(
         for task in pending:
             task.cancel()
     finally:
-        robot_control.teardown()
+        robot_control.stop()
 #
 # TODO: Implement
 #@router.websocket("/robot_control/ws")
