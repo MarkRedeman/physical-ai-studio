@@ -1,22 +1,21 @@
-from workers.async_model_worker import AsyncModelWorker
-from control.sync_mixed_model_integration import SyncMixedModelIntegration
-from workers.base import BaseProcessWorker, run_at_frequency, BaseThreadWorker
-import base64
-import cv2
-import numpy as np
 import asyncio
-from dataclasses import dataclass, field
+import base64
 import multiprocessing as mp
+from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event as EventClass
+from pathlib import Path
 from typing import Any, Literal
 
-from pathlib import Path
+import cv2
+import numpy as np
 from pydantic import BaseModel
 
 from robots.robot_client_factory import RobotClientFactory
 from schemas.dataset import Dataset
 from schemas.environment import EnvironmentWithRelations, TeleoperatorRobotWithRobot
 from schemas.model import Model
+from workers.async_model_worker import AsyncModelWorker
+from workers.base import BaseProcessWorker, BaseThreadWorker, run_at_frequency
 from workers.camera_worker import CameraWorker
 from workers.teleoperate_worker import TeleoperateWorker
 
@@ -267,6 +266,8 @@ class ModelIntegration(BaseProcessWorker):
         self._stop_task_event = mp.Event()
 
     async def setup(self) -> None:
+        from control.sync_mixed_model_integration import SyncMixedModelIntegration
+
         async_worker = AsyncModelWorker()
         async_worker.connect()
         async_worker.load_model(self.model, self.backend)
