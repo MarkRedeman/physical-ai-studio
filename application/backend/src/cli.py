@@ -4,6 +4,7 @@ import sys
 
 import click
 
+from cli.models import models
 from db.engine import get_sync_db_session
 from db.migration import MigrationManager
 from db.schema import (
@@ -107,6 +108,9 @@ def migrate() -> None:
     else:
         click.echo("✗ Migration failed!")
         sys.exit(1)
+
+
+cli.add_command(models)
 
 
 if __name__ == "__main__":
