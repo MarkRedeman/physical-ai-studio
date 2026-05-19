@@ -290,7 +290,7 @@ class RobotControlState(BaseModel):
     follower_source: Literal["model", "teleoperation"] | None = None
     episodes_recorded: int = 0
 
-RECORDING_FPS = 30
+RECORDING_FPS = 50
 
 class RobotControlOrchestrator:
     environment: EnvironmentIntegration | None = None
@@ -362,6 +362,7 @@ class RobotControlOrchestrator:
             await self.recording.save_episode()
             recording_state = self.recording.get_state()
             self.state.is_recording = recording_state["is_recording"]
+            self.state.episodes_recorded = recording_state["episodes_recorded"]
             self._report_state()
 
     async def discard_episode(self) -> None:
