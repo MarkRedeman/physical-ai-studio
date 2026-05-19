@@ -167,5 +167,35 @@ def import_dir(
         sys.exit(1)
 
 
+@models.command("compress")
+@click.argument("model_id", type=click.UUID)
+@click.option("--name", default=None, type=str, help="Name for the compressed model (default: '<original> (INT8)')")
+def compress_weights(model_id: UUID, name: str | None) -> None:
+    """Compress an exported OpenVINO model's weights to INT8 using NNCF.
+
+    Creates a new model entry with compressed weights, linked to the
+    original via parent_model_id.  Only the OpenVINO export directory
+    is included (checkpoints and other export backends are omitted).
+    """
+    from services.model_compression_service import ModelCompressionError, ModelCompressionService
+
+    click.echo(f"Compressing model {model_id} with NNCF INT8_SYM...")
+
+    async def _run_compression() -> None:
+        compressed = await ModelCompressionService.compress_model(model_id=model_id, name=name)
+        click.echo("Model compressed successfully!")
+        click.echo(f"Compressed model ID: {compressed.id}")
+        click.echo(f"Compressed model path: {compressed.path}")
+
+    try:
+        asyncio.run(_run_compression())
+    except ModelCompressionError as e:
+        click.echo(f"Compression failed: {e}")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
