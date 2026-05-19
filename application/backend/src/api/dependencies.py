@@ -12,11 +12,13 @@ from services import (
     DatasetService,
     EpisodeThumbnailService,
     ModelDownloadService,
+    ModelMetricsService,
     ModelService,
     ProjectCameraService,
     ProjectService,
     RobotService,
 )
+from services.dataset_import.service import DatasetImportService
 from services.environment_service import EnvironmentService
 from services.event_processor import EventProcessor
 from services.job_service import JobService
@@ -116,6 +118,16 @@ def get_model_service() -> ModelService:
 
 
 @lru_cache
+def get_model_metrics_service(request: HTTPConnection) -> ModelMetricsService:
+    """Provides a ModelService instance for managing models."""
+    settings = getattr(request.app.state, "settings", None)
+    if settings is None:
+        settings = get_settings()
+
+    return ModelMetricsService(settings=settings)
+
+
+@lru_cache
 def get_model_download_service() -> ModelDownloadService:
     """Provides a ModelDownloadService instance for model exports."""
     return ModelDownloadService()
@@ -125,6 +137,12 @@ def get_model_download_service() -> ModelDownloadService:
 def get_job_service() -> JobService:
     """Provides a JobService instance for managing jobs."""
     return JobService()
+
+
+@lru_cache
+def get_dataset_import_service() -> DatasetImportService:
+    """Provides a DatasetImportService instance for dataset import jobs."""
+    return DatasetImportService()
 
 
 def get_log_service(request: HTTPConnection) -> LogService:
@@ -189,13 +207,6 @@ def get_environment_id(environment_id: str) -> UUID:
     if not is_valid_uuid(environment_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid environment ID")
     return UUID(environment_id)
-
-
-def validate_uuid(uuid: str) -> UUID:
-    """Initialize and validates UUID."""
-    if not is_valid_uuid(uuid):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID")
-    return UUID(uuid)
 
 
 def get_scheduler(request: HTTPConnection) -> Scheduler:

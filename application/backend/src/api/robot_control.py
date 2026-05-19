@@ -1,3 +1,4 @@
+from src.workers.teleoperate_worker import ActionWriteState
 from fastapi.exceptions import HTTPException
 from typing import Annotated, Any
 from uuid import UUID
@@ -79,6 +80,7 @@ async def robot_websocket(
             mp_stop_event=scheduler.mp_stop_event
         )
         worker.start()
+        worker.set_action_source(ActionWriteState.FROM_LEADER)
         while True:
             async with run_at_frequency(fps):
                 action_keys = follower_client.features()

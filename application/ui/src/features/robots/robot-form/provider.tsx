@@ -17,27 +17,11 @@ export const RobotFormContext = createContext<RobotFormState>(null);
 export const SetRobotFormContext = createContext<Dispatch<SetStateAction<RobotForm>> | null>(null);
 
 export const buildRobotBodyFromForm = (robotForm: RobotForm, robot_id: string): SchemaRobotInput | null => {
-    if (!robotForm.type || !robotForm.name) {
+    if (!robotForm.type) {
         return null;
     }
 
     switch (robotForm.type) {
-        case 'Trossen_Bimanual_WidowXAI_Follower':
-        case 'Trossen_Bimanual_WidowXAI_Leader':
-            if (!robotForm.connection_string_left || !robotForm.connection_string_right) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string_left: robotForm.connection_string_left,
-                    connection_string_right: robotForm.connection_string_right,
-                    serial_number: robotForm.serial_number ?? '',
-                },
-            };
         case 'SO101_Follower':
         case 'SO101_Leader':
             if (!robotForm.serial_number) {
@@ -65,6 +49,22 @@ export const buildRobotBodyFromForm = (robotForm: RobotForm, robot_id: string): 
                 type: robotForm.type,
                 payload: {
                     connection_string: robotForm.connection_string,
+                    serial_number: robotForm.serial_number ?? '',
+                },
+            };
+        case 'Trossen_Bimanual_WidowXAI_Follower':
+        case 'Trossen_Bimanual_WidowXAI_Leader':
+            if (!robotForm.connection_string_left || !robotForm.connection_string_right) {
+                return null;
+            }
+
+            return {
+                id: robot_id,
+                name: robotForm.name,
+                type: robotForm.type,
+                payload: {
+                    connection_string_left: robotForm.connection_string_left,
+                    connection_string_right: robotForm.connection_string_right,
                     serial_number: robotForm.serial_number ?? '',
                 },
             };
