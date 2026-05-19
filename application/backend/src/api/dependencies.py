@@ -214,10 +214,6 @@ def get_scheduler(request: HTTPConnection) -> Scheduler:
     return request.app.state.scheduler
 
 
-def get_scheduler_ws(request: HTTPConnection) -> Scheduler:
-    """Provide the global Scheduler instance for WebSocket."""
-    return request.app.state.scheduler
-
 SchedulerDep = Annotated[Scheduler, Depends(get_scheduler)]
 
 def get_event_processor_ws(request: HTTPConnection) -> EventProcessor:

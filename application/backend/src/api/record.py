@@ -1,19 +1,18 @@
-from workers.base import run_at_frequency
-from starlette.websockets import WebSocketDisconnect
 import asyncio
-import multiprocessing as mp
 from queue import Empty
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket
 from fastapi.responses import Response
 from loguru import logger
+from starlette.websockets import WebSocketDisconnect
 
-from api.dependencies import RobotCalibrationServiceDep, RobotConnectionManagerDep, get_scheduler_ws
+from api.dependencies import RobotCalibrationServiceDep, RobotConnectionManagerDep, get_scheduler
 from core.scheduler import Scheduler
 from robots.robot_client_factory import RobotClientFactory
 from schemas import Dataset, Model
 from schemas.environment import EnvironmentWithRelations
+from workers.base import run_at_frequency
 from workers.robot_control_worker import RobotControlOrchestrator
 
 router = APIRouter(prefix="/api/record")
@@ -95,7 +94,7 @@ async def robot_control_websocket(
     websocket: WebSocket,
     robot_manager: RobotConnectionManagerDep,
     calibration_service: RobotCalibrationServiceDep,
-    scheduler: Annotated[Scheduler, Depends(get_scheduler_ws)],
+    scheduler: Annotated[Scheduler, Depends(get_scheduler)],
 ):
     await websocket.accept()
     queue = asyncio.Queue()
@@ -122,45 +121,3 @@ async def robot_control_websocket(
             task.cancel()
     finally:
         robot_control.stop()
-#
-# TODO: Implement
-#@router.websocket("/robot_control/ws")
-#async def robot_control_websocket(
-#    websocket: WebSocket,
-#    robot_manager: RobotConnectionManagerDep,
-#    calibration_service: RobotCalibrationServiceDep,
-#    scheduler: Annotated[Scheduler, Depends(get_scheduler_ws)],
-#    worker_pool: WorkerPoolDep,
-#) -> None:
-#    """Robot control websocket."""
-#    await websocket.accept()
-#    queue: mp.Queue = mp.Queue()
-#    process = RobotControlWorker(
-#        stop_event=scheduler.mp_stop_event,
-#        robot_client_factory=RobotClientFactory(
-#            robot_manager=robot_manager,
-#            calibration_service=calibration_service,
-#        ),
-#        queue=queue,
-#        model_worker_registry=model_registry,
-#        teleoperate_worker_registry=teleoperate_registry
-#    )
-#    process.start()
-#
-#    incoming_task = asyncio.create_task(handle_incoming(websocket, process))
-#    outgoing_task = asyncio.create_task(handle_outgoing(websocket, queue))
-#
-#    _, pending = await asyncio.wait(
-#        {incoming_task, outgoing_task},
-#        return_when=asyncio.FIRST_COMPLETED,
-#    )
-#
-#    for task in pending:
-#        task.cancel()
-#
-#    if process is not None:
-#        process.disconnect()
-#        process.join(10)
-#
-#    queue.close()
-#    logger.info("websocket handling done...")
