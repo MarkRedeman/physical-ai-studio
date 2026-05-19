@@ -22,6 +22,7 @@ class TeleoperateWorker(BaseProcessWorker):
                  mp_stop_event: EventClass):
         buffer_length = len(follower.features())
         self.loaded_event = mp.Event()
+        self.action_write_state = mp.Event() #decides if reading actions
         self._output_actions = mp.Array(ctypes.c_double, buffer_length)
         self._output_state = mp.Array(ctypes.c_double, buffer_length)
         super().__init__(
@@ -66,10 +67,14 @@ class TeleoperateWorker(BaseProcessWorker):
                 async with run_at_frequency(self.frequency):
                     state = (self.follower.read_state())["state"]
                     self._set_state([state[key] for key in features])
-                    if self.leader is not None:
+                    if self.action_write_state.is_set() and self.leader is not None:
                         actions = (self.leader.read_state())["state"]
                         self.follower.set_joints_state(actions, goal_time * 3)
                         self._set_actions([actions[key] for key in features])
+                    else:
+                        raw_actions = self.get_actions()
+                        actions = {i: raw_actions[k] for k, i in enumerate(features)}
+                        self.follower.set_joints_state(actions, goal_time * 3)
         finally:
             logger.info("Teleoperating stopped, disconnecting robots.")
             if self.leader:

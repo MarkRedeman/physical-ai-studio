@@ -261,6 +261,9 @@ class ModelIntegration(BaseProcessWorker):
         self.model_integration = None
         self.is_running = False
         self.fps = 30 #TODO FPS
+        self._task_buf = mp.Array("c", 256)  # shared task string
+        self._start_task_event = mp.Event()
+        self._stop_task_event = mp.Event()
 
     async def setup(self) -> None:
         async_worker = AsyncModelWorker()
@@ -270,25 +273,60 @@ class ModelIntegration(BaseProcessWorker):
         await self.model_integration.setup()
         self.loaded_event.set()
 
+    def start_task(self, task: str) -> None:
+        self._task_buf.get_obj().value = task.encode("utf-8")[:255]
+        self._start_task_event.set()
+
+    def stop_task(self) -> None:
+        self._stop_task_event.set()
+
     async def run_loop(self):
         while not self.should_stop():
             async with run_at_frequency(self.fps):
+                await asyncio.gather(
+                    self._handle_start_task(),
+                    self._handle_stop_task(),
+                )
+
                 if self.model_integration and self.is_running:
                     obs = get_observation_from_manifest(self.data_manifest)
                     observation = format_observation_for_model(obs, self.data_manifest)
                     action = self.model_integration.select_action(observation)
                     if action is not None:
-                        print(action)
-                        #self.data_manifest.robot.actions.get_obj()[:] = action
+                        #print(action)
+                        self.data_manifest.robot.actions.get_obj()[:] = action
                         #actions = dict(zip(self.environment_integration.action_keys, action))
                         #report_observation["actions"] = actions
                         #await self.environment_integration.set_joints_state(actions, goal_time)
 
-    async def teardown(self):
+    def get_task(self) -> str:
+        return bytes(self._task_buf.get_obj()).rstrip(b"\x00").decode()
+
+    async def teardown(self) -> None:
         if self.model_integration:
             self.model_integration.teardown()
 
+    async def _handle_start_task(self) -> None:
+        if self._start_task_event.is_set():
+            self._start_task_event.clear()
+            self.is_running = True
+            self.event_queue.put_nowait(
+                {
+                    "event": "start_task",
+                    "state": {"is_running": True},
+                }
+            )
 
+    async def _handle_stop_task(self) -> None:
+        if self._stop_task_event.is_set():
+            self._stop_task_event.clear()
+            self.is_running = False
+            self.event_queue.put_nowait(
+                {
+                    "event": "stop_task",
+                    "state": {"is_running": False},
+                }
+            )
 
 
 class EnvironmentIntegration:
@@ -409,6 +447,12 @@ class RobotControlOrchestrator(BaseThreadWorker):
         if event["event"] == "discard_episode":
             self.state.is_recording = event["state"]["is_recording"]
             self._report_state()
+        if event["event"] == "start_task":
+            self.state.follower_source = "model" if event["state"]["is_running"] else "teleoperation"
+            self._report_state()
+        if event["event"] == "stop_task":
+            self.state.follower_source = "model" if event["state"]["is_running"] else "teleoperation"
+            self._report_state()
 
     async def load_environment(self, environment: EnvironmentWithRelations) -> None:
         """Load environment with cameras and robots."""
@@ -484,9 +528,13 @@ class RobotControlOrchestrator(BaseThreadWorker):
 
     def start_task(self, task: str) -> None:
         """Start task on model."""
+        if self.model:
+            self.model.start_task(task)
 
     def stop_task(self) -> None:
         """Stop executing actions from model."""
+        if self.model:
+            self.model.stop_task()
 
     def set_follower_source(self, follower_source: Literal["model", "teleoperation"] | None) -> None:
         """Sets teleoperation loop to follow either model or teleoperator."""
@@ -496,6 +544,9 @@ class RobotControlOrchestrator(BaseThreadWorker):
             self.environment.teardown()
         if self.recording:
             self.recording.stop()
+        if self.model:
+            self.model.stop()
+
         self.event_queue.close()
 
     def get_observation(self) -> dict | None:

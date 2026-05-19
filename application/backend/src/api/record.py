@@ -45,11 +45,10 @@ async def handle_incoming(websocket: WebSocket, robot_control: RobotControlOrche
                     robot_control.save_episode()
                 case "discard_episode":
                     robot_control.discard_episode()
-                #case "start_task":
-                #    robot_control.start_task(payload["task"])
-                #case "stop_task":
-                #    robot_control.stop()
-                #    break
+                case "start_task":
+                    robot_control.start_task(payload["task"])
+                case "stop_task":
+                    robot_control.stop_task()
             await asyncio.sleep(0.005)
     except WebSocketDisconnect:
         pass

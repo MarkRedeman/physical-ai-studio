@@ -201,7 +201,7 @@ export const RobotControlProvider = (props: useRobotControlProps) => {
         mutationFn: async () =>
             await sendJsonMessageAndWait<RobotControlApiJsonResponse<RobotControlState>>(
                 { event: 'stop_task', data: {} },
-                ({ data }) => data['follower_source'] === null
+                ({ data }) => data['follower_source'] !== 'model'
             ),
     });
 
