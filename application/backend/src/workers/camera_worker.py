@@ -38,7 +38,7 @@ class CameraWorker(BaseProcessWorker):
     ):
         super().__init__(stop_event=mp_stop_event, queues_to_cancel=[])
         self.loaded_event = Event()
-        self._width = config.payload.width or 640
+        self._width = config.payload.width or 640 # TODO explicitly add width, height to ip camera
         self._height = config.payload.height or 480
         self._frame_data = Array(ctypes.c_uint8, self._width * self._height * 3)
         self.config = config

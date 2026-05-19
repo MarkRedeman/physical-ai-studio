@@ -44,6 +44,8 @@ async def run_at_frequency(frequency: float) -> AsyncGenerator[None]:
     sleep_time = target_dt - elapsed
     if sleep_time > 0:
         await asyncio.sleep(sleep_time)
+    else:
+        await asyncio.sleep(0)
 
 
 

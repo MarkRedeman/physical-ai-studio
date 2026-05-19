@@ -1,10 +1,10 @@
-from src.workers.base import BaseProcessWorker
+from workers.base import BaseProcessWorker, run_at_frequency
 import base64
 import cv2
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+import numpy as np
 import asyncio
-from collections.abc import Callable
 from dataclasses import dataclass, field
+import multiprocessing as mp
 from multiprocessing.synchronize import Event as EventClass
 from typing import Any, Literal
 
@@ -71,25 +71,154 @@ def build_lerobot_dataset_features(manifest: EnvironmentDataManifest, use_videos
         ),
     )
 
-def get_observation_from_manifest(manifest: EnvironmentDataManifest, timestamp: float = 0):
-    raw_actions = list(manifest.robot.actions.get_obj())
-    actions = {i: raw_actions[k] for k,i in enumerate(manifest.robot.features)}
-    raw_state = list(manifest.robot.state.get_obj())
-    state = {i: raw_state[k] for k,i in enumerate(manifest.robot.features)}
+def get_observation_from_manifest(manifest: EnvironmentDataManifest, timestamp: float = 0) -> dict:
+    """Lightweight read-only get data from environments SharedMemory."""
+    actions = list(manifest.robot.actions.get_obj())
+    state = list(manifest.robot.state.get_obj())
 
     camera_images = {}
     for camera in manifest.cameras:
         frame = CameraWorker.frame_from_buffer(camera.frame_data.get_obj(), camera.width, camera.height)
+        camera_images[camera.id] = frame
+
+    return {
+        "state": state,
+        "action": actions,
+        "images": camera_images,
+        "timestamp": timestamp,
+    }
+
+def format_observation_for_dataset(observation: dict, manifest: EnvironmentDataManifest) -> tuple[dict, dict]:
+    """Format observation for input of a dataset."""
+    result = {i: observation["state"][k] for k,i in enumerate(manifest.robot.features)}
+    actions = {i: observation["action"][k] for k,i in enumerate(manifest.robot.features)}
+    for camera in manifest.cameras:
+        camera_name = camera.name.lower()
+        # RGB2BGR
+        result[camera_name] = np.ascontiguousarray(observation["images"][camera.id][..., ::-1])
+
+
+    return result, actions
+
+def format_observation_for_reporting(observation: dict, manifest: EnvironmentDataManifest) -> dict:
+    """Format observation for UI."""
+    actions = {i: observation["action"][k] for k,i in enumerate(manifest.robot.features)}
+    state = {i: observation["state"][k] for k,i in enumerate(manifest.robot.features)}
+    camera_images = {}
+    for camera in manifest.cameras:
+        frame = observation["images"][camera.id]
         _, imagebytes = cv2.imencode(".jpg", frame)
         camera_images[camera.id] = base64.b64encode(imagebytes).decode()
-        #TODO  dont convert to jpg just yet, jsut for reporting
 
     return {
         "state": state,
         "actions": actions,
         "cameras": camera_images,
-        "timestamp": timestamp,
+        "timestamp": observation["timestamp"],
     }
+
+
+class RecordingWorker(BaseProcessWorker):
+    def __init__(self, dataset: Dataset, data_manifest: EnvironmentDataManifest, mp_terminate_event: EventClass):
+        super().__init__(stop_event=mp_terminate_event, queues_to_cancel=[])
+        self.loaded_event = mp.Event()
+        #self.start_episode_event = TwoWayEvent()
+        #self.save_episode_event = TwoWayEvent()
+        #self.discard_episode_event = TwoWayEvent()
+        self.dataset_config = dataset
+        self.data_manifest = data_manifest
+        self.fps = 50
+        self._start_event = mp.Event()
+        self._start_ack = mp.Event()
+        self._save_event = mp.Event()
+        self._save_ack = mp.Event()
+        self._discard_event = mp.Event()
+        self._discard_ack = mp.Event()
+        self._task_buf = mp.Array('c', 256)        # shared task string
+        self._is_recording = mp.Value('b', False)
+        self._episodes_recorded = mp.Value('i', 0)
+
+    def get_state(self) -> dict:
+        return {
+            "is_recording": self._is_recording.value,
+            "episodes_recorded": self._episodes_recorded.value,
+            "task": self.get_task(),
+        }
+
+    async def start_episode(self, task: str) -> None:
+        self._start_ack.clear()
+        self._task_buf.get_obj().value = task.encode('utf-8')[:255]
+        self._start_event.set()
+        await asyncio.to_thread(self._start_ack.wait)
+
+    async def save_episode(self) -> None:
+        self._save_ack.clear()
+        self._save_event.set()
+        await asyncio.to_thread(self._save_ack.wait)
+
+    async def discard_episode(self) -> None:
+        self._discard_ack.clear()
+        self._discard_event.set()
+        await asyncio.to_thread(self._discard_ack.wait)
+
+    async def setup(self) -> None:
+        from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+
+        self.dataset = InternalLeRobotDataset(Path(self.dataset_config.path))
+        features = build_lerobot_dataset_features(self.data_manifest)
+        self.recording_mutation = self.dataset.start_recording_mutation(
+            fps=RECORDING_FPS,
+            features=features,
+            robot_type=self.data_manifest.robot.type,
+        )
+        self.loaded_event.set()
+
+    async def run_loop(self) -> None:
+        while not self.should_stop():
+            async with run_at_frequency(self.fps):
+                await asyncio.gather(
+                    self._handle_start_recording(),
+                    self._handle_save_episode(),
+                    self._handle_discard_episode(),
+                )
+
+                if self._is_recording.value:
+                    obs = get_observation_from_manifest(self.data_manifest)
+                    dataset_observation, actions = format_observation_for_dataset(obs, self.data_manifest)
+                    self.recording_mutation.add_frame(dataset_observation, actions, self.get_task())
+
+    async def teardown(self) -> None:
+        if self.recording_mutation:
+            self.recording_mutation.teardown()
+
+    def get_task(self) -> str:
+        return bytes(self._task_buf.get_obj()).rstrip(b"\x00").decode()
+
+    async def _handle_start_recording(self) -> None:
+        if self._start_event.is_set():
+            #say(f"Start episode {self.state.episodes_recorded + 1}")
+            print("Start recording")
+            self._is_recording.value = True
+            self._start_event.clear()
+            self._start_ack.set()
+
+    async def _handle_save_episode(self) -> None:
+        if self._save_event.is_set():
+            #say(f"Saving episode {self.state.episodes_recorded + 1}")
+            self._save_event.clear()
+            self.recording_mutation.save_episode()
+            self._is_recording.value = False
+            self._episodes_recorded.value += 1
+            self._save_ack.set()
+
+    async def _handle_discard_episode(self) -> None:
+        if self._discard_event.is_set():
+            #say("Discard episode")
+            self._discard_event.clear()
+            self.recording_mutation.discard_buffer()
+            self._is_recording.value = False
+            self._discard_ack.set()
+
 
 
 class EnvironmentIntegration:
@@ -165,7 +294,7 @@ RECORDING_FPS = 30
 
 class RobotControlOrchestrator:
     environment: EnvironmentIntegration | None = None
-    dataset: InternalLeRobotDataset | None = None
+    recording: RecordingWorker | None = None
 
     def __init__(self,
         message_queue: asyncio.Queue,
@@ -193,17 +322,18 @@ class RobotControlOrchestrator:
         finally:
             self._report_state()
 
-    def load_dataset(self, dataset: Dataset) -> None:
+    async def load_dataset(self, dataset: Dataset) -> None:
         """Load dataset and setup recording."""
         if self.environment and self.environment.manifest:
             try:
-                self.dataset = InternalLeRobotDataset(Path(dataset.path))
-                features = build_lerobot_dataset_features(self.environment.manifest)
-                self.recording_mutation = self.dataset.start_recording_mutation(
-                    fps=RECORDING_FPS,
-                    features=features,
-                    robot_type=self.environment.manifest.robot.type,
+                worker = RecordingWorker(
+                    dataset,
+                    self.environment.manifest,
+                    self._mp_terminate_event
                 )
+                worker.start()
+                await asyncio.to_thread(worker.loaded_event.wait)
+                self.recording = worker
                 self.state.dataset_loaded = True
             except Exception as e:
                 self._report_error("dataset", e)
@@ -213,13 +343,36 @@ class RobotControlOrchestrator:
             self._report_error("dataset", ValueError("Cannot load dataset without environment."))
 
 
-    def load_model(self, model: Model) -> None:
+    def load_model(self, model: Model, backend: str) -> None:
         """Load model for inference."""
 
-    def start_recording(self, task: str) -> None:
+    async def start_recording(self, task: str) -> None:
         """Start recording of specified task."""
+        print(f"start recording... recording ready? {self.recording is not None}")
+        if self.recording:
+            await self.recording.start_episode(task)
+            recording_state = self.recording.get_state()
+            self.state.is_recording = recording_state["is_recording"]
+            print(self.state)
+            self._report_state()
 
-    def start_task(self, task: str) -> None:
+    async def save_episode(self) -> None:
+        """Save recording."""
+        if self.recording:
+            await self.recording.save_episode()
+            recording_state = self.recording.get_state()
+            self.state.is_recording = recording_state["is_recording"]
+            self._report_state()
+
+    async def discard_episode(self) -> None:
+        """Discard episode."""
+        if self.recording:
+            await self.recording.discard_episode()
+            recording_state = self.recording.get_state()
+            self.state.is_recording = recording_state["is_recording"]
+            self._report_state()
+
+    async def start_task(self, task: str) -> None:
         """Start task on model."""
 
     def stop_task(self) -> None:
@@ -231,10 +384,13 @@ class RobotControlOrchestrator:
     def teardown(self) -> None:
         if self.environment:
             self.environment.teardown()
+        if self.recording:
+            self.recording.stop()
 
     def get_observation(self) -> dict | None:
         if self.environment and self.environment.manifest:
-            return get_observation_from_manifest(self.environment.manifest)
+            obs = get_observation_from_manifest(self.environment.manifest)
+            return format_observation_for_reporting(obs, self.environment.manifest)
         return None
 
     def _report_state(self):

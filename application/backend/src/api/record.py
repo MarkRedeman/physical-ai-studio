@@ -36,15 +36,15 @@ async def handle_incoming(websocket: WebSocket, robot_control: RobotControlOrche
                 case "load_model":
                     robot_control.load_model(Model.model_validate(payload["model"]), payload["backend"])
                 case "load_dataset":
-                    robot_control.load_dataset(Dataset.model_validate(payload["dataset"]))
+                    await robot_control.load_dataset(Dataset.model_validate(payload["dataset"]))
                 case "set_follower_source":
                     robot_control.set_follower_source(payload["follower_source"])
                 case "start_recording":
-                    robot_control.start_recording(payload["task"])
-                #case "save_episode":
-                #    robot_control.save_episode()
-                #case "discard_episode":
-                #    robot_control.discard_episode()
+                    await robot_control.start_recording(payload["task"])
+                case "save_episode":
+                    await robot_control.save_episode()
+                case "discard_episode":
+                    await robot_control.discard_episode()
                 #case "start_task":
                 #    robot_control.start_task(payload["task"])
                 #case "stop_task":

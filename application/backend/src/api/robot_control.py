@@ -57,7 +57,6 @@ async def robot_websocket(
     """
     await websocket.accept()
     settings = await websocket.receive_json("text")
-    print(settings)
     follower_id = get_robot_id(settings["follower_id"])
     robot_client_factory = RobotClientFactory(robot_manager, calibration_service)
     follower = await robot_service.get_robot_by_id(project_id, follower_id)

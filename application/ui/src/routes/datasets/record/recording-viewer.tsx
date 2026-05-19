@@ -63,8 +63,8 @@ export const RecordingViewer = () => {
                     <ProgressCircle marginStart='size-200' size='S' isIndeterminate alignSelf={'center'} />
                 </Heading>
                 <Flex direction='column' margin='size-200'>
-                    <StatusLight variant={state.dataset_loaded ? 'positive' : 'yellow'}>Dataset</StatusLight>
                     <StatusLight variant={state.environment_loaded ? 'positive' : 'yellow'}>Environment</StatusLight>
+                    <StatusLight variant={state.dataset_loaded ? 'positive' : 'yellow'}>Dataset</StatusLight>
                 </Flex>
                 <Button
                     variant={'secondary'}
