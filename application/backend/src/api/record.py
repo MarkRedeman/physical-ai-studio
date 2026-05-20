@@ -13,7 +13,7 @@ from robots.robot_client_factory import RobotClientFactory
 from schemas import Dataset, Model
 from schemas.environment import EnvironmentWithRelations
 from workers.base import run_at_frequency
-from workers.robot_control_worker import RobotControlOrchestrator
+from workers.robot_control_orchestrator_worker import RobotControlOrchestrator
 
 router = APIRouter(prefix="/api/record")
 
@@ -95,7 +95,8 @@ async def robot_control_websocket(
     robot_manager: RobotConnectionManagerDep,
     calibration_service: RobotCalibrationServiceDep,
     scheduler: Annotated[Scheduler, Depends(get_scheduler)],
-):
+) -> None:
+    """Control robots, record datasets and run inference."""
     await websocket.accept()
     queue = asyncio.Queue()
     robot_control = RobotControlOrchestrator(
