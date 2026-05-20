@@ -19,7 +19,6 @@ class RobotManifestEntry:
     features: list[str]
     state: Any  # mp.Array[c_double], shared with TeleoperateWorker
     actions: Any  # mp.Array[c_double], shared with TeleoperateWorker
-    has_action_value: Any  # mp.Event, shared with TeleoperateWorker
 
 
 @dataclass

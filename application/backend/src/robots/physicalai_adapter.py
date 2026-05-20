@@ -31,6 +31,7 @@ class PhysicalAIRobotAdapter(RobotClient):
         *,
         robot: Robot,
         robot_type: RobotType,
+        home_position: list[float],
         config: PhysicalAIRobotAdapterConfig | None = None,
     ) -> None:
         resolved_config = config or PhysicalAIRobotAdapterConfig()
@@ -38,6 +39,7 @@ class PhysicalAIRobotAdapter(RobotClient):
         self._robot_type = robot_type
         self._config = resolved_config
         self._robot_lock = asyncio.Lock()
+        self.home_position = home_position
         self.is_controlled = False
 
     def _is_follower(self) -> bool:

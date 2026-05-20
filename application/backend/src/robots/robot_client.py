@@ -8,6 +8,7 @@ class RobotClient(ABC):
     """Abstract interface for robot communication (commands only)."""
 
     name: str
+    home_position: list[float]
 
     @property
     @abstractmethod

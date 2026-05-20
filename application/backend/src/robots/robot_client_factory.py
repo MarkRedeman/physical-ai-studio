@@ -2,6 +2,7 @@ from typing import Literal
 
 from physicalai.robot.so101 import SO101, SO101Calibration
 from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
+from physicalai.robot.trossen.constants import HOME_POSITION as WIDOWXAI_HOME_POSITION
 
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
@@ -31,6 +32,7 @@ class RobotClientFactory:
                 return PhysicalAIRobotAdapter(
                     robot=robot_driver,
                     robot_type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
+                    home_position=list(WIDOWXAI_HOME_POSITION),
                     config=PhysicalAIRobotAdapterConfig(
                         include_velocities=True,
                         goal_time_scale=1.0,
@@ -42,6 +44,7 @@ class RobotClientFactory:
                 return PhysicalAIRobotAdapter(
                     robot=robot_driver,
                     robot_type=RobotType.TROSSEN_WIDOWXAI_LEADER,
+                    home_position=list(WIDOWXAI_HOME_POSITION),
                     config=PhysicalAIRobotAdapterConfig(
                         include_velocities=True,
                         goal_time_scale=1.0,
@@ -74,6 +77,7 @@ class RobotClientFactory:
         return PhysicalAIRobotAdapter(
             robot=bimanual_robot,
             robot_type=robot_type,
+            home_position=list(WIDOWXAI_HOME_POSITION),
             config=PhysicalAIRobotAdapterConfig(
                 include_velocities=True,
                 goal_time_scale=1.0,
@@ -105,10 +109,12 @@ class RobotClientFactory:
             }
         )
 
+        so101_home_position = [0, -90, 90, 50, 0, 45]
         so101 = SO101(port=port, calibration=so101_cal, role=role, unit="normalized")
         return PhysicalAIRobotAdapter(
             robot=so101,
             robot_type=robot.type,
+            home_position=so101_home_position,
             config=PhysicalAIRobotAdapterConfig(
                 include_velocities=False,
                 goal_time_scale=1.0,

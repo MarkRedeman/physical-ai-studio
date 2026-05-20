@@ -73,7 +73,6 @@ class ModelIntegration(BaseProcessWorker):
                     action = self.model_integration.select_action(observation)
                     if action is not None:
                         self.data_manifest.robot.actions.get_obj()[:] = action
-                        self.data_manifest.robot.has_action_value.set()
 
     def get_task(self) -> str:
         return bytes(self._task_buf.get_obj()).rstrip(b"\x00").decode()
