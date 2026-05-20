@@ -47,6 +47,7 @@ class EnvironmentIntegration:
                 state=teleoperate_worker._output_state,
                 actions=teleoperate_worker._output_actions,
                 action_source=teleoperate_worker._action_source,
+                has_action_value=teleoperate_worker._has_action_value,
             )
 
             camera_entries = []

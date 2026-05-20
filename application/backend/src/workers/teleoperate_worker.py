@@ -3,6 +3,7 @@ import asyncio
 import enum
 import multiprocessing as mp
 from multiprocessing.synchronize import Event as EventClass
+from typing import Any
 
 from loguru import logger
 
@@ -22,6 +23,10 @@ class TeleoperateWorker(BaseProcessWorker):
 
     leader: RobotClient | None
     stop_event: EventClass
+    _action_source: Any
+    _output_actions: Any
+    _output_state: Any
+    _has_action_value: Any
 
     def __init__(self,
                  follower: RobotClient,
@@ -33,6 +38,7 @@ class TeleoperateWorker(BaseProcessWorker):
         self._action_source = mp.Value(ctypes.c_int, ActionWriteState.NONE)
         self._output_actions = mp.Array(ctypes.c_double, buffer_length)
         self._output_state = mp.Array(ctypes.c_double, buffer_length)
+        self._has_action_value = mp.Event()
         super().__init__(
             stop_event=mp_stop_event,
             queues_to_cancel=[],
@@ -56,6 +62,7 @@ class TeleoperateWorker(BaseProcessWorker):
     def _set_actions(self, data: list[float]) -> None:
         with self._output_actions.get_lock():
             self._output_actions.get_obj()[:] = data
+        self._has_action_value.set()
 
     def get_action_source(self) -> int:
         return self._action_source.value
@@ -86,7 +93,7 @@ class TeleoperateWorker(BaseProcessWorker):
                         actions = (self.leader.read_state())["state"]
                         self.follower.set_joints_state(actions, goal_time * 2)
                         self._set_actions([actions[key] for key in features])
-                    elif self.get_action_source() == ActionWriteState.FROM_ACTIONS:
+                    elif self.get_action_source() == ActionWriteState.FROM_ACTIONS and self._has_action_value.is_set():
                         raw_actions = self.get_actions()
                         actions = {i: raw_actions[k] for k, i in enumerate(features)}
                         self.follower.set_joints_state(actions, goal_time * 2)
