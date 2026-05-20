@@ -14,7 +14,8 @@ from robots.robot_client_factory import RobotClientFactory
 from schemas.dataset import Dataset
 from schemas.environment import EnvironmentWithRelations, TeleoperatorRobotWithRobot
 from schemas.model import Model
-from workers.async_model_worker import AsyncModelWorker
+from workers.remote_model_worker import RemoteModelWorker
+from workers.model_worker import ModelWorker
 from workers.base import BaseProcessWorker, BaseThreadWorker, run_at_frequency
 from workers.camera_worker import CameraWorker
 from workers.teleoperate_worker import TeleoperateWorker
@@ -244,6 +245,9 @@ class RecordingWorker(BaseProcessWorker):
 
 class ModelIntegration(BaseProcessWorker):
     ROLE="ModelIntegrationWorker"
+
+    _child_workers: list[BaseProcessWorker] = []
+
     def __init__(
             self,
             model: Model,
@@ -267,11 +271,16 @@ class ModelIntegration(BaseProcessWorker):
 
     async def setup(self) -> None:
         from control.sync_mixed_model_integration import SyncMixedModelIntegration
-
-        async_worker = AsyncModelWorker()
-        async_worker.connect()
-        async_worker.load_model(self.model, self.backend)
-        self.model_integration = SyncMixedModelIntegration(model_worker=async_worker, fps=self.fps)
+        try:
+            remote_worker = RemoteModelWorker()
+            remote_worker.connect()
+            remote_worker.load_model(self.model, self.backend)
+            self.model_integration = SyncMixedModelIntegration(model_worker=remote_worker, fps=self.fps)
+        except ConnectionRefusedError:
+            model_worker = ModelWorker(self.model, self.backend, stop_event=self._interrupt_event)
+            self.model_integration = SyncMixedModelIntegration(model_worker=model_worker, fps=self.fps)
+            model_worker.start()
+            self._child_workers.append(model_worker)
         await self.model_integration.setup()
         self.loaded_event.set()
 
@@ -295,18 +304,18 @@ class ModelIntegration(BaseProcessWorker):
                     observation = format_observation_for_model(obs, self.data_manifest)
                     action = self.model_integration.select_action(observation)
                     if action is not None:
-                        #print(action)
                         self.data_manifest.robot.actions.get_obj()[:] = action
-                        #actions = dict(zip(self.environment_integration.action_keys, action))
-                        #report_observation["actions"] = actions
-                        #await self.environment_integration.set_joints_state(actions, goal_time)
 
     def get_task(self) -> str:
         return bytes(self._task_buf.get_obj()).rstrip(b"\x00").decode()
 
     async def teardown(self) -> None:
+        for worker in self._child_workers:
+            worker.stop()
+
         if self.model_integration:
             self.model_integration.teardown()
+
 
     async def _handle_start_task(self) -> None:
         if self._start_task_event.is_set():

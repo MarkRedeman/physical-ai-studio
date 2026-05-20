@@ -1,4 +1,4 @@
-from workers.async_model_worker import AsyncModelWorker
+from workers.remote_model_worker import RemoteModelWorker
 from physicalai.data import Observation
 
 from control.inference_poller import InferencePoller
@@ -7,13 +7,13 @@ from workers.model_worker import ModelWorker
 
 
 class SyncMixedModelIntegration:
-    model_worker: ModelWorker | AsyncModelWorker
+    model_worker: ModelWorker | RemoteModelWorker
     queue_mixer: QueueMixer
     inference_poller: InferencePoller
     fps: int
     use_synchronous: bool = True
 
-    def __init__(self, model_worker: ModelWorker | AsyncModelWorker, fps: int):
+    def __init__(self, model_worker: ModelWorker | RemoteModelWorker, fps: int):
         self.model_worker = model_worker
         self.fps = fps
 
