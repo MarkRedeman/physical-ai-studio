@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 
 
 MODULE = "workers.training_worker"
+PHYSICALAI_TRAIN = "physicalai.train"
+PHYSICALAI_DATA = "physicalai.data"
+LIGHTNING_LOGGERS = "lightning.pytorch.loggers"
+LIGHTNING_CALLBACKS = "lightning.pytorch.callbacks"
+MODELS_UTILS = "models.utils"
+TRAINING_UTILS = "workers.training.utils"
 
 
 # ---------------------------------------------------------------------------
@@ -146,17 +152,17 @@ class TestTraining:
         failed_job.status = JobStatus.FAILED
 
         with (
-            patch(f"{MODULE}.setup_policy", return_value=policy) as mock_setup,
-            patch(f"{MODULE}.Trainer", return_value=trainer),
+            patch(f"{MODELS_UTILS}.setup_policy", return_value=policy) as mock_setup,
+            patch(f"{PHYSICALAI_TRAIN}.Trainer", return_value=trainer),
             patch(f"{MODULE}.JobService") as MockJobService,
             patch(f"{MODULE}.ModelService"),
-            patch(f"{MODULE}.LeRobotDataModule"),
+            patch(f"{PHYSICALAI_DATA}.LeRobotDataModule"),
             patch(f"{MODULE}.get_settings", return_value=_make_settings(tmp_path)),
-            patch(f"{MODULE}.CSVLogger"),
-            patch(f"{MODULE}.ModelCheckpoint"),
-            patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
-            patch(f"{MODULE}.TrainingTrackingCallback"),
-            patch(f"{MODULE}.TrainingLogCallback"),
+            patch(f"{LIGHTNING_LOGGERS}.CSVLogger"),
+            patch(f"{LIGHTNING_CALLBACKS}.ModelCheckpoint"),
+            patch(f"{TRAINING_UTILS}.TrainingTrackingDispatcher") as MockDispatcher,
+            patch(f"{TRAINING_UTILS}.TrainingTrackingCallback"),
+            patch(f"{TRAINING_UTILS}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
         ):
@@ -193,17 +199,17 @@ class TestTraining:
         completed_job.status = JobStatus.COMPLETED
 
         with (
-            patch(f"{MODULE}.setup_policy", return_value=policy) as mock_setup,
-            patch(f"{MODULE}.Trainer", return_value=trainer),
+            patch(f"{MODELS_UTILS}.setup_policy", return_value=policy) as mock_setup,
+            patch(f"{PHYSICALAI_TRAIN}.Trainer", return_value=trainer),
             patch(f"{MODULE}.JobService") as MockJobService,
             patch(f"{MODULE}.ModelService") as MockModelService,
-            patch(f"{MODULE}.LeRobotDataModule"),
+            patch(f"{PHYSICALAI_DATA}.LeRobotDataModule"),
             patch(f"{MODULE}.get_settings", return_value=_make_settings(tmp_path)),
-            patch(f"{MODULE}.CSVLogger"),
-            patch(f"{MODULE}.ModelCheckpoint"),
-            patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
-            patch(f"{MODULE}.TrainingTrackingCallback"),
-            patch(f"{MODULE}.TrainingLogCallback"),
+            patch(f"{LIGHTNING_LOGGERS}.CSVLogger"),
+            patch(f"{LIGHTNING_CALLBACKS}.ModelCheckpoint"),
+            patch(f"{TRAINING_UTILS}.TrainingTrackingDispatcher") as MockDispatcher,
+            patch(f"{TRAINING_UTILS}.TrainingTrackingCallback"),
+            patch(f"{TRAINING_UTILS}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
             patch(f"{MODULE}.shutil.move", return_value=model.path),
@@ -237,17 +243,17 @@ class TestTraining:
         policy = MagicMock()
 
         with (
-            patch(f"{MODULE}.setup_policy", return_value=policy),
-            patch(f"{MODULE}.Trainer") as MockTrainer,
+            patch(f"{MODELS_UTILS}.setup_policy", return_value=policy),
+            patch(f"{PHYSICALAI_TRAIN}.Trainer") as MockTrainer,
             patch(f"{MODULE}.JobService") as MockJobService,
             patch(f"{MODULE}.ModelService") as MockModelService,
-            patch(f"{MODULE}.LeRobotDataModule"),
+            patch(f"{PHYSICALAI_DATA}.LeRobotDataModule"),
             patch(f"{MODULE}.get_settings", return_value=_make_settings(tmp_path)),
-            patch(f"{MODULE}.CSVLogger"),
-            patch(f"{MODULE}.ModelCheckpoint"),
-            patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
-            patch(f"{MODULE}.TrainingTrackingCallback"),
-            patch(f"{MODULE}.TrainingLogCallback"),
+            patch(f"{LIGHTNING_LOGGERS}.CSVLogger"),
+            patch(f"{LIGHTNING_CALLBACKS}.ModelCheckpoint"),
+            patch(f"{TRAINING_UTILS}.TrainingTrackingDispatcher") as MockDispatcher,
+            patch(f"{TRAINING_UTILS}.TrainingTrackingCallback"),
+            patch(f"{TRAINING_UTILS}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
         ):
@@ -279,17 +285,17 @@ class TestTraining:
         policy = MagicMock()
 
         with (
-            patch(f"{MODULE}.setup_policy", return_value=policy),
-            patch(f"{MODULE}.Trainer") as MockTrainer,
+            patch(f"{MODELS_UTILS}.setup_policy", return_value=policy),
+            patch(f"{PHYSICALAI_TRAIN}.Trainer") as MockTrainer,
             patch(f"{MODULE}.JobService") as MockJobService,
             patch(f"{MODULE}.ModelService") as MockModelService,
-            patch(f"{MODULE}.LeRobotDataModule"),
+            patch(f"{PHYSICALAI_DATA}.LeRobotDataModule"),
             patch(f"{MODULE}.get_settings", return_value=_make_settings(tmp_path)),
-            patch(f"{MODULE}.CSVLogger"),
-            patch(f"{MODULE}.ModelCheckpoint"),
-            patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
-            patch(f"{MODULE}.TrainingTrackingCallback"),
-            patch(f"{MODULE}.TrainingLogCallback"),
+            patch(f"{LIGHTNING_LOGGERS}.CSVLogger"),
+            patch(f"{LIGHTNING_CALLBACKS}.ModelCheckpoint"),
+            patch(f"{TRAINING_UTILS}.TrainingTrackingDispatcher") as MockDispatcher,
+            patch(f"{TRAINING_UTILS}.TrainingTrackingCallback"),
+            patch(f"{TRAINING_UTILS}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
         ):

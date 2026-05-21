@@ -45,6 +45,7 @@ def _make_adapter(mode: str = "follower") -> tuple[PhysicalAIRobotAdapter, Magic
     adapter = PhysicalAIRobotAdapter(
         robot=robot,
         robot_type=robot_type,
+        home_position=[0.0] * (2 * NUM_JOINTS),
         config=PhysicalAIRobotAdapterConfig(
             include_velocities=True,
             goal_time_scale=1.0,
@@ -73,7 +74,7 @@ class TestProperties:
 class TestStateAndActions:
     def test_read_state_includes_prefixed_pos_and_vel(self):
         adapter, _ = _make_adapter("follower")
-        result = asyncio.run(adapter.read_state())
+        result = adapter.read_state()
         assert result["event"] == "state_was_updated"
         assert len(result["state"]) == 28
         for key in result["state"]:
@@ -86,7 +87,7 @@ class TestStateAndActions:
             joints[f"left_{n}.pos"] = 1.0
             joints[f"right_{n}.pos"] = 2.0
 
-        result = asyncio.run(adapter.set_joints_state(joints, goal_time=0.1))
+        result = adapter.set_joints_state(joints, goal_time=0.1)
         assert result["event"] == "joints_state_was_set"
         robot.send_action.assert_called_once()
         call = robot.send_action.call_args

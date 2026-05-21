@@ -1,302 +1,174 @@
 import asyncio
-import time
-from multiprocessing import Event, Queue
+import multiprocessing as mp
+from multiprocessing import Event
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from tests.queue_utils import clear_queue, thread_flush, wait_until_message_from_queue
 
 from control.environment_integration import EnvironmentIntegration
-from control.sync_mixed_model_integration import SyncMixedModelIntegration
-from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
-from internal_datasets.mutations.recording_mutation import RecordingMutation
-from schemas.environment import EnvironmentWithRelations
-from workers.robot_control_worker import RobotControlWorker
-
-
-def _wait_until_state(queue: Queue, timeout: float = 2, **expected: bool) -> dict:
-    """Drain 'state' messages until all *expected* fields are ``True``."""
-    t = time.perf_counter()
-    latest = None
-    while time.perf_counter() - t < timeout:
-        try:
-            msg = wait_until_message_from_queue(queue, "state", timeout=0.2)
-            latest = msg["data"]
-            if all(latest.get(k) == v for k, v in expected.items()):
-                return latest
-        except TimeoutError:
-            pass
-    raise TimeoutError(f"State never reached {expected}; last seen: {latest}")
+from workers.model_integration_worker import ModelIntegration
+from workers.recording_worker import RecordingWorker
+from workers.robot_control_orchestrator_worker import RobotControlOrchestrator
 
 
 @pytest.fixture
 def model_integration():
-    mock = MagicMock(spec=SyncMixedModelIntegration)
-
-    gate = Event()
-
-    async def controlled_setup():
-        await asyncio.get_event_loop().run_in_executor(None, gate.wait)
-
-    mock.setup = controlled_setup
-    mock.allow_setup = gate.set
-    mock.teardown = MagicMock()
-    mock.select_action = MagicMock(
-        return_value=[
-            -11.076923076923077,
-            56.043956043956044,
-            -10.197802197802197,
-            69.45054945054945,
-            -24.791208791208792,
-            12.364425162689804,
-        ]
-    )
+    mock = MagicMock(spec=ModelIntegration)
+    mock.loaded_event = mp.Event()
+    mock.loaded_event.set()
     return mock
 
 
 @pytest.fixture
 def environment_integration():
     mock = MagicMock(spec=EnvironmentIntegration)
-
-    gate = Event()
-
-    async def controlled_setup():
-        await asyncio.get_event_loop().run_in_executor(None, gate.wait)
-
-    mock.setup = controlled_setup
-    mock.allow_setup = gate.set
-    mock.teardown = AsyncMock()
-    mock.get_observation = AsyncMock(return_value=None)
-    mock.format_observation_for_reporting = lambda obs, ts: obs
-    mock.format_model_input_observation = lambda obs, task: obs
-
+    mock.setup_environment = AsyncMock()
+    mock.teardown = MagicMock()
+    mock.manifest = MagicMock()
     return mock
 
 
 @pytest.fixture
-def recording_mutation():
-    mock = MagicMock(spec=RecordingMutation)
-    mock.add_frame = MagicMock()
-    return mock
-
-
-@pytest.fixture
-def test_dataset_impl(recording_mutation):
-    mock = MagicMock(spec=InternalLeRobotDataset)
-    mock.start_recording_mutation = MagicMock(return_value=recording_mutation)
+def recording_worker():
+    mock = MagicMock(spec=RecordingWorker)
+    mock.loaded_event = mp.Event()
+    mock.loaded_event.set()
     return mock
 
 
 @pytest.fixture
 def robot_control_worker(mock_robot_client_factory):
     stop_event = Event()
-    queue = Queue()
-    mock_registry = MagicMock()
-    mock_registry.acquire = AsyncMock(return_value=(uuid4(), MagicMock()))
-    mock_registry.release = AsyncMock()
+    queue = mp.Queue()
 
-    process = RobotControlWorker(
-        stop_event=stop_event,
+    process = RobotControlOrchestrator(
+        message_queue=queue,
         robot_client_factory=mock_robot_client_factory,
-        queue=queue,
-        model_worker_registry=mock_registry,
+        mp_terminate_event=stop_event,
     )
     process.start()
 
     yield process
 
-    process.disconnect()
+    process.stop()
     process.join(timeout=5)
 
 
 @pytest.fixture
-def loaded_inference_worker(
-    robot_control_worker, environment_integration, model_integration, test_model, test_environment
-):
-    with patch("workers.robot_control_worker.SyncMixedModelIntegration", return_value=model_integration):
-        robot_control_worker.load_model(test_model, "torch")
-        with patch("workers.robot_control_worker.EnvironmentIntegration", return_value=environment_integration):
-            robot_control_worker.load_environment(test_environment)
-        model_integration.allow_setup()
-        environment_integration.allow_setup()
-        state = _wait_until_state(robot_control_worker.queue, model_loaded=True, environment_loaded=True)
+def loaded_environment_worker(robot_control_worker, environment_integration, test_environment):
+    with patch("workers.robot_control_orchestrator_worker.EnvironmentIntegration", return_value=environment_integration):
+        asyncio.run(robot_control_worker.load_environment(test_environment))
 
-    assert state["model_loaded"]
-    assert state["environment_loaded"]
-    clear_queue(robot_control_worker.queue)
+    state = wait_until_message_from_queue(robot_control_worker.message_queue, "state")
+    assert state["data"]["environment_loaded"]
+    clear_queue(robot_control_worker.message_queue)
 
     return robot_control_worker
 
 
 @pytest.fixture
-def loaded_teleoperation_worker(
-    robot_control_worker, environment_integration, test_dataset_impl, test_dataset, test_environment
-):
-    with patch("workers.robot_control_worker.EnvironmentIntegration", return_value=environment_integration):
-        robot_control_worker.load_environment(test_environment)
-    environment_integration.allow_setup()
-    with patch("workers.robot_control_worker.InternalLeRobotDataset", return_value=test_dataset_impl):
-        robot_control_worker.load_dataset(test_dataset)
-    thread_flush()
-    clear_queue(robot_control_worker.queue)
-    state = wait_until_message_from_queue(robot_control_worker.queue, "state")["data"]
-    assert state["environment_loaded"]
-    assert state["dataset_loaded"]
+def loaded_inference_worker(loaded_environment_worker, model_integration, test_model):
+    worker = loaded_environment_worker
+    with patch("workers.robot_control_orchestrator_worker.ModelIntegration", return_value=model_integration):
+        asyncio.run(worker.load_model(test_model, "torch"))
 
-    return robot_control_worker
+    state = wait_until_message_from_queue(worker.message_queue, "state")
+    assert state["data"]["model_loaded"]
+    clear_queue(worker.message_queue)
+
+    return worker
 
 
-class TestRobotControlWorker:
-    def test_initialize(self, robot_control_worker: RobotControlWorker):
-        report = wait_until_message_from_queue(robot_control_worker.queue, "state")
-        assert report["event"] == "state"
-        assert report["data"] == {
-            "task": None,
-            "model_loaded": False,
-            "episodes_recorded": 0,
-            "environment_loaded": False,
-            "is_recording": False,
-            "dataset_loaded": False,
-            "follower_source": None,
-        }
+@pytest.fixture
+def loaded_teleoperation_worker(loaded_environment_worker, recording_worker, test_dataset):
+    worker = loaded_environment_worker
+    with patch("workers.robot_control_orchestrator_worker.RecordingWorker", return_value=recording_worker):
+        asyncio.run(worker.load_dataset(test_dataset))
 
-    def test_load_environment(
-        self, robot_control_worker: RobotControlWorker, environment_integration, test_environment
-    ):
-        report = wait_until_message_from_queue(robot_control_worker.queue, "state")
-        assert report["event"] == "state"
-        environment = EnvironmentWithRelations.model_validate(test_environment)
-        with patch("workers.robot_control_worker.EnvironmentIntegration", return_value=environment_integration):
-            robot_control_worker.load_environment(environment)
-        report = wait_until_message_from_queue(robot_control_worker.queue, "state")
-        assert report["event"] == "state"
-        assert not report["data"]["environment_loaded"]
+    state = wait_until_message_from_queue(worker.message_queue, "state")
+    assert state["data"]["dataset_loaded"]
+    clear_queue(worker.message_queue)
 
-        environment_integration.allow_setup()
-        report = wait_until_message_from_queue(robot_control_worker.queue, "state")
-        assert report["event"] == "state"
-        assert report["data"]["environment_loaded"]
+    return worker
 
-    def test_get_observations_once_environment_loaded(
-        self, robot_control_worker: RobotControlWorker, environment_integration, test_environment
-    ):
-        environment_integration.get_observation = AsyncMock(return_value={"foo": "bar"})
 
-        environment = EnvironmentWithRelations.model_validate(test_environment)
-        with patch("workers.robot_control_worker.EnvironmentIntegration", return_value=environment_integration):
-            robot_control_worker.load_environment(environment)
-        environment_integration.allow_setup()
-        observation = wait_until_message_from_queue(robot_control_worker.queue, "observations")
-        assert observation is not None
-        assert observation["event"] == "observations"
-        assert observation["data"] == {"foo": "bar"}
+class TestRobotControlOrchestrator:
+    def test_initialize(self, robot_control_worker: RobotControlOrchestrator):
+        assert robot_control_worker.state.task is None
+        assert not robot_control_worker.state.model_loaded
+        assert not robot_control_worker.state.environment_loaded
+        assert not robot_control_worker.state.is_recording
+        assert not robot_control_worker.state.dataset_loaded
+        assert robot_control_worker.state.follower_source is None
+        assert robot_control_worker.state.episodes_recorded == 0
 
-    def test_load_model(self, robot_control_worker: RobotControlWorker, model_integration, test_model):
-        report = wait_until_message_from_queue(robot_control_worker.queue, "state")
-        assert report["event"] == "state"
+    def test_load_environment(self, robot_control_worker, environment_integration, test_environment):
+        with patch("workers.robot_control_orchestrator_worker.EnvironmentIntegration", return_value=environment_integration):
+            asyncio.run(robot_control_worker.load_environment(test_environment))
 
-        # Keep patch active until after allow_setup(): _handle_new_model_load creates
-        # SyncMixedModelIntegration asynchronously, so the patch must outlive load_model().
-        with patch("workers.robot_control_worker.SyncMixedModelIntegration", return_value=model_integration):
-            robot_control_worker.load_model(test_model, "torch")
-            report = wait_until_message_from_queue(robot_control_worker.queue, "state")
-            assert report["event"] == "state"
-            assert not report["data"]["model_loaded"]
+        state = wait_until_message_from_queue(robot_control_worker.message_queue, "state")
+        assert state["data"]["environment_loaded"]
 
-            model_integration.allow_setup()
-            report = robot_control_worker.queue.get()
+    def test_load_model(self, loaded_environment_worker, model_integration, test_model):
+        worker = loaded_environment_worker
+        with patch("workers.robot_control_orchestrator_worker.ModelIntegration", return_value=model_integration):
+            asyncio.run(worker.load_model(test_model, "torch"))
 
-        assert report["event"] == "state"
-        assert report["data"]["model_loaded"]
+        state = wait_until_message_from_queue(worker.message_queue, "state")
+        assert state["data"]["model_loaded"]
 
-    def test_model_are_requested_with_actions(
-        self, loaded_inference_worker: RobotControlWorker, environment_integration, model_integration, test_observation
-    ):
-        worker = loaded_inference_worker
-        worker.start_task("foo")
-        report = wait_until_message_from_queue(worker.queue, "state")
-        assert report is not None
-        assert report["data"]["follower_source"] == "model"
-        environment_integration.get_observation = AsyncMock(return_value=test_observation)
-        wait_until_message_from_queue(worker.queue, "observations")
-        model_integration.select_action.assert_called_with(test_observation)
+    def test_load_dataset(self, loaded_environment_worker, recording_worker, test_dataset):
+        worker = loaded_environment_worker
+        with patch("workers.robot_control_orchestrator_worker.RecordingWorker", return_value=recording_worker):
+            asyncio.run(worker.load_dataset(test_dataset))
 
-    def test_stop_causes_model_inference_to_not_be_called(
-        self, loaded_inference_worker: RobotControlWorker, environment_integration, model_integration, test_observation
-    ):
-        worker = loaded_inference_worker
-        worker.start_task("foo")
-        report = wait_until_message_from_queue(worker.queue, "state")
-        assert report["data"]["follower_source"] == "model"
-        environment_integration.get_observation = AsyncMock(return_value=test_observation)
-        worker.stop()
-        # clear existing queue and wait for next observation
-        report = wait_until_message_from_queue(worker.queue, "state")
-        assert report["data"]["follower_source"] is None
-        clear_queue(worker.queue)
-        model_integration.select_action.reset_mock()  # Reset mock of model select action
-        wait_until_message_from_queue(worker.queue, "observations")
-        model_integration.select_action.assert_not_called()
+        state = wait_until_message_from_queue(worker.message_queue, "state")
+        assert state["data"]["dataset_loaded"]
 
-    def test_disconnect_causes_teardown(
-        self, loaded_inference_worker: RobotControlWorker, environment_integration, model_integration, test_observation
-    ):
-        worker = loaded_inference_worker
-        worker.disconnect()
-        worker.join()
-
-        model_integration.teardown.assert_called()
-        environment_integration.teardown.assert_awaited_once()
-
-    def test_starting_task_sets_follower_source_to_model(
-        self, loaded_inference_worker: RobotControlWorker, environment_integration, model_integration, test_observation
-    ):
+    def test_starting_task_sets_follower_source_to_model(self, loaded_inference_worker):
         worker = loaded_inference_worker
         worker.start_task("foo")
         assert worker.state.follower_source == "model"
 
-    def test_select_follower_input(
-        self, loaded_inference_worker: RobotControlWorker, environment_integration, model_integration, test_observation
-    ):
-        environment_integration.get_observation = AsyncMock(return_value=test_observation)
+    def test_stop_task_resets_follower_source(self, loaded_inference_worker):
         worker = loaded_inference_worker
-        worker.start_task("foo")  # start task automatically sets follower input to model
-        wait_until_message_from_queue(worker.queue, "observations")
-        model_integration.select_action.assert_called_with(test_observation)
-        worker.set_follower_source(None)
-        wait_until_message_from_queue(worker.queue, "state")
-        clear_queue(worker.queue)
-        model_integration.select_action.reset_mock()  # Reset mock of model select action
-        wait_until_message_from_queue(worker.queue, "observations")
-        model_integration.select_action.assert_not_called()
+        worker.start_task("foo")
+        worker.stop_task()
+        assert worker.state.follower_source is None
 
-    def test_teleoperation_recording(
-        self,
-        loaded_teleoperation_worker: RobotControlWorker,
-        environment_integration,
-        test_dataset,
-        test_observation,
-        recording_mutation,
-        test_actions,
-    ):
-        """Tests the entire recording via teleoperation flow."""
-        worker = loaded_teleoperation_worker
+    def test_set_follower_source(self, loaded_inference_worker):
+        worker = loaded_inference_worker
         worker.set_follower_source("teleoperation")
-        report = wait_until_message_from_queue(worker.queue, "state")
-        assert report is not None
-        assert report["data"]["follower_source"] == "teleoperation"
-        worker.start_recording("Foo bar")
-        environment_integration.get_observation = AsyncMock(return_value=test_observation)
-        environment_integration.set_follower_position_from_leader = AsyncMock(return_value=test_actions)
-        observation = wait_until_message_from_queue(worker.queue, "observations")
-        assert observation is not None
-        recording_mutation.add_frame.assert_called()
+        state = wait_until_message_from_queue(worker.message_queue, "state")
+        assert state["data"]["follower_source"] == "teleoperation"
+
+        clear_queue(worker.message_queue)
+        worker.set_follower_source(None)
+        state = wait_until_message_from_queue(worker.message_queue, "state")
+        assert state["data"]["follower_source"] is None
+
+    def test_teardown_calls_sub_worker_teardown(
+        self, loaded_inference_worker, environment_integration, model_integration
+    ):
+        worker = loaded_inference_worker
+        worker.stop()
+        environment_integration.teardown.assert_called()
+        model_integration.stop.assert_called()
+
+    def test_recording_state_updates_from_events(self, loaded_teleoperation_worker, recording_worker):
+        worker = loaded_teleoperation_worker
+        worker.start_recording("task")
+        recording_worker.start_episode.assert_called_with("task")
+
+        worker.event_queue.put({"event": "start_recording", "state": {"is_recording": True}})
+        state = wait_until_message_from_queue(worker.message_queue, "state")
+        assert state["data"]["is_recording"]
+
         worker.save_episode()
-        report = wait_until_message_from_queue(worker.queue, "state")
-        assert not report["data"]["is_recording"]
-        assert report["data"]["episodes_recorded"] == 1
-        recording_mutation.save_episode.assert_called()
-        worker.disconnect()
-        worker.join()
-        recording_mutation.teardown.assert_called()
+        recording_worker.save_episode.assert_called()
+
+        worker.event_queue.put({"event": "save_episode", "state": {"is_recording": False, "episodes_recorded": 1}})
+        state = wait_until_message_from_queue(worker.message_queue, "state")
+        assert not state["data"]["is_recording"]
+        assert state["data"]["episodes_recorded"] == 1

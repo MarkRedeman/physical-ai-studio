@@ -27,6 +27,7 @@ def _make_adapter(
     adapter = PhysicalAIRobotAdapter(
         robot=robot,
         robot_type=robot_type,
+        home_position=[0.0] * len(SO101_JOINT_ORDER),
         config=PhysicalAIRobotAdapterConfig(
             include_velocities=False,
             goal_time_scale=1.0,
@@ -98,7 +99,7 @@ class TestReadState:
         obs.sensor_data = None
         robot.get_observation.return_value = obs
 
-        result = asyncio.run(adapter.read_state())
+        result = adapter.read_state()
 
         assert result["event"] == "state_was_updated"
         assert "state" in result
@@ -115,7 +116,7 @@ class TestSetJointsState:
         adapter, robot = _make_adapter()
 
         joints = {f"{name}.pos": 0.0 for name in SO101_JOINT_ORDER}
-        result = asyncio.run(adapter.set_joints_state(joints, goal_time=0.033))
+        result = adapter.set_joints_state(joints, goal_time=0.033)
 
         assert result["event"] == "joints_state_was_set"
         robot.send_action.assert_called_once()
@@ -125,7 +126,7 @@ class TestSetJointsState:
 
         far_joints = {f"{name}.pos": 1000.0 for name in SO101_JOINT_ORDER}
         goal_time = 0.033
-        asyncio.run(adapter.set_joints_state(far_joints, goal_time=goal_time))
+        adapter.set_joints_state(far_joints, goal_time=goal_time)
         robot.send_action.assert_called_once()
 
 
