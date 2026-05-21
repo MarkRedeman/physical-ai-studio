@@ -118,7 +118,8 @@ class LogService:
         if not jobs_dir.is_dir():
             return sources
 
-        job_log_paths = sorted(jobs_dir.glob("*.log"))
+        # Match only <uuid>.log files (36-char UUID stem), excluding rotated <uuid>.<timestamp>.log
+        job_log_paths = sorted(p for p in jobs_dir.glob("*.log") if len(p.stem) == 36)
         job_ids = [file_path.stem for file_path in job_log_paths]
         source_name_map = await self._get_job_source_name_map(job_ids)
 
