@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from exceptions import InvalidArchiveError
-from schemas.dataset import Dataset, Snapshot
+from schemas.dataset import Dataset
 from schemas.job import TrainJob
 from services.model_import_service import ModelImportService
 
@@ -48,17 +48,6 @@ def dataset(dataset_id, project_id, tmp_path):
             "default_task": "task",
             "project_id": str(project_id),
             "environment_id": str(uuid4()),
-        }
-    )
-
-
-@pytest.fixture
-def snapshot(dataset_id, tmp_path):
-    return Snapshot.model_validate(
-        {
-            "id": str(uuid4()),
-            "dataset_id": str(dataset_id),
-            "path": str(tmp_path / "snapshot"),
         }
     )
 
@@ -123,7 +112,7 @@ def _create_model_directory(base_path: Path, files: dict[str, str]) -> Path:
 
 
 @contextmanager
-def _mock_services(settings, dataset, snapshot=None, job=None):
+def _mock_services(settings, dataset, job=None):
     """Context manager for common service mocks."""
     with ExitStack() as stack:
         # get_settings is sync, not async
@@ -137,13 +126,6 @@ def _mock_services(settings, dataset, snapshot=None, job=None):
                 AsyncMock(side_effect=lambda fn, *a, **k: fn(*a, **k)),
             )
         )
-        if snapshot is not None:
-            stack.enter_context(
-                patch(
-                    "services.model_import_service.SnapshotService.create_snapshot_for_dataset",
-                    AsyncMock(return_value=snapshot),
-                )
-            )
         if job is not None:
             stack.enter_context(
                 patch("services.model_import_service.JobService.create_job", AsyncMock(return_value=job))
@@ -160,10 +142,10 @@ def _mock_services(settings, dataset, snapshot=None, job=None):
 
 
 @pytest.mark.anyio
-async def test_import_model_directory_success(tmp_path, project_id, dataset_id, settings, dataset, snapshot, job):
+async def test_import_model_directory_success(tmp_path, project_id, dataset_id, settings, dataset, job):
     source_dir = _create_model_directory(tmp_path, _base_files())
 
-    with _mock_services(settings, dataset, snapshot, job):
+    with _mock_services(settings, dataset, job):
         model = await ModelImportService().import_model_directory(
             source_dir=source_dir,
             project_id=project_id,
@@ -178,12 +160,10 @@ async def test_import_model_directory_success(tmp_path, project_id, dataset_id, 
 
 
 @pytest.mark.anyio
-async def test_import_model_directory_move_removes_source(
-    tmp_path, project_id, dataset_id, settings, dataset, snapshot, job
-):
+async def test_import_model_directory_move_removes_source(tmp_path, project_id, dataset_id, settings, dataset, job):
     source_dir = _create_model_directory(tmp_path, _base_files())
 
-    with _mock_services(settings, dataset, snapshot, job):
+    with _mock_services(settings, dataset, job):
         model = await ModelImportService().import_model_directory(
             source_dir=source_dir,
             project_id=project_id,
@@ -215,7 +195,7 @@ async def test_import_model_directory_cleans_up_on_failure(tmp_path, project_id,
         patch("services.model_import_service.get_settings", return_value=settings),
         patch("services.model_import_service.DatasetService.get_dataset_by_id", AsyncMock(return_value=dataset)),
         patch(
-            "services.model_import_service.SnapshotService.create_snapshot_for_dataset",
+            "services.model_import_service.JobService.create_job",
             AsyncMock(side_effect=RuntimeError("fail")),
         ),
         patch(
