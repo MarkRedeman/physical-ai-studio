@@ -133,7 +133,7 @@ describe('fetchClient.PATH', () => {
                 fetchClient.PATH('/api/projects/{project_id}/robots/ws', {
                     params: { path: { project_id: 'p1' } },
                 })
-            ).toBe('/api/projects/p1/robots/r1/ws');
+            ).toBe('/api/projects/p1/robots/ws');
         });
 
         it('throws when robot WebSocket path params are missing', () => {
