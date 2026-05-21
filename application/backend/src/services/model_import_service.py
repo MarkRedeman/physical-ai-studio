@@ -13,7 +13,6 @@ from schemas.job import TrainJobPayload
 from services.dataset_service import DatasetService
 from services.job_service import JobService
 from services.model_service import ModelService
-from services.snapshot_service import SnapshotService
 from settings import get_settings
 
 # We assume the directory/zip is taken directly from Physical AI Studio, either
@@ -116,12 +115,9 @@ class ModelImportService:
         base_model_id: UUID | None,
         version: int,
     ) -> Model:
-        """Create snapshot, job, and model record after files are in place."""
+        """Create job, and model record after files are in place."""
         project_id = dataset.project_id
         dataset_id = dataset.id
-
-        snapshot_dir = model_dir / SnapshotService.generate_snapshot_folder_name()
-        snapshot = await SnapshotService.create_snapshot_for_dataset(dataset, destination=snapshot_dir)
 
         job = TrainJob(
             project_id=project_id,
@@ -148,7 +144,9 @@ class ModelImportService:
             dataset_id=dataset_id,
             path=str(model_dir),
             name=model_name,
-            snapshot_id=snapshot.id,
+            # Imported models don't have a snapshot: the provided dataset may differ
+            # from what was actually used for training (possibly on another machine).
+            snapshot_id=None,
             policy=policy,
             properties={},
             train_job_id=job.id,
