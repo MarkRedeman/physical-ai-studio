@@ -139,7 +139,12 @@ def import_dir(
     base_model_id: UUID | None,
     version: int,
 ) -> None:
-    """Import a model from an existing folder (copy or move)."""
+    """Import a model from an existing folder (copy or move) trained by Physical AI Studio.
+
+    The dataset_id should reference a dataset that uses the same environment as the
+    original training. The inference UI uses this dataset to determine which environment
+    to load when running the model.
+    """
     from services.model_import_service import ModelImportService
 
     click.echo(f"Importing model from folder: {source_dir}")
