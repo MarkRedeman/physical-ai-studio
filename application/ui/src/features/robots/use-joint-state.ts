@@ -70,10 +70,12 @@ export const useJointState = (project_id: string, follower_id: string, leader_id
             shouldReconnect: () => true,
             reconnectAttempts: 5,
             reconnectInterval: 3000,
-            onOpen: () => {socket.sendJsonMessage({
-                follower_id,
-                leader_id
-            })},
+            onOpen: () => {
+                socket.sendJsonMessage({
+                    follower_id,
+                    leader_id,
+                });
+            },
             onMessage: handleMessage,
             onError: (error) => console.error('WebSocket error:', error),
             onClose: () => console.info('WebSocket closed'),

@@ -25,7 +25,7 @@ ProjectID = Annotated[UUID, Depends(get_project_id)]
 
 
 @router.get("/ws", tags=["WebSocket"], summary="Robot control (WebSocket)", status_code=426)
-async def robot_websocket_openapi(project_id: UUID, robot_id: UUID) -> Response:  # noqa: ARG001
+async def robot_websocket_openapi(project_id: UUID) -> Response:  # noqa: ARG001
     """This endpoint requires a WebSocket connection. Use `wss://` to connect."""
     return Response(status_code=426)
 

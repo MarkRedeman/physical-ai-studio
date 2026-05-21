@@ -68,11 +68,10 @@ export const InferenceViewer = ({ tasks }: InferenceViewerProps) => {
                         ))}
                     </ComboBox>
                     <ButtonGroup>
-
                         <Button
                             variant='primary'
                             isPending={startTask.isPending}
-                            onPress={() => setFollowerSource.mutate("teleoperation")}
+                            onPress={() => setFollowerSource.mutate('teleoperation')}
                         >
                             Take Control
                         </Button>

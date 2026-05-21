@@ -28,7 +28,7 @@ const EmptyPreview = () => {
 };
 
 const components = {
-    follower: (props: IDockviewPanelProps<{ title: string; follower_id: string, leader_id: string | undefined }>) => {
+    follower: (props: IDockviewPanelProps<{ title: string; follower_id: string; leader_id: string | undefined }>) => {
         return <RobotCell follower_id={props.params.follower_id} leader_id={props.params.leader_id} />;
     },
     camera: (props: IDockviewPanelProps<{ camera_id: string }>) => {
@@ -67,8 +67,7 @@ const buildDockviewPanels = (api: DockviewReadyEvent['api'], environment: Enviro
     });
 
     environment.robots.forEach((robot) => {
-        const teleoperator_id = robot.teleoperator.type === "robot" ? robot.teleoperator.robot_id : undefined;
-        console.log(teleoperator_id)
+        const teleoperator_id = robot.teleoperator.type === 'robot' ? robot.teleoperator.robot_id : undefined;
         panels.add(robot.robot_id);
         if (!api.panels.some((panel) => panel.id === robot.robot_id)) {
             api.addPanel({
@@ -76,7 +75,7 @@ const buildDockviewPanels = (api: DockviewReadyEvent['api'], environment: Enviro
                 params: {
                     title: 'Follower',
                     follower_id: robot.robot_id,
-                    leader_id: teleoperator_id
+                    leader_id: teleoperator_id,
                 },
                 title: 'Follower',
                 component: 'follower',

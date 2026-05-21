@@ -6,7 +6,7 @@ import { RobotViewer } from '../../controller/robot-viewer';
 import { RobotModelsProvider } from '../../robot-models-context';
 import { useJointState, useSynchronizeModelJoints } from '../../use-joint-state';
 
-const InnerCell = ({ follower_id, leader_id }: { follower_id: string, leader_id?: string }) => {
+const InnerCell = ({ follower_id, leader_id }: { follower_id: string; leader_id?: string }) => {
     const { project_id } = useProjectId();
 
     const { data: robot } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots/{robot_id}', {
@@ -23,8 +23,7 @@ const InnerCell = ({ follower_id, leader_id }: { follower_id: string, leader_id?
     );
 };
 
-export const RobotCell = ({ follower_id, leader_id }: { follower_id: string, leader_id?: string }) => {
-    console.log(follower_id, leader_id)
+export const RobotCell = ({ follower_id, leader_id }: { follower_id: string; leader_id?: string }) => {
     return (
         <RobotModelsProvider>
             <InnerCell follower_id={follower_id} leader_id={leader_id} />
