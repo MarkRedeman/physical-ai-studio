@@ -123,6 +123,10 @@ conflicts = [[
     { package = "physical-ai-studio", extra = "xpu" },
 ]]
 
+[options]
+exclude-newer = "2026-05-14T06:28:25.737713724Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "accelerate"
 version = "1.13.0"
