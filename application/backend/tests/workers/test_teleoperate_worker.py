@@ -10,7 +10,14 @@ import pytest
 from robots.robot_client import RobotClient
 from workers.teleoperate_worker import ActionWriteState, TeleoperateWorker
 
-FEATURES = ["shoulder_pan.pos", "shoulder_lift.pos", "elbow_flex.pos", "wrist_flex.pos", "wrist_roll.pos", "gripper.pos"]
+FEATURES = [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos",
+]
 
 
 def _make_robot_client():
@@ -19,15 +26,14 @@ def _make_robot_client():
     client.home_position = [0.0] * len(FEATURES)
     client.connect = AsyncMock()
     client.disconnect = AsyncMock()
-    client.read_state.return_value = {"state": {k: 0.0 for k in FEATURES}}
+    client.read_state.return_value = {"state": dict.fromkeys(FEATURES, 0.0)}
     client.set_joints_state.return_value = {"event": "joints_state_was_set"}
     return client
 
 
 def _make_worker(follower=None, leader=None, frequency=100.0):
     follower = follower or _make_robot_client()
-    worker = TeleoperateWorker(follower, leader, frequency, mp.Event())
-    return worker
+    return TeleoperateWorker(follower, leader, frequency, mp.Event())
 
 
 def _run_one_iteration(worker):
@@ -126,7 +132,7 @@ class TestRunLoop:
     def test_from_leader_reads_leader_and_writes_follower(self):
         follower = _make_robot_client()
         leader = _make_robot_client()
-        leader.read_state.return_value = {"state": {k: 1.0 for k in FEATURES}}
+        leader.read_state.return_value = {"state": dict.fromkeys(FEATURES, 1.0)}
         worker = _make_worker(follower=follower, leader=leader)
         worker.set_action_source(ActionWriteState.FROM_LEADER)
         _run_one_iteration(worker)

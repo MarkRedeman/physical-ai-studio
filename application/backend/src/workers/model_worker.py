@@ -5,7 +5,6 @@ import time
 from multiprocessing.synchronize import Event as EventClass
 
 from loguru import logger
-from physicalai.inference import InferenceModel
 
 from control.inference_result import InferenceResult
 from schemas import Model

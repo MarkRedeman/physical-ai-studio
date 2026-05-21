@@ -4,7 +4,7 @@ from multiprocessing import Event
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from tests.queue_utils import clear_queue, thread_flush, wait_until_message_from_queue
+from tests.queue_utils import clear_queue, wait_until_message_from_queue
 
 from control.environment_integration import EnvironmentIntegration
 from workers.model_integration_worker import ModelIntegration
@@ -57,7 +57,9 @@ def robot_control_worker(mock_robot_client_factory):
 
 @pytest.fixture
 def loaded_environment_worker(robot_control_worker, environment_integration, test_environment):
-    with patch("workers.robot_control_orchestrator_worker.EnvironmentIntegration", return_value=environment_integration):
+    with patch(
+        "workers.robot_control_orchestrator_worker.EnvironmentIntegration", return_value=environment_integration
+    ):
         asyncio.run(robot_control_worker.load_environment(test_environment))
 
     state = wait_until_message_from_queue(robot_control_worker.message_queue, "state")
@@ -104,7 +106,9 @@ class TestRobotControlOrchestrator:
         assert robot_control_worker.state.episodes_recorded == 0
 
     def test_load_environment(self, robot_control_worker, environment_integration, test_environment):
-        with patch("workers.robot_control_orchestrator_worker.EnvironmentIntegration", return_value=environment_integration):
+        with patch(
+            "workers.robot_control_orchestrator_worker.EnvironmentIntegration", return_value=environment_integration
+        ):
             asyncio.run(robot_control_worker.load_environment(test_environment))
 
         state = wait_until_message_from_queue(robot_control_worker.message_queue, "state")

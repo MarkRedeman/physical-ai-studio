@@ -109,7 +109,7 @@ class RobotClientFactory:
             }
         )
 
-        so101_home_position = [0, -90, 90, 50, 0, 45]
+        so101_home_position = [0.0, -90.0, 90.0, 50.0, 0.0, 45.0]
         so101 = SO101(port=port, calibration=so101_cal, role=role, unit="normalized")
         return PhysicalAIRobotAdapter(
             robot=so101,

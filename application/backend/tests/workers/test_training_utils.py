@@ -3,8 +3,8 @@
 
 import multiprocessing as mp
 import queue
-from uuid import uuid4
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 from workers.training.utils import TrainingLogCallback, TrainingTrackingCallback, TrainingTrackingDispatcher
 

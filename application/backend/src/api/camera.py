@@ -55,6 +55,7 @@ async def camera_websocket_openapi(
     """This endpoint requires a WebSocket connection. Use `wss://` to connect."""
     return Response(status_code=426)
 
+
 @router.websocket("/ws")
 async def camera_websocket(
     websocket: WebSocket,
@@ -76,6 +77,7 @@ async def camera_websocket(
             {"event": "status", "state": "running", ...}
     """
     import cv2
+
     await websocket.accept()
 
     worker = None
@@ -85,7 +87,7 @@ async def camera_websocket(
         while True:
             async with run_at_frequency(camera.payload.fps):
                 frame = worker.get_frame()
-                success, jpeg = cv2.imencode(".jpg", frame) #TODO just send bytes instead?
+                success, jpeg = cv2.imencode(".jpg", frame)
                 if success and jpeg is not None:
                     await websocket.send_bytes(jpeg.tobytes())
     except WebSocketDisconnect:

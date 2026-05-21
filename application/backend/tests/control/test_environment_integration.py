@@ -10,7 +10,14 @@ from control.environment_data_manifest import CameraManifestEntry, EnvironmentDa
 from control.environment_integration import EnvironmentIntegration
 from control.utils import format_observation_for_model, format_observation_for_reporting, get_observation_from_manifest
 
-FEATURES = ["shoulder_pan.pos", "shoulder_lift.pos", "elbow_flex.pos", "wrist_flex.pos", "wrist_roll.pos", "gripper.pos"]
+FEATURES = [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos",
+]
 CAM_ID_1 = "3ed60255-04ae-407b-8e2c-c3281847a4e0"
 CAM_ID_2 = "4629e172-2aa7-4fde-86b1-e19eb1d210ff"
 
@@ -26,8 +33,12 @@ def _make_manifest():
         action_source=mp.Value(ctypes.c_int, 0),
     )
     cameras = [
-        CameraManifestEntry(id=CAM_ID_1, name="grabber", width=640, height=480, frame_data=MPArray(ctypes.c_uint8, 640 * 480 * 3)),
-        CameraManifestEntry(id=CAM_ID_2, name="front", width=640, height=480, frame_data=MPArray(ctypes.c_uint8, 640 * 480 * 3)),
+        CameraManifestEntry(
+            id=CAM_ID_1, name="grabber", width=640, height=480, frame_data=MPArray(ctypes.c_uint8, 640 * 480 * 3)
+        ),
+        CameraManifestEntry(
+            id=CAM_ID_2, name="front", width=640, height=480, frame_data=MPArray(ctypes.c_uint8, 640 * 480 * 3)
+        ),
     ]
     return EnvironmentDataManifest(robot=robot, cameras=cameras)
 

@@ -104,7 +104,7 @@ async def robot_control_websocket(
 ) -> None:
     """Control robots, record datasets and run inference."""
     await websocket.accept()
-    queue = asyncio.Queue()
+    queue: asyncio.Queue = asyncio.Queue()
     robot_control = RobotControlOrchestrator(
         message_queue=queue,
         robot_client_factory=RobotClientFactory(robot_manager=robot_manager, calibration_service=calibration_service),

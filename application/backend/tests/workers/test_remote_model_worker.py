@@ -31,5 +31,6 @@ class TestLoadModel:
         worker.load_model(test_model, "openvino")
         _, model_json, _ = worker._command_queue.put.call_args[0][0]
         import json
+
         parsed = json.loads(model_json)
         assert parsed["name"] == test_model.name

@@ -233,10 +233,10 @@ async def handle_command(  # noqa: PLR0911
             return await robot_connection.disable_torque()
 
         case SetJointsStateCommand(joints=joints, goal_time=goal_time):
-            return await robot_connection.set_joints_state(joints, goal_time)
+            return robot_connection.set_joints_state(joints, goal_time)
 
         case ReadStateCommand(normalize=normalize):
-            return await robot_connection.read_state(normalize=normalize)
+            return robot_connection.read_state(normalize=normalize)
 
         # Calibration commands
         case GetCalibrationCommand():

@@ -67,15 +67,11 @@ async def robot_websocket(
         leader = await robot_service.get_robot_by_id(project_id, leader_id)
         leader_client = await robot_client_factory.build(leader)
 
-
     worker = None
     try:
         # Create worker
         worker = TeleoperateWorker(
-            follower=follower_client,
-            leader=leader_client,
-            frequency=fps,
-            mp_stop_event=scheduler.mp_stop_event
+            follower=follower_client, leader=leader_client, frequency=fps, mp_stop_event=scheduler.mp_stop_event
         )
         worker.start()
         worker.set_action_source(ActionWriteState.FROM_LEADER)

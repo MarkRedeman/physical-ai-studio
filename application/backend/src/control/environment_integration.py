@@ -1,5 +1,6 @@
 import asyncio
 from multiprocessing.synchronize import Event as EventClass
+from typing import Any
 
 from control.environment_data_manifest import CameraManifestEntry, EnvironmentDataManifest, RobotManifestEntry
 from robots.robot_client_factory import RobotClientFactory
@@ -23,7 +24,7 @@ class EnvironmentIntegration:
         self.cameras = environment.cameras
         self.robot_client_factory = robot_client_factory
         self._mp_terminate_event = mp_terminate_event
-        self._workers = []
+        self._workers: list[Any] = []
 
     async def setup_environment(self) -> None:
         try:

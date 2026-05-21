@@ -92,6 +92,7 @@ class InternalLeRobotDataset(DatasetClient):
     def get_fps(self) -> int | None:
         if hasattr(self, "_dataset"):
             return self._dataset.fps
+        return None
 
     def get_video_path(self, episode: int, camera: str) -> Path:
         """Get Video path of specific episode and camera."""
@@ -326,7 +327,7 @@ class InternalLeRobotDataset(DatasetClient):
 
         return episode_buffer
 
-    def _get_episode_actions(self, episode: dict) -> "torch.Tensor":
+    def _get_episode_actions(self, episode: dict) -> Any:
         """Get episode actions tensor from specific episode."""
         import torch
 

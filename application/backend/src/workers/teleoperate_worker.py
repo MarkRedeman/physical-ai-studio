@@ -1,5 +1,5 @@
-import ctypes
 import asyncio
+import ctypes
 import enum
 import multiprocessing as mp
 from multiprocessing.synchronize import Event as EventClass
@@ -27,11 +27,7 @@ class TeleoperateWorker(BaseProcessWorker):
     _output_actions: Any
     _output_state: Any
 
-    def __init__(self,
-                 follower: RobotClient,
-                 leader: RobotClient | None,
-                 frequency: float,
-                 mp_stop_event: EventClass):
+    def __init__(self, follower: RobotClient, leader: RobotClient | None, frequency: float, mp_stop_event: EventClass):
         buffer_length = len(follower.features())
         self.loaded_event = mp.Event()
         self._action_source = mp.Value(ctypes.c_int, ActionWriteState.NONE)

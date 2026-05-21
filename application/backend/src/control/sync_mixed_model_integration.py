@@ -1,9 +1,9 @@
-from workers.remote_model_worker import RemoteModelWorker
 from physicalai.data import Observation
 
 from control.inference_poller import InferencePoller
 from control.queue_mixer import QueueMixer
 from workers.model_worker import ModelWorker
+from workers.remote_model_worker import RemoteModelWorker
 
 
 class SyncMixedModelIntegration:

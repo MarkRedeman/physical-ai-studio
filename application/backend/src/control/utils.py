@@ -68,7 +68,8 @@ def format_observation_for_dataset(observation: dict, manifest: EnvironmentDataM
     return result, actions
 
 
-def format_observation_for_model(observation: dict, manifest: EnvironmentDataManifest):
+def format_observation_for_model(observation: dict, manifest: EnvironmentDataManifest) -> Any:
+    """Format observation dict into a model-ready Observation object."""
     from physicalai.data import Observation
 
     images: dict = {}

@@ -11,8 +11,8 @@ from robots.robot_client_factory import RobotClientFactory
 from schemas.dataset import Dataset
 from schemas.environment import EnvironmentWithRelations
 from schemas.model import Model
-from workers.model_integration_worker import ModelIntegration
 from workers.base import BaseThreadWorker, run_at_frequency
+from workers.model_integration_worker import ModelIntegration
 from workers.recording_worker import RecordingWorker
 
 
@@ -25,18 +25,19 @@ class RobotControlState(BaseModel):
     follower_source: Literal["model", "teleoperation"] | None = None
     episodes_recorded: int = 0
 
+
 MESSAGE_QUEUE_FREQUENCY = 10
 
-class RobotControlOrchestrator(BaseThreadWorker):
-    ROLE="RobotControlOrchestrator"
 
+class RobotControlOrchestrator(BaseThreadWorker):
+    ROLE = "RobotControlOrchestrator"
 
     def __init__(
         self, message_queue: asyncio.Queue, robot_client_factory: RobotClientFactory, mp_terminate_event: EventClass
     ):
         super().__init__(stop_event=mp_terminate_event)
         self.state = RobotControlState()
-        self.event_queue = mp.Queue()
+        self.event_queue: mp.Queue = mp.Queue()
         self._mp_terminate_event = mp_terminate_event
         self.robot_client_factory = robot_client_factory
         self.message_queue = message_queue
@@ -114,7 +115,7 @@ class RobotControlOrchestrator(BaseThreadWorker):
                     backend=backend,
                     data_manifest=self.environment.manifest,
                     mp_terminate_event=self._mp_terminate_event,
-                    event_queue=self.event_queue
+                    event_queue=self.event_queue,
                 )
                 worker.start()
                 await asyncio.to_thread(worker.loaded_event.wait)
@@ -163,7 +164,6 @@ class RobotControlOrchestrator(BaseThreadWorker):
             self.environment.manifest.robot.action_source.value = action_source
             self.state.follower_source = follower_source
             self._report_state()
-
 
     async def teardown(self) -> None:
         if self.environment:

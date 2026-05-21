@@ -15,7 +15,7 @@ from fastapi.concurrency import asynccontextmanager
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable
     from multiprocessing.queues import Queue
-    from multiprocessing.synchronize import EventClass
+    from multiprocessing.synchronize import Event as EventClass
 
 import time
 
@@ -46,7 +46,6 @@ async def run_at_frequency(frequency: float) -> AsyncGenerator[None]:
         await asyncio.sleep(sleep_time)
     else:
         await asyncio.sleep(0)
-
 
 
 def log_threads(log_level="DEBUG") -> None:  # noqa: ANN001

@@ -1,4 +1,5 @@
 import asyncio
+import ctypes
 import multiprocessing as mp
 from multiprocessing.synchronize import Event as EventClass
 from pathlib import Path
@@ -11,8 +12,9 @@ from workers.base import BaseProcessWorker, run_at_frequency
 
 RECORDING_FPS = 30
 
+
 class RecordingWorker(BaseProcessWorker):
-    ROLE="RecordingWorker"
+    ROLE = "RecordingWorker"
 
     recording_mutation: RecordingMutation | None = None
 
@@ -31,12 +33,12 @@ class RecordingWorker(BaseProcessWorker):
         self._start_event = mp.Event()
         self._save_event = mp.Event()
         self._discard_event = mp.Event()
-        self._task_buf = mp.Array("c", 256)  # shared task string
+        self._task_buf = mp.Array(ctypes.c_char, 256)
         self._is_recording = False
         self._episodes_recorded = 0
 
     def start_episode(self, task: str) -> None:
-        self._task_buf.get_obj().value = task.encode("utf-8")[:255]
+        self._task_buf.get_obj().value = task.encode("utf-8")[:255]  # type: ignore[misc, assignment]
         self._start_event.set()
 
     def save_episode(self) -> None:

@@ -15,7 +15,7 @@ class CameraManifestEntry:
 class RobotManifestEntry:
     name: str
     type: str
-    action_source: Any # mp.Value[c_int], shared with TeleoperateWorker
+    action_source: Any  # mp.Value[c_int], shared with TeleoperateWorker
     features: list[str]
     state: Any  # mp.Array[c_double], shared with TeleoperateWorker
     actions: Any  # mp.Array[c_double], shared with TeleoperateWorker

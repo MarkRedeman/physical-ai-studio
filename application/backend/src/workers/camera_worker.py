@@ -1,17 +1,18 @@
-import ctypes
-from workers.base import BaseProcessWorker
 import asyncio
+import ctypes
 import time
+from multiprocessing import Array, Event
+from multiprocessing.synchronize import Event as EventClass
+from typing import Any
 
 import cv2
 import numpy as np
 from frame_source import FrameSourceFactory
 from frame_source.video_capture_base import VideoCaptureBase
 from loguru import logger
-from multiprocessing import Queue, Event, Array
 
-from multiprocessing.synchronize import Event as EventClass
 from schemas.project_camera import Camera
+from workers.base import BaseProcessWorker
 
 
 def create_frames_source_from_camera(camera: Camera) -> VideoCaptureBase:
@@ -29,16 +30,13 @@ class EmptyFrameError(Exception):
 
 class CameraWorker(BaseProcessWorker):
     """Orchestrates camera streaming over configurable transport."""
-    ROLE="Camera"
 
-    def __init__(
-        self,
-        config: Camera,
-        mp_stop_event: EventClass
-    ):
+    ROLE = "Camera"
+
+    def __init__(self, config: Camera, mp_stop_event: EventClass):
         super().__init__(stop_event=mp_stop_event, queues_to_cancel=[])
         self.loaded_event = Event()
-        self._width = config.payload.width or 640 # TODO explicitly add width, height to ip camera
+        self._width = config.payload.width or 640  # TODO explicitly add width, height to ip camera
         self._height = config.payload.height or 480
         self._frame_data = Array(ctypes.c_uint8, self._width * self._height * 3)
         self.config = config
@@ -54,7 +52,7 @@ class CameraWorker(BaseProcessWorker):
             np.frombuffer(self._frame_data.get_obj(), dtype=np.uint8)[:] = data.reshape(-1)
 
     @staticmethod
-    def frame_from_buffer(buffer, width: int, height: int) -> np.ndarray:
+    def frame_from_buffer(buffer: Any, width: int, height: int) -> np.ndarray:
         return np.frombuffer(buffer, dtype=np.uint8).reshape(height, width, 3).copy()
 
     async def setup(self) -> None:
@@ -80,5 +78,5 @@ class CameraWorker(BaseProcessWorker):
             raise
 
     async def teardown(self) -> None:
-        #self.frame_queue.close()
+        # self.frame_queue.close()
         self.camera.disconnect()
