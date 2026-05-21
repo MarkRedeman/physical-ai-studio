@@ -105,6 +105,26 @@ async def test_discover_job_sources_ignores_rotated_job_logs(tmp_path) -> None:
     assert job_sources[0].name == "Long Job (pi0)"
 
 
+def test_get_all_job_log_paths_returns_rotated_then_active(tmp_path) -> None:
+    """Rotated logs should be returned before the active log for streaming."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir(parents=True)
+
+    job_id = uuid4()
+    active = jobs_dir / f"{job_id}.log"
+    rotated1 = jobs_dir / f"{job_id}.2026-05-18_10-00-00_000000.log"
+    rotated2 = jobs_dir / f"{job_id}.2026-05-19_12-00-00_000000.log"
+
+    for f in [active, rotated1, rotated2]:
+        f.write_text("content")
+
+    service = _build_service(tmp_path)
+    paths = service._get_all_job_log_paths(active)
+
+    # Rotated files first (sorted chronologically), then active
+    assert paths == [rotated1, rotated2, active]
+
+
 @pytest.mark.anyio
 async def test_discover_job_sources_uses_staging_id_when_no_manifest(tmp_path) -> None:
     """New payload with archive_staging_id only -> display name derived from first 8 chars of staging id."""
