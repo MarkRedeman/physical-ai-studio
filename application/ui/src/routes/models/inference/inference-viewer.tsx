@@ -44,8 +44,8 @@ export const InferenceViewer = ({ tasks }: InferenceViewerProps) => {
                     <ProgressCircle marginStart='size-200' size='S' isIndeterminate alignSelf={'center'} />
                 </Heading>
                 <Flex direction='column' margin='size-200'>
-                    <StatusLight variant={state.model_loaded ? 'positive' : 'yellow'}>Model</StatusLight>
                     <StatusLight variant={state.environment_loaded ? 'positive' : 'yellow'}>Environment</StatusLight>
+                    <StatusLight variant={state.model_loaded ? 'positive' : 'yellow'}>Model</StatusLight>
                 </Flex>
                 <Button variant={'secondary'} href={paths.project.models.index({ project_id })}>
                     Cancel

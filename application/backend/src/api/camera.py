@@ -1,10 +1,5 @@
-from workers.base import run_at_frequency
-import asyncio
 import json
-import time
-from contextlib import asynccontextmanager
 from typing import Annotated
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, WebSocket
 from fastapi.responses import Response
@@ -15,6 +10,7 @@ from api.dependencies import SchedulerDep
 from schemas.camera import SupportedCameraFormat
 from schemas.project_camera import Camera as ProjectCamera
 from schemas.project_camera import CameraAdapter
+from workers.base import run_at_frequency
 from workers.camera_worker import CameraWorker
 
 router = APIRouter(prefix="/api/cameras", tags=["Cameras"])

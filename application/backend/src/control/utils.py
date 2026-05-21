@@ -93,8 +93,9 @@ def format_observation_for_reporting(observation: dict, manifest: EnvironmentDat
     camera_images = {}
     for camera in manifest.cameras:
         frame = observation["images"][camera.id]
-        _, imagebytes = cv2.imencode(".jpg", frame)
-        camera_images[camera.id] = base64.b64encode(imagebytes).decode()
+        success, imagebytes = cv2.imencode(".jpg", frame)
+        if success:
+            camera_images[camera.id] = base64.b64encode(imagebytes).decode()
 
     return {
         "state": state,

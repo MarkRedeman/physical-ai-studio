@@ -1,5 +1,3 @@
-from src.workers.teleoperate_worker import ActionWriteState
-from fastapi.exceptions import HTTPException
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -19,7 +17,7 @@ from api.dependencies import (
 from robots.robot_client_factory import RobotClientFactory
 from services import RobotService
 from workers.base import run_at_frequency
-from workers.teleoperate_worker import TeleoperateWorker
+from workers.teleoperate_worker import ActionWriteState, TeleoperateWorker
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
 

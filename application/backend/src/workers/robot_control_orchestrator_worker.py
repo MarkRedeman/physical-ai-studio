@@ -30,9 +30,6 @@ MESSAGE_QUEUE_FREQUENCY = 10
 class RobotControlOrchestrator(BaseThreadWorker):
     ROLE="RobotControlOrchestrator"
 
-    environment: EnvironmentIntegration | None = None
-    recording: RecordingWorker | None = None
-    model: ModelIntegration | None = None
 
     def __init__(
         self, message_queue: asyncio.Queue, robot_client_factory: RobotClientFactory, mp_terminate_event: EventClass
@@ -43,6 +40,9 @@ class RobotControlOrchestrator(BaseThreadWorker):
         self._mp_terminate_event = mp_terminate_event
         self.robot_client_factory = robot_client_factory
         self.message_queue = message_queue
+        self.environment: EnvironmentIntegration | None = None
+        self.recording: RecordingWorker | None = None
+        self.model: ModelIntegration | None = None
 
     async def run_loop(self) -> None:
         while not self.should_stop():

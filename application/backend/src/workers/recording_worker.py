@@ -1,10 +1,11 @@
-from control.utils import build_lerobot_dataset_features, get_observation_from_manifest, format_observation_for_dataset
 import asyncio
 import multiprocessing as mp
 from multiprocessing.synchronize import Event as EventClass
 from pathlib import Path
 
 from control.environment_data_manifest import EnvironmentDataManifest
+from control.utils import build_lerobot_dataset_features, format_observation_for_dataset, get_observation_from_manifest
+from internal_datasets.mutations.recording_mutation import RecordingMutation
 from schemas.dataset import Dataset
 from workers.base import BaseProcessWorker, run_at_frequency
 
@@ -12,6 +13,8 @@ RECORDING_FPS = 30
 
 class RecordingWorker(BaseProcessWorker):
     ROLE="RecordingWorker"
+
+    recording_mutation: RecordingMutation | None = None
 
     def __init__(
         self,
@@ -64,7 +67,7 @@ class RecordingWorker(BaseProcessWorker):
                     self._handle_discard_episode(),
                 )
 
-                if self._is_recording:
+                if self._is_recording and self.recording_mutation:
                     obs = get_observation_from_manifest(self.data_manifest)
                     dataset_observation, actions = format_observation_for_dataset(obs, self.data_manifest)
                     self.recording_mutation.add_frame(dataset_observation, actions, self.get_task())
@@ -84,7 +87,7 @@ class RecordingWorker(BaseProcessWorker):
             self._start_event.clear()
 
     async def _handle_save_episode(self) -> None:
-        if self._save_event.is_set():
+        if self._save_event.is_set() and self.recording_mutation:
             # say(f"Saving episode {self.state.episodes_recorded + 1}")
             self._save_event.clear()
             self.recording_mutation.save_episode()
@@ -98,7 +101,7 @@ class RecordingWorker(BaseProcessWorker):
             )
 
     async def _handle_discard_episode(self) -> None:
-        if self._discard_event.is_set():
+        if self._discard_event.is_set() and self.recording_mutation:
             # say("Discard episode")
             self._discard_event.clear()
             self.recording_mutation.discard_buffer()

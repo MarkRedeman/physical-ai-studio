@@ -1,5 +1,4 @@
 import asyncio
-from queue import Empty
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket
@@ -17,6 +16,7 @@ from workers.robot_control_orchestrator_worker import RobotControlOrchestrator
 
 router = APIRouter(prefix="/api/record")
 
+
 @router.get("/robot_control/ws", tags=["WebSocket"], summary="Robot Control (WebSocket)", status_code=426)
 async def robot_control_websocket_openapi() -> Response:
     """This endpoint requires a WebSocket connection. Use `wss://` to connect."""
@@ -31,7 +31,9 @@ async def handle_incoming(websocket: WebSocket, robot_control: RobotControlOrche
             payload = data.get("data", {})
             match data["event"]:
                 case "load_environment":
-                    await robot_control.load_environment(EnvironmentWithRelations.model_validate(payload["environment"]))
+                    await robot_control.load_environment(
+                        EnvironmentWithRelations.model_validate(payload["environment"])
+                    )
                 case "load_model":
                     await robot_control.load_model(Model.model_validate(payload["model"]), payload["backend"])
                 case "load_dataset":
@@ -55,21 +57,23 @@ async def handle_incoming(websocket: WebSocket, robot_control: RobotControlOrche
         logger.error(f"Incoming task stopped: {e}")
         logger.info("Except: disconnected!")
 
+
 async def handle_outgoing(websocket: WebSocket, queue: asyncio.Queue) -> None:
     """Handle outgoing messages for robot control."""
     try:
         while True:
             try:
-              data = await queue.get()
-              if data is None:
-                  break
-              await websocket.send_json(data)
-            except Empty:
+                data = await queue.get()
+                if data is None:
+                    break
+                await websocket.send_json(data)
+            except asyncio.QueueEmpty:
                 await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         pass
     except Exception as e:
         logger.error(f"Outgoing task stopped: {e}")
+
 
 async def observation_update_loop(websocket: WebSocket, robot_control: RobotControlOrchestrator) -> None:
     """Handle outgoing messages for robot control."""
@@ -82,12 +86,14 @@ async def observation_update_loop(websocket: WebSocket, robot_control: RobotCont
                         {
                             "event": "observations",
                             "data": observation,
-                        })
+                        }
+                    )
     except WebSocketDisconnect:
         pass
     except Exception as e:
         logger.error(f"Observation update loop stopped: {e}")
         raise
+
 
 @router.websocket("/robot_control/ws")
 async def robot_control_websocket(
@@ -101,10 +107,7 @@ async def robot_control_websocket(
     queue = asyncio.Queue()
     robot_control = RobotControlOrchestrator(
         message_queue=queue,
-        robot_client_factory=RobotClientFactory(
-            robot_manager=robot_manager,
-            calibration_service=calibration_service
-        ),
+        robot_client_factory=RobotClientFactory(robot_manager=robot_manager, calibration_service=calibration_service),
         mp_terminate_event=scheduler.mp_stop_event,
     )
     robot_control.start()

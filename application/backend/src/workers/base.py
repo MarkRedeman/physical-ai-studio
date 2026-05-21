@@ -1,6 +1,4 @@
 from __future__ import annotations
-from collections.abc import AsyncGenerator
-from fastapi.concurrency import asynccontextmanager
 
 import abc
 import asyncio
@@ -9,20 +7,22 @@ import os
 import signal
 import threading
 from abc import ABC, abstractmethod
-from multiprocessing import Queue, current_process, Event
+from multiprocessing import Event, Queue
 from typing import TYPE_CHECKING
 
+from fastapi.concurrency import asynccontextmanager
+
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import AsyncGenerator, Iterable
     from multiprocessing.queues import Queue
     from multiprocessing.synchronize import EventClass
+
+import time
 
 import loguru
 from loguru import logger
 
 from core.logging import setup_logging
-
-import time
 
 
 @asynccontextmanager
@@ -33,7 +33,7 @@ async def run_at_frequency(frequency: float) -> AsyncGenerator[None]:
     Example:
 
     fps = 30
-    async with run_at_target_frequency(fps):
+    async with run_at_frequency(fps):
        get_frame_from_camera()
     """
 
@@ -251,4 +251,4 @@ class BaseThreadWorker(threading.Thread, StoppableMixin, abc.ABC):
 
     def stop(self) -> None:
         self._stop_event.set()
-        self.join()
+        self.join(timeout=10)
