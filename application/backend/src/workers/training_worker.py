@@ -148,10 +148,12 @@ class TrainingWorker(BaseProcessWorker):
 
             checkpoint_callback = ModelCheckpoint(
                 dirpath=cache_path,
-                filename="model",  # filename without suffix
+                filename="model",
                 save_top_k=1,
                 monitor="val/loss",
                 mode="min",
+                save_last="link",  # symlink to latest checkpoint (no duplication)
+                save_on_exception=True,  # save checkpoint on crash/exception
             )
             csv_logger = CSVLogger(cache_path.parent, name=cache_path.stem)
 
@@ -164,13 +166,14 @@ class TrainingWorker(BaseProcessWorker):
                             shutdown_event=self._stop_event,
                             interrupt_event=self.interrupt_event,
                             dispatcher=dispatcher,
+                            checkpoint_dir=cache_path,
                         ),
                         TrainingLogCallback(),
                     ],
                     accelerator=accelerator,
                     strategy=get_lightning_strategy(device_type),
                     devices=[device_index] if device_index is not None else "auto",
-                    max_steps=payload.max_steps,
+                    max_epochs=payload.max_epochs,  # guaranteed set by schema validator
                     auto_scale_batch_size=payload.auto_scale_batch_size,
                     precision=precision,
                     check_val_every_n_epoch=1,

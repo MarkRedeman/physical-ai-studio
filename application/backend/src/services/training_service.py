@@ -2,6 +2,7 @@ import asyncio
 import multiprocessing as mp
 from collections.abc import Mapping
 from multiprocessing.synchronize import Event
+from pathlib import Path
 from queue import Empty
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -9,7 +10,6 @@ from uuid import UUID
 if TYPE_CHECKING:
     import lightning.pytorch as pl
 from lightning.pytorch.callbacks import Callback, ProgressBar
-from lightning.pytorch.utilities.types import STEP_OUTPUT
 from loguru import logger
 
 from schemas.base_job import JobStatus, JobType
@@ -18,21 +18,22 @@ from services.job_service import JobService
 from workers.base import BaseThreadWorker
 
 
+def _epoch_progress(trainer: "pl.Trainer") -> int | None:
+    """Return epoch progress as percentage (0-100), or None if max_epochs is unset."""
+    if not trainer.max_epochs or trainer.max_epochs <= 0:
+        return None
+    return round((trainer.current_epoch + 1) / trainer.max_epochs * 100)
+
+
 class ProgressCallback(ProgressBar):
     def __init__(self, job_id: UUID):
         super().__init__()
         self.job_id = job_id
 
-    def on_fit_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:  # noqa ARG002
-        """Pre-compute total steps once training begins."""
-        self.total_steps = trainer.max_steps
-
-    def on_train_batch_end(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: STEP_OUTPUT, batch: Any, batch_idx: int
-    ) -> None:
-        super().on_train_batch_end(trainer, pl_module, outputs, batch, batch_idx)
-        progress = round((trainer.global_step) / self.total_steps * 100)
-        if progress < 100:
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:  # noqa ARG002
+        """Update job progress at the end of each epoch."""
+        progress = _epoch_progress(trainer)
+        if progress is not None and progress < 100:
             asyncio.run(JobService.update_job_status(job_id=self.job_id, status=JobStatus.RUNNING, progress=progress))
 
 
@@ -67,86 +68,55 @@ class TrainingTrackingCallback(Callback):
         shutdown_event: Event,
         interrupt_event: Event,
         dispatcher: TrainingTrackingDispatcher,
+        checkpoint_dir: Path,
     ):
         super().__init__()
         self.shutdown_event = shutdown_event  # global stop event in case of shutdown
         self.interrupt_event = interrupt_event  # event for interrupting training gracefully
         self.dispatcher = dispatcher
+        self.checkpoint_dir = checkpoint_dir
+        self._last_loss: float | None = None
 
     def on_train_batch_end(
         self,
         trainer: "pl.Trainer",
-        pl_module: "pl.LightningModule",  # noqa ARG002
-        outputs: STEP_OUTPUT,
-        batch: Any,  # noqa ARG002
-        batch_idx: int,  # noqa ARG002
+        pl_module: "pl.LightningModule",  # noqa: ARG002
+        outputs: Mapping[str, Any] | Any,
+        batch: Any,  # noqa: ARG002
+        batch_idx: int,  # noqa: ARG002
     ) -> None:
-        if isinstance(outputs, Mapping):
-            loss_tensor = outputs.get("loss")
-            if loss_tensor is not None:
-                loss_val = loss_tensor.detach().cpu().item()
-            else:
-                loss_val = None  # safety fallback
-        else:
-            loss_val = None  # safety fallback
+        # Capture latest loss for epoch-end dispatch
+        if isinstance(outputs, Mapping) and (loss := outputs.get("loss")) is not None:
+            self._last_loss = loss.detach().cpu().item()
 
-        progress = round((trainer.global_step) / trainer.max_steps * 100)
-        self.dispatcher.update_progress(progress, extra_info={"train/loss_step": loss_val})
+        # Check shutdown signals and save checkpoint on interrupt
         if self.shutdown_event.is_set() or self.interrupt_event.is_set():
+            if not trainer.should_stop:
+                logger.info("Interrupt detected, saving checkpoint before stopping")
+                trainer.save_checkpoint(self.checkpoint_dir / "last.ckpt")
             trainer.should_stop = True
+
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:  # noqa ARG002
+        """Dispatch epoch progress and loss to the tracking queue."""
+        progress = _epoch_progress(trainer) or 0
+        self.dispatcher.update_progress(progress, extra_info={"train/loss_step": self._last_loss})
 
 
 class TrainingLogCallback(Callback):
     """Mirror training progress/metrics to loguru as regular log lines."""
 
-    def __init__(self):
-        super().__init__()
-        self.every_n_steps = 1
-
     def on_fit_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:  # noqa ARG002
-        """Resolve logging interval once trainer values are available."""
-        self.every_n_steps = self._auto_every_n_steps(trainer.max_steps)
+        """Log training configuration once trainer values are available."""
+        max_epochs = trainer.max_epochs if trainer.max_epochs and trainer.max_epochs > 0 else "unlimited"
+        logger.info(f"Training started: max_epochs={max_epochs}")
 
-        logger.info(
-            f"Training log cadence configured: every_n_steps={self.every_n_steps}, max_steps={trainer.max_steps}"
-        )
-
-    @staticmethod
-    def _auto_every_n_steps(total_steps: int) -> int:
-        """Choose an interval that targets >=1000 logs and at least every 100 steps.
-
-        Rules:
-        - Never less frequent than every 100 steps.
-        - Aim for at least 1000 progress log entries when possible.
-        """
-        if total_steps <= 0:
-            return 1
-
-        # Log at least once every 100 steps, otherwise make sure to log 1000 times
-        return min(100, max(1, total_steps // 1000))
-
-    def on_train_batch_end(
-        self,
-        trainer: "pl.Trainer",
-        pl_module: "pl.LightningModule",  # noqa ARG002
-        outputs: STEP_OUTPUT,
-        batch: Any,  # noqa ARG002
-        batch_idx: int,  # noqa ARG002
-    ) -> None:
-        global_step = trainer.global_step
-        is_first_step = global_step <= 1
-        if not is_first_step and global_step % self.every_n_steps != 0:
-            return
-
-        loss_val: float | None = None
-        if isinstance(outputs, Mapping):
-            loss_tensor = outputs.get("loss")
-            if loss_tensor is not None:
-                loss_val = loss_tensor.detach().cpu().item()
-
-        max_steps = max(1, trainer.max_steps)
-        progress = min(100, round(global_step / max_steps * 100))
-        logger.info(f"Training progress: step={global_step}/{max_steps} ({progress}%), train/loss_step={loss_val}")
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:  # noqa ARG002
+        epoch = trainer.current_epoch + 1  # 1-indexed for display
+        progress = _epoch_progress(trainer)
+        if progress is not None:
+            logger.info(f"Training progress: epoch={epoch}/{trainer.max_epochs} ({progress}%)")
+        else:
+            logger.info(f"Training progress: epoch={epoch}")
 
 
 class TrainingService:

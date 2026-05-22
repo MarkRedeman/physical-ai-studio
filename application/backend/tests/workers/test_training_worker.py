@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import queue
+from contextlib import ExitStack
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -31,14 +32,19 @@ MODULE = "workers.training_worker"
 
 
 def _make_payload(
-    *, compile_model: bool = True, precision: TrainingPrecision = TrainingPrecision.BF16_MIXED
+    *,
+    compile_model: bool = True,
+    precision: TrainingPrecision = TrainingPrecision.BF16_MIXED,
+    max_epochs: int | None = None,
+    max_steps: int | None = None,
 ) -> TrainJobPayload:
     return TrainJobPayload(
         project_id=uuid4(),
         dataset_id=uuid4(),
         policy="act",
         model_name="test-model",
-        max_steps=100,
+        max_epochs=max_epochs,
+        max_steps=max_steps,
         batch_size=8,
         num_workers=0,
         auto_scale_batch_size=False,
@@ -312,3 +318,170 @@ class TestTraining:
             await worker._train_model(job, model, snapshot, payload, base_model=None)
 
             assert MockTrainer.call_args.kwargs["precision"] == "bf16-mixed"
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by TestTrainingLimit
+# ---------------------------------------------------------------------------
+
+
+def _common_patches(tmp_path, model):
+    """Return a list of patches used by TestTrainingLimit tests."""
+    return [
+        patch(f"{MODULE}.setup_policy", return_value=MagicMock()),
+        patch(f"{MODULE}.LeRobotDataModule"),
+        patch(f"{MODULE}.get_settings", return_value=_make_settings(tmp_path)),
+        patch(f"{MODULE}.CSVLogger"),
+        patch(f"{MODULE}.ModelCheckpoint"),
+        patch(f"{MODULE}.TrainingTrackingCallback"),
+        patch(f"{MODULE}.TrainingLogCallback"),
+        patch(f"{MODULE}.get_torch_device", return_value="cpu"),
+        patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
+    ]
+
+
+class TestTrainingLimit:
+    """Validate max_epochs / max_steps precedence in TrainJobPayload and Trainer construction."""
+
+    # ------------------------------------------------------------------
+    # Schema-level validator tests (no worker needed)
+    # ------------------------------------------------------------------
+
+    def test_default_applies_100_epochs_when_neither_provided(self):
+        payload = TrainJobPayload(
+            project_id=uuid4(),
+            dataset_id=uuid4(),
+            policy="act",
+            model_name="m",
+        )
+        assert payload.max_epochs == 100
+        assert payload.max_steps is None
+
+    def test_max_epochs_only(self):
+        payload = TrainJobPayload(
+            project_id=uuid4(),
+            dataset_id=uuid4(),
+            policy="act",
+            model_name="m",
+            max_epochs=50,
+        )
+        assert payload.max_epochs == 50
+        assert payload.max_steps is None
+
+    def test_max_steps_only_kept_as_fallback(self):
+        payload = TrainJobPayload(
+            project_id=uuid4(),
+            dataset_id=uuid4(),
+            policy="act",
+            model_name="m",
+            max_steps=500,
+        )
+        assert payload.max_steps == 500
+        assert payload.max_epochs == 100
+
+    def test_max_epochs_wins_when_both_provided(self):
+        payload = TrainJobPayload(
+            project_id=uuid4(),
+            dataset_id=uuid4(),
+            policy="act",
+            model_name="m",
+            max_epochs=20,
+            max_steps=999,
+        )
+        assert payload.max_epochs == 20
+        assert payload.max_steps is None
+
+    # ------------------------------------------------------------------
+    # Worker-level: Trainer receives correct kwargs
+    # ------------------------------------------------------------------
+
+    @pytest.mark.anyio
+    async def test_trainer_receives_max_epochs(self, worker, event_queue, tmp_path):
+        """max_epochs is forwarded to Trainer."""
+        payload = _make_payload(compile_model=False, max_epochs=42)
+        model = _make_model(tmp_path)
+        snapshot = _make_snapshot(tmp_path)
+        job = _make_job(payload)
+
+        with ExitStack() as stack:
+            for p in _common_patches(tmp_path, model):
+                stack.enter_context(p)
+            MockTrainer = stack.enter_context(patch(f"{MODULE}.Trainer"))
+            MockJobService = stack.enter_context(patch(f"{MODULE}.JobService"))
+            MockModelService = stack.enter_context(patch(f"{MODULE}.ModelService"))
+            MockDispatcher = stack.enter_context(patch(f"{MODULE}.TrainingTrackingDispatcher"))
+            stack.enter_context(patch(f"{MODULE}.shutil.move", return_value=model.path))
+
+            trainer_instance = MagicMock()
+            trainer_instance.fit = MagicMock()
+            MockTrainer.return_value = trainer_instance
+            MockDispatcher.return_value = MagicMock(start=MagicMock(), is_alive=MagicMock(return_value=False))
+            MockJobService.update_job = AsyncMock(return_value=MagicMock())
+            MockJobService.update_job_status = AsyncMock(return_value=MagicMock())
+            MockModelService.create_model = AsyncMock(return_value=model)
+
+            await worker._train_model(job, model, snapshot, payload, base_model=None)
+
+        assert MockTrainer.call_args.kwargs["max_epochs"] == 42
+        assert "max_steps" not in MockTrainer.call_args.kwargs
+
+    @pytest.mark.anyio
+    async def test_trainer_receives_default_max_epochs_for_legacy_payload(self, worker, event_queue, tmp_path):
+        """Legacy max_steps-only payload: schema defaults to max_epochs=100."""
+        payload = _make_payload(compile_model=False, max_steps=500)
+        model = _make_model(tmp_path)
+        snapshot = _make_snapshot(tmp_path)
+        job = _make_job(payload)
+
+        with ExitStack() as stack:
+            for p in _common_patches(tmp_path, model):
+                stack.enter_context(p)
+            MockTrainer = stack.enter_context(patch(f"{MODULE}.Trainer"))
+            MockJobService = stack.enter_context(patch(f"{MODULE}.JobService"))
+            MockModelService = stack.enter_context(patch(f"{MODULE}.ModelService"))
+            MockDispatcher = stack.enter_context(patch(f"{MODULE}.TrainingTrackingDispatcher"))
+            stack.enter_context(patch(f"{MODULE}.shutil.move", return_value=model.path))
+
+            trainer_instance = MagicMock()
+            trainer_instance.fit = MagicMock()
+            MockTrainer.return_value = trainer_instance
+            MockDispatcher.return_value = MagicMock(start=MagicMock(), is_alive=MagicMock(return_value=False))
+            MockJobService.update_job = AsyncMock(return_value=MagicMock())
+            MockJobService.update_job_status = AsyncMock(return_value=MagicMock())
+            MockModelService.create_model = AsyncMock(return_value=model)
+
+            await worker._train_model(job, model, snapshot, payload, base_model=None)
+
+        # Schema defaults max_epochs to 100; max_steps not forwarded
+        assert MockTrainer.call_args.kwargs["max_epochs"] == 100
+        assert "max_steps" not in MockTrainer.call_args.kwargs
+
+    @pytest.mark.anyio
+    async def test_trainer_max_epochs_wins_over_max_steps(self, worker, event_queue, tmp_path):
+        """When both are passed to payload, max_epochs wins."""
+        payload = _make_payload(compile_model=False, max_epochs=10, max_steps=9999)
+        model = _make_model(tmp_path)
+        snapshot = _make_snapshot(tmp_path)
+        job = _make_job(payload)
+
+        with ExitStack() as stack:
+            for p in _common_patches(tmp_path, model):
+                stack.enter_context(p)
+            MockTrainer = stack.enter_context(patch(f"{MODULE}.Trainer"))
+            MockJobService = stack.enter_context(patch(f"{MODULE}.JobService"))
+            MockModelService = stack.enter_context(patch(f"{MODULE}.ModelService"))
+            MockDispatcher = stack.enter_context(patch(f"{MODULE}.TrainingTrackingDispatcher"))
+            stack.enter_context(patch(f"{MODULE}.shutil.move", return_value=model.path))
+
+            trainer_instance = MagicMock()
+            trainer_instance.fit = MagicMock()
+            MockTrainer.return_value = trainer_instance
+            MockDispatcher.return_value = MagicMock(start=MagicMock(), is_alive=MagicMock(return_value=False))
+            MockJobService.update_job = AsyncMock(return_value=MagicMock())
+            MockJobService.update_job_status = AsyncMock(return_value=MagicMock())
+            MockModelService.create_model = AsyncMock(return_value=model)
+
+            await worker._train_model(job, model, snapshot, payload, base_model=None)
+
+        assert MockTrainer.call_args.kwargs["max_epochs"] == 10
+        assert "max_steps" not in MockTrainer.call_args.kwargs

@@ -11,9 +11,20 @@ from schemas import Model
 from utils.device import get_torch_device
 
 
+def _find_checkpoint(model_dir: Path) -> Path:
+    """Find best available checkpoint: prefer model.ckpt (best), fall back to last.ckpt (interrupted)."""
+    best = model_dir / "model.ckpt"
+    if best.exists():
+        return best
+    last = model_dir / "last.ckpt"
+    if last.exists():
+        return last
+    raise FileNotFoundError(f"No checkpoint found in {model_dir} (expected model.ckpt or last.ckpt)")
+
+
 def load_policy(model: Model, *, compile_model: bool = False) -> Policy:
     """Load existing model."""
-    model_path = str(Path(model.path) / "model.ckpt")
+    model_path = str(_find_checkpoint(Path(model.path)))
     if model.policy == "act":
         policy = ACT.load_from_checkpoint(model_path)
     elif model.policy == "pi0":
