@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
 from core.logging.utils import job_logging_ctx
@@ -163,11 +163,13 @@ class TrainingWorker(BaseProcessWorker):
             devices = [device_index] if device_index is not None else 1
 
             checkpoint_callback = ModelCheckpoint(
-                dirpath=cache_path,
-                filename="model",  # filename without suffix
-                save_top_k=1,
                 monitor="val/loss",
                 mode="min",
+                save_top_k=1,
+                dirpath=cache_path,
+                filename="model",  # filename without suffix
+                save_last=True,
+                verbose=True,
             )
             csv_logger = CSVLogger(cache_path.parent, name=cache_path.stem)
 
@@ -183,6 +185,7 @@ class TrainingWorker(BaseProcessWorker):
                         ),
                         TrainingMetricsCallback(),
                         TrainingLogCallback(),
+                        LearningRateMonitor(logging_interval="step"),
                     ],
                     accelerator=accelerator,
                     strategy=strategy,
