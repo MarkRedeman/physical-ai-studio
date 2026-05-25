@@ -1,12 +1,18 @@
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID
+
+import yaml
 
 from db import get_async_db_session_ctx
 from exceptions import ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
-from schemas.model import BackendExportDetail, Model
+from schemas.model import BackendExportDetail, Model, TrainingSummary
+
+if TYPE_CHECKING:
+    from schemas.job import TrainJob
 
 
 class ModelService:
@@ -87,3 +93,47 @@ class ModelService:
                 )
             )
         return details
+
+    @staticmethod
+    def get_hparams(model: Model) -> dict | None:
+        """Read training hyperparameters from the model directory.
+
+        Looks for ``version_0/hparams.yaml`` (written by Lightning's CSVLogger).
+        """
+        hparams_path = Path(model.path) / "version_0" / "hparams.yaml"
+        if not hparams_path.is_file():
+            return None
+        with hparams_path.open() as f:
+            return yaml.safe_load(f)
+
+    @staticmethod
+    def get_training_summary(training_job: "TrainJob | None") -> TrainingSummary | None:
+        """Extract a summary of training configuration from a training job.
+
+        This merges fields from the job's payload (batch size, precision, etc.)
+        with computed values like training duration.
+        """
+        if training_job is None:
+            return None
+
+        payload = training_job.payload
+
+        duration = None
+        if training_job.start_time is not None and training_job.end_time is not None:
+            duration = (training_job.end_time - training_job.start_time).total_seconds()
+
+        device_type = None
+        if payload.device is not None:
+            device_type = str(payload.device.type)
+
+        return TrainingSummary(
+            max_steps=payload.max_steps,
+            batch_size=payload.batch_size,
+            precision=str(payload.precision),
+            compile_model=payload.compile_model,
+            val_split=payload.val_split,
+            auto_scale_batch_size=payload.auto_scale_batch_size,
+            num_workers=payload.num_workers,
+            device_type=device_type,
+            training_duration_seconds=duration,
+        )

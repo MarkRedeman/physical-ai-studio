@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from schemas.base import BaseIDModel, Field
+from schemas.job import TrainJob
 
 
 class Model(BaseIDModel):
@@ -68,6 +69,21 @@ class BackendExportDetail(BaseModel):
     exported_at: datetime | None = None
 
 
+class TrainingSummary(BaseModel):
+    max_steps: int | None = None
+    batch_size: int | None = None
+    auto_scale_batch_size: bool | None = None
+    num_workers: int | str | None = None
+    precision: str | None = None
+    compile_model: bool | None = None
+    val_split: float | None = None
+    device_type: str | None = None
+    training_duration_seconds: float | None = None
+
+
 class ModelDetailResponse(BaseModel):
     model: Model
     exports: list[BackendExportDetail]
+    training_job: TrainJob | None = None
+    training_summary: TrainingSummary | None = None
+    hparams: dict | None = None
