@@ -81,6 +81,38 @@ async def model_download_endpoint(
     )
 
 
+@router.get("/{model_id}/exports/{backend}/download")
+async def download_model_backend(
+    model_id: Annotated[UUID, Depends(get_model_id)],
+    backend: str,
+    model_service: Annotated[ModelService, Depends(get_model_service)],
+    model_download_service: Annotated[ModelDownloadService, Depends(get_model_download_service)],
+) -> FileResponse:
+    """Download a single backend export as a zip archive."""
+    model = await model_service.get_model_by_id(model_id)
+    if backend not in model.available_backends:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Backend '{backend}' is not available for this model.",
+        )
+
+    export_dir = Path(model.path) / "exports" / backend
+    if not export_dir.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Export directory for backend '{backend}' not found on disk.",
+        )
+
+    archive_path = await asyncio.to_thread(model_download_service.create_backend_archive, export_dir, backend)
+    filename = f"{safe_archive_name(model.name, fallback='model')}_{backend}.zip"
+    return FileResponse(
+        archive_path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(archive_path.unlink, missing_ok=True),
+    )
+
+
 @router.get("/{model_id}/metrics")
 async def stream_metrics(
     model_id: Annotated[UUID, Depends(get_model_id)],
