@@ -10,7 +10,7 @@ import { ReactComponent as ONNXLogo } from './../../assets/logos/onnx-logo-small
 import { ReactComponent as OpenVINOLogo } from './../../assets/logos/OpenVINO-small.svg';
 import { ReactComponent as TorchLogo } from './../../assets/logos/pytorch-logo-small.svg';
 
-export const defaultBackend = 'torch';
+export const defaultBackend = 'openvino';
 
 interface BackendConfig {
     label: string;
