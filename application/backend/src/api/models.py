@@ -20,7 +20,7 @@ from api.dependencies import (
 from api.utils import safe_archive_name
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
-from schemas import Model
+from schemas import ModelDetailResponse
 from services import DatasetService, ModelDownloadService, ModelMetricsService, ModelService
 
 router = APIRouter(prefix="/api/models", tags=["Models"])
@@ -30,9 +30,12 @@ router = APIRouter(prefix="/api/models", tags=["Models"])
 async def get_model_by_id(
     model_id: Annotated[UUID, Depends(get_model_id)],
     model_service: Annotated[ModelService, Depends(get_model_service)],
-) -> Model:
-    """Get model by id."""
-    return await model_service.get_model_by_id(model_id)
+) -> ModelDetailResponse:
+    """Get model by id with per-backend export details and training job info."""
+    model = await model_service.get_model_by_id(model_id)
+    exports = model_service.get_backend_details(model)
+
+    return ModelDetailResponse(model=model, exports=exports)
 
 
 @router.get("/{model_id}/tasks")
