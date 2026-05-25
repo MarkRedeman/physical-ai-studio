@@ -1,0 +1,117 @@
+import { Suspense } from 'react';
+
+import { Divider, Flex, Heading, Loading, Text, View } from '@geti-ui/ui';
+
+import { $api } from '../../../api/client';
+import { SchemaModel } from '../../../api/openapi-spec';
+import { formatDuration } from '../../../routes/models/utils';
+
+interface ModelDetailsProps {
+    model: SchemaModel;
+}
+
+const SKIP_HPARAMS_KEYS = new Set(['dataset_stats']);
+
+const isPrimitive = (v: unknown): v is string | number | boolean | null => {
+    return v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+};
+
+const DetailRow = ({ name, value }: { name: string; value: unknown }) => {
+    const display = isPrimitive(value) ? String(value) : JSON.stringify(value);
+    return (
+        <Flex gap='size-200' UNSAFE_style={{ padding: '4px 0', borderBottom: '1px solid var(--spectrum-gray-200)' }}>
+            <Text UNSAFE_style={{ width: '260px', flexShrink: 0, fontWeight: 500 }}>{name}</Text>
+            <Text>{display}</Text>
+        </Flex>
+    );
+};
+
+const ModelDetailsContent = ({ model }: { model: SchemaModel }) => {
+    const { data: modelDetail } = $api.useSuspenseQuery('get', '/api/models/{model_id}', {
+        params: { path: { model_id: model.id! } },
+    });
+
+    const summary = modelDetail.training_summary;
+    const hparams = modelDetail.hparams;
+
+    return (
+        <Flex direction='row' gap='size-300' paddingY='size-200' wrap marginTop={'size-200'}>
+            <View backgroundColor={'gray-200'} padding='size-200' borderRadius={'small'}>
+                <Flex gap='size-100' direction='column'>
+                    <Heading level={3} marginBottom='size-100'>
+                        Model
+                    </Heading>
+                    <Divider size='S' />
+                    <Flex direction='column' gap='size-50'>
+                        <DetailRow name='Name' value={modelDetail.model.name} />
+                        <DetailRow name='Policy' value={modelDetail.model.policy} />
+                        <DetailRow name='Version' value={modelDetail.model.version} />
+                        <DetailRow name='Created' value={model.created_at ?? '—'} />
+                        <DetailRow name='Exports' value={modelDetail.exports.length} />
+                    </Flex>
+                </Flex>
+            </View>
+
+            {summary && (
+                <View backgroundColor={'gray-200'} padding='size-200' borderRadius={'small'}>
+                    <Flex gap='size-100' direction='column'>
+                        <Heading level={3} marginBottom='size-100'>
+                            Training Configuration
+                        </Heading>
+                        <Flex direction='column' gap='size-50'>
+                            <DetailRow name='Max steps' value={summary.max_steps} />
+                            <DetailRow name='Batch size' value={summary.batch_size} />
+                            {summary.precision && <DetailRow name='Precision' value={summary.precision} />}
+                            {summary.compile_model !== null && summary.compile_model !== undefined && (
+                                <DetailRow name='Compiled' value={summary.compile_model ? 'Yes' : 'No'} />
+                            )}
+                            {summary.val_split !== null && summary.val_split !== undefined && summary.val_split > 0 && (
+                                <DetailRow name='Validation split' value={summary.val_split} />
+                            )}
+                            {summary.auto_scale_batch_size != null && (
+                                <DetailRow
+                                    name='Auto-scale batch size'
+                                    value={summary.auto_scale_batch_size ? 'Yes' : 'No'}
+                                />
+                            )}
+                            <DetailRow name='Workers' value={summary.num_workers ?? '—'} />
+                            {summary.device_type && <DetailRow name='Device' value={summary.device_type} />}
+                            {summary.training_duration_seconds != null && (
+                                <DetailRow
+                                    name='Training time'
+                                    value={formatDuration(summary.training_duration_seconds)}
+                                />
+                            )}
+                        </Flex>
+                    </Flex>
+                </View>
+            )}
+
+            {hparams && (
+                <View backgroundColor={'gray-200'} padding='size-200' borderRadius={'small'}>
+                    <Flex gap='size-100' direction='column'>
+                        <Heading level={3} marginBottom='size-100'>
+                            Model Hyperparameters
+                        </Heading>
+                        <Divider size='S' />
+                        <Flex direction='column' gap='size-50'>
+                            {Object.entries(hparams)
+                                .filter(([key]) => !SKIP_HPARAMS_KEYS.has(key))
+                                .map(([key, value]) => (
+                                    <DetailRow key={key} name={key} value={value} />
+                                ))}
+                        </Flex>
+                    </Flex>
+                </View>
+            )}
+        </Flex>
+    );
+};
+
+export const ModelDetails = ({ model }: ModelDetailsProps) => {
+    return (
+        <Suspense fallback={<Loading mode='inline' size='M' marginY='size-400' />}>
+            <ModelDetailsContent model={model} />
+        </Suspense>
+    );
+};
