@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse
+from physicalai.export.backends import ExportBackend
 from sse_starlette import EventSourceResponse
 from starlette import status
 from starlette.background import BackgroundTask
@@ -87,27 +88,27 @@ async def model_download_endpoint(
 @router.get("/{model_id}/exports/{backend}/download")
 async def download_model_backend(
     model_id: Annotated[UUID, Depends(get_model_id)],
-    backend: str,
+    backend: ExportBackend,
     model_service: Annotated[ModelService, Depends(get_model_service)],
     model_download_service: Annotated[ModelDownloadService, Depends(get_model_download_service)],
 ) -> FileResponse:
     """Download a single backend export as a zip archive."""
     model = await model_service.get_model_by_id(model_id)
-    if backend not in model.available_backends:
+    if backend.value not in model.available_backends:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Backend '{backend}' is not available for this model.",
+            detail=f"Backend '{backend.value}' is not available for this model.",
         )
 
-    export_dir = Path(model.path) / "exports" / backend
+    export_dir = Path(model.path) / "exports" / backend.value
     if not export_dir.is_dir():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Export directory for backend '{backend}' not found on disk.",
+            detail=f"Export directory for backend '{backend.value}' not found on disk.",
         )
 
-    archive_path = await asyncio.to_thread(model_download_service.create_backend_archive, export_dir, backend)
-    filename = f"{safe_archive_name(model.name, fallback='model')}_{backend}.zip"
+    archive_path = await asyncio.to_thread(model_download_service.create_backend_archive, export_dir, backend.value)
+    filename = f"{safe_archive_name(model.name, fallback='model')}_{backend.value}.zip"
     return FileResponse(
         archive_path,
         media_type="application/zip",
