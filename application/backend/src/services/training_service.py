@@ -17,6 +17,8 @@ from services.event_processor import EventType
 from services.job_service import JobService
 from workers.base import BaseThreadWorker
 
+DENSE_TRACKING_UPDATE_STEPS = 1000
+
 
 class ProgressCallback(ProgressBar):
     def __init__(self, job_id: UUID):
@@ -90,8 +92,10 @@ class TrainingTrackingCallback(Callback):
         else:
             loss_val = None  # safety fallback
 
-        progress = round((trainer.global_step) / trainer.max_steps * 100)
-        self.dispatcher.update_progress(progress, extra_info={"train/loss_step": loss_val})
+        if _should_emit_step_update(trainer):
+            total_steps = _get_total_training_steps(trainer)
+            progress = min(100, round(trainer.global_step / total_steps * 100))
+            self.dispatcher.update_progress(progress, extra_info={"train/loss_step": loss_val})
         if self.shutdown_event.is_set() or self.interrupt_event.is_set():
             trainer.should_stop = True
 
@@ -105,7 +109,8 @@ class TrainingLogCallback(Callback):
 
     def on_fit_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:  # noqa ARG002
         """Resolve logging interval once trainer values are available."""
-        self.every_n_steps = self._auto_every_n_steps(trainer.max_steps)
+        total_steps = _get_total_training_steps(trainer)
+        self.every_n_steps = self._auto_every_n_steps(total_steps)
 
         logger.info(
             f"Training log cadence configured: every_n_steps={self.every_n_steps}, max_steps={trainer.max_steps}"
@@ -144,9 +149,29 @@ class TrainingLogCallback(Callback):
             if loss_tensor is not None:
                 loss_val = loss_tensor.detach().cpu().item()
 
-        max_steps = max(1, trainer.max_steps)
+        max_steps = _get_total_training_steps(trainer)
         progress = min(100, round(global_step / max_steps * 100))
         logger.info(f"Training progress: step={global_step}/{max_steps} ({progress}%), train/loss_step={loss_val}")
+
+
+def _get_total_training_steps(trainer: "pl.Trainer") -> int:
+    total_steps = trainer.max_steps
+    if total_steps is None or total_steps <= 0:
+        total_steps = trainer.estimated_stepping_batches
+    if total_steps is None or total_steps <= 0:
+        return 1
+    return int(total_steps)
+
+
+def _should_emit_step_update(trainer: "pl.Trainer") -> bool:
+    global_step = trainer.global_step
+    if global_step <= DENSE_TRACKING_UPDATE_STEPS:
+        return True
+
+    log_every_n_steps = trainer.log_every_n_steps
+    if log_every_n_steps is None or log_every_n_steps <= 0:
+        return True
+    return global_step % log_every_n_steps == 0
 
 
 class TrainingService:

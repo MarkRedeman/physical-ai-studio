@@ -14,6 +14,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
 from core.logging.utils import job_logging_ctx
+from models.training_metrics_callback import TrainingMetricsCallback
 from models.utils import load_policy, setup_policy
 from services.snapshot_service import SnapshotService
 from settings import get_settings
@@ -128,6 +129,7 @@ class TrainingWorker(BaseProcessWorker):
             # Resolve training device -- explicit from payload or auto-detected
             device_type = payload.device.type if payload.device else None
             device_index = payload.device.index if payload.device else None
+            devices = [device_index] if device_index is not None else 1
 
             accelerator = get_torch_device(device_type)
 
@@ -167,6 +169,7 @@ class TrainingWorker(BaseProcessWorker):
                             interrupt_event=self.interrupt_event,
                             dispatcher=dispatcher,
                         ),
+                        TrainingMetricsCallback(),
                         TrainingLogCallback(),
                     ],
                     accelerator=accelerator,
