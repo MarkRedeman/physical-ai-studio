@@ -1,24 +1,44 @@
-import { useMemo } from 'react';
-
+import { ChartsThemeProvider } from '@geti-ui/charts';
+import { Flex } from '@geti-ui/ui';
 import { experimental_streamedQuery as streamedQuery, useQuery } from '@tanstack/react-query';
 
 import { fetchClient } from '../../api/client';
 import { fetchSSE } from '../../api/fetch-sse';
-import { MetricGraph } from './metrics-graph.component';
+import { ActionPredictionErrorGraph } from './action-prediction-error-graph.component';
+import { LearningRateGraph } from './learning-rate-graph.component';
+import { hasAnyMetric, MetricsEntry } from './metrics-chart-utils';
+import { ModelUpdateSizeGraph } from './model-update-size-graph.component';
+import { SystemAcceleratorUtilizationGraph } from './system-accelerator-utilization-graph.component';
+import { SystemMemoryGraph } from './system-memory-graph.component';
+import { SystemStepPerEpochGraph } from './system-step-per-epoch-graph.component';
+import { SystemStepTimeGraph } from './system-step-time-graph.component';
+import { TrainingLossGraph } from './training-loss-graph.component';
 
-interface MetricsEntry {
-    epoch: number;
-    step: number;
-    train_loss: number | null;
-    train_loss_step: number | null;
-}
+const MetricsGraphs = ({ data }: { data?: MetricsEntry[] }) => {
+    const hasActionError =
+        hasAnyMetric(data, 'train_action_error_step') ||
+        hasAnyMetric(data, 'train_action_error_epoch') ||
+        hasAnyMetric(data, 'val_action_error');
+    const hasAcceleratorUtilization =
+        hasAnyMetric(data, 'system_accelerator_utilization_percent') ||
+        hasAnyMetric(data, 'system_accelerator_power_w');
 
-const filterLossStepMetrics = (data?: MetricsEntry[]) => {
-    if (!data) return [];
-    const stepRows = data.filter((entry): entry is MetricsEntry => {
-        return entry.train_loss !== null;
-    });
-    return stepRows.map((row) => ({ x: row.step, y: row.train_loss! }));
+    return (
+        <ChartsThemeProvider theme={{ dotRadius: 0, activeDotRadius: 0 }}>
+            <Flex direction='row' gap='size-200' wrap flex={1}>
+                <TrainingLossGraph data={data} />
+                {hasActionError && <ActionPredictionErrorGraph data={data} />}
+                <LearningRateGraph data={data} />
+                <ModelUpdateSizeGraph data={data} />
+            </Flex>
+            <Flex direction='row' gap='size-200' wrap flex={1}>
+                <SystemMemoryGraph data={data} />
+                {hasAcceleratorUtilization && <SystemAcceleratorUtilizationGraph data={data} />}
+                <SystemStepTimeGraph data={data} />
+                <SystemStepPerEpochGraph data={data} />
+            </Flex>
+        </ChartsThemeProvider>
+    );
 };
 
 export const JobMetricsContent = ({ jobId }: { jobId: string }) => {
@@ -36,11 +56,7 @@ export const JobMetricsContent = ({ jobId }: { jobId: string }) => {
         staleTime: Infinity,
     });
 
-    const lossStepMetrics = useMemo(() => {
-        return filterLossStepMetrics(query.data);
-    }, [query.data]);
-
-    return <MetricGraph title={'Loss'} yAxisLabel={'Loss'} xAxisLabel='Step' data={lossStepMetrics} />;
+    return <MetricsGraphs data={query.data} />;
 };
 
 export const MetricsContent = ({ modelId }: { modelId: string }) => {
@@ -58,9 +74,5 @@ export const MetricsContent = ({ modelId }: { modelId: string }) => {
         staleTime: Infinity,
     });
 
-    const lossStepMetrics = useMemo(() => {
-        return filterLossStepMetrics(query.data);
-    }, [query.data]);
-
-    return <MetricGraph title={'Loss'} yAxisLabel={'Loss'} xAxisLabel='Step' data={lossStepMetrics} />;
+    return <MetricsGraphs data={query.data} />;
 };
