@@ -119,25 +119,6 @@ class ModelImportService:
         project_id = dataset.project_id
         dataset_id = dataset.id
 
-        job = TrainJob(
-            project_id=project_id,
-            payload=TrainJobPayload(
-                project_id=project_id,
-                dataset_id=dataset_id,
-                policy=policy,
-                model_name=model_name,
-                max_steps=100,
-                batch_size=1,
-                auto_scale_batch_size=False,
-                base_model_id=base_model_id,
-                val_split=0.1,
-                device=None,
-            ),
-            status=JobStatus.COMPLETED,
-            message="Model import completed",
-        )
-        job = await JobService.create_job(job)
-
         model = Model(
             id=UUID(model_dir.name),
             project_id=project_id,
