@@ -56,6 +56,25 @@ const InferenceBackendLogo = ({ backend, isAvailable }: { backend: InferenceBack
     );
 };
 
+const Unavailable = ({ backend }: { backend: InferenceBackendConfig }) => {
+    return (
+        <Flex direction='column' gap='size-100' alignItems={'end'}>
+            <Badge variant={'negative'} UNSAFE_style={{ padding: 0, opacity: 0.9 }}>
+                Unavailable
+            </Badge>
+            <ContextualHelp variant='help'>
+                <Heading>Export missing</Heading>
+                <Content>
+                    <Text>
+                        This model does not include an exported model for {backend.label}. Try retraining the model to
+                        restart the model export.
+                    </Text>
+                </Content>
+            </ContextualHelp>
+        </Flex>
+    );
+};
+
 const formatSize = (bytes: number): string => {
     const mb = bytes / (1024 * 1024);
     if (mb >= 1024) {
@@ -64,27 +83,12 @@ const formatSize = (bytes: number): string => {
     return `${mb.toFixed(1)} MB`;
 };
 
-interface DetailCellProps {
-    exportDetail: BackendExportDetail | undefined;
-    backend: InferenceBackendConfig;
-}
-
-const ModelFormatSize = ({ backend, exportDetail }: DetailCellProps) => {
+const ModelFormatSize = ({ exportDetail }: { exportDetail: BackendExportDetail | undefined }) => {
     if (exportDetail === undefined) {
         return (
-            <Flex gap='size-100' alignItems={'center'}>
-                <Badge variant={'negative'} UNSAFE_style={{ padding: 0, opacity: 0.9 }}>
-                    Unavailable
-                </Badge>
-                <ContextualHelp variant='help'>
-                    <Heading>Export missing</Heading>
-                    <Content>
-                        <Text>
-                            This model does not include an exported model for {backend.label}. Try retraining the model
-                            to restart the model export.
-                        </Text>
-                    </Content>
-                </ContextualHelp>
+            <Flex direction='column' gap='size-10'>
+                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Size</Text>
+                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>—</Text>
             </Flex>
         );
     }
@@ -97,11 +101,17 @@ const ModelFormatSize = ({ backend, exportDetail }: DetailCellProps) => {
     );
 };
 
-const ModelPrecision = ({ exportDetail }: Pick<DetailCellProps, 'exportDetail'>) => {
+const ModelPrecision = ({ exportDetail }: { exportDetail: BackendExportDetail | undefined }) => {
     if (exportDetail === undefined) {
-        return null;
+        return (
+            <Flex direction='column' gap='size-10'>
+                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Precision</Text>
+                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>—</Text>
+            </Flex>
+        );
     }
 
+    // At the moment we only support FP16 models
     return (
         <Flex direction='column' gap='size-10'>
             <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Precision</Text>
@@ -131,12 +141,15 @@ const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
             borderRadius={'medium'}
             borderWidth='thin'
             borderColor={'gray-100'}
-            // maxWidth='size-5600'
         >
             <Flex direction='column' justifyContent='space-between' gap='size-200'>
                 <View paddingX='size-200'>
-                    <Flex direction='column' gap='size-100' marginEnd='size-200' justifyContent='center'>
-                        <InferenceBackendLogo backend={backend} isAvailable={isAvailable} />
+                    <Flex justifyContent={'space-between'}>
+                        <Flex direction='column' gap='size-100' marginEnd='size-200' justifyContent='center'>
+                            <InferenceBackendLogo backend={backend} isAvailable={isAvailable} />
+                        </Flex>
+
+                        {isAvailable === false && <Unavailable backend={backend} />}
                     </Flex>
                 </View>
 
@@ -144,7 +157,7 @@ const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
 
                 <View paddingX='size-200'>
                     <Flex gap='size-400' marginTop='size-100' width='100%'>
-                        <ModelFormatSize backend={backend} exportDetail={exportDetail} />
+                        <ModelFormatSize exportDetail={exportDetail} />
                         <ModelPrecision exportDetail={exportDetail} />
                         {isAvailable && (
                             <View marginStart='auto' alignSelf={'center'}>
@@ -155,13 +168,14 @@ const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
                                         color: 'inherit',
                                         display: 'inline-flex',
                                         textDecoration: 'none',
-                                        paddingInline: 'var(--spectrum-global-dimension-size-100)',
+                                        paddingInline: 'var(--spectrum-global-dimension-size-200)',
+                                        alignItems: 'center',
                                     }}
                                     target='_blank'
                                     rel='noopener noreferrer'
                                     variant='secondary'
                                 >
-                                    <Icon marginX='size-100'>
+                                    <Icon marginEnd='size-100'>
                                         <DownloadIcon />
                                     </Icon>
                                     <span>Download</span>
@@ -170,7 +184,6 @@ const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
                         )}
                     </Flex>
                 </View>
-                <View paddingX='size-200'></View>
             </Flex>
         </View>
     );
