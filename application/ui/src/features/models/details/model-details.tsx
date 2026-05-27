@@ -44,9 +44,6 @@ const ModelDetailsContent = ({ model }: { model: SchemaModel }) => {
                         <Flex direction='column' gap='size-50'>
                             <DetailRow name='Name' value={modelDetail.model.name} />
                             <DetailRow name='Policy' value={modelDetail.model.policy} />
-                            <DetailRow name='Version' value={modelDetail.model.version} />
-                            <DetailRow name='Created' value={model.created_at ?? '—'} />
-                            <DetailRow name='Exports' value={modelDetail.exports.length} />
                         </Flex>
                     }
                 />
@@ -83,6 +80,13 @@ const ModelDetailsContent = ({ model }: { model: SchemaModel }) => {
                                         value={formatDuration(summary.training_duration_seconds)}
                                     />
                                 )}
+
+                                <Divider orientation='horizontal' size='S' marginY='size-100' />
+
+                                {hparams &&
+                                    Object.entries(hparams)
+                                        .filter(([key]) => !SKIP_HPARAMS_KEYS.has(key))
+                                        .map(([key, value]) => <DetailRow key={key} name={key} value={value} />)}
                             </Flex>
                         }
                     />
