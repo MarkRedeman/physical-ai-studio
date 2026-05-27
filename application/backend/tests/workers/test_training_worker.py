@@ -147,7 +147,7 @@ class TestTraining:
 
         with (
             patch(f"{MODULE}.setup_policy", return_value=policy) as mock_setup,
-            patch(f"{MODULE}.Trainer", return_value=trainer),
+            patch(f"{MODULE}.Trainer", return_value=trainer) as MockTrainer,
             patch(f"{MODULE}.JobService") as MockJobService,
             patch(f"{MODULE}.ModelService"),
             patch(f"{MODULE}.LeRobotDataModule"),
@@ -155,8 +155,9 @@ class TestTraining:
             patch(f"{MODULE}.CSVLogger"),
             patch(f"{MODULE}.ModelCheckpoint"),
             patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
-            patch(f"{MODULE}.TrainingTrackingCallback"),
-            patch(f"{MODULE}.TrainingLogCallback"),
+            patch(f"{MODULE}.TrainingTrackingCallback") as MockTrackingCallback,
+            patch(f"{MODULE}.TrainingMetricsCallback") as MockMetricsCallback,
+            patch(f"{MODULE}.TrainingLogCallback") as MockLogCallback,
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
         ):
@@ -171,6 +172,9 @@ class TestTraining:
 
             mock_setup.assert_called_once()
             trainer.fit.assert_called_once()
+            assert MockMetricsCallback.return_value in MockTrainer.call_args.kwargs["callbacks"]
+            assert MockTrackingCallback.return_value in MockTrainer.call_args.kwargs["callbacks"]
+            assert MockLogCallback.return_value in MockTrainer.call_args.kwargs["callbacks"]
 
             MockJobService.update_job.assert_called_once()
             failed_call = MockJobService.update_job_status.call_args_list[0]
@@ -206,6 +210,7 @@ class TestTraining:
             patch(f"{MODULE}.ModelCheckpoint"),
             patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
             patch(f"{MODULE}.TrainingTrackingCallback"),
+            patch(f"{MODULE}.TrainingMetricsCallback"),
             patch(f"{MODULE}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
@@ -252,6 +257,7 @@ class TestTraining:
             patch(f"{MODULE}.ModelCheckpoint"),
             patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
             patch(f"{MODULE}.TrainingTrackingCallback"),
+            patch(f"{MODULE}.TrainingMetricsCallback"),
             patch(f"{MODULE}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
@@ -294,6 +300,7 @@ class TestTraining:
             patch(f"{MODULE}.ModelCheckpoint"),
             patch(f"{MODULE}.TrainingTrackingDispatcher") as MockDispatcher,
             patch(f"{MODULE}.TrainingTrackingCallback"),
+            patch(f"{MODULE}.TrainingMetricsCallback"),
             patch(f"{MODULE}.TrainingLogCallback"),
             patch(f"{MODULE}.get_torch_device", return_value="cpu"),
             patch(f"{MODULE}.get_lightning_strategy", return_value="auto"),
