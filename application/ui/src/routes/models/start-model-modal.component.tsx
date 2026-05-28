@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 
-import { Button, ButtonGroup, Content, Dialog, Divider, Heading } from '@geti-ui/ui';
+import { Button, ButtonGroup, Content, Dialog, Divider, Heading, ProgressCircle } from '@geti-ui/ui';
 import { useNavigate } from 'react-router';
 import { createSearchParams } from 'react-router-dom';
 
@@ -11,6 +11,7 @@ import {
     defaultBackend,
     getDefaultInferenceDevice,
     getSupportedInferenceDevices,
+    InferenceDevice,
 } from '../../features/models/backend-selection';
 import { paths } from '../../router';
 
@@ -28,13 +29,14 @@ interface StartInferenceDialogProps {
 }
 
 export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps) => {
-    const [backend, setBackend] = useState<string>(getDefaultbackend(model));
-    const [device, setDevice] = useState<string | undefined>();
+    const initialBackend = getDefaultbackend(model);
+    const [selectedInferenceDevice, setSelectedInferenceDevice] = useState<InferenceDevice | undefined>();
 
     const { data: inferenceDevices = [], isLoading } = $api.useQuery('get', '/api/system/devices/inference');
+    const backend = selectedInferenceDevice?.backend ?? initialBackend;
 
     const selectedDevice = getSupportedInferenceDevices(inferenceDevices, backend).find(
-        (inferenceDevice) => inferenceDevice.device === device
+        (inferenceDevice) => inferenceDevice.device === selectedInferenceDevice?.device
     );
     const inferenceDevice = selectedDevice ?? getDefaultInferenceDevice(inferenceDevices, backend);
 
@@ -60,14 +62,14 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
             <Heading>Select your inference backend</Heading>
             <Divider />
             <Content>
-                <BackendSelection
-                    model={model}
-                    backend={backend}
-                    device={inferenceDevice?.device}
-                    inferenceDevices={inferenceDevices}
-                    setBackend={setBackend}
-                    setDevice={setDevice}
-                />
+                <Suspense fallback={<ProgressCircle aria-label='Loading backends' isIndeterminate size='S' />}>
+                    <BackendSelection
+                        model={model}
+                        inferenceDevice={inferenceDevice}
+                        inferenceDevices={inferenceDevices}
+                        setInferenceDevice={setSelectedInferenceDevice}
+                    />
+                </Suspense>
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={close}>
