@@ -1,11 +1,48 @@
-import { Divider, Flex, Heading, Radio, RadioGroup, Text, View } from '@geti-ui/ui';
+import { useEffect } from 'react';
+
+import { Divider, Flex, Heading, Item, Picker, Radio, RadioGroup, Text, View } from '@geti-ui/ui';
 import { Label } from 'react-aria-components';
 
 import { $api } from '../../api/client';
-import { SchemaModel } from '../../api/openapi-spec';
+import { SchemaInferenceDeviceInfo, SchemaModel } from '../../api/openapi-spec';
 import { INFERENCE_BACKENDS } from './inference-backends';
 
 export const defaultBackend = 'openvino';
+
+export type InferenceDevice = Pick<SchemaInferenceDeviceInfo, 'backend' | 'device'>;
+
+const deviceTypeOrder: Record<SchemaInferenceDeviceInfo['type'], number> = {
+    xpu: 0,
+    npu: 1,
+    cuda: 2,
+    cpu: 3,
+};
+
+const getDeviceKey = ({ backend, device }: InferenceDevice) => `${backend}:${device}`;
+
+const sortInferenceDevices = (a: SchemaInferenceDeviceInfo, b: SchemaInferenceDeviceInfo) => {
+    const typeSort = deviceTypeOrder[a.type] - deviceTypeOrder[b.type];
+    if (typeSort !== 0) {
+        return typeSort;
+    }
+
+    return (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER);
+};
+
+export const getSupportedInferenceDevices = (devices: SchemaInferenceDeviceInfo[], backend: string) => {
+    // We've not yet verified that running our models on NPU works,
+    // so we filter it out for now
+    return devices
+        .filter((device) => device.backend === backend && device.type !== 'npu')
+        .toSorted(sortInferenceDevices);
+};
+
+export const getDefaultInferenceDevice = (devices: SchemaInferenceDeviceInfo[], backend: string) => {
+    const supportedDevices = getSupportedInferenceDevices(devices, backend);
+
+    // Prefer hardware acceleration
+    return supportedDevices.find((device) => device.type !== 'cpu') ?? supportedDevices.at(0);
+};
 
 interface BackendProps {
     id: string;
@@ -56,25 +93,68 @@ const Backend = ({ id, isSelected = false, isDisabled = false }: BackendProps) =
 interface BackendSelectionProps {
     model: SchemaModel;
     backend: string;
+    device: string | undefined;
     setBackend: (backend: string) => void;
+    setDevice: (device: string | undefined) => void;
 }
 
-export const BackendSelection = ({ model, backend, setBackend }: BackendSelectionProps) => {
+export const BackendSelection = ({ model, backend, device, setBackend, setDevice }: BackendSelectionProps) => {
     const { data: policyBackends } = $api.useSuspenseQuery('get', '/api/policies/backends');
+    const { data: inferenceDevices } = $api.useSuspenseQuery('get', '/api/system/devices/inference');
 
     const backends: Array<string> =
         policyBackends[model.policy].filter((modelBackend) => ['openvino', 'torch'].includes(modelBackend)) ?? [];
+    const devices = getSupportedInferenceDevices(inferenceDevices, backend);
+    const selectedDevice = devices.find((inferenceDevice) => inferenceDevice.device === device);
+
+    useEffect(() => {
+        if (selectedDevice !== undefined) {
+            return;
+        }
+
+        const defaultDevice = getDefaultInferenceDevice(inferenceDevices, backend);
+        setDevice(defaultDevice?.device);
+    }, [backend, inferenceDevices, selectedDevice, setDevice]);
+
+    const onBackendChange = (value: string) => {
+        setBackend(value);
+
+        const defaultDevice = getDefaultInferenceDevice(inferenceDevices, value);
+        setDevice(defaultDevice?.device);
+    };
 
     return (
-        <RadioGroup value={backend} onChange={(value) => setBackend(value)} isEmphasized width='100%'>
-            <Flex gap='size-200' direction='column'>
-                {backends.map((backendId) => {
-                    const isSelected = backendId === backend;
-                    const isDisabled = !model.available_backends.includes(backendId);
+        <Flex gap='size-200' direction='column'>
+            <RadioGroup value={backend} onChange={onBackendChange} isEmphasized width='100%'>
+                <Flex gap='size-200' direction='column'>
+                    {backends.map((backendId) => {
+                        const isSelected = backendId === backend;
+                        const isDisabled = !model.available_backends.includes(backendId);
 
-                    return <Backend key={backendId} id={backendId} isSelected={isSelected} isDisabled={isDisabled} />;
-                })}
-            </Flex>
-        </RadioGroup>
+                        return (
+                            <Backend key={backendId} id={backendId} isSelected={isSelected} isDisabled={isDisabled} />
+                        );
+                    })}
+                </Flex>
+            </RadioGroup>
+            <Picker
+                width='100%'
+                label='Inference device'
+                selectedKey={selectedDevice === undefined ? undefined : getDeviceKey(selectedDevice)}
+                onSelectionChange={(key) => {
+                    const selected = devices.find((inferenceDevice) => getDeviceKey(inferenceDevice) === key);
+                    if (selected !== undefined) {
+                        setDevice(selected.device);
+                    }
+                }}
+                isDisabled={devices.length === 0}
+            >
+                {devices.map((inferenceDevice) => (
+                    <Item key={getDeviceKey(inferenceDevice)} textValue={inferenceDevice.name}>
+                        <Text>{inferenceDevice.name}</Text>
+                    </Item>
+                ))}
+            </Picker>
+        </Flex>
     );
 };
