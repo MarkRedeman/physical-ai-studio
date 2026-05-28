@@ -2,7 +2,7 @@ from .base_job import JobStatus, JobType
 from .calibration import CalibrationConfig
 from .camera import Camera, CameraProfile
 from .dataset import Dataset, Episode, EpisodeInfo, EpisodeVideo, LeRobotDatasetInfo, Snapshot
-from .hardware import DeviceInfo, DeviceType
+from .hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDeviceInfo
 from .job import DatasetImportJob, Job, TrainJob
 from .model import BackendExportDetail, Model, ModelDetailResponse
 from .project import Project
@@ -20,6 +20,8 @@ __all__ = [
     "Episode",
     "EpisodeInfo",
     "EpisodeVideo",
+    "InferenceBackend",
+    "InferenceDeviceInfo",
     "Job",
     "JobStatus",
     "JobType",
