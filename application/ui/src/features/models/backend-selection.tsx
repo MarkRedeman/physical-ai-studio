@@ -90,35 +90,31 @@ const Backend = ({ id, isSelected = false, isDisabled = false }: BackendProps) =
 
 interface BackendSelectionProps {
     model: SchemaModel;
-    backend: string;
-    device: string | undefined;
+    inferenceDevice: InferenceDevice | undefined;
     inferenceDevices: SchemaInferenceDeviceInfo[];
-    setBackend: (backend: string) => void;
-    setDevice: (device: string | undefined) => void;
+    setInferenceDevice: (inferenceDevice: InferenceDevice | undefined) => void;
 }
 
 export const BackendSelection = ({
     model,
-    backend,
-    device,
+    inferenceDevice,
     inferenceDevices,
-    setBackend,
-    setDevice,
+    setInferenceDevice,
 }: BackendSelectionProps) => {
-    const { data: policyBackends } = $api.useQuery('get', '/api/policies/backends');
+    const { data: policyBackends } = $api.useSuspenseQuery('get', '/api/policies/backends');
+    const backend = inferenceDevice?.backend ?? defaultBackend;
+    const device = inferenceDevice?.device;
 
     const backends: Array<string> =
         policyBackends?.[model.policy].filter((modelBackend) => ['openvino', 'torch'].includes(modelBackend)) ?? [];
     const devices = getSupportedInferenceDevices(inferenceDevices, backend);
     const selectedDevice =
-        devices.find((inferenceDevice) => inferenceDevice.device === device) ??
+        devices.find((availableDevice) => availableDevice.device === device) ??
         getDefaultInferenceDevice(inferenceDevices, backend);
 
     const onBackendChange = (value: string) => {
-        setBackend(value);
-
         const defaultDevice = getDefaultInferenceDevice(inferenceDevices, value);
-        setDevice(defaultDevice?.device);
+        setInferenceDevice(defaultDevice);
     };
 
     return (
@@ -140,16 +136,16 @@ export const BackendSelection = ({
                 label='Inference device'
                 selectedKey={selectedDevice === undefined ? undefined : getDeviceKey(selectedDevice)}
                 onSelectionChange={(key) => {
-                    const selected = devices.find((inferenceDevice) => getDeviceKey(inferenceDevice) === key);
+                    const selected = devices.find((availableDevice) => getDeviceKey(availableDevice) === key);
                     if (selected !== undefined) {
-                        setDevice(selected.device);
+                        setInferenceDevice(selected);
                     }
                 }}
                 isDisabled={devices.length === 0}
             >
-                {devices.map((inferenceDevice) => (
-                    <Item key={getDeviceKey(inferenceDevice)} textValue={inferenceDevice.name}>
-                        <Text>{inferenceDevice.name}</Text>
+                {devices.map((availableDevice) => (
+                    <Item key={getDeviceKey(availableDevice)} textValue={availableDevice.name}>
+                        <Text>{availableDevice.name}</Text>
                     </Item>
                 ))}
             </Picker>
