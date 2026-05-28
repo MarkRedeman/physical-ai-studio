@@ -33,6 +33,13 @@ class DeviceInfo(BaseModel):
     index: int | None = Field(None, description="Device index among those of the same type (null for CPU)")
 
 
+class InferenceDevice(BaseModel):
+    """Selected backend-specific inference device."""
+
+    backend: InferenceBackend = Field(..., description="Inference backend (openvino, torch)")
+    device: str = Field(..., description="Backend-specific device identifier")
+
+
 class InferenceDeviceInfo(DeviceInfo):
     """Information about a backend-specific compute device available for inference."""
 
