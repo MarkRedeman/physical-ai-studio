@@ -16,6 +16,7 @@ def _device_summary(device):
 def test_get_inference_devices_returns_torch_cpu_when_openvino_missing() -> None:
     with (
         patch("services.system_service.import_module", side_effect=ImportError),
+        patch("services.system_service.SystemService._get_system_memory", return_value=64_000),
         patch("services.system_service.torch.xpu.is_available", return_value=False),
         patch("services.system_service.torch.cuda.is_available", return_value=False),
     ):
@@ -26,13 +27,14 @@ def test_get_inference_devices_returns_torch_cpu_when_openvino_missing() -> None
     assert devices[0].device == "cpu"
     assert devices[0].type == DeviceType.CPU
     assert devices[0].name == "CPU"
-    assert devices[0].memory is None
+    assert devices[0].memory == 64_000
     assert devices[0].index is None
 
 
 def test_get_inference_devices_returns_torch_accelerators() -> None:
     with (
         patch("services.system_service.import_module", side_effect=ImportError),
+        patch("services.system_service.SystemService._get_system_memory", return_value=64_000),
         patch("services.system_service.torch.xpu.is_available", return_value=True),
         patch("services.system_service.torch.xpu.device_count", return_value=1),
         patch(
@@ -49,7 +51,7 @@ def test_get_inference_devices_returns_torch_accelerators() -> None:
         devices = SystemService.get_inference_devices()
 
     assert [_device_summary(device) for device in devices] == [
-        (InferenceBackend.TORCH, "cpu", DeviceType.CPU, "CPU", None, None),
+        (InferenceBackend.TORCH, "cpu", DeviceType.CPU, "CPU", 64_000, None),
         (InferenceBackend.TORCH, "xpu:0", DeviceType.XPU, "Intel Arc", 8_000, 0),
         (InferenceBackend.TORCH, "cuda:0", DeviceType.CUDA, "NVIDIA GPU", 16_000, 0),
     ]
@@ -69,16 +71,17 @@ def test_get_inference_devices_returns_openvino_devices() -> None:
 
     with (
         patch("services.system_service.import_module", return_value=openvino),
+        patch("services.system_service.SystemService._get_system_memory", return_value=64_000),
         patch("services.system_service.torch.xpu.is_available", return_value=False),
         patch("services.system_service.torch.cuda.is_available", return_value=False),
     ):
         devices = SystemService.get_inference_devices()
 
     assert [_device_summary(device) for device in devices] == [
-        (InferenceBackend.TORCH, "cpu", DeviceType.CPU, "CPU", None, None),
-        (InferenceBackend.OPENVINO, "CPU", DeviceType.CPU, "CPU", None, None),
+        (InferenceBackend.TORCH, "cpu", DeviceType.CPU, "CPU", 64_000, None),
+        (InferenceBackend.OPENVINO, "CPU", DeviceType.CPU, "CPU", 64_000, None),
         (InferenceBackend.OPENVINO, "GPU.0", DeviceType.XPU, "Intel GPU", 32_000, 0),
-        (InferenceBackend.OPENVINO, "NPU.0", DeviceType.NPU, "Intel NPU", None, 0),
+        (InferenceBackend.OPENVINO, "NPU.0", DeviceType.NPU, "Intel NPU", 64_000, 0),
     ]
 
 
@@ -90,6 +93,7 @@ def test_get_inference_devices_uses_openvino_fallback_values() -> None:
 
     with (
         patch("services.system_service.import_module", return_value=openvino),
+        patch("services.system_service.SystemService._get_system_memory", return_value=64_000),
         patch("services.system_service.torch.xpu.is_available", return_value=False),
         patch("services.system_service.torch.cuda.is_available", return_value=False),
     ):
