@@ -3,6 +3,7 @@
 
 """Service for querying system hardware information."""
 
+import os
 from importlib import import_module
 from typing import Any
 
@@ -27,16 +28,17 @@ class SystemService:
         devices.extend(cls._get_openvino_inference_devices())
         return devices
 
-    @staticmethod
-    def _get_torch_inference_devices() -> list[InferenceDeviceInfo]:
+    @classmethod
+    def _get_torch_inference_devices(cls) -> list[InferenceDeviceInfo]:
         """Get compute devices available to the Torch backend for inference."""
+        system_memory = cls._get_system_memory()
         devices: list[InferenceDeviceInfo] = [
             InferenceDeviceInfo(
                 backend=InferenceBackend.TORCH,
                 device="cpu",
                 type=DeviceType.CPU,
                 name="CPU",
-                memory=None,
+                memory=system_memory,
                 index=None,
             ),
         ]
@@ -81,13 +83,14 @@ class SystemService:
             return []
 
         core = openvino.Core()
+        system_memory = cls._get_system_memory()
         devices: list[InferenceDeviceInfo] = [
             InferenceDeviceInfo(
                 backend=InferenceBackend.OPENVINO,
                 device="CPU",
                 type=DeviceType.CPU,
                 name="CPU",
-                memory=None,
+                memory=system_memory,
                 index=None,
             ),
         ]
@@ -105,7 +108,7 @@ class SystemService:
                         device=device,
                         type=DeviceType.NPU,
                         name=str(name),
-                        memory=None,
+                        memory=cls._get_openvino_device_memory(core, device) or system_memory,
                         index=cls._get_openvino_device_index(core, device),
                     ),
                 )
@@ -136,9 +139,20 @@ class SystemService:
 
     @classmethod
     def _get_openvino_device_memory(cls, core: Any, device: str) -> int | None:
-        """Return OpenVINO GPU memory in bytes when the property is available."""
+        """Return OpenVINO device memory in bytes when the property is available."""
         memory = cls._get_openvino_property(core, device, "GPU_DEVICE_TOTAL_MEM_SIZE")
         return int(memory) if memory is not None else None
+
+    @staticmethod
+    def _get_system_memory() -> int | None:
+        """Return total system memory in bytes when available."""
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            physical_pages = os.sysconf("SC_PHYS_PAGES")
+        except (ValueError, OSError, AttributeError):
+            logger.debug("Unable to read total system memory.")
+            return None
+        return int(page_size * physical_pages)
 
     @classmethod
     def _get_openvino_device_index(cls, core: Any, device: str) -> int | None:
