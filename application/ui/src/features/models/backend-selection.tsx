@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-
 import { Divider, Flex, Heading, Item, Picker, Radio, RadioGroup, Text, View } from '@geti-ui/ui';
 import { Label } from 'react-aria-components';
 
@@ -94,27 +92,27 @@ interface BackendSelectionProps {
     model: SchemaModel;
     backend: string;
     device: string | undefined;
+    inferenceDevices: SchemaInferenceDeviceInfo[];
     setBackend: (backend: string) => void;
     setDevice: (device: string | undefined) => void;
 }
 
-export const BackendSelection = ({ model, backend, device, setBackend, setDevice }: BackendSelectionProps) => {
-    const { data: policyBackends } = $api.useSuspenseQuery('get', '/api/policies/backends');
-    const { data: inferenceDevices } = $api.useSuspenseQuery('get', '/api/system/devices/inference');
+export const BackendSelection = ({
+    model,
+    backend,
+    device,
+    inferenceDevices,
+    setBackend,
+    setDevice,
+}: BackendSelectionProps) => {
+    const { data: policyBackends } = $api.useQuery('get', '/api/policies/backends');
 
     const backends: Array<string> =
-        policyBackends[model.policy].filter((modelBackend) => ['openvino', 'torch'].includes(modelBackend)) ?? [];
+        policyBackends?.[model.policy].filter((modelBackend) => ['openvino', 'torch'].includes(modelBackend)) ?? [];
     const devices = getSupportedInferenceDevices(inferenceDevices, backend);
-    const selectedDevice = devices.find((inferenceDevice) => inferenceDevice.device === device);
-
-    useEffect(() => {
-        if (selectedDevice !== undefined) {
-            return;
-        }
-
-        const defaultDevice = getDefaultInferenceDevice(inferenceDevices, backend);
-        setDevice(defaultDevice?.device);
-    }, [backend, inferenceDevices, selectedDevice, setDevice]);
+    const selectedDevice =
+        devices.find((inferenceDevice) => inferenceDevice.device === device) ??
+        getDefaultInferenceDevice(inferenceDevices, backend);
 
     const onBackendChange = (value: string) => {
         setBackend(value);
