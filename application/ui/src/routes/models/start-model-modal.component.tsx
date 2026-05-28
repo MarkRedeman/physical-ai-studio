@@ -1,11 +1,17 @@
-import { Suspense, useState } from 'react';
+import { useState } from 'react';
 
-import { Button, ButtonGroup, Content, Dialog, Divider, Heading, ProgressCircle } from '@geti-ui/ui';
+import { Button, ButtonGroup, Content, Dialog, Divider, Heading } from '@geti-ui/ui';
 import { useNavigate } from 'react-router';
 import { createSearchParams } from 'react-router-dom';
 
+import { $api } from '../../api/client';
 import { SchemaModel } from '../../api/openapi-spec';
-import { BackendSelection, defaultBackend } from '../../features/models/backend-selection';
+import {
+    BackendSelection,
+    defaultBackend,
+    getDefaultInferenceDevice,
+    getSupportedInferenceDevices,
+} from '../../features/models/backend-selection';
 import { paths } from '../../router';
 
 const getDefaultbackend = (model: SchemaModel) => {
@@ -25,9 +31,16 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
     const [backend, setBackend] = useState<string>(getDefaultbackend(model));
     const [device, setDevice] = useState<string | undefined>();
 
+    const { data: inferenceDevices = [], isLoading } = $api.useQuery('get', '/api/system/devices/inference');
+
+    const selectedDevice = getSupportedInferenceDevices(inferenceDevices, backend).find(
+        (inferenceDevice) => inferenceDevice.device === device
+    );
+    const inferenceDevice = selectedDevice ?? getDefaultInferenceDevice(inferenceDevices, backend);
+
     const navigate = useNavigate();
     const onStart = () => {
-        if (device === undefined) {
+        if (inferenceDevice === undefined) {
             return;
         }
 
@@ -38,7 +51,7 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
                 model_id: model.id!,
                 backend,
             }),
-            search: createSearchParams({ device }).toString(),
+            search: createSearchParams({ device: inferenceDevice.device }).toString(),
         });
     };
 
@@ -47,21 +60,20 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
             <Heading>Select your inference backend</Heading>
             <Divider />
             <Content>
-                <Suspense fallback={<ProgressCircle aria-label='Loading backends' isIndeterminate size='S' />}>
-                    <BackendSelection
-                        model={model}
-                        backend={backend}
-                        device={device}
-                        setBackend={setBackend}
-                        setDevice={setDevice}
-                    />
-                </Suspense>
+                <BackendSelection
+                    model={model}
+                    backend={backend}
+                    device={inferenceDevice?.device}
+                    inferenceDevices={inferenceDevices}
+                    setBackend={setBackend}
+                    setDevice={setDevice}
+                />
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={close}>
                     Cancel
                 </Button>
-                <Button variant='accent' onPress={onStart} isDisabled={device === undefined}>
+                <Button variant='accent' onPress={onStart} isDisabled={isLoading || inferenceDevice === undefined}>
                     Start
                 </Button>
             </ButtonGroup>
