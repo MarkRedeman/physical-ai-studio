@@ -2,6 +2,7 @@ import asyncio
 import multiprocessing as mp
 import queue
 import time
+import numpy as np
 from multiprocessing.synchronize import Event as EventClass
 from typing import TYPE_CHECKING
 
@@ -77,7 +78,17 @@ class ModelWorker(BaseProcessWorker):
                 try:
                     observation: Observation = self.observation_queue.get(timeout=1)
                     start_time = time.perf_counter()
-                    output = self.inference_model.predict_action_chunk(observation.to_numpy().to_dict(flatten=False))[0]
+                    output = self.inference_model.predict_action_chunk(observation.to_numpy().to_dict(flatten=False))
+                    if output.ndim == 3:  # noqa: PLR2004
+                        if output.shape[0] != 1:
+                            msg = f"Expected action batch dimension of 1, got {output.shape}."
+                            raise ValueError(msg)
+                        output = output[0]
+                    elif output.ndim == 1:
+                        output = output[np.newaxis, :]
+                    elif output.ndim != 2:  # noqa: PLR2004
+                        msg = f"Unsupported action shape {output.shape}; expected 1D, 2D, or batched 3D tensor."
+                        raise ValueError(msg)
                     elapsed_time = time.perf_counter() - start_time
                     logger.debug(f"Inference: ({elapsed_time}): {output.shape}")
                     self.output_queue.put(InferenceResult(time=elapsed_time, data=output))
