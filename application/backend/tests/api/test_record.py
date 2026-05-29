@@ -30,7 +30,7 @@ def test_handle_incoming_load_model_requires_inference_device(test_model) -> Non
         ]
     )
 
-    asyncio.run(handle_incoming(websocket, process))
+    asyncio.run(handle_incoming(websocket, process, set()))
 
     process.load_model.assert_called_once_with(
         Model.model_validate(test_model.model_dump(mode="json")),
