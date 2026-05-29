@@ -28,10 +28,25 @@ const sortInferenceDevices = (a: SchemaInferenceDeviceInfo, b: SchemaInferenceDe
 };
 
 export const getSupportedInferenceDevices = (devices: SchemaInferenceDeviceInfo[], backend: string) => {
-    // We've not yet verified that running our models on NPU works,
-    // so we filter it out for now
     return devices
-        .filter((device) => device.backend === backend && device.type !== 'npu')
+        .filter((device) => {
+            if (device.backend !== backend) {
+                return false;
+            }
+
+            // We've not yet verified that running our models on NPU works,
+            // so we filter it out for now
+            if (device.type === 'npu') {
+                return false;
+            }
+
+            // Using NVIDIA GPU in OpenVINO is not supported
+            if (device.type === 'xpu' && device.name.includes('NVIDIA')) {
+                return false;
+            }
+
+            return true;
+        })
         .toSorted(sortInferenceDevices);
 };
 
