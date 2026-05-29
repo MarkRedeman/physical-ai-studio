@@ -190,7 +190,15 @@ class RobotControlWorker(BaseThreadWorker):
                                     )
                                     action = self.model_integration.select_action(dataset_observation)
                                     if action is not None:
+                                        logger.debug(
+                                            "Model action before mapping: type={}, len={}, action_keys_len={}, preview={}",
+                                            type(action).__name__,
+                                            len(action) if hasattr(action, "__len__") else None,
+                                            len(self.environment_integration.action_keys),
+                                            action,
+                                        )
                                         actions = dict(zip(self.environment_integration.action_keys, action))
+                                        logger.debug("Mapped actions keys: {}", list(actions.keys()))
                                         report_observation["actions"] = actions
                                         await self.environment_integration.set_joints_state(actions, goal_time)
 

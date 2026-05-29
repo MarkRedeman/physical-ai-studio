@@ -1,4 +1,5 @@
 from physicalai.data import Observation
+from loguru import logger
 
 from control.inference_poller import InferencePoller
 from control.queue_mixer import QueueMixer
@@ -25,6 +26,12 @@ class SyncMixedModelIntegration:
     def select_action(self, observation: Observation) -> list[list[float]] | None:
         if self.inference_poller.has_result():
             inference_result = self.inference_poller.get_result()
+            logger.debug(
+                "Inference result received: shape={}, dtype={}, elapsed_time={:.4f}s",
+                getattr(inference_result.data, "shape", None),
+                getattr(inference_result.data, "dtype", None),
+                inference_result.time,
+            )
             offset = int(inference_result.time * self.fps)
             self.queue_mixer.add(inference_result.data, offset)
             self.queue_mixer.lerp_duration = max(offset, 1)
@@ -37,7 +44,13 @@ class SyncMixedModelIntegration:
             self.inference_poller.run_inference(observation)
 
         if not self.queue_mixer.empty():
-            return self.queue_mixer.pop().tolist()
+            action = self.queue_mixer.pop()
+            logger.debug(
+                "QueueMixer pop: shape={}, type={}",
+                getattr(action, "shape", None),
+                type(action).__name__,
+            )
+            return action.tolist()
 
         return None
 
