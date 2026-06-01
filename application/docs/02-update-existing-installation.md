@@ -22,11 +22,25 @@ docker compose up -d --force-recreate
 Then open `http://localhost:7860` and confirm your project loads.
 
 ## Update native setup
-[//]: # (Screenshot suggestion: two terminal windows, one for backend and one for UI, both restarted after pulling latest changes.)
 
-If you run backend and UI separately, then startup the backend and Ui separetly after pulling the new changes with git.
+### Upate the backend
+To update the backend, first go to `./application/backend` and update its dependencies,
 
-Follow the same steps in `./01-installation.md` for your hardware profile.
+```bash
+uv sync --extra xpu # or --extra cpu, --extra cuda
+```
+
+Then restart the backnd by running `./run.sh` as mentioned in `./01-installation.md`.
+
+### Upate the UI
+
+Go to `./application/ui` and update its dependencies,
+
+```bash
+npm install
+```
+
+and start the ui by running `npm run start`.
 
 ## Next
 
