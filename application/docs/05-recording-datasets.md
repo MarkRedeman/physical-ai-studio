@@ -1,17 +1,15 @@
 # Recording Datasets
 
-| **Create a new**                      | **Dataset overview**                         | **Dataset recording**                      |
-|---------------------------------------|----------------------------------------------|--------------------------------------------|
-| ![Create a new dataset][datasets-new] | ![Dataset overview][datasets-overview] | ![Record episodes][datasets-recording] |
+| **Create a new dataset**              | **Dataset overview**                        | **Dataset recording**                  |
+|---------------------------------------|---------------------------------------------|----------------------------------------|
+| ![Create a new dataset][datasets-new] | ![Dataset overview][dataset-review-episode] | ![Record episodes][datasets-recording] |
 
 [dataset-new]: ./assets/03-datasets-new.png
-[dataset-overview]: ./assets/03-datasets-overview.png
-[dataset-recording]: ./assets/03-datasets-recording.png
+[dataset-recording]: ./assets/03-dataset-recording.png
 
 This guide covers what users do in the UI to collect demonstration episodes.
 
 ## 1) Create a dataset
-[//]: # (Screenshot suggestion: New Dataset dialog showing Environment picker, Dataset name, Task, and Save button.)
 
 Start out by creating a dataset, provide it a name and a default task. The environment that you select will be used for recording episodes for the dataset.
 
@@ -29,13 +27,12 @@ Similarly to adding a dataset set we need a name. The default task and environme
 
 ## 2) Open recording mode
 
-| **No episodes yet**                      | **Dataset recording preview**                  | **Dataset recording**                  |
-|------------------------------------------|----------------------------------------|----------------------------------------|
-| ![No episodes yet][datasets-no-episodes] | ![Record episodes preview][datasets-recording-screen] | ![Recording an episode][datasets-recording] |
+| **No episodes yet**                      | **Dataset recording**                       |
+|------------------------------------------|---------------------------------------------|
+| ![No episodes yet][datasets-no-episodes] | ![Recording an episode][datasets-recording] |
 
 [dataset-no-episodes]: ./assets/05-no-episodes.png
-[dataset-recording-screen]: ./assets/05-datasets-recording-screen.png
-[dataset-recording]: ./assets/05-datasets-recording.png
+[dataset-recording]: ./assets/05-dataset-recording.png
 
 Before you start recording episodes please make sure that both follower and leader arm are free to move.
 Once you start recording the follower arm will follow the same movements as the leader.
@@ -58,6 +55,9 @@ Keyboard shortcuts in recording view:
 
 - Right arrow: Start episode or Accept.
 - Left arrow: Discard.
+
+> [!TIP]
+> You can resize and close the camera and robot panels.
 
 ## 3) Review datasets
 

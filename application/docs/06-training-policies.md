@@ -48,19 +48,6 @@ When a training job takes too long and you can interrupt training. This will sto
 When training finishes we export the model to all its supported backends: [PyTorch](https://github.com/pytorch/pytorch), [OpenVINO](https://github.com/openvinotoolkit/openvino), [ONNX](https://github.com/onnx/onnx) and [ExecuTorch](https://github.com/pytorch/executorch).
 Download the model and then use [OpenVINO PhysicalAI](https://github.com/openvinotoolkit/physicalai) to deploy it on your hardware.
 
-## Retraining flow
-
-| **Retrain model from menu**                          | **Retrain model configuration**                              |
-|------------------------------------------------------|--------------------------------------------------------------|
-| ![Retrain model from menu][models-retrain-from-menu] | ![Retrain model configuration][models-retrain-configuration] |
-|                                                      |                                                              |
-
-[models-retrain-from-menu]: ./assets/06-retrain-from-menu.png
-[models-retrain-configuration]: ./assets/06-retrain.png
-
-From model actions, users can choose retrain.
-This will use the same training configuration as its original model.
-
 ## Next
 
 - Run/deploy in UI: `application/docs/08-deploying-model-policies.md`.

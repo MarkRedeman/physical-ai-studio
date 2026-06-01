@@ -98,10 +98,11 @@ Open the dataset and start recording:
 
 | **Train a model**              | **Model list**                                    |
 |--------------------------------|---------------------------------------------------|
-| ![Train a model][models-train] | ![Model list with training progress][models-list] |
+| ![Train a model][models-train-model-policy] | ![Model list with training progress][models-list] |
 
-[models-train]: ./assets/03-models-train.png
-[models-list]: ./assets/03-models-list.png
+
+[models-train-model-policy]: ./assets/07-model-train-policy.png
+[models-list]: ./assets/07-models-list.png
 
 In Models:
 
