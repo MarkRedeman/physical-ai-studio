@@ -59,10 +59,33 @@ Keyboard shortcuts in recording view:
 - Right arrow: Start episode or Accept.
 - Left arrow: Discard.
 
-## 3) Exporting datasets
+## 3) Review datasets
+
+| **Review an episode**                         | **Remove episode from dataset**                         | **Export dataset**                 | **Rename dataset**                 |
+|-----------------------------------------------|---------------------------------------------------------|------------------------------------|------------------------------------|
+| ![Review an episode][datasets-review-episode] | ![Rename episode from dataset][datasets-remove-episode] | ![Export dataset][datasets-export] | ![Rename dataset][datasets-rename] |
+
+[dataset-review-episode]: ./assets/05-review-episode.png
+[dataset-remove-episode]: ./assets/05-remove-episode.png
+[dataset-export]: ./assets/05-dataset-export.png
+[dataset-rename]: ./assets/05-dataset-rename.png
+
+After you've finished recording your episodes you may review each individual episode.
+Episodes can be replayed in the UI and a graph of the joint states is shown to help you find bad episodes.
+
+### Export dataset
 
 At any time you may export a model to a [lerobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) format.
 You can import this back into Physical AI Studio on another system, use [physicalai-train](https://github.com/open-edge-platform/physical-ai-studio/tree/main/library) or [lerobot](https://huggingface.co/docs/lerobot/index) to train models using your dataset outside of the Studio.
+
+### Rename datasets
+
+Use Edit dataset name when:
+
+- A name is too generic.
+- You want clearer versioning for experiments.
+
+Keep names easy to scan in tabs and model-training pickers.
 
 ## Next
 
