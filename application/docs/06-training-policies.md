@@ -55,6 +55,9 @@ Download the model and then use [OpenVINO PhysicalAI](https://github.com/openvin
 | ![Retrain model from menu][models-retrain-from-menu] | ![Retrain model configuration][models-retrain-configuration] |
 |                                                      |                                                              |
 
+[models-retrain-from-menu]: ./assets/06-retrain-from-menu.png
+[models-retrain-configuration]: ./assets/06-retrain.png
+
 From model actions, users can choose retrain.
 This will use the same training configuration as its original model.
 

@@ -10,7 +10,6 @@ git rebase origin/main
 ```
 
 ## Update Docker setup
-[//]: # (Screenshot suggestion: terminal showing docker compose build and docker compose up with successful output.)
 
 From `application/docker/`:
 

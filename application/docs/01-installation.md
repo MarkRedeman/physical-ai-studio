@@ -3,7 +3,6 @@
 This guide helps you install Physical AI Studio and confirm that the UI is ready.
 
 ## Choose how to run
-[//]: # (Screenshot suggestion: side-by-side view of the docs snippets showing Docker and native options, with Docker visually highlighted as recommended.)
 
 Most users should start with Docker:
 
@@ -13,7 +12,6 @@ Most users should start with Docker:
 Use our native setup if you are planning to contribute to the project and want to make changes to either the backend or UI.
 
 ## Install with Docker (recommended)
-[//]: # (Screenshot suggestion: terminal in application/docker showing cp .env.example .env and docker compose up completing successfully.)
 
 From `application/docker/`:
 
@@ -25,17 +23,15 @@ docker compose up -d
 When startup is done, open `http://localhost:7860`.
 
 ## First UI check
-[//]: # (Screenshot suggestion: first loaded app screen showing Projects and, after opening a project, the Robots/Datasets/Models navigation tabs.)
 
-After opening the app, you should see:
+| **Project list**               |
+|--------------------------------|
+| ![Project list][projects-list] |
 
-- A Projects view.
-- The main project navigation after you create/select a project:
-  - Robots
-  - Datasets
-  - Models
+[projects-list]: ./assets/03-project-list.png
 
-If the page opens and you can create a project, your installation is ready.
+After opening the app, you should see the projects page.
+You may now create your first project, see [our getting started guide](./03-getting-started.md).
 
 ## If something does not open
 [//]: # (Screenshot suggestion: Docker Desktop or terminal status indicating containers running, plus browser URL bar at localhost:7860.)

@@ -5,7 +5,7 @@ In Physical AI Studio, an environment combines:
 - Robots (follower + teleoperator)
 - Cameras
 
-Datasets and model runs depend on this setup, so create it carefully in the UI.
+Datasets and model runs depend on this setup.
 
 ## 1) Add robots
 
@@ -55,10 +55,6 @@ To configure your Trossen's WidowX AI arms provide their IP Address, verify
 
 [robots-bimanual-widowx-ai]: ./assets/04-robots-new-bimanual-widowx-ai.png
 
-### Extending Physical AI Studio with new robots
-
-> TODO: TBD
-
 ## 2) Add cameras
 
 | **New USB Camera**                                   | **Cameras list**                            |
@@ -102,7 +98,6 @@ In the form, you will:
 After saving, open the environment and verify all robots and cameras appear as expected.
 
 ## Next
-[//]: # (Screenshot suggestion: optional docs navigation screenshot to Recording Datasets and Hardware Integration chapters.)
 
 - Continue with recording in `application/docs/05-recording-datasets.md`.
 - For hardware-specific troubleshooting, see `application/docs/10-integrating-new-hardware.md`.

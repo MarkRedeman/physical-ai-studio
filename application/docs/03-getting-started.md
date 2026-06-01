@@ -74,8 +74,8 @@ In Environments:
 
 ## 4) Create a dataset and record episodes
 
-| **Create a new**                      | **Dataset overview**                         | **Dataset recording**                      |
-|---------------------------------------|----------------------------------------------|--------------------------------------------|
+| **Create a new**                      | **Dataset overview**                   | **Dataset recording**                  |
+|---------------------------------------|----------------------------------------|----------------------------------------|
 | ![Create a new dataset][datasets-new] | ![Dataset overview][datasets-overview] | ![Record episodes][datasets-recording] |
 
 [dataset-new]: ./assets/03-datasets-new.png
@@ -117,6 +117,9 @@ Watch the training job status in the Models page.
 | **Run a model**               | **Model inference screen**                  |
 |-------------------------------|---------------------------------------------|
 | ![Run a model][inference-run] | ![Model inference screen][inference-screen] |
+
+[inference-run]: ./assets/03-inference-run.png
+[inference-screen]: ./assets/03-inference-screen.png
 
 On a trained model:
 
