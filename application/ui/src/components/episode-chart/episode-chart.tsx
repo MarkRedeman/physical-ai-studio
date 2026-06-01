@@ -116,7 +116,7 @@ export default function EpisodeChart({ actions, joints, fps, time, seek, play, p
                 />
                 <YAxis label={{ value: 'Value (deg)', angle: -90, position: 'insideLeft' }} />
 
-                <Legend verticalAlign='bottom' height={36} />
+                <Legend verticalAlign='bottom' />
                 {hoverPosition !== undefined && (
                     <ReferenceLine x={hoverPosition} stroke='#5ac3f8' label='' strokeWidth={2} />
                 )}

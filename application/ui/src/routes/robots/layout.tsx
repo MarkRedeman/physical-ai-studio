@@ -15,13 +15,13 @@ const CenteredLoading = () => {
 
 export const Layout = () => {
     return (
-        <Grid areas={['robot controls']} columns={[minmax('size-6000', 'auto'), '1fr']} height={'100%'} minHeight={0}>
+        <Grid areas={['robot controls']} columns={['size-6000', '1fr']} height={'100%'} minHeight={0}>
             <View gridArea='robot' backgroundColor={'gray-100'} padding='size-400'>
                 <Suspense fallback={<CenteredLoading />}>
                     <RobotsList />
                 </Suspense>
             </View>
-            <View gridArea='controls' backgroundColor={'gray-50'} minHeight={0}>
+            <View gridArea='controls' backgroundColor={'gray-50'} minHeight={0} overflow={'auto'}>
                 <Suspense fallback={<CenteredLoading />}>
                     <Outlet />
                 </Suspense>

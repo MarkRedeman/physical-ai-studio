@@ -66,7 +66,7 @@ const EpisodeTimelineComponent = () => {
         <div className={classes.timeline}>
             <Disclosure isQuiet>
                 <DisclosureTitle>Timeline</DisclosureTitle>
-                <DisclosurePanel>
+                <DisclosurePanel UNSAFE_style={{ paddingBlock: 0 }}>
                     <LiveEpisodeChart episode={episode} player={player} />
                 </DisclosurePanel>
             </Disclosure>
