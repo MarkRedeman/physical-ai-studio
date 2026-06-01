@@ -10,7 +10,7 @@ Most users should start with Docker:
 - Docker starts both backend and UI together.
 - You open one URL and can begin setting up projects right away.
 
-If you already run backend and UI separately, you can keep using the native setup from `application/README.md`.
+Use our native setup if you are planning to contribute to the project and want to make changes to either the backend or UI.
 
 ## Install with Docker (recommended)
 [//]: # (Screenshot suggestion: terminal in application/docker showing cp .env.example .env and docker compose up completing successfully.)
@@ -18,8 +18,8 @@ If you already run backend and UI separately, you can keep using the native setu
 From `application/docker/`:
 
 ```bash
-cp .env.example .env
-docker compose up
+./setup-devices.sh --xpu # or use --cuda, or --cpu
+docker compose up -d
 ```
 
 When startup is done, open `http://localhost:7860`.
@@ -44,8 +44,63 @@ If the page opens and you can create a project, your installation is ready.
 - Confirm no other app is already using the same port.
 - Restart the stack from `application/docker/`.
 
+## Alternatively install natively 
+
+You may choose to run the backend and UI directly on your system using your local python and node setup. This is mainly intended as a development setup, and requires installing prerequisites on your system.
+
+### Prerequisites
+
+Before starting the backend, install the system libraries.
+
+On Debian/Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  ffmpeg \
+  libgl1 \
+  libglib2.0-0 \
+  libusb-1.0-0 \
+  libusb-1.0-0-dev \
+  libclang-dev \
+  pkg-config \
+  build-essential \
+  g++ \
+  git
+```
+
+If you are using another Linux distribution, install equivalent packages before running
+the native setup steps below.
+
+### Backend
+
+Install the [uv package manager](https://docs.astral.sh/uv/getting-started/installation/), then run the commands below,
+
+```bash
+cd backend
+uv sync --extra xpu # or `--extra cpu` or `--extra cuda`
+./run.sh
+```
+
+Backend runs at http://localhost:7860
+
+If you plan to train Hugging Face Hub-backed policies (for example, SmolVLA, Pi0,
+and others), configure `HF_TOKEN` in `backend/.env`. See
+[Hugging Face Integration](./backend/docs/huggingface_integration.md).
+
+### Frontend
+
+Install [node v24](https://nodejs.org/en/download) (we recommend using nvm), and run the commands below,
+
+```bash
+cd ui
+npm install
+npm run start
+```
+
+UI runs at http://localhost:3000
+
 ## Next
-[//]: # (Screenshot suggestion: optional docs navigation screenshot showing links to Getting Started and Update Existing Installation.)
 
 - Continue with `application/docs/03-getting-started.md`.
 - If you are upgrading an existing setup, use `application/docs/02-update-existing-installation.md`.
