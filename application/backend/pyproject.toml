@@ -10,7 +10,7 @@ dependencies = [
   'harvesters; sys_platform != "darwin"',
   "fastapi[standard]",
   "physicalai-train[pi0,smolvla]",
-  "physicalai[robots, capture]",
+  "physicalai[robots, capture]~=0.1.0",
   "lerobot[feetech]==0.5.1",
   "numpy",
   "websockets",
@@ -86,8 +86,6 @@ explicit = false
 
 [tool.uv.sources]
 physicalai-train = { path = "../../library", editable = true }
-# TODO(#450): Replace with published package once physicalai is back in its own repo.
-physicalai = { git = "https://github.com/openvinotoolkit/physicalai.git", rev = "bc3f760ac3cc7aad75cda96a77cb74c31ef60b94" }
 # Keep torchao on PyPI for all extras.
 # The XPU index publishes `torchao` local-version wheels (e.g. `+xpu`) that can
 # be selected via unsafe-best-match even for non-XPU installs (like `--extra cuda`),
@@ -124,6 +122,7 @@ all = [
 [tool.uv]
 default-groups = ["all"]
 exclude-newer = "7 days"
+exclude-newer-package = { physicalai = "2 day" }
 # The pytorch-xpu index is non-explicit (explicit = false) because
 # transitive deps like pytorch-triton-xpu only exist on the XPU index.
 # unsafe-best-match is required because PyTorch indexes can host stale

@@ -97,6 +97,9 @@ conflicts = [[
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P7D"
 
+[options.exclude-newer-package]
+physicalai = { timestamp = "0001-01-01T00:00:00Z", span = "P2D" }
+
 [manifest]
 overrides = [{ name = "pytest", specifier = ">=9.0.3" }]
 
@@ -2953,7 +2956,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "numpy" },
     { name = "opencv-python" },
-    { name = "physicalai", extras = ["robots", "capture"], git = "https://github.com/openvinotoolkit/physicalai.git?rev=bc3f760ac3cc7aad75cda96a77cb74c31ef60b94" },
+    { name = "physicalai", extras = ["robots", "capture"], specifier = "~=0.1.0" },
     { name = "physicalai-train", extras = ["pi0", "smolvla"], editable = "../../library" },
     { name = "pydantic", specifier = ">=2.12,<2.13" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
@@ -2995,7 +2998,7 @@ lint = [
 [[package]]
 name = "physicalai"
 version = "0.1.0"
-source = { git = "https://github.com/openvinotoolkit/physicalai.git?rev=bc3f760ac3cc7aad75cda96a77cb74c31ef60b94#bc3f760ac3cc7aad75cda96a77cb74c31ef60b94" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonargparse", extra = ["shtab", "signatures"] },
     { name = "loguru" },
@@ -3011,6 +3014,10 @@ dependencies = [
     { name = "pyyaml" },
     { name = "safetensors" },
     { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/49/5e/df939c86baba70fbe81e422d4051f0cfc3d410d588dfe88ad134e12177d3/physicalai-0.1.0.tar.gz", hash = "sha256:0b01a3373efd743de4f9d7d146483f1d85a02c58b63346950ebc1b26bab97405", size = 55206311, upload-time = "2026-05-29T16:17:54.447Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/8b/0ab261dfd36b2f515795041af910a3ebfe04b9806c82445b624ad61600fe/physicalai-0.1.0-py3-none-any.whl", hash = "sha256:947f81497157f547c84b580730b84a82ec4fcd1f699f4a198e6d8a643916e911", size = 193995, upload-time = "2026-05-29T16:17:52.009Z" },
 ]
 
 [package.optional-dependencies]
@@ -3085,7 +3092,7 @@ requires-dist = [
     { name = "openvino-tokenizers", specifier = ">=2026.0" },
     { name = "peft", marker = "extra == 'groot'", specifier = ">=0.13.0,<1.0.0" },
     { name = "peft", marker = "extra == 'pi0'", specifier = ">=0.13.0,<1.0.0" },
-    { name = "physicalai", git = "https://github.com/openvinotoolkit/physicalai.git?rev=bc3f760ac3cc7aad75cda96a77cb74c31ef60b94" },
+    { name = "physicalai", specifier = "~=0.1.0" },
     { name = "physicalai-train", extras = ["groot"], marker = "extra == 'all'" },
     { name = "physicalai-train", extras = ["libero"], marker = "extra == 'all'" },
     { name = "physicalai-train", extras = ["pi0"], marker = "extra == 'all'" },
