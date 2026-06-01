@@ -1,5 +1,6 @@
-"""Unit tests for ModelService focusing on the delete_model behaviour."""
+"""Unit tests for ModelService."""
 
+import json
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -22,6 +23,86 @@ def _make_model(snapshot_id=None) -> Model:
             "properties": {},
         }
     )
+
+
+def test_get_backend_io_spec_reads_manifest(tmp_path) -> None:
+    manifest = {
+        "model": {
+            "input_features": [
+                {
+                    "class_path": "physicalai.inference.data.features.InferenceFeature",
+                    "init_args": {
+                        "ftype": "STATE",
+                        "shape": [6],
+                        "name": "state",
+                        "dtype": "float32",
+                    },
+                },
+                {
+                    "class_path": "physicalai.inference.data.features.InferenceFeature",
+                    "init_args": {
+                        "ftype": "VISUAL",
+                        "shape": [3, 480, 640],
+                        "name": "images.wrist",
+                        "dtype": "float32",
+                    },
+                },
+            ]
+        },
+        "input_names": ["state", "images.wrist"],
+        "output_names": ["action"],
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    io_spec = ModelService.get_backend_io_spec(tmp_path)
+
+    assert io_spec is not None
+    assert [feature.name for feature in io_spec.input_features] == ["state", "images.wrist"]
+    assert io_spec.input_features[1].shape == [3, 480, 640]
+    assert io_spec.input_features[1].ftype == "VISUAL"
+    assert io_spec.input_features[1].dtype == "float32"
+    assert io_spec.input_names == ["state", "images.wrist"]
+    assert io_spec.output_names == ["action"]
+
+
+def test_get_backend_io_spec_returns_none_for_invalid_manifest(tmp_path) -> None:
+    (tmp_path / "manifest.json").write_text("{", encoding="utf-8")
+
+    assert ModelService.get_backend_io_spec(tmp_path) is None
+
+
+def test_get_backend_details_includes_io_spec(tmp_path) -> None:
+    model = _make_model()
+    model.path = str(tmp_path)
+    backend_dir = tmp_path / "exports" / "torch"
+    backend_dir.mkdir(parents=True)
+    (backend_dir / "model.pt").write_text("weights", encoding="utf-8")
+    (backend_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "model": {
+                    "input_features": [
+                        {
+                            "init_args": {
+                                "ftype": "STATE",
+                                "shape": [6],
+                                "name": "state",
+                                "dtype": "float32",
+                            }
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    details = ModelService.get_backend_details(model)
+
+    assert len(details) == 1
+    assert details[0].type == "torch"
+    assert details[0].io_spec is not None
+    assert details[0].io_spec.input_features[0].name == "state"
 
 
 @pytest.mark.anyio

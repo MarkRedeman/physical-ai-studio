@@ -62,11 +62,26 @@ class Model(BaseIDModel):
     )
 
 
+class IOFeature(BaseModel):
+    name: str
+    ftype: str | None = None
+    shape: list[int] | None = None
+    dtype: str | None = None
+
+
+class BackendIOSpec(BaseModel):
+    input_features: list[IOFeature]
+    output_features: list[IOFeature]
+    input_names: list[str]
+    output_names: list[str]
+
+
 class BackendExportDetail(BaseModel):
     type: str
     size_bytes: int
     file_count: int
     exported_at: datetime | None = None
+    io_spec: BackendIOSpec | None = None
 
 
 class TrainingSummary(BaseModel):
