@@ -4,7 +4,7 @@ This guide helps you install Physical AI Studio and confirm that the UI is ready
 
 ## Choose how to run
 
-Most users should start with Docker:
+Docker is the recommended path for most users:
 
 - Docker starts both backend and UI together.
 - You open one URL and can begin setting up projects right away.
