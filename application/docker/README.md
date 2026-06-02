@@ -25,7 +25,7 @@ cp .env.example .env
 #    Edit COMPOSE_PROFILES to: cpu (default), xpu, or cuda
 
 # 3. (Optional) Auto-detect host device GIDs for non-Debian systems
-./setup-devices.sh
+./setup-devices.sh --xpu # or use --cuda, --cpu
 
 # 4. Start Physical AI Studio
 docker compose up

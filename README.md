@@ -58,8 +58,8 @@ cd physical-ai-studio
 
 # Setup and run docker services
 cd application/docker
-./setup-devices.sh
-docker compose --profile xpu up # or use --profile cuda, --profile cpu
+./setup-devices.sh --xpu # or use --cuda, --cpu
+docker compose up -d
 ```
 
 Application runs at <http://localhost:7860>. See the [Docker README](./application/docker/README.md) for
