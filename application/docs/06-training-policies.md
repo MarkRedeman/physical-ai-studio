@@ -2,11 +2,11 @@
 
 | **Train model policy**                           | **Open model training logs**             | **Model formats**                                  |
 |--------------------------------------------------|------------------------------------------|----------------------------------------------------|
-| ![Train model policy][models-train-model-policy] | ![Open model training logs][models-logs] | ![Download optimized model formats][model-formats] |
+| ![Train model policy][models-train-model-policy] | ![Open model training logs][model-logs]  | ![Download optimized model formats][model-formats] |
 
-[models-train-model-policy]: ./assets/07-model-train-policy.png
-[model-logs]: ./assets/07-model-logs.png
-[model-formats]: ./assets/07-model-formats.png
+[models-train-model-policy]: ./assets/06-models-train.png
+[model-logs]: ./assets/06-model-logs.png
+[model-formats]: ./assets/06-models-formats.png
 
 This guide describes how users train models from the Models page.
 
@@ -27,10 +27,9 @@ You may need to tune these settings to get an optimal result.
 
 | **Training job in progress**                              | **Open model training logs**             |
 |-----------------------------------------------------------|------------------------------------------|
-| ![Training job in progress][models-train-job-in-progress] | ![Open model training logs][models-logs] |
+| ![Training job in progress][model-train-job-in-progress]  | ![Open model training logs][model-logs]  |
 
-[model-train-job-in-progress]: ./assets/07-model-train-job-in-progress.png
-[model-logs]: ./assets/07-model-logs.png
+[model-train-job-in-progress]: ./assets/06-model-train-job-in-progress.png
 
 Once you start a training you can see its progress in the models screen. Click the job to see a live view of its loss curve.
 You may also view the training logs.
@@ -43,11 +42,9 @@ When a training job takes too long and you can interrupt training. This will sto
 |----------------------------------------------------|
 | ![Download optimized model formats][model-formats] |
 
-[model-formats]: ./assets/07-model-formats.png
-
 When training finishes we export the model to all its supported backends: [PyTorch](https://github.com/pytorch/pytorch), [OpenVINO](https://github.com/openvinotoolkit/openvino), [ONNX](https://github.com/onnx/onnx) and [ExecuTorch](https://github.com/pytorch/executorch).
 Download the model and then use [OpenVINO PhysicalAI](https://github.com/openvinotoolkit/physicalai) to deploy it on your hardware.
 
 ## Next
 
-- Run/deploy in UI: `application/docs/08-deploying-model-policies.md`.
+- Run/deploy in UI: [Deploying Model Policies](./07-deploying-model-policies.md).

@@ -7,15 +7,15 @@ In Physical AI Studio, an environment combines:
 
 Datasets and model runs depend on this setup.
 
-## 1) Add robots
+## 1. Add robots
 
 | **SO101 Leader robot**                                     | **Trossen WidowX AI follower robot**                                 | **Robots list**                           |
 |------------------------------------------------------------|----------------------------------------------------------------------|-------------------------------------------|
 | ![Setup a new SO101 Leader robot][robots-new-so101-leader] | ![Setup a new WidowXAI follower robot][robots-new-widowxai-follower] | ![List of configured robots][robots-list] |
 
-[robots-new-so101-leader]: ./assets/03-robots-new-so101-leader.png
-[robots-new-widowxai-follower]: ./assets/03-robots-new-widowxai-follower.png
-[robots-list]: ./assets/03-robots-list.png
+[robots-new-so101-leader]: ./assets/04-robots-new-so101-leader.png
+[robots-new-widowxai-follower]: ./assets/04-robots-new-widowxai-follower.png
+[robots-list]: ./assets/04-robots-list.png
 
 [//]: # (Screenshot suggestion: Robots section landing view with list of configured robots and Add new robot action.)
 
@@ -34,7 +34,7 @@ What you see in the UI depends on robot type.
 [so101-verification]: ./assets/04-so101-verification.png
 
 For SO101, the UI can guide you through a setup wizard.
-If you've not yet configured your SO101's control board then we will help you setup the motors, and subsequently calibrate the arm. 
+If you've not yet configured your SO101's control board then we will help you set up the motors, and subsequently calibrate the arm.
 Once done you can verify that calibration is successful by moving the arm and check that its movement matches the screen.
 
 You may also choose to "Skip verification" if you have previously calibrated the arm. In this case we read the calibration values from the control board.
@@ -55,14 +55,14 @@ To configure your Trossen's WidowX AI arms provide their IP Address, verify
 
 [robots-bimanual-widowx-ai]: ./assets/04-robots-new-bimanual-widowx-ai.png
 
-## 2) Add cameras
+## 2. Add cameras
 
 | **New USB Camera**                                   | **Cameras list**                            |
 |------------------------------------------------------|---------------------------------------------|
 | ![Setup a new overview camera][cameras-new-overview] | ![List of configured cameras][cameras-list] |
 
-[cameras-new-overview]: ./assets/03-cameras-new-overview.png
-[cameras-list]: ./assets/03-cameras-list.png
+[cameras-new-overview]: ./assets/04-cameras-new-overview.png
+[cameras-list]: ./assets/04-cameras-list.png
 
 Open Cameras and add each camera you need.
 
@@ -77,14 +77,14 @@ During setup, confirm:
 In our own setups we often use a resolution of 640 x 480 at 30 FPS.
 Internally the models trained by Physical AI Studio resize images to a low resolution, hence choosing a high resolution for your cameras may not be effective and end up consuming more disk space.
 
-## 3) Create environment
+## 3. Create environment
 
 | **New environment**                          | **Environment list**                       |
 |----------------------------------------------|--------------------------------------------|
 | ![Setup a new environment][environments-new] | ![List of environments][environments-list] |
 
-[environments-new]: ./assets/03-environments-new.png
-[environments-list]: ./assets/03-environments-list.png
+[environments-new]: ./assets/04-environment-new.png
+[environments-list]: ./assets/04-environments-list.png
 
 Open Environments and create a new one.
 
@@ -99,5 +99,4 @@ After saving, open the environment and verify all robots and cameras appear as e
 
 ## Next
 
-- Continue with recording in `application/docs/05-recording-datasets.md`.
-- For hardware-specific troubleshooting, see `application/docs/10-integrating-new-hardware.md`.
+- Continue with recording in [Recording Datasets](./05-recording-datasets.md).

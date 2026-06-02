@@ -28,7 +28,7 @@ When startup is done, open `http://localhost:7860`.
 |--------------------------------|
 | ![Project list][projects-list] |
 
-[projects-list]: ./assets/03-project-list.png
+[projects-list]: ./assets/03-projects-list.png
 
 After opening the app, you should see the projects page.
 You may now create your first project, see [our getting started guide](./03-getting-started.md).
@@ -40,7 +40,7 @@ You may now create your first project, see [our getting started guide](./03-gett
 - Confirm no other app is already using the same port.
 - Restart the stack from `application/docker/`.
 
-## Alternatively install natively 
+## Alternatively install natively
 
 You may choose to run the backend and UI directly on your system using your local python and node setup. This is mainly intended as a development setup, and requires installing prerequisites on your system.
 
@@ -82,7 +82,7 @@ Backend runs at http://localhost:7860
 
 If you plan to train Hugging Face Hub-backed policies (for example, SmolVLA, Pi0,
 and others), configure `HF_TOKEN` in `backend/.env`. See
-[Hugging Face Integration](./backend/docs/huggingface_integration.md).
+[Hugging Face Integration](../backend/docs/huggingface_integration.md).
 
 ### Frontend
 
@@ -98,5 +98,5 @@ UI runs at http://localhost:3000
 
 ## Next
 
-- Continue with `application/docs/03-getting-started.md`.
-- If you are upgrading an existing setup, use `application/docs/02-update-existing-installation.md`.
+- Continue with [Getting Started](./03-getting-started.md).
+- If you are upgrading an existing setup, use [Update Existing Installation](./02-update-existing-installation.md).

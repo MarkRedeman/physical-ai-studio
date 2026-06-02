@@ -22,16 +22,16 @@ Then open `http://localhost:7860` and confirm your project loads.
 
 ## Update native setup
 
-### Upate the backend
+### Update the backend
 To update the backend, first go to `./application/backend` and update its dependencies,
 
 ```bash
 uv sync --extra xpu # or --extra cpu, --extra cuda
 ```
 
-Then restart the backnd by running `./run.sh` as mentioned in `./01-installation.md`.
+Then restart the backend by running `./run.sh` as mentioned in [Installation](./01-installation.md).
 
-### Upate the UI
+### Update the UI
 
 Go to `./application/ui` and update its dependencies,
 
@@ -39,9 +39,9 @@ Go to `./application/ui` and update its dependencies,
 npm install
 ```
 
-and start the ui by running `npm run start`.
+and start the UI by running `npm run start`.
 
 ## Next
 
-- If this is your first run on a new machine, go to `application/docs/01-installation.md`.
-- For the full workflow, continue with `application/docs/03-getting-started.md`.
+- If this is your first run on a new machine, go to [Installation](./01-installation.md).
+- For the full workflow, continue with [Getting Started](./03-getting-started.md).

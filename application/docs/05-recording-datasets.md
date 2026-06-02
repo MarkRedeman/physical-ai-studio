@@ -2,14 +2,15 @@
 
 | **Create a new dataset**              | **Dataset overview**                        | **Dataset recording**                  |
 |---------------------------------------|---------------------------------------------|----------------------------------------|
-| ![Create a new dataset][datasets-new] | ![Dataset overview][dataset-review-episode] | ![Record episodes][datasets-recording] |
+| ![Create a new dataset][dataset-new]  | ![Dataset overview][dataset-review-episode] | ![Record episodes][dataset-recording]  |
 
-[dataset-new]: ./assets/03-datasets-new.png
-[dataset-recording]: ./assets/03-dataset-recording.png
+[dataset-new]: ./assets/05-datasets-new.png
+[dataset-review-episode]: ./assets/05-dataset-review-episode.png
+[dataset-recording]: ./assets/05-dataset-recording.png
 
 This guide covers what users do in the UI to collect demonstration episodes.
 
-## 1) Create a dataset
+## 1. Create a dataset
 
 Start out by creating a dataset, provide it a name and a default task. The environment that you select will be used for recording episodes for the dataset.
 
@@ -19,20 +20,19 @@ Start out by creating a dataset, provide it a name and a default task. The envir
 |-------------------------------------------|------------------------------------|
 | ![Upload dataset][datasets-import-upload] | ![Import dataset][datasets-import] |
 
-[dataset-import-upload]: ./assets/05-import-dataset-upload.png
-[dataset-import]: ./assets/05-import-dataset.png
+[datasets-import-upload]: ./assets/05-dataset-import-upload.png
+[datasets-import]: ./assets/05-dataset-import-dataset.png
 
 Alternatively you can import either a [lerobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) dataset or an exported dataset from Physical AI Studio.
-Similarly to adding a dataset set we need a name. The default task and environment for the dataset can be selected after uploading your dataset.
+Similarly to adding a dataset we need a name. The default task and environment for the dataset can be selected after uploading your dataset.
 
-## 2) Open recording mode
+## 2. Open recording mode
 
 | **No episodes yet**                      | **Dataset recording**                       |
 |------------------------------------------|---------------------------------------------|
-| ![No episodes yet][datasets-no-episodes] | ![Recording an episode][datasets-recording] |
+| ![No episodes yet][dataset-no-episodes]  | ![Recording an episode][dataset-recording]  |
 
 [dataset-no-episodes]: ./assets/05-no-episodes.png
-[dataset-recording]: ./assets/05-dataset-recording.png
 
 Before you start recording episodes please make sure that both follower and leader arm are free to move.
 Once you start recording the follower arm will follow the same movements as the leader.
@@ -42,7 +42,7 @@ Once your environment has finished loading you will see your camera feeds as wel
 
 In the top right you can also see the total episodes recorded in your dataset.
 We recommend recording at least 50 episodes before you start training a model.
-    
+
 Typically recording episodes is done in a loop:
 
 1. Reset your physical scene.
@@ -59,14 +59,13 @@ Keyboard shortcuts in recording view:
 > [!TIP]
 > You can resize and close the camera and robot panels.
 
-## 3) Review datasets
+## 3. Review datasets
 
 | **Review an episode**                         | **Remove episode from dataset**                         | **Export dataset**                 | **Rename dataset**                 |
 |-----------------------------------------------|---------------------------------------------------------|------------------------------------|------------------------------------|
-| ![Review an episode][datasets-review-episode] | ![Rename episode from dataset][datasets-remove-episode] | ![Export dataset][datasets-export] | ![Rename dataset][datasets-rename] |
+| ![Review an episode][dataset-review-episode]  | ![Rename episode from dataset][dataset-remove-episode]  | ![Export dataset][dataset-export]  | ![Rename dataset][dataset-rename]  |
 
-[dataset-review-episode]: ./assets/05-review-episode.png
-[dataset-remove-episode]: ./assets/05-remove-episode.png
+[dataset-remove-episode]: ./assets/05-dataset-remove-episode.png
 [dataset-export]: ./assets/05-dataset-export.png
 [dataset-rename]: ./assets/05-dataset-rename.png
 
@@ -89,5 +88,4 @@ Keep names easy to scan in tabs and model-training pickers.
 
 ## Next
 
-- Manage and curate datasets in `application/docs/06-dataset-management.md`.
-- Start training in `application/docs/07-training-policies.md`.
+- Start training in [Training Policies](./06-training-policies.md).
