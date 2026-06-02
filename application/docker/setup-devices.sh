@@ -14,9 +14,11 @@
 # Usage:
 #   ./application/docker/setup-devices.sh          # auto-detect & write
 #   ./application/docker/setup-devices.sh --check   # check only, no writes
+#   ./application/docker/setup-devices.sh --cpu    # write COMPOSE_PROFILES=cpu
 #   ./application/docker/setup-devices.sh --xpu     # write COMPOSE_PROFILES=xpu
 #   ./application/docker/setup-devices.sh --cuda    # write COMPOSE_PROFILES=cuda
 # ---------------------------------------------------------------------------
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

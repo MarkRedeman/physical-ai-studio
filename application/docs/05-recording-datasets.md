@@ -61,9 +61,9 @@ Keyboard shortcuts in recording view:
 
 ## 3. Review datasets
 
-| **Review an episode**                         | **Remove episode from dataset**                         | **Export dataset**                 | **Rename dataset**                 |
-|-----------------------------------------------|---------------------------------------------------------|------------------------------------|------------------------------------|
-| ![Review an episode][dataset-review-episode]  | ![Rename episode from dataset][dataset-remove-episode]  | ![Export dataset][dataset-export]  | ![Rename dataset][dataset-rename]  |
+| **Review an episode**                        | **Remove episode from dataset**                        | **Export dataset**                | **Rename dataset**                |
+|----------------------------------------------|--------------------------------------------------------|-----------------------------------|-----------------------------------|
+| ![Review an episode][dataset-review-episode] | ![Remove episode from dataset][dataset-remove-episode] | ![Export dataset][dataset-export] | ![Rename dataset][dataset-rename] |
 
 [dataset-remove-episode]: ./assets/05-dataset-remove-episode.png
 [dataset-export]: ./assets/05-dataset-export.png
