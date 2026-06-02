@@ -81,9 +81,9 @@ export const MotorSetupStep = () => {
     };
 
     return (
-        <Flex direction='column' gap='size-300'>
+        <Flex direction='column' gap='size-200'>
             <div className={classes.sectionCard}>
-                <Flex direction='column' gap='size-200'>
+                <Flex direction='column' gap='size-100'>
                     <Heading level={4}>Motor Setup Progress</Heading>
 
                     {MOTOR_SETUP_ORDER.map((motor, index) => {

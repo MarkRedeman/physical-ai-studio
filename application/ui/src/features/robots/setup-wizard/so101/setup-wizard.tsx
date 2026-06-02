@@ -160,7 +160,7 @@ export const SetupWizardContent = () => {
             areas={['stepper stepper', 'form viewer']}
             columns={['size-6000', '1fr']}
             rows={['auto', '1fr']}
-            gap='size-400'
+            gap='size-200'
             height='100%'
             UNSAFE_className={classes.wizardGrid}
         >
@@ -173,7 +173,7 @@ export const SetupWizardContent = () => {
                     labels={STEP_LABELS}
                     onGoToStep={goToStep}
                 />
-                <Divider orientation='horizontal' size='S' marginTop='size-200' />
+                <Divider orientation='horizontal' size='S' marginTop='size-100' />
             </View>
 
             {/* Left column: current step content */}

@@ -133,7 +133,7 @@ export const ProjectLayout = () => {
     return (
         <Tabs aria-label='Header navigation' selectedKey={pageName} UNSAFE_style={{ height: '100%', minHeight: 0 }}>
             <Grid
-                areas={['header', 'subheader', 'content', 'footer']}
+                areas={['header', 'subheader', 'content', 'content']}
                 UNSAFE_style={{
                     gridTemplateRows:
                         // eslint-disable-next-line max-len
@@ -148,7 +148,6 @@ export const ProjectLayout = () => {
                         <Outlet />
                     </Suspense>
                 </View>
-                <Footer />
             </Grid>
         </Tabs>
     );
