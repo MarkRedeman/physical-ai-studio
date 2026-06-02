@@ -34,8 +34,8 @@ What you see in the UI depends on robot type.
 [so101-verification]: ./assets/04-so101-verification.png
 
 For SO101, the UI can guide you through a setup wizard.
-If you've not yet configured your SO101's control board then we will help you set up the motors, and subsequently calibrate the arm.
-Once done you can verify that calibration is successful by moving the arm and check that its movement matches the screen.
+If you have not configured your SO101 control board yet, the UI helps you set up the motors and calibrate the arm.
+After calibration, move the arm to verify that its motion matches the on-screen visualization.
 
 You may also choose to "Skip verification" if you have previously calibrated the arm. In this case we read the calibration values from the control board.
 
@@ -45,7 +45,7 @@ You may also choose to "Skip verification" if you have previously calibrated the
 |----------------------------------------------------------------------|
 | ![Setup a new WidowXAI follower robot][robots-new-widowxai-follower] |
 
-To configure your Trossen's WidowX AI arms provide their IP Address, verify 
+To configure your Trossen WidowX AI arms, provide their IP addresses and verify that the arms can connect before saving.
 
 ### Bimanual Trossen WidowX AI setup
 
@@ -74,8 +74,8 @@ During setup, confirm:
 - Resolution and FPS look right.
 - Preview feed is correct before saving.
 
-In our own setups we often use a resolution of 640 x 480 at 30 FPS.
-Internally the models trained by Physical AI Studio resize images to a low resolution, hence choosing a high resolution for your cameras may not be effective and end up consuming more disk space.
+We often use 640 x 480 at 30 FPS.
+Physical AI Studio models resize images internally, so higher camera resolutions may not improve training and can consume more disk space.
 
 ## 3. Create environment
 

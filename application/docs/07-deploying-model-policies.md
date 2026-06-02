@@ -7,11 +7,11 @@
 [inference-run]: ./assets/07-inference-run.png
 [inference-screen]: ./assets/07-inference-screen.png
 
-Models can be deployed using [OpenVINO PhysicalAI](https://github.com/openvinotoolkit/physicalai) or can run inside of Physical AI Studio.
-When on the models screen press the "Run model" button of your newly trained policy, then select the inference backend and the inference device. We currently support PyTorch and OpenVINO as runtimes in Studio using either GPU or CPU.
+Models can run inside Physical AI Studio or be deployed with [OpenVINO PhysicalAI](https://github.com/openvinotoolkit/physicalai).
+On the Models screen, click Run model for a trained policy, then select the inference backend and device. Studio currently supports PyTorch and OpenVINO on GPU or CPU.
 
-When you start the model we will load the environment used to record the dataset the model was trained on.
-Once we finished loading the environment and model you will see a similar screen as used when recording the dataset. Pick the task the model should perform and press "Play".
+When you start the model, Studio loads the environment used to record the dataset the model was trained on.
+After the environment and model load, you will see a screen similar to the recording view. Pick the task the model should perform and click Play.
 
 ## Next
 

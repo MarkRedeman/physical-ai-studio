@@ -12,7 +12,7 @@ This guide covers what users do in the UI to collect demonstration episodes.
 
 ## 1. Create a dataset
 
-Start out by creating a dataset, provide it a name and a default task. The environment that you select will be used for recording episodes for the dataset.
+Create a dataset, give it a name, and optionally set a default task. The selected environment is used when recording episodes.
 
 ### Import a dataset
 
@@ -23,8 +23,8 @@ Start out by creating a dataset, provide it a name and a default task. The envir
 [datasets-import-upload]: ./assets/05-dataset-import-upload.png
 [datasets-import]: ./assets/05-dataset-import-dataset.png
 
-Alternatively you can import either a [lerobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) dataset or an exported dataset from Physical AI Studio.
-Similarly to adding a dataset we need a name. The default task and environment for the dataset can be selected after uploading your dataset.
+Alternatively, you can import a [LeRobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) dataset or a dataset exported from Physical AI Studio.
+After upload, provide a name and select the default task and environment.
 
 ## 2. Open recording mode
 
@@ -34,10 +34,10 @@ Similarly to adding a dataset we need a name. The default task and environment f
 
 [dataset-no-episodes]: ./assets/05-no-episodes.png
 
-Before you start recording episodes please make sure that both follower and leader arm are free to move.
+Before you start recording episodes, make sure that both the follower and leader arms are free to move.
 Once you start recording the follower arm will follow the same movements as the leader.
 
-From your dataset page, start recording by pressing the "Add episode".
+From your dataset page, start recording by clicking Add episode.
 Once your environment has finished loading you will see your camera feeds as well as a visualization of your follower robot.
 
 In the top right you can also see the total episodes recorded in your dataset.
@@ -74,7 +74,7 @@ Episodes can be replayed in the UI and a graph of the joint states is shown to h
 
 ### Export dataset
 
-At any time you may export a model to a [lerobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) format.
+At any time you may export a dataset in [LeRobot v3](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) format.
 You can import this back into Physical AI Studio on another system, use [physicalai-train](https://github.com/open-edge-platform/physical-ai-studio/tree/main/library) or [lerobot](https://huggingface.co/docs/lerobot/index) to train models using your dataset outside of the Studio.
 
 ### Rename datasets

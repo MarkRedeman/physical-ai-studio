@@ -2,7 +2,7 @@
 
 Use this guide after pulling new changes, so the UI and backend stay in sync.
 
-First make sure you are on the latest `main` branch,
+First, make sure you are on the latest `main` branch:
 
 ```bash
 git fetch origin

@@ -13,14 +13,14 @@ This guide describes how users train models from the Models page.
 ## Train a new model policy
 
 Once you've collected enough episodes for your dataset you can begin to train a new model policy.
-First you will have to choose the model policy, we currently support:
+First, choose the model policy. We currently support:
 
 - ACT
 - SmolVLA
 - Pi0.5
 
-Depending on the amount of VRAM your GPU supports
-Under the advanced settings you may find options for changing the _batch size_, _training steps_, _amount of data workers_, _precision_ and an option to _compile model_ before training.
+Depending on the amount of VRAM available on your GPU, you may need to adjust the advanced settings.
+These settings include _batch size_, _training steps_, _amount of data workers_, _precision_, and an option to _compile model_ before training.
 You may need to tune these settings to get an optimal result.
 
 ## Monitor training progress
@@ -31,10 +31,10 @@ You may need to tune these settings to get an optimal result.
 
 [model-train-job-in-progress]: ./assets/06-model-train-job-in-progress.png
 
-Once you start a training you can see its progress in the models screen. Click the job to see a live view of its loss curve.
+After you start training, you can see its progress in the Models screen. Click the job to see a live view of its loss curve.
 You may also view the training logs.
 
-When a training job takes too long and you can interrupt training. This will store a checkpoint of the current model and export the model to deployable formats. 
+If a training job takes too long, you can interrupt it. This stores a checkpoint of the current model and exports the model to deployable formats.
 
 ## Model formats
 
