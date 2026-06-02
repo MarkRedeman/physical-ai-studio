@@ -29,8 +29,8 @@ What you see in the UI depends on robot type.
 |-----------------------------------------------------------------------|--------------------------------------------------|----------------------------------------------------------|
 | ![Setup a motors of an off the shelf so101 robot][so101-setup-motors] | ![Calibrate your SO101 robot][so101-calibration] | ![Verify calibration was successful][so101-verification] |
 
-[so101-setup-motors]: ./assets/04-so101-motor-setup.png
-[so101-calibration]: ./assets/04-so101-calibration.png
+[so101-setup-motors]: ./assets/04-so101-motor-setup.gif
+[so101-calibration]: ./assets/04-so101-calibration.gif
 [so101-verification]: ./assets/04-so101-verification.png
 
 For SO101, the UI can guide you through a setup wizard.
