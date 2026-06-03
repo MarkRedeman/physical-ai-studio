@@ -34,6 +34,7 @@ from schemas.job import TrainJobPayload
 from services import DatasetService, ModelService
 from services.event_processor import EventType
 from services.job_service import JobService
+from services.model_manifest_service import ModelManifestService
 from services.training_service import (
     TrainingLogCallback,
     TrainingService,
@@ -199,6 +200,7 @@ class TrainingWorker(BaseProcessWorker):
                     logger.exception(e)
 
             await self._export_policy(policy=export_policy, path=path, job=job)
+            self._write_root_manifest(path)
 
             job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.COMPLETED, message="Training finished"
@@ -236,3 +238,18 @@ class TrainingWorker(BaseProcessWorker):
             except Exception as e:
                 logger.error("Failed exporting model to {} format", backend_name)
                 logger.exception(e)
+
+    @staticmethod
+    def _write_root_manifest(path: Path) -> None:
+        try:
+            manifest_path = ModelManifestService.write_root_manifest(path)
+        except Exception as e:
+            logger.warning("Failed writing root model manifest")
+            logger.exception(e)
+            return
+
+        if manifest_path is None:
+            logger.warning("Skipping root model manifest: torch export manifest not found or invalid")
+            return
+
+        logger.info("Root model manifest written to {}", manifest_path)
