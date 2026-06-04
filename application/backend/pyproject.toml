@@ -29,6 +29,7 @@ dependencies = [
   "aiofiles>=25.1.0",
   "types-aiofiles>=25.1.0.20251011",
   "sse-starlette>=2.0.0",
+  "huggingface-hub>=0.35.3",
   "executorch>=1.1.0",
   # Executorch pulls in torchao transitively; use an exact public version so
   # uv doesn't select XPU local-version wheels (e.g. 0.15.0+xpu) for CUDA runs.

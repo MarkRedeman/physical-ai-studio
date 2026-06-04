@@ -31,12 +31,12 @@ async def find_robot_port(manager: RobotConnectionManager, robot: Robot) -> str 
 
 
 class RobotCalibrationService:
-    robot_manager: RobotConnectionManager
+    robot_manager: RobotConnectionManager | None
     settings: Settings
 
     def __init__(
         self,
-        robot_manager: RobotConnectionManager,
+        robot_manager: RobotConnectionManager | None,
         settings: Settings,
     ):
         self.robot_manager = robot_manager
@@ -98,6 +98,9 @@ class RobotCalibrationService:
             return calibration
 
     async def get_robot_motor_calibration(self, robot: Robot) -> dict[str, MotorCalibration]:
+        if self.robot_manager is None:
+            raise ValueError("Robot manager is required to read motor calibration")
+
         if robot.type not in (RobotType.SO101_FOLLOWER, RobotType.SO101_LEADER):
             raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
 

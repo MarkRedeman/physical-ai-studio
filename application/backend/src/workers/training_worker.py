@@ -8,7 +8,7 @@ import datetime
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
@@ -30,11 +30,16 @@ from physicalai.train import Trainer
 
 from schemas import Job, Model, Snapshot
 from schemas.base_job import JobStatus
+from schemas.calibration import Calibration
+from schemas.dataset import Dataset
+from schemas.environment import EnvironmentWithRelations
 from schemas.job import TrainJobPayload
 from services import DatasetService, ModelService
+from services.environment_service import EnvironmentService
 from services.event_processor import EventType
 from services.job_service import JobService
 from services.model_manifest_service import ModelManifestService
+from services.robot_calibration_service import RobotCalibrationService
 from services.training_service import (
     TrainingLogCallback,
     TrainingService,
@@ -92,7 +97,7 @@ class TrainingWorker(BaseProcessWorker):
                     )
 
                     self.interrupt_event.clear()
-                    await asyncio.create_task(self._train_model(job, model, snapshot, payload, base_model))
+                    await asyncio.create_task(self._train_model(job, model, dataset, snapshot, payload, base_model))
             self.stop_aware_sleep(0.5)
 
     async def setup(self) -> None:
@@ -106,7 +111,13 @@ class TrainingWorker(BaseProcessWorker):
             await TrainingService.abort_orphan_jobs()
 
     async def _train_model(
-        self, job: Job, model: Model, snapshot: Snapshot, payload: TrainJobPayload, base_model: Model | None = None
+        self,
+        job: Job,
+        model: Model,
+        dataset: Dataset,
+        snapshot: Snapshot,
+        payload: TrainJobPayload,
+        base_model: Model | None = None,
     ):
         settings = get_settings()
         await JobService.update_job(
@@ -200,7 +211,15 @@ class TrainingWorker(BaseProcessWorker):
                     logger.exception(e)
 
             await self._export_policy(policy=export_policy, path=path, job=job)
-            self._write_root_manifest(path)
+            environment = await self._get_training_environment(dataset)
+            calibrations = await self._get_environment_calibrations(environment)
+            self._write_model_metadata(
+                path,
+                model=model,
+                dataset=dataset,
+                environment=environment,
+                calibrations=calibrations,
+            )
 
             job = await JobService.update_job_status(
                 job_id=job.id, status=JobStatus.COMPLETED, message="Training finished"
@@ -240,16 +259,69 @@ class TrainingWorker(BaseProcessWorker):
                 logger.exception(e)
 
     @staticmethod
-    def _write_root_manifest(path: Path) -> None:
+    async def _get_training_environment(dataset: Dataset) -> EnvironmentWithRelations | None:
+        try:
+            return await EnvironmentService.get_environment_by_id(dataset.project_id, dataset.environment_id)
+        except Exception as e:
+            logger.warning("Failed loading training environment for model metadata")
+            logger.exception(e)
+            return None
+
+    @staticmethod
+    async def _get_environment_calibrations(environment: EnvironmentWithRelations | None) -> dict[UUID, Calibration]:
+        if environment is None:
+            return {}
+
+        calibration_service = RobotCalibrationService(robot_manager=None, settings=get_settings())
+        calibrations: dict[UUID, Calibration] = {}
+        for robot_config in environment.robots:
+            robot = robot_config.robot
+            if robot.active_calibration_id is None:
+                continue
+            try:
+                calibrations[robot.id] = await calibration_service.get_calibration(robot.active_calibration_id)
+            except Exception as e:
+                logger.warning("Failed loading active calibration for robot {}", robot.name)
+                logger.exception(e)
+
+        return calibrations
+
+    @staticmethod
+    def _write_model_metadata(
+        path: Path,
+        model: Model,
+        dataset: Dataset,
+        environment: EnvironmentWithRelations | None,
+        calibrations: dict[UUID, Calibration],
+    ) -> None:
         try:
             manifest_path = ModelManifestService.write_root_manifest(path)
+            if manifest_path is None:
+                logger.warning("Skipping model metadata: torch export manifest not found or invalid")
+                return
+
+            logger.info("Root model manifest written to {}", manifest_path)
+
+            if environment is not None:
+                environment_path = ModelManifestService.write_environment_description(path, environment, calibrations)
+                logger.info("Model environment description written to {}", environment_path)
+
+                calibration_path = ModelManifestService.write_runtime_calibration(path, environment, calibrations)
+                if calibration_path is not None:
+                    logger.info("Model runtime calibration written to {}", calibration_path)
+
+            readme_path = ModelManifestService.write_model_card(
+                path,
+                model=model,
+                dataset=dataset,
+                environment=environment,
+                calibrations=calibrations,
+            )
+            if readme_path is None:
+                logger.warning("Skipping model card README: root model manifest not found or invalid")
+                return
+
+            logger.info("Model card README written to {}", readme_path)
         except Exception as e:
-            logger.warning("Failed writing root model manifest")
+            logger.warning("Failed writing model metadata")
             logger.exception(e)
-            return
-
-        if manifest_path is None:
-            logger.warning("Skipping root model manifest: torch export manifest not found or invalid")
-            return
-
-        logger.info("Root model manifest written to {}", manifest_path)
