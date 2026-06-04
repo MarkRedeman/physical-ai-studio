@@ -89,7 +89,7 @@ def test_write_model_card_from_root_manifest(tmp_path) -> None:
                                 "shape": [6],
                                 "name": "state",
                                 "dtype": "float32",
-                            }
+                            },
                         }
                     ],
                 },
@@ -114,7 +114,7 @@ def test_write_model_card_from_root_manifest(tmp_path) -> None:
                                 "shape": [6],
                                 "name": "state",
                                 "dtype": "float32",
-                            }
+                            },
                         }
                     ],
                 },

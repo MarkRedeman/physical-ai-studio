@@ -467,9 +467,7 @@ class ModelManifestService:
             return []
 
         return [
-            sample
-            for feature in manifest.model.input_features
-            if (sample := ModelManifestService._sample(feature))
+            sample for feature in manifest.model.input_features if (sample := ModelManifestService._sample(feature))
         ]
 
     @staticmethod

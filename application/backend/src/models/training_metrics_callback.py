@@ -198,9 +198,7 @@ class TrainingMetricsCallback(Callback):
         if not self._should_log_step(trainer):
             return
 
-        step_time = (
-            time.perf_counter() - self._step_start_time if self._step_start_time is not None else float("nan")
-        )
+        step_time = time.perf_counter() - self._step_start_time if self._step_start_time is not None else float("nan")
 
         metrics: dict[str, float] = {
             "train/fractional_epoch": self._fractional_epoch(trainer),

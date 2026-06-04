@@ -6,12 +6,9 @@ from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from exceptions import InvalidArchiveError
-from schemas import Model, TrainJob
-from schemas.base_job import JobStatus
+from schemas import Model
 from schemas.dataset import Dataset
-from schemas.job import TrainJobPayload
 from services.dataset_service import DatasetService
-from services.job_service import JobService
 from services.model_service import ModelService
 from settings import get_settings
 
@@ -130,7 +127,7 @@ class ModelImportService:
             snapshot_id=None,
             policy=policy,
             properties={},
-            train_job_id=job.id,
+            train_job_id=None,
             parent_model_id=base_model_id,
             version=version,
             created_at=None,
