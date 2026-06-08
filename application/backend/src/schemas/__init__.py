@@ -5,6 +5,7 @@ from .dataset import Dataset, Episode, EpisodeInfo, EpisodeVideo, LeRobotDataset
 from .hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDevice, InferenceDeviceInfo
 from .job import DatasetImportJob, Job, TrainJob
 from .model import BackendExportDetail, Model, ModelDetailResponse
+from .policy import PolicyHyperParameter, PolicyHyperParametersResponse
 from .project import Project
 from .robot import LeRobotConfig, NetworkIpRobotConfig, Robot, SerialPortInfo
 
@@ -31,6 +32,8 @@ __all__ = [
     "Model",
     "ModelDetailResponse",
     "NetworkIpRobotConfig",
+    "PolicyHyperParameter",
+    "PolicyHyperParametersResponse",
     "Project",
     "Robot",
     "SerialPortInfo",
