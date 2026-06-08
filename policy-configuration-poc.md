@@ -2,314 +2,180 @@
 
 ## Summary
 
-This POC restructures policy configuration for three policies:
+This POC restructures policy configuration for `ACT`, `Pi05`, and `SmolVLA` from large flat config objects into grouped
+dataclasses. The old flat constructor style still works for compatibility, but the preferred path is now a policy-specific
+config object such as `act_config`, `pi05_config`, or `smolvla_config`.
 
-- ACT
-- Pi05
-- SmolVLA
+This is a library-side POC. It prepares the shape for a future REST/FastAPI integration, but it does not yet wire these
+configs into the backend API.
 
-The goal was to move away from very large flat config classes and long policy constructors as the primary way to model
-configuration. Instead, related settings are grouped into smaller nested config dataclasses, while preserving the old
-flat constructor and checkpoint behavior as much as possible.
+## Before
 
-This is not a full API integration yet. It is a library-side proof of concept that makes policy configs more structured
-and prepares them for eventual FastAPI/OpenAPI exposure.
-
-## What Changed
-
-### ACT
-
-`ACTConfig` now contains grouped subconfigs:
-
-- `ACTInputOutputConfig`
-- `ACTVisionBackboneConfig`
-- `ACTTransformerConfig`
-- `ACTVAEConfig`
-- `ACTInferenceConfig`
-- `ACTOptimizerConfig`
-
-`ACT` now accepts:
-
-```python
-ACT(act_config=ACTConfig(...))
-```
-
-For compatibility, it still accepts:
-
-```python
-ACT(config=ACTConfig(...))
-ACT(chunk_size=100, optimizer_lr=1e-5, ...)
-```
-
-Structured hparams are written under:
-
-```python
-policy.hparams["act_config"]
-```
-
-Flat hparams are still written for compatibility.
-
-### Pi05
-
-`Pi05Config` now contains grouped subconfigs:
-
-- `Pi05BackboneConfig`
-- `Pi05InputOutputConfig`
-- `Pi05FlowMatchingConfig`
-- `Pi05PreprocessingConfig`
-- `Pi05TrainingConfig`
-- `Pi05OptimizerConfig`
-
-`Pi05` now accepts:
-
-```python
-Pi05(pi05_config=Pi05Config(...))
-```
-
-For compatibility, it still accepts:
-
-```python
-Pi05(config=Pi05Config(...))
-Pi05(chunk_size=100, optimizer_lr=2.5e-5, ...)
-```
-
-Structured hparams are written under:
-
-```python
-policy.hparams["pi05_config"]
-```
-
-Flat hparams are still written for compatibility.
-
-### SmolVLA
-
-`SmolVLAConfig` now contains grouped subconfigs:
-
-- `SmolVLAInputOutputConfig`
-- `SmolVLAPreprocessingConfig`
-- `SmolVLAArchitectureConfig`
-- `SmolVLAFlowMatchingConfig`
-- `SmolVLAFineTuningConfig`
-- `SmolVLAOptimizerConfig`
-
-`SmolVLA` now accepts:
-
-```python
-SmolVLA(smolvla_config=SmolVLAConfig(...))
-```
-
-For compatibility, it still accepts:
-
-```python
-SmolVLA(config=SmolVLAConfig(...))
-SmolVLA(chunk_size=100, optimizer_lr=1e-4, ...)
-```
-
-Structured hparams are written under:
-
-```python
-policy.hparams["smolvla_config"]
-```
-
-Flat hparams are still written for compatibility.
-
-## Compatibility Strategy
-
-The grouped config classes are the new preferred shape, but the POC intentionally keeps the old flat API working.
-
-Each top-level config class supports both:
-
-```python
-ACTConfig(io=ACTInputOutputConfig(chunk_size=50))
-```
-
-and:
-
-```python
-ACTConfig(chunk_size=50)
-```
-
-The same pattern applies to Pi05 and SmolVLA.
-
-Each config also exposes legacy flat properties:
-
-```python
-config.chunk_size
-config.optimizer_lr
-config.freeze_vision_encoder
-```
-
-These properties delegate to the grouped subconfig. This keeps existing policy/model code mostly unchanged.
-
-Each config also has:
-
-```python
-config.to_flat_dict()
-```
-
-This is used to keep the legacy flat hparams/checkpoint keys available.
-
-`from_dict()` accepts both nested and flat dictionaries. This matters for:
-
-- Existing checkpoints.
-- HuggingFace `config.json` loading.
-- Existing tests and scripts that serialize flat config dictionaries.
-
-## Hparams Behavior
-
-The POC writes both flat and structured hparams.
-
-For example, ACT hparams now include flat keys such as:
-
-```yaml
-chunk_size: 100
-n_action_steps: 100
-optimizer_lr: 1.0e-05
-```
-
-and structured config:
-
-```yaml
-act_config:
-  io:
-    chunk_size: 100
-    n_action_steps: 100
-  optimizer:
-    optimizer_lr: 1.0e-05
-```
-
-Pi05 and SmolVLA use `pi05_config` and `smolvla_config` respectively.
-
-The generic `config` hparams key is no longer written for these POC policies. The constructor still accepts `config` as
-a compatibility alias, but new hparams use policy-specific names.
-
-## Field Metadata And Validation
-
-Grouped config fields now include dataclass `metadata` with descriptions and lightweight validation hints, for example:
-
-```python
-optimizer_lr: float = field(
-    default=1e-4,
-    metadata={"description": "Learning rate.", "gt": 0.0},
-)
-```
-
-Validation is implemented manually in `__post_init__()` methods.
-
-Examples:
-
-- `n_action_steps <= chunk_size`
-- positive dimensions
-- valid dtype choices
-- positive learning rates
-- valid optimizer betas
-- image resolution tuple shape
-
-This is not yet full FastAPI/OpenAPI integration. The metadata is a useful foundation, but FastAPI will not
-automatically consume all dataclass metadata as rich OpenAPI constraints without an adapter or Pydantic model layer.
-
-## Tests Added Or Updated
-
-The POC updated tests for:
-
-- Grouped config construction.
-- Legacy flat config construction.
-- Nested `to_dict()` / `from_dict()` round trips.
-- Flat property access on grouped config classes.
-- Policy construction from grouped configs.
-- Policy-specific structured hparams keys.
-- Metadata descriptions on grouped config fields.
-- Validation behavior.
-
-Targeted tests run successfully:
-
-```bash
-uv run pytest tests/unit/policies/test_act.py tests/unit/policies/test_pi05.py tests/unit/policies/test_smolvla.py
-```
-
-Result:
-
-```text
-173 passed
-```
-
-## Pros
-
-### Clearer Configuration Structure
-
-Grouped config classes make it easier to see which parameters belong together. For example, optimizer settings are no
-longer mixed with image preprocessing, architecture internals, and action chunking parameters.
-
-This is a meaningful readability improvement over very large flat dataclasses.
-
-### Better API Shape For Future REST Integration
-
-Nested config maps naturally to a cleaner REST payload:
+The old shape was flat. Conceptually, a config looked like this:
 
 ```json
 {
-  "policy": "smolvla",
-  "policy_config": {
+  "chunk_size": 100,
+  "n_action_steps": 50,
+  "vision_backbone": "resnet18",
+  "pretrained_backbone_weights": "ResNet18_Weights.IMAGENET1K_V1",
+  "dim_model": 512,
+  "n_heads": 8,
+  "use_vae": true,
+  "latent_dim": 32,
+  "kl_weight": 10.0,
+  "optimizer_lr": 0.00001,
+  "optimizer_weight_decay": 0.0001,
+  "optimizer_grad_clip_norm": 10.0
+}
+```
+
+And policy construction typically looked like this:
+
+```python
+ACT(chunk_size=100, n_action_steps=50, optimizer_lr=1e-5)
+```
+
+This works, but related concerns are mixed together: action chunking, vision backbone, transformer architecture, VAE
+settings, and optimizer settings all live in one namespace.
+
+## After
+
+The new preferred shape groups related settings:
+
+```json
+{
+  "io": {
+    "chunk_size": 100,
+    "n_action_steps": 50
+  },
+  "vision": {
+    "vision_backbone": "resnet18",
+    "pretrained_backbone_weights": "ResNet18_Weights.IMAGENET1K_V1"
+  },
+  "transformer": {
+    "dim_model": 512,
+    "n_heads": 8
+  },
+  "vae": {
+    "use_vae": true,
+    "latent_dim": 32,
+    "kl_weight": 10.0
+  },
+  "optimizer": {
+    "optimizer_lr": 0.00001,
+    "optimizer_weight_decay": 0.0001,
+    "optimizer_grad_clip_norm": 10.0
+  }
+}
+```
+
+Construction can now use policy-specific config objects:
+
+```python
+ACT(act_config=ACTConfig(io=ACTInputOutputConfig(chunk_size=100, n_action_steps=50)))
+Pi05(pi05_config=Pi05Config(...))
+SmolVLA(smolvla_config=SmolVLAConfig(...))
+```
+
+For compatibility, these still work:
+
+```python
+ACT(config=ACTConfig(...))
+ACT(chunk_size=100, optimizer_lr=1e-5)
+```
+
+The same compatibility pattern exists for `Pi05` and `SmolVLA`.
+
+## Hparams
+
+New structured hparams use policy-specific keys:
+
+```json
+{
+  "chunk_size": 100,
+  "n_action_steps": 50,
+  "optimizer_lr": 0.00001,
+  "act_config": {
     "io": {
-      "chunk_size": 50,
+      "chunk_size": 100,
       "n_action_steps": 50
     },
     "optimizer": {
-      "optimizer_lr": 0.0001
+      "optimizer_lr": 0.00001
     }
   }
 }
 ```
 
-This is easier for users and UI code to reason about than one giant flat object.
+For `Pi05` and `SmolVLA`, the structured keys are `pi05_config` and `smolvla_config`.
 
-### Backward Compatibility Is Mostly Preserved
+Flat hparams are intentionally still written for now. This reduces the risk of breaking checkpoint loading or existing
+analysis tools that expect flat keys.
 
-Existing flat constructor calls still work.
+## What Was Implemented
 
-Existing code that reads `config.chunk_size` or `config.optimizer_lr` still works through compatibility properties.
+Implemented grouped config support for:
 
-Flat hparams are still written, reducing the risk of breaking checkpoint loading or existing analysis code.
+- `ACT`
+- `Pi05`
+- `SmolVLA`
 
-### Policy-Specific Hparams Are Less Ambiguous
+Each policy now has:
 
-Structured hparams now use policy-specific keys:
+- grouped subconfig dataclasses
+- field descriptions in dataclass metadata
+- basic validation in `__post_init__`
+- support for grouped config construction
+- support for legacy flat config construction
+- policy-specific hparams keys
+- tests for grouped config behavior and compatibility
 
-- `act_config`
-- `pi05_config`
-- `smolvla_config`
+Targeted tests passed:
 
-This is clearer than a generic `config` key, especially when inspecting model artifacts manually.
+```bash
+uv run pytest tests/unit/policies/test_act.py tests/unit/policies/test_pi05.py tests/unit/policies/test_smolvla.py
+```
 
-### Better Documentation Surface
+Result: `173 passed`.
 
-Each grouped config field now has a description in metadata. This gives us something structured to use later for REST
-schema generation or a policy-parameter discovery endpoint.
+## Pros
 
-### Incremental Migration Path
+### Clearer Mental Model
 
-This approach does not require changing every policy call site immediately. The backend can keep using flat args while
-we gradually move toward config-object construction.
+Grouping makes the config easier to scan. Optimizer settings, model architecture, preprocessing, and action chunking are
+no longer all mixed in one flat namespace.
+
+### Better Future API Shape
+
+Nested configs map more naturally to a REST payload and UI form. It is easier to show sections like `optimizer`, `io`,
+or `vision` than a long unsorted list of fields.
+
+### Backward Compatibility
+
+The old flat constructor style still works. Existing code that reads `config.chunk_size` or `config.optimizer_lr` still
+works through compatibility properties.
+
+### Better Hparams Naming
+
+Structured hparams now use policy-specific names: `act_config`, `pi05_config`, and `smolvla_config`. This is clearer than
+a generic `config` key.
+
+### Metadata Foundation
+
+Fields now have structured descriptions and lightweight validation hints. That gives us a foundation for future schema
+generation or policy-parameter discovery.
 
 ## Cons
 
-### More Code
+### More Code And More Surface Area
 
-This POC adds a lot of code.
+The compatibility layer adds a lot of code: nested dataclasses, flat properties, `to_flat_dict()`, custom `from_dict()`,
+and policy-specific aliases.
 
-The compatibility layer is especially verbose:
+### Duplication During Migration
 
-- grouped dataclasses
-- flat constructor aliases
-- flat properties
-- `to_flat_dict()`
-- custom `from_dict()` filtering
-
-The result is clearer conceptually, but mechanically larger.
-
-### Duplication Exists During Migration
-
-For now, the same parameter exists in multiple forms:
+The same value can now exist in several places:
 
 ```python
 config.io.chunk_size
@@ -318,97 +184,31 @@ policy.hparams["chunk_size"]
 policy.hparams["act_config"]["io"]["chunk_size"]
 ```
 
-This duplication is intentional for compatibility, but it can be confusing and creates room for inconsistency if the
-code is not disciplined.
+This is intentional for compatibility, but it is not ideal long term.
 
-### Constructors Are Still Too Large
+### Constructors Are Still Large
 
-The POC did not remove the large policy constructors. It only added a better config-object path while preserving the
-old flat constructor path.
+The POC did not remove the large policy constructors. It added a cleaner config-object path while keeping the old path.
+So this is a migration step, not the final design.
 
-So this is not the final clean design. The final design would likely prefer:
+### FastAPI Integration Is Not Automatic Yet
 
-```python
-ACT(act_config=ACTConfig(...))
-Pi05(pi05_config=Pi05Config(...))
-SmolVLA(smolvla_config=SmolVLAConfig(...))
-```
+Dataclass metadata is useful, but FastAPI will not automatically turn all of it into rich OpenAPI fields. We may still
+need a Pydantic layer, a schema adapter, or explicit backend request models.
 
-and eventually de-emphasize or remove flat args where compatibility allows.
+### Checkpoint Compatibility Still Needs Real-Artifact Testing
 
-### Dataclass Metadata Is Not Enough For FastAPI By Itself
-
-The added metadata is useful, but FastAPI will not automatically turn all of it into ideal OpenAPI output unless we
-bridge it into Pydantic fields or custom schema generation.
-
-This POC prepares for API integration, but does not complete it.
-
-### Nested Dataclasses May Complicate Checkpoint Evolution
-
-Lightning checkpoint loading is sensitive to constructor signatures and hparams. The POC keeps flat keys to reduce risk,
-but long-term migration needs careful checkpoint compatibility tests with real old artifacts.
-
-Unit tests cover synthetic checkpoint paths, but they are not the same as testing a corpus of existing trained models.
-
-### Public API Surface Is Larger
-
-Adding many subconfig classes creates more public names that users may depend on. If we later decide the group boundaries
-are wrong, changing them will be harder.
-
-The group names chosen here are reasonable, but not necessarily final.
-
-### Inheritance/Dataclass Custom Init Is Awkward
-
-The top-level config classes use `@dataclass(frozen=True, init=False)` with custom constructors. This is practical for
-compatibility, but it is more complex than plain dataclasses and less elegant than a clean Pydantic model hierarchy.
-
-## Open Questions
-
-### Should We Keep Flat Hparams Forever?
-
-Probably not. They are useful for compatibility now, but long term it would be cleaner to store only structured config
-plus any runtime training metadata.
-
-Before removing flat hparams, we need to know whether anything downstream depends on them.
-
-### Should Config Classes Become Pydantic Models?
-
-Possibly. Pydantic would make FastAPI integration much cleaner, especially for OpenAPI descriptions and validation.
-
-However, the library currently uses dataclasses and custom `Config` serialization. Switching to Pydantic would be a
-larger architectural decision.
-
-### Should Runtime/Checkpoint-Only Fields Be In The API Config?
-
-Some config fields are probably not user-facing REST API fields.
-
-Examples:
-
-- dataset-derived feature definitions
-- pretrained model internals
-- checkpoint restoration helpers
-- some architecture internals that should not be casually changed
-
-The backend API may still need an allowlist or adapter, even with grouped configs.
-
-### Should `compile_model` Stay In Policy Config?
-
-The backend already has `compile_model` on `TrainJobPayload`. The config classes also include `compile_model` because
-the policies historically had it in constructors/config.
-
-This can create duplicate state. The backend should decide which one wins and avoid exposing two controls to users.
+Unit tests pass, but real old checkpoints should still be tested. Lightning checkpoint loading is sensitive to hparams
+and constructor signatures.
 
 ## Recommendation
 
-The POC is directionally good, but should be treated as a migration step, not the final design.
+Keep this as the preferred library-side direction, but treat it as a POC rather than a final API design.
 
-Recommended next steps:
+Next steps:
 
-1. Keep this grouped config shape as the preferred library API.
-2. Add backend support for accepting policy config objects, but use a small adapter/allowlist for user-editable fields.
-3. Decide whether FastAPI should consume dataclasses directly or whether we should generate/define Pydantic models from these configs.
-4. Test loading existing real checkpoints for ACT, Pi05, and SmolVLA.
-5. Decide whether to keep flat hparams long term or plan a deprecation path.
-6. Repeat the pattern for Pi0 only after deciding whether this grouping strategy is acceptable.
-
-The biggest benefit is conceptual clarity and API readiness. The biggest cost is added compatibility complexity.
+1. Test loading existing real checkpoints for `ACT`, `Pi05`, and `SmolVLA`.
+2. Decide whether backend API schemas should use these dataclasses directly or generate Pydantic models from them.
+3. Add a backend adapter/allowlist so only intended user-editable fields are exposed.
+4. Decide whether flat hparams should be deprecated later.
+5. Apply the pattern to `Pi0` only after we are comfortable with the grouping and API story.
