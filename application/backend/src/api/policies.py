@@ -10,7 +10,16 @@ from physicalai.policies.pi05 import Pi05Config
 from physicalai.policies.smolvla import SmolVLAConfig
 from starlette import status
 
-from schemas.policy import PolicyHyperParameter, PolicyHyperParametersResponse
+from schemas.policy import (
+    BooleanHyperParameter,
+    ChoiceHyperParameter,
+    FloatHyperParameter,
+    GroupHyperParameter,
+    IntHyperParameter,
+    PolicyHyperParameter,
+    PolicyHyperParametersResponse,
+    StringHyperParameter,
+)
 
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
 
@@ -70,10 +79,9 @@ def _hyper_parameters_from_config(config: object) -> list[PolicyHyperParameter]:
 
         if dataclasses.is_dataclass(value):
             hyper_parameters.append(
-                PolicyHyperParameter(
+                GroupHyperParameter(
                     name=config_field.name,
                     field_type="group",
-                    default_value=None,
                     description=description,
                     human_name=human_name,
                     hyper_parameters=_hyper_parameters_from_config(value),
@@ -91,7 +99,7 @@ def _hyper_parameters_from_config(config: object) -> list[PolicyHyperParameter]:
             continue
 
         hyper_parameters.append(
-            PolicyHyperParameter(
+            _make_hyper_parameter(
                 name=config_field.name,
                 field_type=field_type,
                 default_value=value,
@@ -102,6 +110,28 @@ def _hyper_parameters_from_config(config: object) -> list[PolicyHyperParameter]:
         )
 
     return hyper_parameters
+
+
+def _make_hyper_parameter(
+    *,
+    name: str,
+    field_type: Literal["integer", "boolean", "float", "string", "choice"],
+    default_value: Any,
+    description: str,
+    human_name: str,
+    allowed_values: list[Any] | None,
+) -> PolicyHyperParameter:
+    """Build the concrete hyperparameter response object for a leaf field."""
+    common = {"name": name, "description": description, "human_name": human_name}
+    if field_type == "choice":
+        return ChoiceHyperParameter(default_value=default_value, allowed_values=allowed_values or [], **common)
+    if field_type == "integer":
+        return IntHyperParameter(default_value=default_value, **common)
+    if field_type == "boolean":
+        return BooleanHyperParameter(default_value=default_value, **common)
+    if field_type == "float":
+        return FloatHyperParameter(default_value=default_value, **common)
+    return StringHyperParameter(default_value=default_value, **common)
 
 
 def _field_type(annotation: object) -> Literal["integer", "boolean", "float", "string"] | None:

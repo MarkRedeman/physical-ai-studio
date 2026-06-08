@@ -18,18 +18,20 @@ def test_get_policy_hyper_parameters_act():
     vision_params = {param["name"]: param for param in groups["vision"]["hyper_parameters"]}
 
     assert groups["io"]["field_type"] == "group"
+    assert "default_value" not in groups["io"]
+    assert "allowed_values" not in groups["io"]
     assert io_params["chunk_size"] == {
         "name": "chunk_size",
         "field_type": "integer",
         "default_value": 100,
         "description": "Number of future action steps predicted per policy invocation.",
         "human_name": "Chunk Size",
-        "allowed_values": None,
-        "hyper_parameters": [],
     }
     assert vae_params["use_vae"]["field_type"] == "boolean"
     assert optimizer_params["optimizer_lr"]["field_type"] == "float"
     assert vision_params["vision_backbone"]["field_type"] == "string"
+    assert "allowed_values" not in optimizer_params["optimizer_lr"]
+    assert "hyper_parameters" not in optimizer_params["optimizer_lr"]
     assert "compile_model" not in {param["name"] for param in groups["optimizer"]["hyper_parameters"]}
 
 
@@ -56,6 +58,7 @@ def test_get_policy_hyper_parameters_pi05_and_smolvla():
     assert pi05_backbone_params["dtype"]["field_type"] == "choice"
     assert pi05_backbone_params["dtype"]["default_value"] == "bfloat16"
     assert pi05_backbone_params["dtype"]["allowed_values"] == ["bfloat16", "float32"]
+    assert "hyper_parameters" not in pi05_backbone_params["dtype"]
     assert pi05_optimizer_params["optimizer_lr"]["field_type"] == "float"
     assert smolvla_architecture_params["vlm_model_name"]["field_type"] == "string"
     assert smolvla_fine_tuning_params["freeze_vision_encoder"]["field_type"] == "boolean"
