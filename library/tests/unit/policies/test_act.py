@@ -75,7 +75,8 @@ class TestACTConfig:
         assert policy.config.chunk_size == 50
         assert policy.config.n_action_steps == 25
         assert policy.hparams["chunk_size"] == 50
-        assert policy.hparams["config"]["io"]["chunk_size"] == 50
+        assert policy.hparams["act_config"]["io"]["chunk_size"] == 50
+        assert "config" not in policy.hparams
 
     def test_config_fields_have_descriptions(self):
         config_classes = [
