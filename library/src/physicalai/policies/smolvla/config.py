@@ -11,13 +11,16 @@ from typing import Any
 from physicalai.config import Config
 
 
-def _metadata(description: str, **validation: object) -> dict[str, object]:
+def _metadata(description: str, *, title: str | None = None, **validation: object) -> dict[str, object]:
     """Build metadata that can be passed directly to pydantic.Field.
 
     Dataclasses keep metadata as a plain mapping, while API adapters can later do
     ``Field(**field.metadata)`` without translating common constraint names.
     """
-    return {"description": description, **validation}
+    metadata = {"description": description, **validation}
+    if title is not None:
+        metadata["title"] = title
+    return metadata
 
 
 @dataclass(frozen=True)
