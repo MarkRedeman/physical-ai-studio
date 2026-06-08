@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import copy
+import dataclasses
 import tempfile
 from unittest.mock import patch
 import pytest
@@ -13,8 +14,91 @@ from physicalai.data import Observation
 from physicalai.data.observation import IMAGES
 from physicalai.inference.preprocessors.resize import ResizePreprocessor
 from physicalai.policies import ACT
+from physicalai.policies.act.config import (
+    ACTConfig,
+    ACTInputOutputConfig,
+    ACTOptimizerConfig,
+    ACTTransformerConfig,
+    ACTVAEConfig,
+    ACTVisionBackboneConfig,
+)
 from physicalai.policies.act.model import ACT as ACTModel
 from physicalai.policies.act.preprocessor import ACTPreprocessor
+
+
+class TestACTConfig:
+    """Tests for grouped ACT config behavior."""
+
+    def test_grouped_config_exposes_legacy_flat_properties(self):
+        config = ACTConfig(
+            io=ACTInputOutputConfig(chunk_size=50, n_action_steps=25),
+            vision=ACTVisionBackboneConfig(image_size=(224, 224)),
+            transformer=ACTTransformerConfig(dim_model=256, n_heads=4, dropout=0.2),
+            vae=ACTVAEConfig(use_vae=False, kl_weight=0.0),
+            optimizer=ACTOptimizerConfig(optimizer_lr=2e-5),
+        )
+
+        assert config.chunk_size == 50
+        assert config.n_action_steps == 25
+        assert config.image_size == (224, 224)
+        assert config.dim_model == 256
+        assert config.n_heads == 4
+        assert config.dropout == 0.2
+        assert config.use_vae is False
+        assert config.kl_weight == 0.0
+        assert config.optimizer_lr == 2e-5
+
+    def test_grouped_config_round_trips_from_dict(self):
+        config = ACTConfig(
+            io=ACTInputOutputConfig(chunk_size=50, n_action_steps=25),
+            transformer=ACTTransformerConfig(dim_model=256, n_heads=4),
+        )
+
+        restored = ACTConfig.from_dict(config.to_dict())
+
+        assert restored.chunk_size == 50
+        assert restored.n_action_steps == 25
+        assert restored.dim_model == 256
+        assert restored.n_heads == 4
+
+    def test_legacy_flat_config_round_trips_from_dict(self):
+        restored = ACTConfig.from_dict({"chunk_size": 50, "n_action_steps": 25, "dim_model": 256, "n_heads": 4})
+
+        assert restored.chunk_size == 50
+        assert restored.n_action_steps == 25
+        assert restored.dim_model == 256
+        assert restored.n_heads == 4
+
+    def test_policy_accepts_grouped_config(self):
+        policy = ACT(config=ACTConfig(io=ACTInputOutputConfig(chunk_size=50, n_action_steps=25)))
+
+        assert policy.config.chunk_size == 50
+        assert policy.config.n_action_steps == 25
+        assert policy.hparams["chunk_size"] == 50
+        assert policy.hparams["config"]["io"]["chunk_size"] == 50
+
+    def test_config_fields_have_descriptions(self):
+        config_classes = [
+            ACTInputOutputConfig,
+            ACTVisionBackboneConfig,
+            ACTTransformerConfig,
+            ACTVAEConfig,
+            ACTOptimizerConfig,
+        ]
+
+        for config_cls in config_classes:
+            for config_field in dataclasses.fields(config_cls):
+                assert config_field.metadata.get("description")
+
+    def test_config_validation(self):
+        with pytest.raises(ValueError, match="n_action_steps"):
+            ACTInputOutputConfig(chunk_size=10, n_action_steps=20)
+
+        with pytest.raises(ValueError, match="dim_model"):
+            ACTTransformerConfig(dim_model=255, n_heads=8)
+
+        with pytest.raises(ValueError, match="optimizer_lr"):
+            ACTOptimizerConfig(optimizer_lr=0)
 
 
 class TestACTolicy:
