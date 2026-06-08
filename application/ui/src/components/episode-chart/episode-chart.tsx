@@ -128,7 +128,7 @@ export default function EpisodeChart({ actions, joints, fps, time, seek, play, p
                         key={joint}
                         type='monotone'
                         dataKey={joint}
-                        stroke={lineColors[i]}
+                        stroke={lineColors.at(i % lineColors.length)}
                         name={toCapitalizedWords(stripPosSuffix(joint))}
                         dot={false}
                         activeDot={false}
