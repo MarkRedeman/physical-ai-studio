@@ -6,8 +6,9 @@ This POC restructures policy configuration for `ACT`, `Pi05`, and `SmolVLA` from
 dataclasses. The old flat constructor style still works for compatibility, but the preferred path is now a policy-specific
 config object such as `act_config`, `pi05_config`, or `smolvla_config`.
 
-This is a library-side POC. It prepares the shape for a future REST/FastAPI integration, but it does not yet wire these
-configs into the backend API.
+This is a library-side POC. The config metadata is now compatible with `pydantic.Field(**metadata)`, which makes it easy
+to translate these dataclasses into FastAPI/OpenAPI request schemas. The backend API wiring itself is still not
+implemented.
 
 ## Before
 
@@ -124,7 +125,7 @@ Implemented grouped config support for:
 Each policy now has:
 
 - grouped subconfig dataclasses
-- field descriptions in dataclass metadata
+- field metadata compatible with `pydantic.Field(**metadata)`
 - basic validation in `__post_init__`
 - support for grouped config construction
 - support for legacy flat config construction
@@ -137,7 +138,55 @@ Targeted tests passed:
 uv run pytest tests/unit/policies/test_act.py tests/unit/policies/test_pi05.py tests/unit/policies/test_smolvla.py
 ```
 
-Result: `173 passed`.
+Result: `176 passed`.
+
+## FastAPI Compatibility
+
+Config fields use dataclass `metadata` with Pydantic/FastAPI-compatible keys:
+
+```python
+optimizer_lr: float = field(
+    default=1e-4,
+    metadata={
+        "description": "Learning rate.",
+        "gt": 0.0,
+    },
+)
+```
+
+For enum-like schema hints, fields use `json_schema_extra`:
+
+```python
+dtype: Literal["bfloat16", "float32"] = field(
+    default="bfloat16",
+    metadata={
+        "description": "Model weight precision.",
+        "json_schema_extra": {"enum": ["bfloat16", "float32"]},
+    },
+)
+```
+
+For tuple/list length constraints, fields use Pydantic's `min_length` and `max_length` names:
+
+```python
+image_size: tuple[int, int] = field(
+    default=(512, 512),
+    metadata={
+        "description": "Image preprocessing resolution as (height, width).",
+        "min_length": 2,
+        "max_length": 2,
+    },
+)
+```
+
+That means a backend adapter can mechanically translate dataclass fields into Pydantic fields without renaming common
+constraint keys:
+
+```python
+Field(default=dataclass_field.default, **dataclass_field.metadata)
+```
+
+The config modules themselves still do not import Pydantic.
 
 ## Pros
 
@@ -146,7 +195,7 @@ Result: `173 passed`.
 Grouping makes the config easier to scan. Optimizer settings, model architecture, preprocessing, and action chunking are
 no longer all mixed in one flat namespace.
 
-### Better Future API Shape
+### Better API Shape
 
 Nested configs map more naturally to a REST payload and UI form. It is easier to show sections like `optimizer`, `io`,
 or `vision` than a long unsorted list of fields.
@@ -163,8 +212,8 @@ a generic `config` key.
 
 ### Metadata Foundation
 
-Fields now have structured descriptions and lightweight validation hints. That gives us a foundation for future schema
-generation or policy-parameter discovery.
+Fields now have structured descriptions and Pydantic-compatible validation/schema hints. A backend adapter can translate
+the dataclass metadata into FastAPI/OpenAPI fields without bespoke key mapping.
 
 ## Cons
 
@@ -191,10 +240,10 @@ This is intentional for compatibility, but it is not ideal long term.
 The POC did not remove the large policy constructors. It added a cleaner config-object path while keeping the old path.
 So this is a migration step, not the final design.
 
-### FastAPI Integration Is Not Automatic Yet
+### FastAPI Wiring Is Not Done Yet
 
-Dataclass metadata is useful, but FastAPI will not automatically turn all of it into rich OpenAPI fields. We may still
-need a Pydantic layer, a schema adapter, or explicit backend request models.
+The metadata is compatible with Pydantic field kwargs, but FastAPI will not automatically expose these library dataclasses
+as the backend training request schema. We still need an adapter, generated Pydantic models, or explicit request models.
 
 ### Checkpoint Compatibility Still Needs Real-Artifact Testing
 
@@ -208,7 +257,7 @@ Keep this as the preferred library-side direction, but treat it as a POC rather 
 Next steps:
 
 1. Test loading existing real checkpoints for `ACT`, `Pi05`, and `SmolVLA`.
-2. Decide whether backend API schemas should use these dataclasses directly or generate Pydantic models from them.
+2. Decide whether backend API schemas should use these dataclasses directly or generate Pydantic models from their metadata.
 3. Add a backend adapter/allowlist so only intended user-editable fields are exposed.
 4. Decide whether flat hparams should be deprecated later.
 5. Apply the pattern to `Pi0` only after we are comfortable with the grouping and API story.
