@@ -91,6 +91,16 @@ class TestACTConfig:
             for config_field in dataclasses.fields(config_cls):
                 assert config_field.metadata.get("description")
 
+    def test_config_metadata_is_pydantic_field_compatible(self):
+        from pydantic import Field
+
+        for config_field in dataclasses.fields(ACTTransformerConfig):
+            Field(**config_field.metadata)
+
+        image_size = next(field for field in dataclasses.fields(ACTVisionBackboneConfig) if field.name == "image_size")
+        assert image_size.metadata["min_length"] == 2
+        assert image_size.metadata["max_length"] == 2
+
     def test_config_validation(self):
         with pytest.raises(ValueError, match="n_action_steps"):
             ACTInputOutputConfig(chunk_size=10, n_action_steps=20)

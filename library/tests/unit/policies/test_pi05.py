@@ -186,6 +186,25 @@ class TestPi05Config:
             for config_field in dataclasses.fields(config_cls):
                 assert config_field.metadata.get("description")
 
+    def test_config_metadata_is_pydantic_field_compatible(self) -> None:
+        """Test metadata can be passed directly to pydantic.Field by adapters."""
+        from pydantic import Field
+
+        for config_cls in [Pi05BackboneConfig, Pi05InputOutputConfig, Pi05PreprocessingConfig]:
+            for config_field in dataclasses.fields(config_cls):
+                Field(**config_field.metadata)
+
+        paligemma_variant = next(
+            field for field in dataclasses.fields(Pi05BackboneConfig) if field.name == "paligemma_variant"
+        )
+        assert paligemma_variant.metadata["json_schema_extra"] == {"enum": ["gemma_300m", "gemma_2b"]}
+
+        image_resolution = next(
+            field for field in dataclasses.fields(Pi05PreprocessingConfig) if field.name == "image_resolution"
+        )
+        assert image_resolution.metadata["min_length"] == 2
+        assert image_resolution.metadata["max_length"] == 2
+
     def test_frozen_dataclass(self) -> None:
         """Test Pi05Config is frozen (immutable)."""
         config = Pi05Config()

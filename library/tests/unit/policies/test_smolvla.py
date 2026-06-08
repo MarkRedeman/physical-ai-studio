@@ -131,6 +131,20 @@ class TestSmolVLAConfig:
             for config_field in dataclasses.fields(config_cls):
                 assert config_field.metadata.get("description")
 
+    def test_config_metadata_is_pydantic_field_compatible(self) -> None:
+        """Test metadata can be passed directly to pydantic.Field by adapters."""
+        from pydantic import Field
+
+        for config_cls in [SmolVLAInputOutputConfig, SmolVLAPreprocessingConfig, SmolVLAOptimizerConfig]:
+            for config_field in dataclasses.fields(config_cls):
+                Field(**config_field.metadata)
+
+        image_size = next(
+            field for field in dataclasses.fields(SmolVLAPreprocessingConfig) if field.name == "resize_imgs_with_padding"
+        )
+        assert image_size.metadata["min_length"] == 2
+        assert image_size.metadata["max_length"] == 2
+
 
 # ============================================================================ #
 # Policy Tests                                                                 #
