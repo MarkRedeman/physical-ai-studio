@@ -13,7 +13,11 @@ from physicalai.data import Feature  # noqa: TC001 - Needed at runtime for type 
 
 
 def _metadata(description: str, **validation: object) -> dict[str, object]:
-    """Build field metadata for docs/schema adapters."""
+    """Build metadata that can be passed directly to pydantic.Field.
+
+    Dataclasses keep metadata as a plain mapping, while API adapters can later do
+    ``Field(**field.metadata)`` without translating common constraint names.
+    """
     return {"description": description, **validation}
 
 
@@ -87,7 +91,7 @@ class ACTVisionBackboneConfig(Config):
     )
     image_size: tuple[int, int] = field(
         default=(512, 512),
-        metadata=_metadata("Image preprocessing resolution as (height, width).", min_items=2, max_items=2),
+        metadata=_metadata("Image preprocessing resolution as (height, width).", min_length=2, max_length=2),
     )
 
     def __post_init__(self) -> None:

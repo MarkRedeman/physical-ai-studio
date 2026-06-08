@@ -12,7 +12,11 @@ from physicalai.config import Config
 
 
 def _metadata(description: str, **validation: object) -> dict[str, object]:
-    """Build field metadata for docs/schema adapters."""
+    """Build metadata that can be passed directly to pydantic.Field.
+
+    Dataclasses keep metadata as a plain mapping, while API adapters can later do
+    ``Field(**field.metadata)`` without translating common constraint names.
+    """
     return {"description": description, **validation}
 
 
@@ -57,7 +61,7 @@ class SmolVLAPreprocessingConfig(Config):
 
     resize_imgs_with_padding: tuple[int, int] = field(
         default=(512, 512),
-        metadata=_metadata("Target padded image resolution as (height, width).", min_items=2, max_items=2),
+        metadata=_metadata("Target padded image resolution as (height, width).", min_length=2, max_length=2),
     )
     empty_cameras: int = field(
         default=0,
@@ -183,7 +187,7 @@ class SmolVLAOptimizerConfig(Config):
     optimizer_lr: float = field(default=1e-4, metadata=_metadata("Learning rate.", gt=0.0))
     optimizer_betas: tuple[float, float] = field(
         default=(0.9, 0.95),
-        metadata=_metadata("AdamW beta coefficients as (beta1, beta2).", min_items=2, max_items=2),
+        metadata=_metadata("AdamW beta coefficients as (beta1, beta2).", min_length=2, max_length=2),
     )
     optimizer_eps: float = field(default=1e-8, metadata=_metadata("Optimizer epsilon.", gt=0.0))
     optimizer_weight_decay: float = field(default=1e-10, metadata=_metadata("Weight decay coefficient.", ge=0.0))

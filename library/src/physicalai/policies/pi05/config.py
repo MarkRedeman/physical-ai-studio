@@ -12,7 +12,11 @@ from physicalai.config import Config
 
 
 def _metadata(description: str, **validation: object) -> dict[str, object]:
-    """Build field metadata for docs/schema adapters."""
+    """Build metadata that can be passed directly to pydantic.Field.
+
+    Dataclasses keep metadata as a plain mapping, while API adapters can later do
+    ``Field(**field.metadata)`` without translating common constraint names.
+    """
     return {"description": description, **validation}
 
 
@@ -22,15 +26,21 @@ class Pi05BackboneConfig(Config):
 
     paligemma_variant: Literal["gemma_300m", "gemma_2b"] = field(
         default="gemma_2b",
-        metadata=_metadata("Gemma variant used for the vision-language backbone.", choices=("gemma_300m", "gemma_2b")),
+        metadata=_metadata(
+            "Gemma variant used for the vision-language backbone.",
+            json_schema_extra={"enum": ["gemma_300m", "gemma_2b"]},
+        ),
     )
     action_expert_variant: Literal["gemma_300m", "gemma_2b"] = field(
         default="gemma_300m",
-        metadata=_metadata("Gemma variant used for the action expert.", choices=("gemma_300m", "gemma_2b")),
+        metadata=_metadata(
+            "Gemma variant used for the action expert.",
+            json_schema_extra={"enum": ["gemma_300m", "gemma_2b"]},
+        ),
     )
     dtype: Literal["bfloat16", "float32"] = field(
         default="bfloat16",
-        metadata=_metadata("Model weight precision.", choices=("bfloat16", "float32")),
+        metadata=_metadata("Model weight precision.", json_schema_extra={"enum": ["bfloat16", "float32"]}),
     )
 
     def __post_init__(self) -> None:
@@ -128,7 +138,7 @@ class Pi05PreprocessingConfig(Config):
 
     image_resolution: tuple[int, int] = field(
         default=(224, 224),
-        metadata=_metadata("Target image resolution as (height, width).", min_items=2, max_items=2),
+        metadata=_metadata("Target image resolution as (height, width).", min_length=2, max_length=2),
     )
     empty_cameras: int = field(default=0, metadata=_metadata("Number of empty camera slots to add.", ge=0))
     tokenizer_max_length: int = field(
@@ -139,7 +149,7 @@ class Pi05PreprocessingConfig(Config):
         default="QUANTILES",
         metadata=_metadata(
             "State/action normalization mode. QUANTILES is robust to outliers; MEAN_STD uses mean/std.",
-            choices=("MEAN_STD", "QUANTILES"),
+            json_schema_extra={"enum": ["MEAN_STD", "QUANTILES"]},
         ),
     )
 
@@ -186,7 +196,7 @@ class Pi05OptimizerConfig(Config):
     optimizer_lr: float = field(default=2.5e-5, metadata=_metadata("Learning rate.", gt=0.0))
     optimizer_betas: tuple[float, float] = field(
         default=(0.9, 0.95),
-        metadata=_metadata("Adam beta coefficients as (beta1, beta2).", min_items=2, max_items=2),
+        metadata=_metadata("Adam beta coefficients as (beta1, beta2).", min_length=2, max_length=2),
     )
     optimizer_eps: float = field(default=1e-8, metadata=_metadata("Optimizer epsilon.", gt=0.0))
     optimizer_weight_decay: float = field(default=0.01, metadata=_metadata("Weight decay coefficient.", ge=0.0))
