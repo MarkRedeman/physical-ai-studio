@@ -1,21 +1,56 @@
-from typing import Any, Literal
+from __future__ import annotations
+
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
 
-class PolicyHyperParameter(BaseModel):
+class BaseHyperParameter(BaseModel):
     name: str = Field(description="Hyperparameter field name")
-    field_type: Literal["group", "integer", "boolean", "float", "string", "choice"] = Field(
-        description="Hyperparameter field type",
-    )
-    default_value: Any = Field(default=None, description="Default value for the hyperparameter")
     description: str = Field(description="Description of the hyperparameter")
     human_name: str = Field(description="Human-friendly display name")
-    allowed_values: list[Any] | None = Field(default=None, description="Allowed values for choice fields")
-    hyper_parameters: list["PolicyHyperParameter"] = Field(
-        default_factory=list,
-        description="Nested hyperparameters for group fields",
-    )
+
+
+class IntHyperParameter(BaseHyperParameter):
+    field_type: Literal["integer"] = "integer"
+    default_value: int | None = Field(description="Default integer value")
+
+
+class BooleanHyperParameter(BaseHyperParameter):
+    field_type: Literal["boolean"] = "boolean"
+    default_value: bool | None = Field(description="Default boolean value")
+
+
+class FloatHyperParameter(BaseHyperParameter):
+    field_type: Literal["float"] = "float"
+    default_value: float | None = Field(description="Default float value")
+
+
+class StringHyperParameter(BaseHyperParameter):
+    field_type: Literal["string"] = "string"
+    default_value: str | None = Field(description="Default string value")
+
+
+class GroupHyperParameter(BaseHyperParameter):
+    field_type: Literal["group"] = "group"
+    hyper_parameters: list[PolicyHyperParameter] = Field(description="Nested hyperparameters")
+
+
+class ChoiceHyperParameter(BaseHyperParameter):
+    field_type: Literal["choice"] = "choice"
+    default_value: Any = Field(description="Default selected value")
+    allowed_values: list[Any] = Field(description="Allowed values")
+
+
+PolicyHyperParameter = Annotated[
+    GroupHyperParameter
+    | IntHyperParameter
+    | BooleanHyperParameter
+    | FloatHyperParameter
+    | StringHyperParameter
+    | ChoiceHyperParameter,
+    Field(discriminator="field_type"),
+]
 
 
 class PolicyHyperParametersResponse(BaseModel):
@@ -23,4 +58,5 @@ class PolicyHyperParametersResponse(BaseModel):
     hyper_parameters: list[PolicyHyperParameter]
 
 
-PolicyHyperParameter.model_rebuild()
+GroupHyperParameter.model_rebuild()
+PolicyHyperParametersResponse.model_rebuild()
