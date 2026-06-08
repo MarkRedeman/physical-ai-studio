@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -156,14 +157,20 @@ class Pi05(ExportablePolicyMixin, Policy):
         scheduler_warmup_steps: int = 1_000,
         scheduler_decay_steps: int | None = 30_000,
         scheduler_decay_lr: float = 2.5e-6,
+        pi05_config: Pi05Config | Mapping[str, Any] | None = None,
+        config: Pi05Config | Mapping[str, Any] | None = None,
         # Eager initialization
         dataset_stats: dict[str, dict[str, list[float] | str | tuple]] | None = None,
     ) -> None:
         """Initialize Pi05 policy."""
-        super().__init__(n_action_steps=n_action_steps)
+        policy_config = pi05_config or config
+        if isinstance(policy_config, Mapping):
+            policy_config = Pi05Config.from_dict(dict(policy_config))
 
         weight_file = None
-        if pretrained_name_or_path is not None:
+        if policy_config is not None:
+            self.config = policy_config
+        elif pretrained_name_or_path is not None:
             self.config, dataset_stats, weight_file = self._from_hf(
                 pretrained_name_or_path,
                 dtype=dtype,
@@ -221,8 +228,9 @@ class Pi05(ExportablePolicyMixin, Policy):
                 scheduler_decay_steps=scheduler_decay_steps,
                 scheduler_decay_lr=scheduler_decay_lr,
             )
+        super().__init__(n_action_steps=self.config.n_action_steps)
         # captures raw init args
-        self.save_hyperparameters(ignore=["config", "pretrained_name_or_path", "compile_model"])
+        self.save_hyperparameters(ignore=["pi05_config", "config", "pretrained_name_or_path", "compile_model"])
         # overwrites with resolved self.config values
         self._set_hparam_keys()
 
@@ -238,11 +246,11 @@ class Pi05(ExportablePolicyMixin, Policy):
 
     def _set_hparam_keys(self) -> None:
         """Sync top-level checkpoint hparams from the resolved policy config."""
-        for key, value in self.config.__dict__.items():
+        for key, value in self.config.to_flat_dict().items():
             if key == "compile_model" or key not in self.hparams:
                 continue
             self.hparams[key] = value
-        self.hparams["config"] = self.config.to_dict()
+        self.hparams["pi05_config"] = self.config.to_dict()
 
     def _initialize_model(
         self,

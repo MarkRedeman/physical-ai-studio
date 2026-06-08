@@ -8,11 +8,21 @@ Fast, self-contained tests with no external dependencies (no HuggingFace model d
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 import torch
 from physicalai.config import Config
 from physicalai.data.observation import IMAGES, STATE
 from physicalai.policies.pi05 import Pi05, Pi05Config, Pi05Model
+from physicalai.policies.pi05.config import (
+    Pi05BackboneConfig,
+    Pi05FlowMatchingConfig,
+    Pi05InputOutputConfig,
+    Pi05OptimizerConfig,
+    Pi05PreprocessingConfig,
+    Pi05TrainingConfig,
+)
 from physicalai.policies.pi05.pretrained_utils import (
     fix_state_dict_keys,
     parse_config_features,
@@ -130,12 +140,51 @@ class TestPi05Config:
         assert isinstance(config, Config)
 
         config_dict = config.to_dict()
-        assert config_dict["chunk_size"] == 100
-        assert config_dict["optimizer_lr"] == 1e-4
+        assert config_dict["io"]["chunk_size"] == 100
+        assert config_dict["optimizer"]["optimizer_lr"] == 1e-4
 
         restored = Pi05Config.from_dict(config_dict)
         assert restored.chunk_size == 100
         assert restored.optimizer_lr == 1e-4
+
+    def test_legacy_flat_config_round_trip(self) -> None:
+        """Test legacy flat config dictionaries are still accepted."""
+        restored = Pi05Config.from_dict({"chunk_size": 100, "n_action_steps": 50, "optimizer_lr": 1e-4})
+
+        assert restored.chunk_size == 100
+        assert restored.n_action_steps == 50
+        assert restored.optimizer_lr == 1e-4
+
+    def test_grouped_config_properties(self) -> None:
+        """Test grouped config exposes legacy flat properties."""
+        config = Pi05Config(
+            backbone=Pi05BackboneConfig(action_expert_variant="gemma_2b"),
+            io=Pi05InputOutputConfig(chunk_size=100, n_action_steps=50),
+            flow_matching=Pi05FlowMatchingConfig(num_inference_steps=8),
+            preprocessing=Pi05PreprocessingConfig(tokenizer_max_length=128),
+            training=Pi05TrainingConfig(freeze_vision_encoder=True),
+            optimizer=Pi05OptimizerConfig(optimizer_lr=1e-4),
+        )
+
+        assert config.action_expert_variant == "gemma_2b"
+        assert config.chunk_size == 100
+        assert config.num_inference_steps == 8
+        assert config.tokenizer_max_length == 128
+        assert config.freeze_vision_encoder is True
+        assert config.optimizer_lr == 1e-4
+
+    def test_config_fields_have_descriptions(self) -> None:
+        """Test grouped config fields carry schema metadata descriptions."""
+        for config_cls in [
+            Pi05BackboneConfig,
+            Pi05InputOutputConfig,
+            Pi05FlowMatchingConfig,
+            Pi05PreprocessingConfig,
+            Pi05TrainingConfig,
+            Pi05OptimizerConfig,
+        ]:
+            for config_field in dataclasses.fields(config_cls):
+                assert config_field.metadata.get("description")
 
     def test_frozen_dataclass(self) -> None:
         """Test Pi05Config is frozen (immutable)."""
@@ -167,8 +216,18 @@ class TestPi05Policy:
         assert policy.hparams.chunk_size == 100
         assert policy.hparams.optimizer_lr == 1e-4
         assert policy.hparams.freeze_vision_encoder is True
-        assert "config" in policy.hparams
-        assert policy.hparams["config"]["chunk_size"] == 100
+        assert "pi05_config" in policy.hparams
+        assert "config" not in policy.hparams
+        assert policy.hparams["pi05_config"]["io"]["chunk_size"] == 100
+
+    def test_policy_accepts_grouped_config(self) -> None:
+        """Test Pi05 policy accepts grouped config directly."""
+        policy = Pi05(pi05_config=Pi05Config(io=Pi05InputOutputConfig(chunk_size=100, n_action_steps=50)))
+
+        assert policy.config.chunk_size == 100
+        assert policy.config.n_action_steps == 50
+        assert policy.hparams["chunk_size"] == 100
+        assert policy.hparams["pi05_config"]["io"]["chunk_size"] == 100
 
     def test_config_attribute(self) -> None:
         """Test Pi05 policy has config attribute."""
