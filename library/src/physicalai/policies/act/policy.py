@@ -3,6 +3,7 @@
 
 """Lightning module for ACT policy."""
 
+from collections.abc import Mapping
 from typing import Any, cast
 
 import torch
@@ -116,6 +117,7 @@ class ACT(ExportablePolicyMixin, Policy):
         optimizer_weight_decay: float = 1e-4,
         optimizer_grad_clip_norm: float = 10.0,
         compile_model: bool = False,
+        config: ACTConfig | Mapping[str, Any] | None = None,
         # Eager initialization (for checkpoint loading)
         dataset_stats: dict[str, Any] | None = None,
     ) -> None:
@@ -123,10 +125,10 @@ class ACT(ExportablePolicyMixin, Policy):
 
         Creates ACTConfig from explicit args and saves it as hyperparameters.
         """
-        super().__init__(n_action_steps=n_action_steps)
+        if isinstance(config, Mapping):
+            config = ACTConfig.from_dict(dict(config))
 
-        # Create config from explicit args (policy-level config)
-        self.config = ACTConfig(
+        self.config = config or ACTConfig(
             input_features={},
             output_features={},
             n_obs_steps=n_obs_steps,
@@ -155,8 +157,13 @@ class ACT(ExportablePolicyMixin, Policy):
             compile_model=compile_model,
         )
 
+        super().__init__(n_action_steps=self.config.n_action_steps)
+
         # Save config as hyperparameters for checkpoint restoration
         self.save_hyperparameters(ignore=["config", "compile_model"])
+        for key, value in self.config.to_flat_dict().items():
+            if key != "compile_model":
+                self.hparams[key] = value
         # Also save config dict for compatibility
         self.hparams["config"] = self.config.to_dict()
 
