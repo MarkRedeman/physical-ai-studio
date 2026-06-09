@@ -1,6 +1,7 @@
 import base64
 import copy
 import shutil
+from numbers import Real
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -102,6 +103,12 @@ class InternalLeRobotDataset(DatasetClient):
 
     def get_manifest(self) -> DatasetManifestResponse:
         """Build a dataset manifest from loaded LeRobot metadata."""
+
+        def _coerce_int(value: object) -> int | None:
+            if isinstance(value, Real):
+                return int(value)
+            return None
+
         features = self._dataset.features if isinstance(self._dataset.features, dict) else {}
         dataset_fps = int(self._dataset.meta.fps) if self._dataset.meta.fps is not None else 30
 
@@ -151,23 +158,29 @@ class InternalLeRobotDataset(DatasetClient):
 
             info_section = feature.get("info")
             if isinstance(info_section, dict):
+                width = _coerce_int(info_section.get("video.width")) or width
+                height = _coerce_int(info_section.get("video.height")) or height
+                fps = _coerce_int(info_section.get("video.fps")) or fps
+
                 video_info = info_section.get("video")
                 if isinstance(video_info, dict):
                     width_val = video_info.get("width")
                     height_val = video_info.get("height")
                     fps_val = video_info.get("fps")
-                    width = int(width_val) if isinstance(width_val, int | float) else width
-                    height = int(height_val) if isinstance(height_val, int | float) else height
-                    fps = int(fps_val) if isinstance(fps_val, int | float) else fps
+                    width = _coerce_int(width_val) or width
+                    height = _coerce_int(height_val) or height
+                    fps = _coerce_int(fps_val) or fps
 
             if width is None or height is None:
                 shape = feature.get("shape")
                 if isinstance(shape, list) and len(shape) >= 2:
-                    shape_height, shape_width = shape[0], shape[1]
-                    if isinstance(shape_width, int):
-                        width = shape_width
-                    if isinstance(shape_height, int):
-                        height = shape_height
+                    dims = [_coerce_int(v) for v in shape]
+                    if len(dims) >= 3 and dims[0] in {1, 3} and dims[1] is not None and dims[2] is not None:
+                        height = dims[1]
+                        width = dims[2]
+                    elif dims[0] is not None and dims[1] is not None:
+                        height = dims[0]
+                        width = dims[1]
 
             resolution = (width, height) if width is not None and height is not None else None
             cameras.append(
