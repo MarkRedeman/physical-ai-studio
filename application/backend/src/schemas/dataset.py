@@ -89,3 +89,4 @@ class DatasetManifestCameraEntry(BaseModel):
 class DatasetManifestResponse(BaseModel):
     robots: list[DatasetManifestRobotEntry]
     cameras: list[DatasetManifestCameraEntry]
+    tasks: list[str]

@@ -178,7 +178,7 @@ class InternalLeRobotDataset(DatasetClient):
                 )
             )
 
-        return DatasetManifestResponse(robots=robots, cameras=cameras)
+        return DatasetManifestResponse(robots=robots, cameras=cameras, tasks=self.get_tasks())
 
     def get_episode_thumbnail_png(
         self,
