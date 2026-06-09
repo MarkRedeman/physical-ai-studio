@@ -196,3 +196,22 @@ class EnvironmentWithRelations(BaseModel):
             }
         }
     )
+
+
+class EnvironmentManifestRobotEntry(BaseModel):
+    name: str
+    robot_type: str
+    features: list[str]
+    fps: int
+
+
+class EnvironmentManifestCameraEntry(BaseModel):
+    name: str
+    driver: str
+    resolution: tuple[int, int] | None = None
+    fps: int | None = None
+
+
+class EnvironmentManifestResponse(BaseModel):
+    robots: list[EnvironmentManifestRobotEntry]
+    cameras: list[EnvironmentManifestCameraEntry]

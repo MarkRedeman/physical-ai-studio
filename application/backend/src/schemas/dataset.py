@@ -72,3 +72,20 @@ class Snapshot(BaseIDModel):
             }
         }
     }
+
+
+class DatasetManifestRobotEntry(BaseModel):
+    robot_type: str | None = None
+    features: list[str]
+    fps: int
+
+
+class DatasetManifestCameraEntry(BaseModel):
+    name: str
+    resolution: tuple[int, int] | None = None
+    fps: int | None = None
+
+
+class DatasetManifestResponse(BaseModel):
+    robots: list[DatasetManifestRobotEntry]
+    cameras: list[DatasetManifestCameraEntry]

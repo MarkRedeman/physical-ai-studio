@@ -7,6 +7,7 @@ from fastapi.exceptions import HTTPException
 from fastapi.requests import HTTPConnection
 
 from core.scheduler import Scheduler
+from robots.robot_client_factory import RobotClientFactory
 from services import (
     DatasetDownloadService,
     DatasetService,
@@ -82,6 +83,14 @@ def get_robot_calibration_service(robot_manager: RobotConnectionManagerDep) -> R
 
 
 RobotCalibrationServiceDep = Annotated[RobotCalibrationService, Depends(get_robot_calibration_service)]
+
+
+def get_robot_client_factory(
+    robot_manager: RobotConnectionManagerDep,
+    calibration_service: RobotCalibrationServiceDep,
+) -> RobotClientFactory:
+    """Provide a RobotClientFactory instance."""
+    return RobotClientFactory(robot_manager=robot_manager, calibration_service=calibration_service)
 
 
 @lru_cache

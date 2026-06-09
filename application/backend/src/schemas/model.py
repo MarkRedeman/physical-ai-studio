@@ -97,3 +97,9 @@ class ModelDetailResponse(BaseModel):
     exports: list[BackendExportDetail]
     training_summary: TrainingSummary | None = None
     hparams: dict | None = None
+
+
+class ModelManifestResponse(BaseModel):
+    backend: str
+    input_features: list[IOFeature]
+    output_features: list[IOFeature]

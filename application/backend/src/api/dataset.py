@@ -19,7 +19,7 @@ from api.utils import safe_archive_name
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from internal_datasets.mutations.delete_episode_mutation import DeleteEpisodesMutation
 from internal_datasets.utils import get_internal_dataset
-from schemas import Dataset, Episode, EpisodeInfo
+from schemas import Dataset, DatasetManifestResponse, Episode, EpisodeInfo
 from services import DatasetDownloadService, DatasetService, EpisodeThumbnailService
 
 router = APIRouter(prefix="/api/dataset", tags=["Dataset"])
@@ -32,6 +32,20 @@ async def get_dataset(
 ) -> Dataset:
     """Get dataset by id"""
     return await dataset_service.get_dataset_by_id(dataset_id)
+
+
+@router.get("/{dataset_id}/manifest")
+async def get_dataset_manifest(
+    dataset_id: Annotated[UUID, Depends(get_dataset_id)],
+    dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
+) -> DatasetManifestResponse:
+    """Get dataset manifest inferred from loaded dataset metadata."""
+    dataset = await dataset_service.get_dataset_by_id(dataset_id)
+    internal_dataset = get_internal_dataset(dataset)
+    if not isinstance(internal_dataset, InternalLeRobotDataset):
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Dataset manifest is unsupported")
+
+    return internal_dataset.get_manifest()
 
 
 @router.get("/{dataset_id}/episodes")

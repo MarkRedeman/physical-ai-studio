@@ -1,10 +1,18 @@
 from .base_job import JobStatus, JobType
 from .calibration import CalibrationConfig
 from .camera import Camera, CameraProfile
-from .dataset import Dataset, Episode, EpisodeInfo, EpisodeVideo, LeRobotDatasetInfo, Snapshot
+from .dataset import (
+    Dataset,
+    DatasetManifestResponse,
+    Episode,
+    EpisodeInfo,
+    EpisodeVideo,
+    LeRobotDatasetInfo,
+    Snapshot,
+)
 from .hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDevice, InferenceDeviceInfo
 from .job import DatasetImportJob, Job, TrainJob
-from .model import BackendExportDetail, Model, ModelDetailResponse
+from .model import BackendExportDetail, Model, ModelDetailResponse, ModelManifestResponse
 from .project import Project
 from .robot import LeRobotConfig, NetworkIpRobotConfig, Robot, SerialPortInfo
 
@@ -14,6 +22,7 @@ __all__ = [
     "Camera",
     "CameraProfile",
     "Dataset",
+    "DatasetManifestResponse",
     "DatasetImportJob",
     "DeviceInfo",
     "DeviceType",
@@ -30,6 +39,7 @@ __all__ = [
     "LeRobotDatasetInfo",
     "Model",
     "ModelDetailResponse",
+    "ModelManifestResponse",
     "NetworkIpRobotConfig",
     "Project",
     "Robot",

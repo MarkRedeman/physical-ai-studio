@@ -3,9 +3,22 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from api.dependencies import get_environment_id, get_environment_service, get_project_id
-from schemas.environment import Environment, EnvironmentWithRelations
+from api.dependencies import (
+    get_environment_id,
+    get_environment_service,
+    get_project_id,
+    get_robot_client_factory,
+)
+from schemas.environment import (
+    Environment,
+    EnvironmentManifestCameraEntry,
+    EnvironmentManifestResponse,
+    EnvironmentManifestRobotEntry,
+    EnvironmentWithRelations,
+)
+from utils.camera_factory import is_migrated
 from services.environment_service import EnvironmentService
+from robots.robot_client_factory import RobotClientFactory
 
 router = APIRouter(prefix="/api/projects/{project_id}/environments", tags=["Project Environments"])
 
@@ -39,6 +52,58 @@ async def get_project_environment(
 ) -> EnvironmentWithRelations:
     """Get environment by id with eager loaded robots and cameras."""
     return await environment_service.get_environment_by_id(project_id, environment_id)
+
+
+@router.get("/{environment_id}/manifest")
+async def get_environment_manifest(
+    project_id: Annotated[UUID, Depends(get_project_id)],
+    environment_id: Annotated[UUID, Depends(get_environment_id)],
+    environment_service: Annotated[EnvironmentService, Depends(get_environment_service)],
+    robot_client_factory: Annotated[RobotClientFactory, Depends(get_robot_client_factory)],
+) -> EnvironmentManifestResponse:
+    """Get environment manifest for compatibility checks."""
+    environment = await environment_service.get_environment_by_id(project_id, environment_id)
+
+    robots: list[EnvironmentManifestRobotEntry] = []
+    for robot_with_teleop in environment.robots:
+        robot = robot_with_teleop.robot
+        client = await robot_client_factory.build(robot)
+        robots.append(
+            EnvironmentManifestRobotEntry(
+                name=robot.name,
+                robot_type=str(robot.type),
+                features=client.features(),
+                fps=30,
+            )
+        )
+
+    cameras: list[EnvironmentManifestCameraEntry] = []
+    for camera in environment.cameras:
+        if not is_migrated(camera.driver):
+            continue
+
+        resolution: tuple[int, int] | None = None
+        fps: int | None = None
+        payload = camera.payload
+        if payload is not None:
+            width = getattr(payload, "width", None)
+            height = getattr(payload, "height", None)
+            fps_value = getattr(payload, "fps", None)
+            if isinstance(width, int) and isinstance(height, int):
+                resolution = (width, height)
+            if isinstance(fps_value, int):
+                fps = fps_value
+
+        cameras.append(
+            EnvironmentManifestCameraEntry(
+                name=camera.name,
+                driver=camera.driver,
+                resolution=resolution,
+                fps=fps,
+            )
+        )
+
+    return EnvironmentManifestResponse(robots=robots, cameras=cameras)
 
 
 @router.put("/{environment_id}")

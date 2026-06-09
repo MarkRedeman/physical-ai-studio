@@ -22,7 +22,7 @@ from api.dependencies import (
 from api.utils import safe_archive_name
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_dataset
-from schemas import ModelDetailResponse
+from schemas import ModelDetailResponse, ModelManifestResponse
 from schemas.job import TrainJob
 from services import DatasetService, JobService, ModelDownloadService, ModelMetricsService, ModelService
 
@@ -52,6 +52,29 @@ async def get_model_by_id(
         exports=exports,
         training_summary=training_summary,
         hparams=hparams,
+    )
+
+
+@router.get("/{model_id}/manifest")
+async def get_model_manifest(
+    model_id: Annotated[UUID, Depends(get_model_id)],
+    model_service: Annotated[ModelService, Depends(get_model_service)],
+    backend: str = "torch",
+) -> ModelManifestResponse:
+    """Get model manifest for a backend export."""
+    model = await model_service.get_model_by_id(model_id)
+    backend_dir = Path(model.path) / "exports" / backend
+    io_spec = model_service.get_backend_io_spec(backend_dir)
+    if io_spec is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Manifest not found for backend '{backend}'.",
+        )
+
+    return ModelManifestResponse(
+        backend=backend,
+        input_features=io_spec.input_features,
+        output_features=io_spec.output_features,
     )
 
 

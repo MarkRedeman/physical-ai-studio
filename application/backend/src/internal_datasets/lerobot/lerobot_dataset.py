@@ -20,6 +20,7 @@ from internal_datasets.dataset_client import DatasetClient
 from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings
 from internal_datasets.mutations.recording_mutation import RecordingMutation
 from schemas import Episode, EpisodeInfo, EpisodeVideo
+from schemas.dataset import DatasetManifestCameraEntry, DatasetManifestResponse, DatasetManifestRobotEntry
 from settings import get_settings
 
 EpisodeMetadata = dict[str, Any]
@@ -98,6 +99,86 @@ class InternalLeRobotDataset(DatasetClient):
 
     def get_video_keys(self) -> list[str]:
         return list(self._dataset.meta.video_keys)
+
+    def get_manifest(self) -> DatasetManifestResponse:
+        """Build a dataset manifest from loaded LeRobot metadata."""
+        features = self._dataset.features if isinstance(self._dataset.features, dict) else {}
+        dataset_fps = int(self._dataset.meta.fps) if self._dataset.meta.fps is not None else 30
+
+        recorded_features: list[str] = []
+        seen_features: set[str] = set()
+        for key in ("action", "observation.state"):
+            feature = features.get(key)
+            if not isinstance(feature, dict):
+                continue
+            names = feature.get("names")
+            if not isinstance(names, list):
+                continue
+            for name in names:
+                if not isinstance(name, str):
+                    continue
+                if name in seen_features:
+                    continue
+                seen_features.add(name)
+                recorded_features.append(name)
+
+        robot_type = getattr(self._dataset.meta, "robot_type", None)
+        robot_type_str = str(robot_type) if isinstance(robot_type, str) and robot_type else None
+        robots = [
+            DatasetManifestRobotEntry(
+                robot_type=robot_type_str,
+                features=recorded_features,
+                fps=dataset_fps,
+            )
+        ]
+
+        cameras: list[DatasetManifestCameraEntry] = []
+        for key, feature in features.items():
+            if not isinstance(key, str) or not key.startswith("observation.images."):
+                continue
+            if not isinstance(feature, dict):
+                continue
+            if feature.get("dtype") != "video":
+                continue
+
+            camera_name = key.removeprefix("observation.images.")
+            if not camera_name:
+                continue
+
+            width: int | None = None
+            height: int | None = None
+            fps = dataset_fps
+
+            info_section = feature.get("info")
+            if isinstance(info_section, dict):
+                video_info = info_section.get("video")
+                if isinstance(video_info, dict):
+                    width_val = video_info.get("width")
+                    height_val = video_info.get("height")
+                    fps_val = video_info.get("fps")
+                    width = int(width_val) if isinstance(width_val, int | float) else width
+                    height = int(height_val) if isinstance(height_val, int | float) else height
+                    fps = int(fps_val) if isinstance(fps_val, int | float) else fps
+
+            if width is None or height is None:
+                shape = feature.get("shape")
+                if isinstance(shape, list) and len(shape) >= 2:
+                    shape_height, shape_width = shape[0], shape[1]
+                    if isinstance(shape_width, int):
+                        width = shape_width
+                    if isinstance(shape_height, int):
+                        height = shape_height
+
+            resolution = (width, height) if width is not None and height is not None else None
+            cameras.append(
+                DatasetManifestCameraEntry(
+                    name=camera_name,
+                    resolution=resolution,
+                    fps=fps,
+                )
+            )
+
+        return DatasetManifestResponse(robots=robots, cameras=cameras)
 
     def get_episode_thumbnail_png(
         self,
