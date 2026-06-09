@@ -172,10 +172,15 @@ def test_upload_accepts_valid_zip_and_attaches_archive(tmp_path: Path) -> None:
         compression=zipfile.ZIP_STORED,
     )
 
+    staged_path = tmp_path / "cache" / "imports" / "datasets" / f"{_FIXED_STAGING_ID}.zip"
     with (
-        patch("api.dataset_import.get_settings", return_value=Settings(storage_dir=tmp_path)),
-        patch("services.dataset_import.staging.get_settings", return_value=Settings(storage_dir=tmp_path)),
+        patch("api.dataset_import.check_disk_headroom"),
+        patch("api.dataset_import.resolve_payload_archive_path", return_value=staged_path),
+        patch("api.dataset_import.get_settings") as mock_get_settings,
     ):
+        settings = mock_get_settings.return_value
+        settings.data_import_max_uncompressed_bytes = 10 * 1024 * 1024
+
         try:
             client = TestClient(app)
             response = client.put(
@@ -184,12 +189,6 @@ def test_upload_accepts_valid_zip_and_attaches_archive(tmp_path: Path) -> None:
             )
         finally:
             app.dependency_overrides.clear()
-
-        # Resolve the staging path while patches are still active so get_settings
-        # returns the same tmp_path-based cache_dir used during the upload.
-        from services.dataset_import.staging import resolve_payload_archive_path
-
-        staged_path = resolve_payload_archive_path(job_stub._job.payload)
 
     assert response.status_code == 202
     assert len(stub.calls) == 1
