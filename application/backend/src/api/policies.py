@@ -68,26 +68,15 @@ def get_policy_hyper_parameters(policy: str) -> PolicyHyperParametersResponse:
 
 
 def _hyper_parameters_from_config(config: object) -> list[PolicyHyperParameter]:
-    """Convert grouped config dataclasses into API hyperparameter descriptors."""
-    hyper_parameters: list[PolicyHyperParameter] = []
+    """Convert flat config dataclasses into grouped API hyperparameter descriptors."""
+    grouped_parameters: dict[str, list[PolicyHyperParameter]] = {}
+    group_titles: dict[str, str] = {}
     type_hints = get_type_hints(type(config))
 
     for config_field in dataclasses.fields(config):
         value = getattr(config, config_field.name)
         human_name = str(config_field.metadata.get("title") or _humanize_field_name(config_field.name))
         description = str(config_field.metadata.get("description", ""))
-
-        if dataclasses.is_dataclass(value):
-            hyper_parameters.append(
-                GroupHyperParameter(
-                    name=config_field.name,
-                    field_type="group",
-                    description=description,
-                    human_name=human_name,
-                    hyper_parameters=_hyper_parameters_from_config(value),
-                ),
-            )
-            continue
 
         if config_field.name in _SKIPPED_HYPERPARAMETER_FIELDS:
             continue
@@ -98,7 +87,8 @@ def _hyper_parameters_from_config(config: object) -> list[PolicyHyperParameter]:
         if field_type is None:
             continue
 
-        hyper_parameters.append(
+        group_name, group_title = _group_info(config_field.metadata)
+        grouped_parameters.setdefault(group_name, []).append(
             _make_hyper_parameter(
                 name=config_field.name,
                 field_type=field_type,
@@ -108,8 +98,29 @@ def _hyper_parameters_from_config(config: object) -> list[PolicyHyperParameter]:
                 allowed_values=allowed_values,
             ),
         )
+        group_titles[group_name] = group_title
 
-    return hyper_parameters
+    return [
+        GroupHyperParameter(
+            name=group_name,
+            field_type="group",
+            description=f"{group_titles[group_name]} hyperparameters",
+            human_name=group_titles[group_name],
+            hyper_parameters=parameters,
+        )
+        for group_name, parameters in grouped_parameters.items()
+    ]
+
+
+def _group_info(metadata: Any) -> tuple[str, str]:
+    """Return group name and display title from field metadata."""
+    json_schema_extra = metadata.get("json_schema_extra")
+    if isinstance(json_schema_extra, dict):
+        group_name = json_schema_extra.get("group")
+        group_title = json_schema_extra.get("group_title")
+        if isinstance(group_name, str) and isinstance(group_title, str):
+            return group_name, group_title
+    return "general", "General"
 
 
 def _make_hyper_parameter(

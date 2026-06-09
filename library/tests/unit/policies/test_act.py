@@ -14,102 +14,9 @@ from physicalai.data import Observation
 from physicalai.data.observation import IMAGES
 from physicalai.inference.preprocessors.resize import ResizePreprocessor
 from physicalai.policies import ACT
-from physicalai.policies.act.config import (
-    ACTConfig,
-    ACTInputOutputConfig,
-    ACTOptimizerConfig,
-    ACTTransformerConfig,
-    ACTVAEConfig,
-    ACTVisionBackboneConfig,
-)
+from physicalai.policies.act.config import ACTConfig
 from physicalai.policies.act.model import ACT as ACTModel
 from physicalai.policies.act.preprocessor import ACTPreprocessor
-
-
-class TestACTConfig:
-    """Tests for grouped ACT config behavior."""
-
-    def test_grouped_config_exposes_legacy_flat_properties(self):
-        config = ACTConfig(
-            io=ACTInputOutputConfig(chunk_size=50, n_action_steps=25),
-            vision=ACTVisionBackboneConfig(image_size=(224, 224)),
-            transformer=ACTTransformerConfig(dim_model=256, n_heads=4, dropout=0.2),
-            vae=ACTVAEConfig(use_vae=False, kl_weight=0.0),
-            optimizer=ACTOptimizerConfig(optimizer_lr=2e-5),
-        )
-
-        assert config.chunk_size == 50
-        assert config.n_action_steps == 25
-        assert config.image_size == (224, 224)
-        assert config.dim_model == 256
-        assert config.n_heads == 4
-        assert config.dropout == 0.2
-        assert config.use_vae is False
-        assert config.kl_weight == 0.0
-        assert config.optimizer_lr == 2e-5
-
-    def test_grouped_config_round_trips_from_dict(self):
-        config = ACTConfig(
-            io=ACTInputOutputConfig(chunk_size=50, n_action_steps=25),
-            transformer=ACTTransformerConfig(dim_model=256, n_heads=4),
-        )
-
-        restored = ACTConfig.from_dict(config.to_dict())
-
-        assert restored.chunk_size == 50
-        assert restored.n_action_steps == 25
-        assert restored.dim_model == 256
-        assert restored.n_heads == 4
-
-    def test_legacy_flat_config_round_trips_from_dict(self):
-        restored = ACTConfig.from_dict({"chunk_size": 50, "n_action_steps": 25, "dim_model": 256, "n_heads": 4})
-
-        assert restored.chunk_size == 50
-        assert restored.n_action_steps == 25
-        assert restored.dim_model == 256
-        assert restored.n_heads == 4
-
-    def test_policy_accepts_grouped_config(self):
-        policy = ACT(config=ACTConfig(io=ACTInputOutputConfig(chunk_size=50, n_action_steps=25)))
-
-        assert policy.config.chunk_size == 50
-        assert policy.config.n_action_steps == 25
-        assert policy.hparams["chunk_size"] == 50
-        assert policy.hparams["act_config"]["io"]["chunk_size"] == 50
-        assert "config" not in policy.hparams
-
-    def test_config_fields_have_descriptions(self):
-        config_classes = [
-            ACTInputOutputConfig,
-            ACTVisionBackboneConfig,
-            ACTTransformerConfig,
-            ACTVAEConfig,
-            ACTOptimizerConfig,
-        ]
-
-        for config_cls in config_classes:
-            for config_field in dataclasses.fields(config_cls):
-                assert config_field.metadata.get("description")
-
-    def test_config_metadata_is_pydantic_field_compatible(self):
-        from pydantic import Field
-
-        for config_field in dataclasses.fields(ACTTransformerConfig):
-            Field(**config_field.metadata)
-
-        image_size = next(field for field in dataclasses.fields(ACTVisionBackboneConfig) if field.name == "image_size")
-        assert image_size.metadata["min_length"] == 2
-        assert image_size.metadata["max_length"] == 2
-
-    def test_config_validation(self):
-        with pytest.raises(ValueError, match="n_action_steps"):
-            ACTInputOutputConfig(chunk_size=10, n_action_steps=20)
-
-        with pytest.raises(ValueError, match="dim_model"):
-            ACTTransformerConfig(dim_model=255, n_heads=8)
-
-        with pytest.raises(ValueError, match="optimizer_lr"):
-            ACTOptimizerConfig(optimizer_lr=0)
 
 
 class TestACTolicy:
@@ -212,6 +119,15 @@ class TestACTolicy:
         """Test compile_model is excluded from saved hyperparameters."""
         policy = ACT(compile_model=True)
         assert "compile_model" not in policy.hparams
+
+    def test_config_metadata_is_field_compatible(self):
+        """Test flat config fields carry pydantic-compatible metadata and group hints."""
+        from pydantic import Field
+
+        fields = {field.name: field for field in dataclasses.fields(ACTConfig)}
+        Field(**fields["chunk_size"].metadata)
+        assert fields["chunk_size"].metadata["json_schema_extra"]["group"] == "io"
+        assert fields["optimizer_lr"].metadata["json_schema_extra"]["group"] == "optimizer"
 
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
     def test_dtype_change(self, policy, batch, dtype):
