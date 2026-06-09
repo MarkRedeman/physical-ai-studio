@@ -2,185 +2,147 @@
 
 ## Summary
 
-This POC restructures policy configuration for `ACT`, `Pi05`, and `SmolVLA` from large flat config objects into grouped
-dataclasses. The old flat constructor style still works for compatibility, but the preferred path is now a policy-specific
-config object such as `act_config`, `pi05_config`, or `smolvla_config`.
+This POC keeps the existing flat policy config classes for `ACT`, `Pi05`, and `SmolVLA`, but adds structured field
+metadata to each relevant config field. The metadata lets the backend expose grouped hyperparameter information without
+changing the config object shape or policy constructor behavior.
 
-This is a library-side POC. The config metadata is now compatible with `pydantic.Field(**metadata)`, which makes it easy
-to translate these dataclasses into FastAPI/OpenAPI request schemas. The backend API wiring itself is still not
-implemented.
+This is the safer compatibility-focused approach. The library still has flat config classes and flat constructor args,
+while the API can present those fields as grouped UI/API sections.
 
 ## Before
 
-The old shape was flat. Conceptually, a config looked like this:
+The config shape was flat and undocumented at the field level:
 
 ```json
 {
   "chunk_size": 100,
   "n_action_steps": 50,
   "vision_backbone": "resnet18",
-  "pretrained_backbone_weights": "ResNet18_Weights.IMAGENET1K_V1",
   "dim_model": 512,
   "n_heads": 8,
   "use_vae": true,
-  "latent_dim": 32,
-  "kl_weight": 10.0,
-  "optimizer_lr": 0.00001,
-  "optimizer_weight_decay": 0.0001,
-  "optimizer_grad_clip_norm": 10.0
+  "optimizer_lr": 0.00001
 }
 ```
 
-And policy construction typically looked like this:
+Construction looked like this and still does:
 
 ```python
 ACT(chunk_size=100, n_action_steps=50, optimizer_lr=1e-5)
 ```
 
-This works, but related concerns are mixed together: action chunking, vision backbone, transformer architecture, VAE
-settings, and optimizer settings all live in one namespace.
+The downside was that action chunking, vision, architecture, VAE, and optimizer settings were all mixed in one namespace
+with no structured descriptions for API/UI generation.
 
 ## After
 
-The new preferred shape groups related settings:
-
-```json
-{
-  "io": {
-    "chunk_size": 100,
-    "n_action_steps": 50
-  },
-  "vision": {
-    "vision_backbone": "resnet18",
-    "pretrained_backbone_weights": "ResNet18_Weights.IMAGENET1K_V1"
-  },
-  "transformer": {
-    "dim_model": 512,
-    "n_heads": 8
-  },
-  "vae": {
-    "use_vae": true,
-    "latent_dim": 32,
-    "kl_weight": 10.0
-  },
-  "optimizer": {
-    "optimizer_lr": 0.00001,
-    "optimizer_weight_decay": 0.0001,
-    "optimizer_grad_clip_norm": 10.0
-  }
-}
-```
-
-Construction can now use policy-specific config objects:
+The config class remains flat, but fields now carry metadata:
 
 ```python
-ACT(act_config=ACTConfig(io=ACTInputOutputConfig(chunk_size=100, n_action_steps=50)))
-Pi05(pi05_config=Pi05Config(...))
-SmolVLA(smolvla_config=SmolVLAConfig(...))
-```
-
-For compatibility, these still work:
-
-```python
-ACT(config=ACTConfig(...))
-ACT(chunk_size=100, optimizer_lr=1e-5)
-```
-
-The same compatibility pattern exists for `Pi05` and `SmolVLA`.
-
-## Hparams
-
-New structured hparams use policy-specific keys:
-
-```json
-{
-  "chunk_size": 100,
-  "n_action_steps": 50,
-  "optimizer_lr": 0.00001,
-  "act_config": {
-    "io": {
-      "chunk_size": 100,
-      "n_action_steps": 50
+chunk_size: int = field(
+    default=100,
+    metadata={
+        "description": "Number of future action steps predicted per policy invocation.",
+        "title": "Chunk Size",
+        "ge": 1,
+        "json_schema_extra": {
+            "group": "io",
+            "group_title": "Input / Output"
+        }
     },
-    "optimizer": {
-      "optimizer_lr": 0.00001
+)
+```
+
+The API endpoint uses that metadata to return grouped hyperparameters:
+
+```json
+{
+  "policy": "act",
+  "hyper_parameters": [
+    {
+      "name": "io",
+      "field_type": "group",
+      "human_name": "Input / Output",
+      "description": "Input / Output hyperparameters",
+      "hyper_parameters": [
+        {
+          "name": "chunk_size",
+          "field_type": "integer",
+          "default_value": 100,
+          "description": "Number of future action steps predicted per policy invocation.",
+          "human_name": "Chunk Size"
+        }
+      ]
     }
-  }
+  ]
 }
 ```
 
-For `Pi05` and `SmolVLA`, the structured keys are `pi05_config` and `smolvla_config`.
+Choice fields are represented explicitly:
 
-Flat hparams are intentionally still written for now. This reduces the risk of breaking checkpoint loading or existing
-analysis tools that expect flat keys.
+```json
+{
+  "name": "dtype",
+  "field_type": "choice",
+  "default_value": "bfloat16",
+  "allowed_values": ["bfloat16", "float32"],
+  "description": "Model weight precision.",
+  "human_name": "Dtype"
+}
+```
 
 ## What Was Implemented
 
-Implemented grouped config support for:
+Implemented for:
 
-- `ACT`
-- `Pi05`
-- `SmolVLA`
+- `ACTConfig`
+- `Pi05Config`
+- `SmolVLAConfig`
 
-Each policy now has:
+Added:
 
-- grouped subconfig dataclasses
-- field metadata compatible with `pydantic.Field(**metadata)`
-- basic validation in `__post_init__`
-- support for grouped config construction
-- support for legacy flat config construction
-- policy-specific hparams keys
-- tests for grouped config behavior and compatibility
+- Pydantic/FastAPI-compatible dataclass field metadata.
+- `json_schema_extra.group` and `json_schema_extra.group_title` for API grouping.
+- descriptions and human-friendly titles where needed.
+- the `/api/policies/{policy}/hyper_parameters` endpoint.
+- discriminated response types: `group`, `integer`, `boolean`, `float`, `string`, and `choice`.
+- tests for metadata compatibility and endpoint responses.
 
-Targeted tests passed:
+The policy constructors and config classes remain flat for backward compatibility.
 
-```bash
-uv run pytest tests/unit/policies/test_act.py tests/unit/policies/test_pi05.py tests/unit/policies/test_smolvla.py
+## Compatibility
+
+This approach preserves the existing API:
+
+```python
+ACTConfig(chunk_size=100, optimizer_lr=1e-5)
+Pi05Config(chunk_size=100, optimizer_lr=2.5e-5)
+SmolVLAConfig(chunk_size=100, optimizer_lr=1e-4)
 ```
 
-Result: `176 passed`.
+It also preserves hparams behavior:
+
+```yaml
+chunk_size: 100
+optimizer_lr: 1.0e-05
+config:
+  chunk_size: 100
+  optimizer_lr: 1.0e-05
+```
+
+This avoids the checkpoint compatibility risk introduced by changing the config shape to nested dataclasses.
 
 ## FastAPI Compatibility
 
-Config fields use dataclass `metadata` with Pydantic/FastAPI-compatible keys:
+Metadata uses Pydantic-compatible keys such as:
 
-```python
-optimizer_lr: float = field(
-    default=1e-4,
-    metadata={
-        "description": "Learning rate.",
-        "gt": 0.0,
-    },
-)
-```
+- `description`
+- `title`
+- `gt`, `ge`, `lt`, `le`
+- `min_length`, `max_length`
+- `json_schema_extra`
 
-For enum-like schema hints, fields use `json_schema_extra`:
-
-```python
-dtype: Literal["bfloat16", "float32"] = field(
-    default="bfloat16",
-    metadata={
-        "description": "Model weight precision.",
-        "json_schema_extra": {"enum": ["bfloat16", "float32"]},
-    },
-)
-```
-
-For tuple/list length constraints, fields use Pydantic's `min_length` and `max_length` names:
-
-```python
-image_size: tuple[int, int] = field(
-    default=(512, 512),
-    metadata={
-        "description": "Image preprocessing resolution as (height, width).",
-        "min_length": 2,
-        "max_length": 2,
-    },
-)
-```
-
-That means a backend adapter can mechanically translate dataclass fields into Pydantic fields without renaming common
-constraint keys:
+That means a backend adapter can translate fields with:
 
 ```python
 Field(default=dataclass_field.default, **dataclass_field.metadata)
@@ -190,74 +152,51 @@ The config modules themselves still do not import Pydantic.
 
 ## Pros
 
-### Clearer Mental Model
+### Strong Backward Compatibility
 
-Grouping makes the config easier to scan. Optimizer settings, model architecture, preprocessing, and action chunking are
-no longer all mixed in one flat namespace.
+The config classes remain flat. Existing constructor calls, config serialization, hparams, and checkpoint assumptions are
+much less likely to break.
 
-### Better API Shape
+### Better API Shape Without Changing Library Shape
 
-Nested configs map more naturally to a REST payload and UI form. It is easier to show sections like `optimizer`, `io`,
-or `vision` than a long unsorted list of fields.
+The API still returns grouped hyperparameters, but grouping is derived from metadata rather than nested config classes.
 
-### Backward Compatibility
+### FastAPI-Friendly Metadata
 
-The old flat constructor style still works. Existing code that reads `config.chunk_size` or `config.optimizer_lr` still
-works through compatibility properties.
+Field metadata can be reused by a Pydantic/FastAPI adapter with minimal translation.
 
-### Better Hparams Naming
+### Less Compatibility Glue
 
-Structured hparams now use policy-specific names: `act_config`, `pi05_config`, and `smolvla_config`. This is clearer than
-a generic `config` key.
-
-### Metadata Foundation
-
-Fields now have structured descriptions and Pydantic-compatible validation/schema hints. A backend adapter can translate
-the dataclass metadata into FastAPI/OpenAPI fields without bespoke key mapping.
+We no longer need nested config classes, flat compatibility properties, or `to_flat_dict()` migration helpers.
 
 ## Cons
 
-### More Code And More Surface Area
+### Config Classes Are Still Flat
 
-The compatibility layer adds a lot of code: nested dataclasses, flat properties, `to_flat_dict()`, custom `from_dict()`,
-and policy-specific aliases.
+The Python config classes remain large and less elegant than truly nested configs.
 
-### Duplication During Migration
+### Grouping Is Metadata-Driven
 
-The same value can now exist in several places:
+Grouping is not represented in the Python type structure. It depends on `json_schema_extra.group` being present and
+correct.
 
-```python
-config.io.chunk_size
-config.chunk_size
-policy.hparams["chunk_size"]
-policy.hparams["act_config"]["io"]["chunk_size"]
-```
+### Still Needs Backend Training Payload Integration
 
-This is intentional for compatibility, but it is not ideal long term.
+The endpoint exposes available hyperparameters, but training jobs do not yet accept and apply user-provided policy config
+payloads.
 
-### Constructors Are Still Large
+### Real Checkpoint Testing Still Needed
 
-The POC did not remove the large policy constructors. It added a cleaner config-object path while keeping the old path.
-So this is a migration step, not the final design.
-
-### FastAPI Wiring Is Not Done Yet
-
-The metadata is compatible with Pydantic field kwargs, but FastAPI will not automatically expose these library dataclasses
-as the backend training request schema. We still need an adapter, generated Pydantic models, or explicit request models.
-
-### Checkpoint Compatibility Still Needs Real-Artifact Testing
-
-Unit tests pass, but real old checkpoints should still be tested. Lightning checkpoint loading is sensitive to hparams
-and constructor signatures.
+This approach is designed to preserve compatibility, but existing real checkpoints should still be tested.
 
 ## Recommendation
 
-Keep this as the preferred library-side direction, but treat it as a POC rather than a final API design.
+Prefer this flat-config-with-metadata approach for now. It gives us the API/UI benefits while minimizing checkpoint and
+constructor compatibility risk.
 
 Next steps:
 
 1. Test loading existing real checkpoints for `ACT`, `Pi05`, and `SmolVLA`.
-2. Decide whether backend API schemas should use these dataclasses directly or generate Pydantic models from their metadata.
-3. Add a backend adapter/allowlist so only intended user-editable fields are exposed.
-4. Decide whether flat hparams should be deprecated later.
-5. Apply the pattern to `Pi0` only after we are comfortable with the grouping and API story.
+2. Add backend training payload support using these flat config classes.
+3. Use an allowlist or metadata flag to decide which fields are actually user-editable.
+4. Consider nested configs later only if we are ready for a breaking library API migration.

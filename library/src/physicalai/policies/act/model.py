@@ -15,7 +15,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import einops
 import numpy as np
@@ -377,7 +377,7 @@ class ACT(Model):
         return None
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class _ACTConfig(ACTConfig):
     normalization_mapping: dict[FeatureType, NormalizationType] = field(
         default_factory=lambda: {
@@ -386,26 +386,6 @@ class _ACTConfig(ACTConfig):
             FeatureType.ACTION: NormalizationType.MEAN_STD,
         },
     )
-
-    def __init__(
-        self,
-        *,
-        normalization_mapping: dict[FeatureType, NormalizationType] | None = None,
-        **kwargs: Any,
-    ) -> None:
-        """Initialize internal ACT model config from legacy flat kwargs."""
-        super().__init__(**kwargs)
-        object.__setattr__(
-            self,
-            "normalization_mapping",
-            normalization_mapping
-            or {
-                FeatureType.VISUAL: NormalizationType.MEAN_STD,
-                FeatureType.STATE: NormalizationType.MEAN_STD,
-                FeatureType.ACTION: NormalizationType.MEAN_STD,
-            },
-        )
-        self.__post_init__()
 
     def __post_init__(self) -> None:
         """Post-initialization validation for ACT model configuration.

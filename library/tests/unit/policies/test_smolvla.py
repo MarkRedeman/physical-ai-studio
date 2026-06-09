@@ -14,14 +14,6 @@ import pytest
 import torch
 from physicalai.config import Config
 from physicalai.policies.smolvla import SmolVLA, SmolVLAConfig
-from physicalai.policies.smolvla.config import (
-    SmolVLAArchitectureConfig,
-    SmolVLAFineTuningConfig,
-    SmolVLAFlowMatchingConfig,
-    SmolVLAInputOutputConfig,
-    SmolVLAOptimizerConfig,
-    SmolVLAPreprocessingConfig,
-)
 
 # ============================================================================ #
 # Configuration Tests                                                          #
@@ -84,66 +76,21 @@ class TestSmolVLAConfig:
 
         # to_dict / from_dict round-trip
         config_dict = config.to_dict()
-        assert config_dict["io"]["chunk_size"] == 100
-        assert config_dict["optimizer"]["optimizer_lr"] == 2e-4
+        assert config_dict["chunk_size"] == 100
+        assert config_dict["optimizer_lr"] == 2e-4
 
         restored = SmolVLAConfig.from_dict(config_dict)
         assert restored.chunk_size == 100
         assert restored.optimizer_lr == 2e-4
 
-    def test_legacy_flat_config_round_trip(self) -> None:
-        """Test legacy flat config dictionaries are still accepted."""
-        restored = SmolVLAConfig.from_dict({"chunk_size": 100, "n_action_steps": 50, "optimizer_lr": 2e-4})
-
-        assert restored.chunk_size == 100
-        assert restored.n_action_steps == 50
-        assert restored.optimizer_lr == 2e-4
-
-    def test_grouped_config_properties(self) -> None:
-        """Test grouped config exposes legacy flat properties."""
-        config = SmolVLAConfig(
-            io=SmolVLAInputOutputConfig(chunk_size=100, n_action_steps=50),
-            preprocessing=SmolVLAPreprocessingConfig(tokenizer_max_length=64),
-            architecture=SmolVLAArchitectureConfig(num_vlm_layers=8),
-            flow_matching=SmolVLAFlowMatchingConfig(num_steps=8),
-            fine_tuning=SmolVLAFineTuningConfig(freeze_vision_encoder=False),
-            optimizer=SmolVLAOptimizerConfig(optimizer_lr=2e-4),
-        )
-
-        assert config.chunk_size == 100
-        assert config.n_action_steps == 50
-        assert config.tokenizer_max_length == 64
-        assert config.num_vlm_layers == 8
-        assert config.num_steps == 8
-        assert config.freeze_vision_encoder is False
-        assert config.optimizer_lr == 2e-4
-
-    def test_config_fields_have_descriptions(self) -> None:
-        """Test grouped config fields carry schema metadata descriptions."""
-        for config_cls in [
-            SmolVLAInputOutputConfig,
-            SmolVLAPreprocessingConfig,
-            SmolVLAArchitectureConfig,
-            SmolVLAFlowMatchingConfig,
-            SmolVLAFineTuningConfig,
-            SmolVLAOptimizerConfig,
-        ]:
-            for config_field in dataclasses.fields(config_cls):
-                assert config_field.metadata.get("description")
-
-    def test_config_metadata_is_pydantic_field_compatible(self) -> None:
-        """Test metadata can be passed directly to pydantic.Field by adapters."""
+    def test_config_metadata_is_field_compatible(self) -> None:
+        """Test flat config fields carry pydantic-compatible metadata and group hints."""
         from pydantic import Field
 
-        for config_cls in [SmolVLAInputOutputConfig, SmolVLAPreprocessingConfig, SmolVLAOptimizerConfig]:
-            for config_field in dataclasses.fields(config_cls):
-                Field(**config_field.metadata)
-
-        image_size = next(
-            field for field in dataclasses.fields(SmolVLAPreprocessingConfig) if field.name == "resize_imgs_with_padding"
-        )
-        assert image_size.metadata["min_length"] == 2
-        assert image_size.metadata["max_length"] == 2
+        fields = {field.name: field for field in dataclasses.fields(SmolVLAConfig)}
+        Field(**fields["optimizer_lr"].metadata)
+        assert fields["optimizer_lr"].metadata["json_schema_extra"]["group"] == "optimizer"
+        assert fields["vlm_model_name"].metadata["json_schema_extra"]["group"] == "architecture"
 
 
 # ============================================================================ #
@@ -169,18 +116,9 @@ class TestSmolVLAPolicy:
         assert policy.hparams.chunk_size == 100
         assert policy.hparams.optimizer_lr == 2e-4
         assert policy.hparams.freeze_vision_encoder is False
-        assert "smolvla_config" in policy.hparams
-        assert "config" not in policy.hparams
-        assert policy.hparams["smolvla_config"]["io"]["chunk_size"] == 100
-
-    def test_policy_accepts_grouped_config(self) -> None:
-        """Test SmolVLA policy accepts grouped config directly."""
-        policy = SmolVLA(smolvla_config=SmolVLAConfig(io=SmolVLAInputOutputConfig(chunk_size=100, n_action_steps=50)))
-
-        assert policy.config.chunk_size == 100
-        assert policy.config.n_action_steps == 50
-        assert policy.hparams["chunk_size"] == 100
-        assert policy.hparams["smolvla_config"]["io"]["chunk_size"] == 100
+        # Config dict stored in hparams
+        assert "config" in policy.hparams
+        assert policy.hparams["config"]["chunk_size"] == 100
 
     def test_save_hyperparameters_ignores_compile_model(self) -> None:
         """Test compile_model is excluded from saved hyperparameters."""

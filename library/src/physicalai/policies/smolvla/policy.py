@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -154,8 +153,6 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         scheduler_warmup_steps: int = 1_000,
         scheduler_decay_steps: int = 30_000,
         scheduler_decay_lr: float = 2.5e-6,
-        smolvla_config: SmolVLAConfig | Mapping[str, Any] | None = None,
-        config: SmolVLAConfig | Mapping[str, Any] | None = None,
         # Eager initialization (for checkpoint loading)
         dataset_stats: dict[str, dict[str, list[float] | str | tuple]] | None = None,
     ) -> None:
@@ -163,14 +160,10 @@ class SmolVLA(ExportablePolicyMixin, Policy):
 
         Creates SmolVLAConfig from explicit args and saves it as hyperparameters.
         """
-        policy_config = smolvla_config or config
-        if isinstance(policy_config, Mapping):
-            policy_config = SmolVLAConfig.from_dict(dict(policy_config))
+        super().__init__(n_action_steps=n_action_steps)
 
         weights_file = None
-        if policy_config is not None:
-            self.config = policy_config
-        elif pretrained_name_or_path is not None:
+        if pretrained_name_or_path is not None:
             self.config, dataset_stats, weights_file = self._from_hf(
                 pretrained_name_or_path,
                 tokenizer_max_length=tokenizer_max_length,
@@ -229,11 +222,10 @@ class SmolVLA(ExportablePolicyMixin, Policy):
                 scheduler_decay_steps=scheduler_decay_steps,
                 scheduler_decay_lr=scheduler_decay_lr,
             )
-        super().__init__(n_action_steps=self.config.n_action_steps)
 
         # Save config as hyperparameters for checkpoint restoration
         self.save_hyperparameters(
-            ignore=["smolvla_config", "config", "pretrained_name_or_path", "compile_model"],
+            ignore=["config", "pretrained_name_or_path", "compile_model"],
         )
         # overwrites with resolved self.config values
         self._set_hparam_keys()
@@ -253,11 +245,11 @@ class SmolVLA(ExportablePolicyMixin, Policy):
 
     def _set_hparam_keys(self) -> None:
         """Sync top-level checkpoint hparams from the resolved policy config."""
-        for key, value in self.config.to_flat_dict().items():
+        for key, value in self.config.__dict__.items():
             if key == "compile_model" or key not in self.hparams:
                 continue
             self.hparams[key] = value
-        self.hparams["smolvla_config"] = self.config.to_dict()
+        self.hparams["config"] = self.config.to_dict()
 
     def _initialize_model(
         self,
