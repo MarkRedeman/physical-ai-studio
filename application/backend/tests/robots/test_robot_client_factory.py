@@ -189,3 +189,33 @@ class TestFindPort:
         port = await _factory().find_port(SerialPortInfo(connection_string="/dev/ttyACM0", serial_number="GONE"))
 
         assert port is None
+
+
+class TestGetFeatures:
+    def test_returns_so101_features_without_resolving_a_port(self) -> None:
+        factory = _factory()
+
+        assert factory.get_features(_so101_robot()) == [f"{name}.pos" for name in JOINT_NAMES]
+
+    def test_includes_velocities_when_the_catalog_requests_them(self) -> None:
+        robot = _robot(
+            "Trossen_WidowXAI_Follower",
+            {"connection_string": "192.168.1.2"},
+        )
+
+        assert _factory().get_features(robot) == [
+            "shoulder_pan.pos",
+            "shoulder_lift.pos",
+            "elbow_flex.pos",
+            "wrist_flex.pos",
+            "wrist_yaw.pos",
+            "wrist_roll.pos",
+            "gripper.pos",
+            "shoulder_pan.vel",
+            "shoulder_lift.vel",
+            "elbow_flex.vel",
+            "wrist_flex.vel",
+            "wrist_yaw.vel",
+            "wrist_roll.vel",
+            "gripper.vel",
+        ]

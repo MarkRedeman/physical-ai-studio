@@ -35,8 +35,9 @@ from runtime.config_builder import (
     runtime_config_change_me,
     runtime_export_readme,
 )
-from schemas import Model, ModelDetailResponse
+from schemas import Model, ModelDetailResponse, ModelManifestResponse
 from schemas.job import TrainJob
+from schemas.model import BackendIOSpec
 from services import DatasetService, JobService, ModelDownloadService, ModelMetricsService, ModelService
 from services.environment_service import EnvironmentService
 
@@ -114,6 +115,29 @@ async def get_model_by_id(
         exports=exports,
         training_summary=training_summary,
         hparams=hparams,
+    )
+
+
+@router.get("/{model_id}/manifest")
+async def get_model_manifest(
+    model_id: UUID,
+    model_service: Annotated[ModelService, Depends(get_model_service)],
+    backend: str = "torch",
+) -> ModelManifestResponse:
+    """Get model manifest for a backend export."""
+    model = await model_service.get_model_by_id(model_id)
+    backend_dir = Path(model.path) / "exports" / backend
+    io_spec = BackendIOSpec.from_backend_dir(backend_dir)
+    if io_spec is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Manifest not found for backend '{backend}'.",
+        )
+
+    return ModelManifestResponse(
+        backend=backend,
+        input_features=io_spec.input_features,
+        output_features=io_spec.output_features,
     )
 
 

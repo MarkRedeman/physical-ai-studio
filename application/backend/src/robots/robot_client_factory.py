@@ -9,7 +9,7 @@ from robots.catalog.registry import RobotCatalogRegistry
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
 from schemas import SerialPortInfo
-from schemas.robot import ReadableRobot, UnavailableRobot
+from schemas.robot import ReadableRobot, Robot, UnavailableRobot
 from utils.device_paths import resolve_serial_device
 from utils.serial_robot_tools import RobotConnectionManager
 
@@ -69,6 +69,22 @@ class RobotClientFactory:
         # it must come from the id, never the free-form display name.
         shared_robot = SharedRobot.from_config(robot_driver, name=shared_robot_name(robot.id))
         return shared_robot, definition
+
+    def get_features(self, robot: Robot) -> list[str]:
+        """Return the robot's feature schema without resolving or opening hardware."""
+        definition = self.catalog_registry.get_definition(robot.type)
+        if definition is None:
+            raise ValueError(f"Robot type is not part of the catalog: {robot.type}")
+        if definition.asset is None:
+            raise ValueError(f"Robot type {robot.type} has no feature metadata")
+
+        position_features = list(definition.asset.joint_map)
+        if not position_features:
+            raise ValueError(f"Robot type {robot.type} has no joint feature metadata")
+        if not definition.adapter_options.include_velocities:
+            return position_features
+
+        return position_features + [feature.removesuffix(".pos") + ".vel" for feature in position_features]
 
     async def find_port(self, port_info: SerialPortInfo) -> str | None:
         """Resolve a live serial port for a robot whose identity is known.

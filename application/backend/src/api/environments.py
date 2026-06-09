@@ -8,8 +8,16 @@ from physicalai.config import to_yaml
 
 from api.dependencies import RobotClientFactoryDep, get_environment_service
 from runtime.config_builder import RUNTIME_FPS, build_runtime_config, runtime_config_change_me
-from schemas.environment import Environment, EnvironmentWithRelations, TeleoperatorRobotWithRobot
+from schemas.environment import (
+    Environment,
+    EnvironmentManifestCameraEntry,
+    EnvironmentManifestResponse,
+    EnvironmentManifestRobotEntry,
+    EnvironmentWithRelations,
+    TeleoperatorRobotWithRobot,
+)
 from services.environment_service import EnvironmentService
+from utils.camera_factory import is_migrated
 
 router = APIRouter(prefix="/api/projects/{project_id}/environments", tags=["Project Environments"])
 
@@ -80,6 +88,57 @@ async def get_runtime_config(
         media_type="application/yaml",
         headers={"Content-Disposition": 'attachment; filename="runtime.yaml"'},
     )
+
+
+@router.get("/{environment_id}/manifest")
+async def get_environment_manifest(
+    project_id: ProjectID,
+    environment_id: UUID,
+    environment_service: Annotated[EnvironmentService, Depends(get_environment_service)],
+    robot_client_factory: RobotClientFactoryDep,
+) -> EnvironmentManifestResponse:
+    """Get environment manifest for compatibility checks."""
+    environment = await environment_service.get_environment_by_id(project_id, environment_id)
+
+    robots: list[EnvironmentManifestRobotEntry] = []
+    for robot_with_teleop in environment.robots:
+        robot = robot_with_teleop.robot
+        robots.append(
+            EnvironmentManifestRobotEntry(
+                name=robot.name,
+                robot_type=str(robot.type),
+                features=robot_client_factory.get_features(robot),
+                fps=30,
+            )
+        )
+
+    cameras: list[EnvironmentManifestCameraEntry] = []
+    for camera in environment.cameras:
+        if not is_migrated(camera.driver):
+            continue
+
+        resolution: tuple[int, int] | None = None
+        fps: int | None = None
+        payload = camera.payload
+        if payload is not None:
+            width = getattr(payload, "width", None)
+            height = getattr(payload, "height", None)
+            fps_value = getattr(payload, "fps", None)
+            if isinstance(width, int) and isinstance(height, int):
+                resolution = (width, height)
+            if isinstance(fps_value, int):
+                fps = fps_value
+
+        cameras.append(
+            EnvironmentManifestCameraEntry(
+                name=camera.name,
+                driver=camera.driver,
+                resolution=resolution,
+                fps=fps,
+            )
+        )
+
+    return EnvironmentManifestResponse(robots=robots, cameras=cameras)
 
 
 @router.put("/{environment_id}")
