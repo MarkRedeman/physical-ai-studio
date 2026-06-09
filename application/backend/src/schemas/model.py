@@ -61,13 +61,39 @@ class Model(BaseIDModel):
     )
 
 
+class IOFeature(BaseModel):
+    name: str
+    ftype: str | None = None
+    shape: list[int] | None = None
+    dtype: str | None = None
+
+
+class BackendIOSpec(BaseModel):
+    input_features: list[IOFeature]
+    output_features: list[IOFeature]
+
+
 class BackendExportDetail(BaseModel):
     type: str
     size_bytes: int
     file_count: int
     exported_at: datetime | None = None
+    io_spec: BackendIOSpec | None = None
+
+
+class TrainingSummary(BaseModel):
+    max_steps: int | None = None
+    batch_size: int | None = None
+    auto_scale_batch_size: bool | None = None
+    num_workers: int | str | None = None
+    precision: str | None = None
+    compile_model: bool | None = None
+    val_split: float | None = None
+    device_type: str | None = None
 
 
 class ModelDetailResponse(BaseModel):
     model: Model
     exports: list[BackendExportDetail]
+    training_summary: TrainingSummary | None = None
+    hparams: dict | None = None
