@@ -53,6 +53,10 @@ def setup_policy(model: Model, *, compile_model: bool = False) -> Policy:
     if model.policy == "pi05":
         return Pi05(pretrained_name_or_path="lerobot/pi05_base", compile_model=compile_model)
     if model.policy == "smolvla":
-        return SmolVLA(pretrained_name_or_path="lerobot/smolvla_base", compile_model=compile_model)
+        return SmolVLA(
+            pretrained_name_or_path="lerobot/smolvla_base",
+            compile_model=compile_model,
+            image_features=["overview", "gripper"]
+        )
 
     raise ValueError(f"Policy not implemented yet: {model.policy}")
