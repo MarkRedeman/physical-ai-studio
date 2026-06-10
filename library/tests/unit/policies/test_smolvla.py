@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 import torch
 from physicalai.config import Config
+from physicalai.data.utils import ordered_observation_image_keys, resolve_visual_dataset_stats
 from physicalai.policies.smolvla import SmolVLA, SmolVLAConfig
 
 # ============================================================================ #
@@ -81,6 +82,391 @@ class TestSmolVLAConfig:
         assert restored.chunk_size == 100
         assert restored.optimizer_lr == 2e-4
 
+    def test_image_features_tuple_and_duplicate_validation(self) -> None:
+        """Test image_features normalization and duplicate detection."""
+        config = SmolVLAConfig(image_features=["images.top", "images.wrist"])
+        assert config.image_features == ("images.top", "images.wrist")
+
+        with pytest.raises(ValueError, match="Duplicate image feature names"):
+            SmolVLAConfig(image_features=("images.top", "images.top"))
+
+
+class TestVisualDatasetStatsResolver:
+    """Tests for visual dataset stats resolution when overriding image features."""
+
+    @staticmethod
+    def _base_stats() -> dict[str, dict[str, object]]:
+        return {
+            "observation.state": {
+                "name": "state",
+                "shape": (4,),
+                "type": "STATE",
+                "mean": [0.0, 0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0, 1.0],
+            },
+            "observation.images.top": {
+                "name": "images.top",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.3, 0.4, 0.5],
+                "std": [0.2, 0.2, 0.2],
+            },
+            "action": {
+                "name": "action",
+                "shape": (2,),
+                "type": "ACTION",
+                "mean": [0.0, 0.0],
+                "std": [1.0, 1.0],
+            },
+        }
+
+    def test_resolve_visual_stats_same_count(self) -> None:
+        stats = {
+            **self._base_stats(),
+            "observation.images.new_top": {
+                "name": "images.new_top",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.3, 0.4, 0.5],
+                "std": [0.2, 0.2, 0.2],
+            },
+        }
+        del stats["observation.images.top"]
+
+        resolved = resolve_visual_dataset_stats(stats, ["images.new_top"])
+
+        assert "observation.images.new_top" in resolved
+        assert resolved["observation.images.new_top"]["name"] == "images.new_top"
+        assert resolved["action"] == stats["action"]
+
+    def test_resolve_visual_stats_expands_with_default_stats(self) -> None:
+        stats = self._base_stats()
+
+        resolved = resolve_visual_dataset_stats(
+            stats,
+            ["images.top", "images.wrist"],
+            allow_missing_visual_defaults=True,
+        )
+
+        assert "observation.images.top" in resolved
+        assert "observation.images.wrist" in resolved
+        added = resolved["observation.images.wrist"]
+        assert added["shape"] == (3, 96, 96)
+        assert added["mean"] == [0.0, 0.0, 0.0]
+        assert added["std"] == [1.0, 1.0, 1.0]
+
+    def test_resolve_visual_stats_defaults_pruning_warning_uses_set_difference(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Defaults path should report dropped visuals by membership, not prefix slicing."""
+        stats = {
+            **self._base_stats(),
+            "observation.images.wrist": {
+                "name": "images.wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(
+            stats,
+            ["images.wrist"],
+            allow_missing_visual_defaults=True,
+        )
+
+        visual_keys = [k for k in resolved if k.startswith("observation.images")]
+        assert visual_keys == ["observation.images.wrist"]
+        assert "Pruning 1 visual dataset_stats entries" in caplog.text
+        assert "observation.images.top" in caplog.text
+        assert "observation.images.wrist" not in caplog.text
+
+    def test_resolve_visual_stats_defaults_preserves_exact_key_stats_on_reorder(self) -> None:
+        """Defaults path should keep camera-specific stats when keys already exist."""
+        stats = {
+            **self._base_stats(),
+            "observation.images.wrist": {
+                "name": "images.wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.9, 0.9, 0.9],
+                "std": [0.1, 0.1, 0.1],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(
+            stats,
+            ["images.wrist", "images.top"],
+            allow_missing_visual_defaults=True,
+        )
+
+        assert resolved["observation.images.wrist"]["mean"] == [0.9, 0.9, 0.9]
+        assert resolved["observation.images.wrist"]["std"] == [0.1, 0.1, 0.1]
+        assert resolved["observation.images.top"]["mean"] == [0.3, 0.4, 0.5]
+        assert resolved["observation.images.top"]["std"] == [0.2, 0.2, 0.2]
+
+    def test_resolve_visual_stats_allows_too_few_by_pruning(self, caplog: pytest.LogCaptureFixture) -> None:
+        stats = {
+            **self._base_stats(),
+            "observation.images.wrist": {
+                "name": "images.wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(stats, ["images.top"])
+
+        assert "observation.images.top" in resolved
+        assert "observation.images.wrist" not in resolved
+        assert "Pruning 1 visual dataset_stats entries" in caplog.text
+
+    def test_resolve_visual_stats_reorders_when_pruning_prefix_mismatch(self, caplog: pytest.LogCaptureFixture) -> None:
+        stats = {
+            **self._base_stats(),
+            "observation.images.wrist": {
+                "name": "images.wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(stats, ["images.wrist"])
+
+        visual_keys = [k for k in resolved if k.startswith("observation.images")]
+        assert visual_keys == ["observation.images.wrist"]
+        assert "Reordering visual dataset_stats" in caplog.text
+        assert "Pruning 1 visual dataset_stats entries" in caplog.text
+
+    def test_resolve_visual_stats_rejects_count_mismatch_when_stats_provided(self) -> None:
+        stats = self._base_stats()
+
+        with pytest.raises(ValueError, match="must match in count"):
+            resolve_visual_dataset_stats(stats, ["images.top", "images.extra"])
+
+    def test_resolve_visual_stats_reorders_order_mismatch_when_stats_provided(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        stats = {
+            **self._base_stats(),
+            "observation.images.wrist": {
+                "name": "images.wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(stats, ["images.wrist", "images.top"])
+
+        visual_keys = [k for k in resolved if k.startswith("observation.images")]
+        assert visual_keys == ["observation.images.wrist", "observation.images.top"]
+        assert "Reordering visual dataset_stats" in caplog.text
+
+    def test_resolve_visual_stats_rejects_duplicates(self) -> None:
+        with pytest.raises(ValueError, match="Duplicate image feature names"):
+            resolve_visual_dataset_stats(self._base_stats(), ["images.top", "images.top"])
+
+    def test_resolve_visual_stats_strict_remaps_lerobot_style_stripped_keys(self) -> None:
+        """Strict resolution should match LeRobot-style observation.<camera> keys."""
+        stats = {
+            "observation.state": {
+                "name": "state",
+                "shape": (4,),
+                "type": "STATE",
+                "mean": [0.0, 0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0, 1.0],
+            },
+            "observation.top": {
+                "name": "top",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.3, 0.4, 0.5],
+                "std": [0.2, 0.2, 0.2],
+            },
+            "observation.wrist": {
+                "name": "wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.6, 0.6, 0.6],
+                "std": [0.4, 0.4, 0.4],
+            },
+            "action": {
+                "name": "action",
+                "shape": (2,),
+                "type": "ACTION",
+                "mean": [0.0, 0.0],
+                "std": [1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(stats, ["images.wrist", "images.top"])
+
+        visual_keys = [k for k, v in resolved.items() if v.get("type") == "VISUAL"]
+        assert visual_keys == ["observation.wrist", "observation.top"]
+
+    def test_resolve_visual_stats_defaults_remaps_lerobot_style_stripped_keys(self) -> None:
+        """Defaults resolution should preserve stripped LeRobot visual stat keys."""
+        stats = {
+            "observation.state": {
+                "name": "state",
+                "shape": (4,),
+                "type": "STATE",
+                "mean": [0.0, 0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0, 1.0],
+            },
+            "observation.top": {
+                "name": "top",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.3, 0.4, 0.5],
+                "std": [0.2, 0.2, 0.2],
+            },
+            "observation.wrist": {
+                "name": "wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.6, 0.6, 0.6],
+                "std": [0.4, 0.4, 0.4],
+            },
+            "action": {
+                "name": "action",
+                "shape": (2,),
+                "type": "ACTION",
+                "mean": [0.0, 0.0],
+                "std": [1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(
+            stats,
+            ["images.wrist", "images.top"],
+            allow_missing_visual_defaults=True,
+        )
+
+        assert resolved["observation.wrist"]["mean"] == [0.6, 0.6, 0.6]
+        assert resolved["observation.top"]["mean"] == [0.3, 0.4, 0.5]
+
+    def test_resolve_visual_stats_accepts_single_image_aliases(self) -> None:
+        """Single-image aliases (images/image) map to observation.image keys."""
+        stats = {
+            "observation.state": {
+                "name": "state",
+                "shape": (4,),
+                "type": "STATE",
+                "mean": [0.0, 0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0, 1.0],
+            },
+            "observation.image": {
+                "name": "image",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.1, 0.1, 0.1],
+                "std": [0.9, 0.9, 0.9],
+            },
+            "observation.image2": {
+                "name": "image2",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.2, 0.2, 0.2],
+                "std": [0.8, 0.8, 0.8],
+            },
+            "action": {
+                "name": "action",
+                "shape": (2,),
+                "type": "ACTION",
+                "mean": [0.0, 0.0],
+                "std": [1.0, 1.0],
+            },
+        }
+
+        resolved = resolve_visual_dataset_stats(stats, ["images", "image2"])
+
+        visual_keys = [k for k, v in resolved.items() if v.get("type") == "VISUAL"]
+        assert visual_keys == ["observation.image", "observation.image2"]
+
+    def test_ordered_runtime_keys_normalize_observation_image_variants(self) -> None:
+        """Runtime expected image keys normalize from observation.image* forms."""
+        stats = {
+            "observation.state": {
+                "name": "state",
+                "shape": (4,),
+                "type": "STATE",
+                "mean": [0.0, 0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0, 1.0],
+            },
+            "observation.image": {
+                "name": "image",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.1, 0.1, 0.1],
+                "std": [0.9, 0.9, 0.9],
+            },
+            "observation.image2": {
+                "name": "image2",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.2, 0.2, 0.2],
+                "std": [0.8, 0.8, 0.8],
+            },
+            "action": {
+                "name": "action",
+                "shape": (2,),
+                "type": "ACTION",
+                "mean": [0.0, 0.0],
+                "std": [1.0, 1.0],
+            },
+        }
+
+        runtime_keys = ordered_observation_image_keys(stats)
+
+        assert runtime_keys == ("images.image", "images.image2")
+
+    def test_ordered_runtime_keys_normalize_lerobot_style_stripped_visual_keys(self) -> None:
+        """LeRobot stripped visual stat keys should normalize to runtime images.* keys."""
+        stats = {
+            "observation.state": {
+                "name": "state",
+                "shape": (4,),
+                "type": "STATE",
+                "mean": [0.0, 0.0, 0.0, 0.0],
+                "std": [1.0, 1.0, 1.0, 1.0],
+            },
+            "observation.top": {
+                "name": "top",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.3, 0.4, 0.5],
+                "std": [0.2, 0.2, 0.2],
+            },
+            "observation.wrist": {
+                "name": "wrist",
+                "shape": (3, 96, 96),
+                "type": "VISUAL",
+                "mean": [0.6, 0.6, 0.6],
+                "std": [0.4, 0.4, 0.4],
+            },
+            "action": {
+                "name": "action",
+                "shape": (2,),
+                "type": "ACTION",
+                "mean": [0.0, 0.0],
+                "std": [1.0, 1.0],
+            },
+        }
+
+        runtime_keys = ordered_observation_image_keys(stats)
+
+        assert runtime_keys == ("images.top", "images.wrist")
+
 
 # ============================================================================ #
 # Policy Tests                                                                 #
@@ -146,6 +532,48 @@ class TestSmolVLAPolicy:
 
 class TestSmolVLAPreprocessor:
     """Tests for SmolVLA preprocessor functions."""
+
+    def test_preprocess_images_expected_keys_enforces_order(self) -> None:
+        """Expected image keys should determine camera stack order."""
+        from physicalai.data.observation import STATE
+        from physicalai.policies.smolvla.preprocessor import SmolVLAPreprocessor
+
+        preprocessor = SmolVLAPreprocessor(
+            image_resolution=None,
+            expected_image_keys=("images.wrist", "images.top"),
+        )
+        batch = {
+            STATE: torch.zeros(1, 4),
+            "images.top": torch.full((1, 3, 2, 2), 1.0),
+            "images.wrist": torch.full((1, 3, 2, 2), 0.5),
+            "_images_keys": ["images.top", "images.wrist"],
+        }
+
+        result = preprocessor._preprocess_images(batch)
+
+        assert result["images"].shape == (2, 1, 3, 2, 2)
+        torch.testing.assert_close(result["images"][0], torch.zeros((1, 3, 2, 2)))
+        torch.testing.assert_close(result["images"][1], torch.ones((1, 3, 2, 2)))
+
+    def test_preprocess_images_expected_keys_missing_raises(self) -> None:
+        """Missing expected image keys should raise a fail-fast ValueError."""
+        from physicalai.data.observation import STATE
+        from physicalai.policies.smolvla.preprocessor import SmolVLAPreprocessor
+
+        preprocessor = SmolVLAPreprocessor(
+            image_resolution=None,
+            expected_image_keys=("images.top", "images.wrist"),
+        )
+        batch = {
+            STATE: torch.zeros(1, 4),
+            "images.top": torch.full((1, 3, 2, 2), 1.0),
+            "_images_keys": ["images.top"],
+        }
+
+        with pytest.raises(ValueError, match="Missing image features in observation") as exc_info:
+            preprocessor._preprocess_images(batch)
+
+        assert "images.wrist" in str(exc_info.value)
 
     def test_make_smolvla_preprocessors(self) -> None:
         """Test make_smolvla_preprocessors returns callables."""

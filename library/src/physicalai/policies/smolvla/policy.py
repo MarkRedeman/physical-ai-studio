@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -20,6 +21,11 @@ from physicalai.inference.manifest import ComponentSpec
 from safetensors.torch import load_file
 
 from physicalai.data.observation import ACTION, IMAGES, STATE, TASK, FeatureType
+from physicalai.data.utils import (
+    ordered_config_image_features,
+    ordered_observation_image_keys,
+    resolve_visual_dataset_stats,
+)
 from physicalai.export import ExportablePolicyMixin, ExportBackend
 from physicalai.export.backends import (
     ExportParameters,
@@ -36,6 +42,8 @@ from .model import SmolVLAModel
 from .pretrained_utils import extract_dataset_stats, fix_state_dict_keys
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from physicalai.data import Observation
 
     from .preprocessor import SmolVLAPostprocessor, SmolVLAPreprocessor
@@ -54,6 +62,7 @@ class SmolVLA(ExportablePolicyMixin, Policy):
 
     Args:
         pretrained_name_or_path: HuggingFace repo ID or local path for pretrained weights and config.
+        image_features: If available, overwrites feature name of visual features. Default: None
         n_obs_steps: Number of observation steps to use. Default: 1.
         chunk_size: Size of action chunks for prediction. Default: 50.
         n_action_steps: Number of action steps to execute. Default: 50.
@@ -103,10 +112,26 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         >>> action = policy.select_action(obs)
     """
 
+    @staticmethod
+    def _normalize_image_features_input(image_features: Iterable[str] | None) -> tuple[str, ...] | None:
+        """Normalize image feature input into ``tuple[str, ...]``.
+
+        Returns:
+            ``None`` when no image features are provided; otherwise a tuple of
+            normalized image feature names.
+        """
+        if image_features is None:
+            return None
+        if isinstance(image_features, str):
+            return (image_features,)
+        return tuple(str(name) for name in image_features)
+
     def __init__(  # noqa: PLR0913
         self,
         # Pretrained model id
         pretrained_name_or_path: str | Path | None = None,
+        # image features
+        image_features: Iterable[str] | None = None,
         # Input / output structure.
         n_obs_steps: int = 1,
         chunk_size: int = 50,
@@ -162,10 +187,14 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         """
         super().__init__(n_action_steps=n_action_steps)
 
+        # Materialize once so one-shot iterables are safe to reuse.
+        normalized_image_features = self._normalize_image_features_input(image_features)
+
         weights_file = None
         if pretrained_name_or_path is not None:
             self.config, dataset_stats, weights_file = self._from_hf(
                 pretrained_name_or_path,
+                image_features=normalized_image_features,
                 tokenizer_max_length=tokenizer_max_length,
                 pad_language_to=pad_language_to,
                 use_random_input_noise=use_random_input_noise,
@@ -185,8 +214,15 @@ class SmolVLA(ExportablePolicyMixin, Policy):
                 scheduler_decay_lr=scheduler_decay_lr,
             )
         else:
+            inferred_image_features: tuple[str, ...] | None = None
+            if normalized_image_features is None and dataset_stats is not None:
+                inferred_image_features = ordered_config_image_features(
+                    cast("dict[str, dict[str, Any]]", dataset_stats),
+                )
+
             # Create config from explicit args (policy-level config)
             self.config = SmolVLAConfig(
+                image_features=(normalized_image_features or inferred_image_features),
                 n_obs_steps=n_obs_steps,
                 chunk_size=chunk_size,
                 n_action_steps=n_action_steps,
@@ -227,7 +263,7 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         self.save_hyperparameters(
             ignore=["config", "pretrained_name_or_path", "compile_model"],
         )
-        # overwrites with resolved self.config values
+        # Overwrites with resolved self.config values
         self._set_hparam_keys()
 
         # Model will be built in setup() or immediately if env_action_dim provided
@@ -251,6 +287,16 @@ class SmolVLA(ExportablePolicyMixin, Policy):
             self.hparams[key] = value
         self.hparams["config"] = self.config.to_dict()
 
+    def _set_config_image_features_from_dataset_stats(
+        self,
+        dataset_stats: dict[str, dict[str, list[float] | str | tuple]],
+    ) -> None:
+        """Sync config image_features from resolved visual dataset stats order."""
+        image_features = ordered_config_image_features(cast("dict[str, dict[str, Any]]", dataset_stats))
+        self.config = replace(self.config, image_features=image_features)
+        self.hparams["image_features"] = image_features
+        self.hparams["config"] = self.config.to_dict()
+
     def _initialize_model(
         self,
         dataset_stats: dict[str, dict[str, list[float] | str | tuple]],
@@ -264,6 +310,9 @@ class SmolVLA(ExportablePolicyMixin, Policy):
             dataset_stats: Dataset normalization statistics.
             weights_file: Optional pretrained weights file.
         """
+        dataset_stats = resolve_visual_dataset_stats(dataset_stats, self.config.image_features)
+        self._set_config_image_features_from_dataset_stats(dataset_stats)
+
         self.model = SmolVLAModel(
             dataset_stats,
             chunk_size=self.config.chunk_size,
@@ -322,6 +371,7 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         self,
         pretrained_name_or_path: str | Path,
         *,
+        image_features: Iterable[str] | None = None,
         tokenizer_max_length: int = 48,
         pad_language_to: str = "max_length",
         use_random_input_noise: bool = False,
@@ -398,10 +448,22 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         hf_config["scheduler_warmup_steps"] = scheduler_warmup_steps
         hf_config["scheduler_decay_steps"] = scheduler_decay_steps
         hf_config["scheduler_decay_lr"] = scheduler_decay_lr
+        normalized_image_features = tuple(image_features) if image_features is not None else None
+        if normalized_image_features is not None:
+            hf_config["image_features"] = list(normalized_image_features)
+        dataset_stats = extract_dataset_stats(hf_config, preprocessor_file, preprocessor_dir)
+
+        requested_image_features = normalized_image_features
+        dataset_stats = resolve_visual_dataset_stats(
+            dataset_stats,
+            requested_image_features,
+            allow_missing_visual_defaults=True,
+        )
+
+        if normalized_image_features is None:
+            hf_config["image_features"] = list(ordered_config_image_features(dataset_stats))
 
         config = SmolVLAConfig.from_dict(hf_config)
-
-        dataset_stats = extract_dataset_stats(hf_config, preprocessor_file, preprocessor_dir)
 
         return config, dataset_stats, weights_file
 
@@ -419,6 +481,10 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         """
         from .preprocessor import make_smolvla_preprocessors  # noqa: PLC0415
 
+        dataset_stats = resolve_visual_dataset_stats(dataset_stats, self.config.image_features)
+        self._set_config_image_features_from_dataset_stats(dataset_stats)
+        expected_image_keys = ordered_observation_image_keys(dataset_stats)
+
         self._preprocessor, self._postprocessor = make_smolvla_preprocessors(
             max_state_dim=self.config.max_state_dim,
             max_action_dim=self.config.max_action_dim,
@@ -427,6 +493,7 @@ class SmolVLA(ExportablePolicyMixin, Policy):
             max_token_len=self.config.tokenizer_max_length,
             token_pad_type=self.config.pad_language_to,
             tokenizer_name=self.config.vlm_model_name,
+            expected_image_keys=expected_image_keys,
         )
         self._dataset_stats = dataset_stats
         self.hparams["dataset_stats"] = dataset_stats
@@ -458,6 +525,9 @@ class SmolVLA(ExportablePolicyMixin, Policy):
         stats_dict = train_dataset.stats
 
         if self.model is not None:
+            # Fine-tuning path: make dataset stats authoritative for image feature keys
+            # before strict visual resolution in _update_preprocessor_stats.
+            self._set_config_image_features_from_dataset_stats(stats_dict)
             self._update_preprocessor_stats(stats_dict)
             reformat_dataset_to_match_policy(self, datamodule)
             return
