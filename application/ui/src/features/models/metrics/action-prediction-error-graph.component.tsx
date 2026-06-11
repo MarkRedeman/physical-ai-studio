@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatAxisValue,
     formatEpochTick,
     getFormattedValue,
@@ -29,7 +30,7 @@ const buildActionErrorSeries = (data?: MetricsEntry[]) => {
             {
                 dataKey: 'train',
                 name: 'Training error',
-                data: smooth(toPoints(data, STEP_X_KEY, 'train_action_error_step')),
+                data: downsamplePointsByX(smooth(toPoints(data, STEP_X_KEY, 'train_action_error_step'))),
             },
             {
                 dataKey: 'trainEpoch',

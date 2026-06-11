@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatAxisValue,
     formatEpochTick,
     getFormattedValue,
@@ -35,7 +36,7 @@ const buildLossSeries = (data?: MetricsEntry[]) => {
             {
                 dataKey: 'train',
                 name: 'Training loss',
-                data: smooth(toPoints(data, STEP_X_KEY, 'train_loss_step')),
+                data: downsamplePointsByX(smooth(toPoints(data, STEP_X_KEY, 'train_loss_step'))),
             },
             {
                 dataKey: 'val',

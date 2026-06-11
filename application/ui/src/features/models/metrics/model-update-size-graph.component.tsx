@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatAxisValue,
     formatEpochTick,
     getFormattedValue,
@@ -31,7 +32,7 @@ export const ModelUpdateSizeGraph = ({ data, epochTicks }: ModelUpdateSizeGraphP
             {
                 dataKey: 'gradNorm',
                 name: 'Model update size',
-                data: toPoints(data, STEP_X_KEY, 'train_grad_norm'),
+                data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'train_grad_norm')),
                 color: TRAIN_COLOR,
             },
         ],

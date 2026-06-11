@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatAxisValue,
     formatEpochTick,
     getFormattedValue,
@@ -31,7 +32,7 @@ export const SystemStepTimeGraph = ({ data, epochTicks }: SystemStepTimeGraphPro
             {
                 dataKey: 'stepTime',
                 name: 'Step time',
-                data: toPoints(data, STEP_X_KEY, 'system_step_time_s'),
+                data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'system_step_time_s')),
                 color: TRAIN_COLOR,
             },
         ],
