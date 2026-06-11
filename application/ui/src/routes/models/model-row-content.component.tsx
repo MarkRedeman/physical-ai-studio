@@ -3,8 +3,8 @@ import { Heading, IllustratedMessage, Item, TabList, TabPanels, Tabs, View } fro
 import { SchemaModel } from '../../api/openapi-spec';
 import { ModelDetails } from '../../features/models/details/model-details';
 import { ModelFormats } from '../../features/models/formats/model-formats';
+import { ModelMetricsContent } from '../../features/models/metrics/model-metrics-content';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
-import { MetricsContent } from './metrics';
 
 import classes from './model-row-content.module.scss';
 
@@ -36,7 +36,7 @@ export const ModelRowContent = ({ model }: ModelRowContentProps) => {
                         <ModelFormats model={model} />
                     </Item>
                     <Item key='metrics'>
-                        <MetricsContent modelId={model.id!} />
+                        <ModelMetricsContent modelId={model.id!} />
                     </Item>
                     <Item key='datasets'>
                         <ComingSoon />
