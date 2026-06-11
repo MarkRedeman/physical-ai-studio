@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    compressStepEpochPoints,
     getFormattedValue,
     MetricChartBox,
     MetricChartPoint,
@@ -47,7 +48,7 @@ export const SystemStepPerEpochGraph = ({ data }: { data?: MetricsEntry[] }) => 
             {
                 dataKey: 'epoch',
                 name: 'Epoch',
-                data: toStepEpochPoints(data),
+                data: compressStepEpochPoints(toStepEpochPoints(data)),
                 color: TRAIN_COLOR,
                 curve: 'stepAfter' as const,
             },

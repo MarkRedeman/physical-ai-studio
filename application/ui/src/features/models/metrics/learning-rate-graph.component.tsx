@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatEpochTick,
     formatScientific,
     getFormattedValue,
@@ -44,7 +45,7 @@ export const LearningRateGraph = ({ data, epochTicks }: LearningRateGraphProps) 
             {
                 dataKey: 'lr',
                 name: 'Learning rate',
-                data: toPoints(data, STEP_X_KEY, 'train_lr'),
+                data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'train_lr')),
                 color: TRAIN_COLOR,
             },
         ],

@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatAxisValue,
     formatEpochTick,
     getFormattedValue,
@@ -36,7 +37,7 @@ export const SystemAcceleratorUtilizationGraph = ({
         () => ({
             dataKey: 'utilization',
             name: 'Accelerator utilization',
-            data: toPoints(data, STEP_X_KEY, 'system_accelerator_utilization_percent'),
+            data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'system_accelerator_utilization_percent')),
             color: TRAIN_COLOR,
         }),
         [data]
@@ -45,7 +46,7 @@ export const SystemAcceleratorUtilizationGraph = ({
         () => ({
             dataKey: 'power',
             name: 'Accelerator power',
-            data: toPoints(data, STEP_X_KEY, 'system_accelerator_power_w'),
+            data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'system_accelerator_power_w')),
             color: TRAIN_COLOR,
         }),
         [data]

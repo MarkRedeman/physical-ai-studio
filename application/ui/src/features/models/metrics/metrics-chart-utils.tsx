@@ -91,6 +91,7 @@ export const CHART_THEME = { dotRadius: 0, activeDotRadius: 0 };
 export const CHART_HIGHLIGHT = { enabled: true, interaction: { legendHover: true, legendClick: true } };
 export const X_AXIS_TICK_COUNT = 8;
 export const Y_AXIS_TICK_COUNT = 4;
+export const MAX_METRIC_POINTS = 2000;
 export const TRAIN_COLOR = 'var(--energy-blue)';
 export const STEP_X_KEY = 'train_fractional_epoch';
 export const TRAIN_EPOCH_X_KEY = 'train_epoch';
@@ -187,6 +188,117 @@ export const smooth = (points: MetricChartPoint[], alpha = 0.9) => {
 
         return { ...point, y: previous };
     });
+};
+
+type PointAccumulator = {
+    count: number;
+    x: number;
+    y: number;
+    epochSum: number;
+    epochCount: number;
+    stepSum: number;
+    stepCount: number;
+};
+
+const toBucketPoint = (bucket: PointAccumulator): MetricChartPoint => {
+    return {
+        x: bucket.x / bucket.count,
+        y: bucket.y / bucket.count,
+        epoch: bucket.epochCount === 0 ? undefined : bucket.epochSum / bucket.epochCount,
+        step: bucket.stepCount === 0 ? undefined : Math.round(bucket.stepSum / bucket.stepCount),
+    };
+};
+
+const clampIndex = (index: number, maxIndex: number) => {
+    return Math.min(maxIndex, Math.max(0, index));
+};
+
+export const downsamplePointsByX = (points: MetricChartPoint[], maxPoints = MAX_METRIC_POINTS) => {
+    if (points.length <= maxPoints || maxPoints < 3) {
+        return points;
+    }
+
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const middlePoints = points.slice(1, -1);
+    const middleTargetCount = maxPoints - 2;
+
+    if (middlePoints.length <= middleTargetCount) {
+        return points;
+    }
+
+    const minX = firstPoint.x;
+    const maxX = lastPoint.x;
+    const range = maxX - minX;
+
+    if (range <= 0) {
+        const step = middlePoints.length / middleTargetCount;
+        const sampled = Array.from({ length: middleTargetCount }, (_, index) => {
+            return middlePoints[Math.floor(index * step)];
+        });
+
+        return [firstPoint, ...sampled, lastPoint];
+    }
+
+    const bucketWidth = range / middleTargetCount;
+    const buckets: Array<PointAccumulator | undefined> = Array.from({ length: middleTargetCount }, () => undefined);
+
+    for (const point of middlePoints) {
+        const relativePosition = (point.x - minX) / bucketWidth;
+        const bucketIndex = clampIndex(Math.floor(relativePosition), middleTargetCount - 1);
+        const bucket = buckets[bucketIndex] ?? { count: 0, x: 0, y: 0, epochSum: 0, epochCount: 0, stepSum: 0, stepCount: 0 };
+
+        bucket.count += 1;
+        bucket.x += point.x;
+        bucket.y += point.y;
+        if (typeof point.epoch === 'number') {
+            bucket.epochSum += point.epoch;
+            bucket.epochCount += 1;
+        }
+        if (typeof point.step === 'number') {
+            bucket.stepSum += point.step;
+            bucket.stepCount += 1;
+        }
+
+        buckets[bucketIndex] = bucket;
+    }
+
+    const downsampledMiddle = buckets.flatMap((bucket) => (bucket === undefined ? [] : [toBucketPoint(bucket)]));
+
+    return [firstPoint, ...downsampledMiddle, lastPoint];
+};
+
+export const compressStepEpochPoints = (points: MetricChartPoint[]) => {
+    if (points.length <= 2) {
+        return points;
+    }
+
+    const compressed: MetricChartPoint[] = [points[0]];
+
+    for (let index = 1; index < points.length; index++) {
+        const previous = points[index - 1];
+        const current = points[index];
+        const hasEpochChange = current.y !== previous.y;
+
+        if (!hasEpochChange) {
+            continue;
+        }
+
+        const lastKept = compressed[compressed.length - 1];
+        if (lastKept.x !== previous.x || lastKept.y !== previous.y) {
+            compressed.push(previous);
+        }
+
+        compressed.push(current);
+    }
+
+    const finalPoint = points[points.length - 1];
+    const lastKept = compressed[compressed.length - 1];
+    if (lastKept.x !== finalPoint.x || lastKept.y !== finalPoint.y) {
+        compressed.push(finalPoint);
+    }
+
+    return compressed;
 };
 
 export const hasData = (series: MetricChartSeries) => series.data.length > 0;

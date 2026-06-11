@@ -8,6 +8,7 @@ import {
     CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
+    downsamplePointsByX,
     formatAxisValue,
     formatEpochTick,
     getFormattedValue,
@@ -33,7 +34,7 @@ export const SystemMemoryGraph = ({ data, epochTicks }: SystemMemoryGraphProps) 
         () => ({
             dataKey: 'memoryPercent',
             name: 'Accelerator memory',
-            data: toPoints(data, STEP_X_KEY, 'system_accelerator_memory_percent'),
+            data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'system_accelerator_memory_percent')),
             color: TRAIN_COLOR,
         }),
         [data]
@@ -42,7 +43,7 @@ export const SystemMemoryGraph = ({ data, epochTicks }: SystemMemoryGraphProps) 
         () => ({
             dataKey: 'memory',
             name: 'Accelerator memory',
-            data: toPoints(data, STEP_X_KEY, 'system_accelerator_memory_mb'),
+            data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'system_accelerator_memory_mb')),
             color: TRAIN_COLOR,
         }),
         [data]
@@ -51,7 +52,7 @@ export const SystemMemoryGraph = ({ data, epochTicks }: SystemMemoryGraphProps) 
         () => ({
             dataKey: 'memoryTotal',
             name: 'Accelerator memory total',
-            data: toPoints(data, STEP_X_KEY, 'system_accelerator_memory_total_mb'),
+            data: downsamplePointsByX(toPoints(data, STEP_X_KEY, 'system_accelerator_memory_total_mb')),
             color: '#ff7300',
             dashed: true,
         }),
