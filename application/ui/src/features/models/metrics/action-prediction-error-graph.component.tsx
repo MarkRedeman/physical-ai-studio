@@ -1,13 +1,15 @@
+import { useMemo } from 'react';
+
 import { LineChart, withDatasetSubsetPalette } from '@geti-ui/charts';
 
 import {
     buildChartData,
     buildChartSeries,
+    CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
     formatAxisValue,
     formatEpochTick,
-    getNaturalEpochTicks,
     getFormattedValue,
     hasData,
     MetricChartBox,
@@ -45,21 +47,27 @@ const buildActionErrorSeries = (data?: MetricsEntry[]) => {
     ).filter(hasData);
 };
 
-export const ActionPredictionErrorGraph = ({ data }: { data?: MetricsEntry[] }) => {
-    const series = buildActionErrorSeries(data);
-    const epochTicks = getNaturalEpochTicks(data);
+type ActionPredictionErrorGraphProps = {
+    data?: MetricsEntry[];
+    epochTicks: number[];
+};
+
+export const ActionPredictionErrorGraph = ({ data, epochTicks }: ActionPredictionErrorGraphProps) => {
+    const series = useMemo(() => buildActionErrorSeries(data), [data]);
+    const chartData = useMemo(() => buildChartData(series), [series]);
+    const chartSeries = useMemo(() => buildChartSeries(series), [series]);
 
     return (
         <MetricChartBox title='Action Prediction Error'>
             <LineChart
-                data={buildChartData(series)}
+                data={chartData}
                 xAxisKey='epoch'
-                series={buildChartSeries(series)}
+                series={chartSeries}
                 showLegend={series.length > 1}
                 aria-label='Action Prediction Error over Epoch'
                 height={CHART_HEIGHT}
                 margin={CHART_MARGIN}
-                highlight={{ enabled: true, interaction: { legendHover: true, legendClick: true } }}
+                highlight={CHART_HIGHLIGHT}
                 tooltipProps={{
                     formatter: (value, name) => [getFormattedValue(value), name],
                     content: (props) => <MetricTooltip {...props} />,

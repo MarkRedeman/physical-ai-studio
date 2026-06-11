@@ -1,13 +1,15 @@
+import { useMemo } from 'react';
+
 import { LineChart } from '@geti-ui/charts';
 
 import {
     buildChartData,
     buildChartSeries,
+    CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
     formatAxisValue,
     formatEpochTick,
-    getNaturalEpochTicks,
     getFormattedValue,
     MetricChartBox,
     MetricTooltip,
@@ -18,28 +20,37 @@ import {
     Y_AXIS_TICK_COUNT,
 } from './metrics-chart-utils';
 
-export const ModelUpdateSizeGraph = ({ data }: { data?: MetricsEntry[] }) => {
-    const series = [
-        {
-            dataKey: 'gradNorm',
-            name: 'Model update size',
-            data: toPoints(data, STEP_X_KEY, 'train_grad_norm'),
-            color: TRAIN_COLOR,
-        },
-    ];
-    const epochTicks = getNaturalEpochTicks(data);
+type ModelUpdateSizeGraphProps = {
+    data?: MetricsEntry[];
+    epochTicks: number[];
+};
+
+export const ModelUpdateSizeGraph = ({ data, epochTicks }: ModelUpdateSizeGraphProps) => {
+    const series = useMemo(
+        () => [
+            {
+                dataKey: 'gradNorm',
+                name: 'Model update size',
+                data: toPoints(data, STEP_X_KEY, 'train_grad_norm'),
+                color: TRAIN_COLOR,
+            },
+        ],
+        [data]
+    );
+    const chartData = useMemo(() => buildChartData(series), [series]);
+    const chartSeries = useMemo(() => buildChartSeries(series), [series]);
 
     return (
         <MetricChartBox title='Model Update Size'>
             <LineChart
-                data={buildChartData(series)}
+                data={chartData}
                 xAxisKey='epoch'
-                series={buildChartSeries(series)}
+                series={chartSeries}
                 showLegend={false}
                 aria-label='Model Update Size over Epoch'
                 height={CHART_HEIGHT}
                 margin={CHART_MARGIN}
-                highlight={{ enabled: true, interaction: { legendHover: true, legendClick: true } }}
+                highlight={CHART_HIGHLIGHT}
                 tooltipProps={{
                     formatter: (value, name) => [getFormattedValue(value), name],
                     content: (props) => <MetricTooltip {...props} />,

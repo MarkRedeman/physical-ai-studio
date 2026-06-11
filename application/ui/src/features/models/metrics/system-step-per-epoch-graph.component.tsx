@@ -1,8 +1,11 @@
+import { useMemo } from 'react';
+
 import { LineChart } from '@geti-ui/charts';
 
 import {
     buildChartData,
     buildChartSeries,
+    CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
     getFormattedValue,
@@ -39,27 +42,32 @@ const toStepEpochPoints = (data: MetricsEntry[] | undefined) => {
 };
 
 export const SystemStepPerEpochGraph = ({ data }: { data?: MetricsEntry[] }) => {
-    const series = [
-        {
-            dataKey: 'epoch',
-            name: 'Epoch',
-            data: toStepEpochPoints(data),
-            color: TRAIN_COLOR,
-            curve: 'stepAfter' as const,
-        },
-    ];
+    const series = useMemo(
+        () => [
+            {
+                dataKey: 'epoch',
+                name: 'Epoch',
+                data: toStepEpochPoints(data),
+                color: TRAIN_COLOR,
+                curve: 'stepAfter' as const,
+            },
+        ],
+        [data]
+    );
+    const chartData = useMemo(() => buildChartData(series, false), [series]);
+    const chartSeries = useMemo(() => buildChartSeries(series), [series]);
 
     return (
         <MetricChartBox title='Steps Per Epoch'>
             <LineChart
-                data={buildChartData(series, false)}
+                data={chartData}
                 xAxisKey='epoch'
-                series={buildChartSeries(series)}
+                series={chartSeries}
                 showLegend={false}
                 aria-label='Steps Per Epoch over Step'
                 height={CHART_HEIGHT}
                 margin={CHART_MARGIN}
-                highlight={{ enabled: true, interaction: { legendHover: true, legendClick: true } }}
+                highlight={CHART_HIGHLIGHT}
                 tooltipProps={{
                     formatter: (value, name) => [getFormattedValue(value), name],
                     content: (props) => <MetricTooltip {...props} />,
