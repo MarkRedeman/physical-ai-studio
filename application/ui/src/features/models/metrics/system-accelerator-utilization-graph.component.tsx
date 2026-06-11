@@ -1,13 +1,15 @@
+import { useMemo } from 'react';
+
 import { LineChart } from '@geti-ui/charts';
 
 import {
     buildChartData,
     buildChartSeries,
+    CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
     formatAxisValue,
     formatEpochTick,
-    getNaturalEpochTicks,
     getFormattedValue,
     MetricChartBox,
     MetricChartSeries,
@@ -21,34 +23,49 @@ import {
 
 const hasSeriesData = (series: MetricChartSeries) => series.data.length > 0;
 
-export const SystemAcceleratorUtilizationGraph = ({ data }: { data?: MetricsEntry[] }) => {
-    const utilizationSeries: MetricChartSeries = {
-        dataKey: 'utilization',
-        name: 'Accelerator utilization',
-        data: toPoints(data, STEP_X_KEY, 'system_accelerator_utilization_percent'),
-        color: TRAIN_COLOR,
-    };
-    const powerSeries: MetricChartSeries = {
-        dataKey: 'power',
-        name: 'Accelerator power',
-        data: toPoints(data, STEP_X_KEY, 'system_accelerator_power_w'),
-        color: TRAIN_COLOR,
-    };
-    const series = hasSeriesData(utilizationSeries) ? [utilizationSeries] : [powerSeries];
+type SystemAcceleratorUtilizationGraphProps = {
+    data?: MetricsEntry[];
+    epochTicks: number[];
+};
+
+export const SystemAcceleratorUtilizationGraph = ({
+    data,
+    epochTicks,
+}: SystemAcceleratorUtilizationGraphProps) => {
+    const utilizationSeries = useMemo<MetricChartSeries>(
+        () => ({
+            dataKey: 'utilization',
+            name: 'Accelerator utilization',
+            data: toPoints(data, STEP_X_KEY, 'system_accelerator_utilization_percent'),
+            color: TRAIN_COLOR,
+        }),
+        [data]
+    );
+    const powerSeries = useMemo<MetricChartSeries>(
+        () => ({
+            dataKey: 'power',
+            name: 'Accelerator power',
+            data: toPoints(data, STEP_X_KEY, 'system_accelerator_power_w'),
+            color: TRAIN_COLOR,
+        }),
+        [data]
+    );
     const isUtilization = hasSeriesData(utilizationSeries);
-    const epochTicks = getNaturalEpochTicks(data);
+    const series = useMemo(() => (isUtilization ? [utilizationSeries] : [powerSeries]), [isUtilization, powerSeries, utilizationSeries]);
+    const chartData = useMemo(() => buildChartData(series), [series]);
+    const chartSeries = useMemo(() => buildChartSeries(series), [series]);
 
     return (
         <MetricChartBox title={isUtilization ? 'Accelerator Utilization' : 'Accelerator Power'}>
             <LineChart
-                data={buildChartData(series)}
+                data={chartData}
                 xAxisKey='epoch'
-                series={buildChartSeries(series)}
+                series={chartSeries}
                 showLegend={false}
                 aria-label={`${isUtilization ? 'Accelerator Utilization' : 'Accelerator Power'} over Epoch`}
                 height={CHART_HEIGHT}
                 margin={CHART_MARGIN}
-                highlight={{ enabled: true, interaction: { legendHover: true, legendClick: true } }}
+                highlight={CHART_HIGHLIGHT}
                 tooltipProps={{
                     formatter: (value, name) => [getFormattedValue(value), name],
                     content: (props) => <MetricTooltip {...props} />,

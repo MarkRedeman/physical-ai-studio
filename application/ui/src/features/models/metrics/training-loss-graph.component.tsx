@@ -1,13 +1,15 @@
+import { useMemo } from 'react';
+
 import { LineChart, withDatasetSubsetPalette } from '@geti-ui/charts';
 
 import {
     buildChartData,
     buildChartSeries,
+    CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
     formatAxisValue,
     formatEpochTick,
-    getNaturalEpochTicks,
     getFormattedValue,
     hasData,
     MetricChartBox,
@@ -47,22 +49,28 @@ const buildLossSeries = (data?: MetricsEntry[]) => {
     return series.map(toPositiveLogPoints).filter(hasData);
 };
 
-export const TrainingLossGraph = ({ data }: { data?: MetricsEntry[] }) => {
-    const series = buildLossSeries(data);
-    const epochTicks = getNaturalEpochTicks(data);
+type TrainingLossGraphProps = {
+    data?: MetricsEntry[];
+    epochTicks: number[];
+};
+
+export const TrainingLossGraph = ({ data, epochTicks }: TrainingLossGraphProps) => {
+    const series = useMemo(() => buildLossSeries(data), [data]);
+    const chartData = useMemo(() => buildChartData(series), [series]);
+    const chartSeries = useMemo(() => buildChartSeries(series), [series]);
 
     return (
         <MetricChartBox title='Training Loss'>
             <LineChart
-                data={buildChartData(series)}
+                data={chartData}
                 xAxisKey='epoch'
-                series={buildChartSeries(series)}
+                series={chartSeries}
                 showLegend={series.length > 1}
                 aria-label='Training Loss over Epoch'
                 height={CHART_HEIGHT}
                 yScale={{ scale: 'log', domain: ['auto', 'auto'] }}
                 margin={CHART_MARGIN}
-                highlight={{ enabled: true, interaction: { legendHover: true, legendClick: true } }}
+                highlight={CHART_HIGHLIGHT}
                 tooltipProps={{
                     formatter: (value, name) => [getFormattedValue(value), name],
                     content: (props) => <MetricTooltip {...props} />,

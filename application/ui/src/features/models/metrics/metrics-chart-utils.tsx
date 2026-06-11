@@ -87,6 +87,8 @@ type MetricTooltipProps = ChartTooltipContentProps & {
 
 export const CHART_HEIGHT = 300;
 export const CHART_MARGIN = { top: 35, right: 35, bottom: 35, left: 35 };
+export const CHART_THEME = { dotRadius: 0, activeDotRadius: 0 };
+export const CHART_HIGHLIGHT = { enabled: true, interaction: { legendHover: true, legendClick: true } };
 export const X_AXIS_TICK_COUNT = 8;
 export const Y_AXIS_TICK_COUNT = 4;
 export const TRAIN_COLOR = 'var(--energy-blue)';
@@ -94,18 +96,42 @@ export const STEP_X_KEY = 'train_fractional_epoch';
 export const TRAIN_EPOCH_X_KEY = 'train_epoch';
 export const VAL_EPOCH_X_KEY = 'val_epoch';
 
-export const formatEpochTick = (value: number) => Math.floor(value).toString();
-export const getNaturalEpochTicks = (data: MetricsEntry[] | undefined) => {
-    const maxEpoch = Math.max(
-        0,
-        ...(data ?? []).flatMap(({ train_fractional_epoch, train_epoch, val_epoch }) => {
-            return [train_fractional_epoch, train_epoch, val_epoch].filter(
-                (value): value is number => typeof value === 'number'
-            );
-        })
-    );
+const roundTickValue = (value: number) => Number(value.toFixed(6));
 
-    return Array.from({ length: Math.floor(maxEpoch) + 1 }, (_, index) => index);
+const toEpochValues = (data: MetricsEntry[] | undefined) => {
+    if (!data) {
+        return [];
+    }
+
+    return data.flatMap(({ train_fractional_epoch, train_epoch, val_epoch }) => {
+        return [train_fractional_epoch, train_epoch, val_epoch].filter((value): value is number => typeof value === 'number');
+    });
+};
+
+export const getEquidistantEpochTicks = (data: MetricsEntry[] | undefined, tickCount = X_AXIS_TICK_COUNT) => {
+    const epochValues = toEpochValues(data);
+
+    if (epochValues.length === 0) {
+        return [0];
+    }
+
+    const minEpoch = Math.min(...epochValues);
+    const maxEpoch = Math.max(...epochValues);
+
+    if (minEpoch === maxEpoch) {
+        return [roundTickValue(minEpoch)];
+    }
+
+    const safeTickCount = Math.max(2, tickCount);
+    const step = (maxEpoch - minEpoch) / (safeTickCount - 1);
+
+    return Array.from({ length: safeTickCount }, (_, index) => roundTickValue(minEpoch + index * step));
+};
+
+export const formatEpochTick = (value: number) => {
+    const rounded = Number(value.toFixed(1));
+
+    return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
 };
 
 export const formatMetricValue = (value: number | string | readonly (number | string)[] | undefined) => {

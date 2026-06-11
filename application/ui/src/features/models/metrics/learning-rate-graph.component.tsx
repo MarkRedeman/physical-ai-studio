@@ -1,13 +1,15 @@
+import { useMemo } from 'react';
+
 import { LineChart } from '@geti-ui/charts';
 
 import {
     buildChartData,
     buildChartSeries,
+    CHART_HIGHLIGHT,
     CHART_HEIGHT,
     CHART_MARGIN,
     formatEpochTick,
     formatScientific,
-    getNaturalEpochTicks,
     getFormattedValue,
     MetricChartBox,
     MetricChartPoint,
@@ -31,30 +33,39 @@ const getRelativePaddedDomain = (points: MetricChartPoint[], paddingRatio = 0.1)
     return [min * (1 - paddingRatio), max * (1 + paddingRatio)];
 };
 
-export const LearningRateGraph = ({ data }: { data?: MetricsEntry[] }) => {
-    const series = [
-        {
-            dataKey: 'lr',
-            name: 'Learning rate',
-            data: toPoints(data, STEP_X_KEY, 'train_lr'),
-            color: TRAIN_COLOR,
-        },
-    ];
-    const lrDomain = getRelativePaddedDomain(series[0].data);
-    const epochTicks = getNaturalEpochTicks(data);
+type LearningRateGraphProps = {
+    data?: MetricsEntry[];
+    epochTicks: number[];
+};
+
+export const LearningRateGraph = ({ data, epochTicks }: LearningRateGraphProps) => {
+    const series = useMemo(
+        () => [
+            {
+                dataKey: 'lr',
+                name: 'Learning rate',
+                data: toPoints(data, STEP_X_KEY, 'train_lr'),
+                color: TRAIN_COLOR,
+            },
+        ],
+        [data]
+    );
+    const chartData = useMemo(() => buildChartData(series), [series]);
+    const chartSeries = useMemo(() => buildChartSeries(series), [series]);
+    const lrDomain = useMemo(() => getRelativePaddedDomain(series[0].data), [series]);
 
     return (
         <MetricChartBox title='Learning Rate'>
             <LineChart
-                data={buildChartData(series)}
+                data={chartData}
                 xAxisKey='epoch'
-                series={buildChartSeries(series)}
+                series={chartSeries}
                 showLegend={false}
                 aria-label='Learning Rate over Epoch'
                 height={CHART_HEIGHT}
                 yScale={lrDomain === undefined ? undefined : { domain: lrDomain }}
                 margin={CHART_MARGIN}
-                highlight={{ enabled: true, interaction: { legendHover: true, legendClick: true } }}
+                highlight={CHART_HIGHLIGHT}
                 tooltipProps={{
                     formatter: (value, name) => [getFormattedValue(value, formatScientific), name],
                     content: (props) => <MetricTooltip {...props} valueFormatter={formatScientific} />,
