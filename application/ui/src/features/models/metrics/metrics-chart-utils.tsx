@@ -2,7 +2,7 @@ import { ChartTooltipContentProps, LineChartSeriesConfig, useChartsTheme } from 
 import { Flex, View } from '@geti-ui/ui';
 import type { CSSProperties, ReactNode } from 'react';
 
-import { Box } from './box.component';
+import { Box } from '../../../routes/models/box.component';
 
 export interface MetricsEntry {
     epoch: number | null;

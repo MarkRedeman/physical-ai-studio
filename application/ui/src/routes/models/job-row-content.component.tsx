@@ -1,7 +1,7 @@
 import { Heading, Item, TabList, TabPanels, Tabs, View } from '@geti-ui/ui';
 
 import { SchemaTrainJob } from '../../api/openapi-spec';
-import { JobMetricsContent } from './metrics';
+import { JobMetricsContent } from '../../features/models/metrics/job-metrics-content';
 
 import classes from './model-row-content.module.css';
 
