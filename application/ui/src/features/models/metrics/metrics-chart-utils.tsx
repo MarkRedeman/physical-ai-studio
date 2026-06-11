@@ -129,9 +129,9 @@ export const getEquidistantEpochTicks = (data: MetricsEntry[] | undefined, tickC
 };
 
 export const formatEpochTick = (value: number) => {
-    const rounded = Number(value.toFixed(1));
+    const rounded = Number(value.toFixed(3));
 
-    return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+    return rounded.toString();
 };
 
 export const formatMetricValue = (value: number | string | readonly (number | string)[] | undefined) => {
