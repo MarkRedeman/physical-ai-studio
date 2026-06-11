@@ -1,8 +1,5 @@
-import json
 import shutil
-from datetime import datetime
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 import yaml
@@ -11,7 +8,7 @@ from db import get_async_db_session_ctx
 from exceptions import ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
 from schemas.job import TrainJob
-from schemas.model import BackendExportDetail, BackendIOSpec, IOFeature, Model, TrainingSummary
+from schemas.model import BackendExportDetail, Model, TrainingSummary
 
 
 class ModelService:
@@ -73,97 +70,11 @@ class ModelService:
 
         details: list[BackendExportDetail] = []
         for backend_dir in sorted(exports_dir.iterdir()):
-            if not backend_dir.is_dir():
-                continue
-            files = [f for f in backend_dir.rglob("*") if f.is_file()]
+            detail = BackendExportDetail.from_backend_dir(backend_dir)
+            if detail is not None:
+                details.append(detail)
 
-            # Backend exports folder may be empty if export failed
-            if len(files) == 0:
-                continue
-
-            total_size = sum(f.stat().st_size for f in files)
-            exported_at = datetime.fromtimestamp(backend_dir.stat().st_mtime)
-            details.append(
-                BackendExportDetail(
-                    type=backend_dir.name,
-                    size_bytes=total_size,
-                    file_count=len(files),
-                    exported_at=exported_at,
-                    io_spec=ModelService.get_backend_io_spec(backend_dir),
-                )
-            )
         return details
-
-    @staticmethod
-    def get_backend_io_spec(backend_dir: Path) -> BackendIOSpec | None:
-        """Read model I/O details from a backend export manifest."""
-        manifest_path = backend_dir / "manifest.json"
-        if not manifest_path.is_file():
-            return None
-
-        try:
-            with manifest_path.open(encoding="utf-8") as f:
-                manifest = json.load(f)
-        except (OSError, ValueError):
-            return None
-
-        if not isinstance(manifest, dict):
-            return None
-
-        model_section = manifest.get("model")
-        if not isinstance(model_section, dict):
-            return None
-
-        input_features = ModelService._parse_io_features(model_section.get("input_features"))
-        output_features = ModelService._parse_io_features(model_section.get("output_features"))
-
-        if not input_features and not output_features:
-            return None
-
-        return BackendIOSpec(
-            input_features=input_features,
-            output_features=output_features,
-        )
-
-    @staticmethod
-    def _parse_io_features(raw_features: Any) -> list[IOFeature]:
-        if not isinstance(raw_features, list):
-            return []
-
-        features: list[IOFeature] = []
-        for raw_feature in raw_features:
-            if not isinstance(raw_feature, dict):
-                continue
-
-            init_args = raw_feature.get("init_args")
-            if not isinstance(init_args, dict):
-                init_args = raw_feature
-
-            name = init_args.get("name")
-            if not isinstance(name, str) or not name:
-                continue
-
-            raw_shape = init_args.get("shape")
-            shape = raw_shape if isinstance(raw_shape, list) and all(isinstance(v, int) for v in raw_shape) else None
-
-            ftype = init_args.get("ftype")
-            dtype = init_args.get("dtype")
-            features.append(
-                IOFeature(
-                    name=name,
-                    ftype=ftype if isinstance(ftype, str) else None,
-                    shape=shape,
-                    dtype=dtype if isinstance(dtype, str) else None,
-                )
-            )
-
-        return features
-
-    @staticmethod
-    def _parse_string_list(raw_items: Any) -> list[str]:
-        if not isinstance(raw_items, list):
-            return []
-        return [item for item in raw_items if isinstance(item, str)]
 
     @staticmethod
     def get_hparams(model: Model) -> dict | None:
