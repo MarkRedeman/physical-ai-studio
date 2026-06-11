@@ -102,3 +102,8 @@ a {
 .recharts-wrapper *:focus:not(:focus-visible) {
     outline: none !important;
 }
+
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus {
+    outline: none;
+}
