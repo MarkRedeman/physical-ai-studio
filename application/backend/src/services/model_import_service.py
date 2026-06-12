@@ -130,7 +130,7 @@ class ModelImportService:
             snapshot_id=None,
             policy=policy,
             properties={},
-            train_job_id=job.id,
+            train_job_id=None,
             parent_model_id=base_model_id,
             version=version,
             created_at=None,
