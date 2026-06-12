@@ -148,8 +148,11 @@ class EnvironmentIntegration:
         return Observation(
             state=state,
             images=images,
-            # task=task, # TODO: Implement tasks.
+            task=["Move the dice into the cup"], # TODO: Implement tasks.
+            # Move the dice into the cup
+
         )
+
 
     def format_observation_for_dataset(self, raw_observation: dict) -> dict:
         """Format observation for dataset frame input."""

@@ -182,6 +182,74 @@ def import_dir(
         sys.exit(1)
 
 
+
+@models.command("lerobot")
+def lerobot() -> None:
+    """Rexport
+
+uv run src/cli.py models reexport --model-dir /home/mark/data/models/smolvla-tests/dice-cleanup-combined-smolvla-pas --model-type smolvla
+uv run src/cli.py models reexport --model-dir /home/mark/data/models/smolvla-tests/dice-cleanup-combined-act-pas --model-type act
+
+    """
+    from physicalai.policies import ACT, Pi05, SmolVLA
+    from physicalai.policies.base import Policy
+    from physicalai.export import ExportablePolicyMixin
+    from loguru import logger
+
+    # …/3741ce3b-4867-47bb-98d2-03057944baec/exports
+    #…/c70d5e36-b646-4701-9c9a-06f2041245dd/exports 
+    # /home/mark/.local/share/physicalai/models/c70d5e36-b646-4701-9c9a-06f2041245dd/exports
+
+    smolvla_model_dir = "/home/mark/.local/share/physicalai/models/c70d5e36-b646-4701-9c9a-06f2041245dd/exports/lerobot"
+    act_model_dir = "/home/mark/.local/share/physicalai/models/3741ce3b-4867-47bb-98d2-03057944baec/exports/exports/lerobot"
+
+    def load_policy(model_type) -> Policy:
+        """Load existing model."""
+        if model_type == "act":
+            return ACT.load_from_checkpoint(Path("/home/mark/.local/share/physicalai/models/3741ce3b-4867-47bb-98d2-03057944baec/exports/lerobot/model.pt"))
+        elif model_type == "smolvla":
+            return SmolVLA(pretrained_name_or_path=smolvla_model_dir)
+        else:
+            raise ValueError(f"Policy {model_type} not implemented.")
+
+    click.echo(f"Re-export models from lerobot")
+
+    model_type = "smolvla"
+    model_dir = Path("/home/mark/.local/share/physicalai/models/c70d5e36-b646-4701-9c9a-06f2041245dd/")
+
+    model_dir = Path("/home/mark/.local/share/physicalai/models/3741ce3b-4867-47bb-98d2-03057944baec/")
+    model_type = "act"
+    policy = load_policy(model_type)
+
+
+    async def _run_export() -> None:
+        if not isinstance(policy, ExportablePolicyMixin):
+            logger.info("Skipping export: policy does not support export backends")
+            return
+
+        logger.info("Starting model export for trained policy")
+        for backend in policy.get_supported_export_backends():
+            backend_name = backend.value if hasattr(backend, "value") else str(backend)
+            try:
+                logger.info("Exporting model to {} format", backend_name)
+                export_dir = model_dir / "exports" / backend
+
+                if export_dir.exists():
+                    logger.info("Skipping: {}", backend_name)
+                    continue
+
+                policy.export(export_dir, backend=backend)
+                logger.info("Model export to {} completed", backend_name)
+            except Exception as e:
+                logger.error("Failed exporting model to {} format", backend_name)
+                logger.exception(e)
+
+    try:
+        asyncio.run(_run_export())
+    except Exception as e:
+        click.echo(f"Model import failed: {e}")
+        sys.exit(1)
+
 @models.command("reexport")
 @click.option("--model-dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--model-type", required=True, type=str)
