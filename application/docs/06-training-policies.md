@@ -45,6 +45,26 @@ If a training job takes too long, you can interrupt it. This stores a checkpoint
 When training finishes we export the model to all its supported backends: [PyTorch](https://github.com/pytorch/pytorch), [OpenVINO](https://github.com/openvinotoolkit/openvino), [ONNX](https://github.com/onnx/onnx) and [ExecuTorch](https://github.com/pytorch/executorch).
 Download the model and then use [OpenVINO PhysicalAI](https://github.com/openvinotoolkit/physicalai) to deploy it on your hardware.
 
+## Troubleshooting training network errors
+
+If training fails with a network error such as `urlopen error [Errno 99] Cannot assign requested address`, verify that the running container has the expected proxy configuration. Some training paths and model policies may contact external services such as Hugging Face Hub.
+
+From `application/docker/`, check the host `.env`, the rendered Compose configuration, and the running container environment:
+
+```bash
+grep -i proxy .env
+docker compose --profile cuda config | grep -i proxy
+docker exec physical-ai-studio-cuda env | grep -i proxy
+```
+
+Use the profile and container name that match your setup: `cpu`, `xpu`, or `cuda`.
+
+If proxy values are present in `.env` but missing from `docker compose ... config` or from the running container, upgrade to Docker Compose v2.24.0+ and recreate the container:
+
+```bash
+docker compose up -d --force-recreate
+```
+
 ## Next
 
 - Run/deploy in UI: [Deploying Model Policies](./07-deploying-model-policies.md).
