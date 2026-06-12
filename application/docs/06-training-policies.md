@@ -100,11 +100,8 @@ From `application/docker/`, check the host `.env`, the rendered Compose configur
 
 ```bash
 grep -i proxy .env
-docker compose --profile cuda config | grep -i proxy
-docker exec physical-ai-studio-cuda env | grep -i proxy
+docker compose config | grep -i proxy
 ```
-
-Use the profile and container name that match your setup: `cpu`, `xpu`, or `cuda`.
 
 If proxy values are present in `.env` but missing from `docker compose ... config` or from the running container, upgrade to Docker Compose v2.24.0+ and recreate the container:
 
