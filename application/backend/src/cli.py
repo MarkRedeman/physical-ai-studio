@@ -1,6 +1,7 @@
 """Command line interface for interacting with the Physical AI Studio application."""
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from uuid import UUID
@@ -184,42 +185,59 @@ def import_dir(
 
 
 @models.command("lerobot")
-def lerobot() -> None:
-    """Rexport
+@click.option("--model-dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path))
+def lerobot(model_dir: Path) -> None:
+    """Re-export a LeRobot pretrained directory into supported backends.
 
-uv run src/cli.py models reexport --model-dir /home/mark/data/models/smolvla-tests/dice-cleanup-combined-smolvla-pas --model-type smolvla
-uv run src/cli.py models reexport --model-dir /home/mark/data/models/smolvla-tests/dice-cleanup-combined-act-pas --model-type act
-
+    Example:
+    uv run src/cli.py models lerobot --model-dir /path/to/model/exports/lerobot
     """
-    from physicalai.policies import ACT, Pi05, SmolVLA
-    from physicalai.policies.base import Policy
-    from physicalai.export import ExportablePolicyMixin
     from loguru import logger
 
-    # …/3741ce3b-4867-47bb-98d2-03057944baec/exports
-    #…/c70d5e36-b646-4701-9c9a-06f2041245dd/exports 
-    # /home/mark/.local/share/physicalai/models/c70d5e36-b646-4701-9c9a-06f2041245dd/exports
+    from physicalai.export import ExportablePolicyMixin
+    from physicalai.policies import ACT, Pi05, SmolVLA
+    from physicalai.policies.base import Policy
+    from physicalai.policies.lerobot import LeRobotPolicy
 
-    smolvla_model_dir = "/home/mark/.local/share/physicalai/models/c70d5e36-b646-4701-9c9a-06f2041245dd/exports/lerobot"
-    act_model_dir = "/home/mark/.local/share/physicalai/models/3741ce3b-4867-47bb-98d2-03057944baec/exports/exports/lerobot"
+    def load_policy_from_lerobot_dir(path: Path) -> Policy:
+        config_path = path / "config.json"
+        with config_path.open(encoding="utf-8") as f:
+            policy_type = str(json.load(f).get("type", "")).lower()
 
-    def load_policy(model_type) -> Policy:
-        """Load existing model."""
-        if model_type == "act":
-            return ACT.load_from_checkpoint(Path("/home/mark/.local/share/physicalai/models/3741ce3b-4867-47bb-98d2-03057944baec/exports/lerobot/model.pt"))
-        elif model_type == "smolvla":
-            return SmolVLA(pretrained_name_or_path=smolvla_model_dir)
-        else:
-            raise ValueError(f"Policy {model_type} not implemented.")
+        native_loaders: dict[str, type[Policy]] = {
+            "act": ACT,
+            "pi05": Pi05,
+            "smolvla": SmolVLA,
+        }
 
-    click.echo(f"Re-export models from lerobot")
+        native_cls = native_loaders.get(policy_type)
+        if native_cls is None:
+            logger.info("Policy type '{}' does not have a native converter path, using LeRobot wrapper", policy_type)
+            return LeRobotPolicy.from_pretrained(path)
 
-    model_type = "smolvla"
-    model_dir = Path("/home/mark/.local/share/physicalai/models/c70d5e36-b646-4701-9c9a-06f2041245dd/")
+        model_root = path.parent.parent
+        checkpoint_candidates = [
+            model_root / "model.ckpt",
+            model_root / "last.ckpt",
+            path / "model.ckpt",
+            path / "last.ckpt",
+        ]
 
-    model_dir = Path("/home/mark/.local/share/physicalai/models/3741ce3b-4867-47bb-98d2-03057944baec/")
-    model_type = "act"
-    policy = load_policy(model_type)
+        for checkpoint_path in checkpoint_candidates:
+            if checkpoint_path.exists():
+                logger.info("Loading native '{}' checkpoint from {}", policy_type, checkpoint_path)
+                return native_cls.load_from_checkpoint(str(checkpoint_path))
+
+        logger.warning(
+            "Could not find a native Lightning checkpoint for '{}' near {}. "
+            "Falling back to LeRobot wrapper (likely torch-only export support).",
+            policy_type,
+            path,
+        )
+        return LeRobotPolicy.from_pretrained(path)
+
+    click.echo(f"Re-export model from LeRobot folder: {model_dir}")
+    policy = load_policy_from_lerobot_dir(model_dir)
 
 
     async def _run_export() -> None:
@@ -232,7 +250,7 @@ uv run src/cli.py models reexport --model-dir /home/mark/data/models/smolvla-tes
             backend_name = backend.value if hasattr(backend, "value") else str(backend)
             try:
                 logger.info("Exporting model to {} format", backend_name)
-                export_dir = model_dir / "exports" / backend
+                export_dir = model_dir / "exports" / backend_name
 
                 if export_dir.exists():
                     logger.info("Skipping: {}", backend_name)

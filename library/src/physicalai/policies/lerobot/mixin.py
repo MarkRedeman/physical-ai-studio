@@ -306,6 +306,11 @@ class LeRobotFromConfig(FromConfig):
         wrapper._is_pretrained = True  # noqa: SLF001
         wrapper._framework = "lerobot"  # noqa: SLF001
         wrapper._config = config  # noqa: SLF001
+        wrapper._dataset_stats = None  # noqa: SLF001
+        wrapper._input_features = None  # noqa: SLF001
+        wrapper._output_features = None  # noqa: SLF001
+        wrapper._provided_config = config  # noqa: SLF001
+        wrapper._policy_config = {}  # noqa: SLF001
 
         # Set policy_name from the loaded config (needed by all wrapper types)
         wrapper.policy_name = config.type
