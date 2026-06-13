@@ -128,9 +128,6 @@ def _mock_services(settings, dataset, job=None):
         )
         if job is not None:
             stack.enter_context(
-                patch("services.model_import_service.JobService.create_job", AsyncMock(return_value=job))
-            )
-            stack.enter_context(
                 patch("services.model_import_service.ModelService.create_model", AsyncMock(side_effect=lambda m: m))
             )
         yield
@@ -195,7 +192,7 @@ async def test_import_model_directory_cleans_up_on_failure(tmp_path, project_id,
         patch("services.model_import_service.get_settings", return_value=settings),
         patch("services.model_import_service.DatasetService.get_dataset_by_id", AsyncMock(return_value=dataset)),
         patch(
-            "services.model_import_service.JobService.create_job",
+            "services.model_import_service.ModelService.create_model",
             AsyncMock(side_effect=RuntimeError("fail")),
         ),
         patch(
@@ -211,3 +208,107 @@ async def test_import_model_directory_cleans_up_on_failure(tmp_path, project_id,
         )
 
     assert not settings.models_dir.exists() or not any(settings.models_dir.iterdir())
+
+
+@pytest.mark.anyio
+async def test_import_from_lerobot_directory_success(tmp_path, project_id, dataset_id, settings, dataset):
+    source_dir = tmp_path / "lerobot_source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "config.json").write_text(json.dumps({"type": "act", "chunk_size": 100}), encoding="utf-8")
+    (source_dir / "train_config.json").write_text(json.dumps({"seed": 1337}), encoding="utf-8")
+    (source_dir / "model.safetensors").write_text("weights", encoding="utf-8")
+
+    with (
+        patch("services.model_import_service.get_settings", return_value=settings),
+        patch("services.model_import_service.DatasetService.get_dataset_by_id", AsyncMock(return_value=dataset)),
+        patch(
+            "services.model_import_service.asyncio.to_thread",
+            AsyncMock(side_effect=lambda fn, *a, **k: fn(*a, **k)),
+        ),
+        patch("services.model_import_service.ModelService.create_model", AsyncMock(side_effect=lambda m: m)),
+        patch.object(ModelImportService, "_load_policy_from_lerobot_dir", return_value=object()),
+        patch.object(ModelImportService, "_write_model_checkpoint"),
+        patch.object(ModelImportService, "_export_all_supported_backends"),
+    ):
+        model = await ModelImportService().import_from_lerobot_directory(
+            source_dir=source_dir,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            model_name="imported-lerobot",
+        )
+
+    model_path = Path(model.path)
+    assert model.policy == "act"
+    assert (model_path / "exports" / "lerobot" / "config.json").is_file()
+    assert (model_path / "version_0" / "hparams.yaml").is_file()
+    assert (model_path / "version_0" / "metrics.csv").is_file()
+    hparams_text = (model_path / "version_0" / "hparams.yaml").read_text(encoding="utf-8")
+    assert "source: lerobot" in hparams_text
+    assert "policy: act" in hparams_text
+
+
+@pytest.mark.anyio
+async def test_import_from_lerobot_directory_unknown_policy_rejected_without_flag(
+    tmp_path,
+    project_id,
+    dataset_id,
+    settings,
+    dataset,
+):
+    source_dir = tmp_path / "lerobot_source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "config.json").write_text(json.dumps({"type": "xvla"}), encoding="utf-8")
+    (source_dir / "model.safetensors").write_text("weights", encoding="utf-8")
+
+    with (
+        patch("services.model_import_service.get_settings", return_value=settings),
+        patch("services.model_import_service.DatasetService.get_dataset_by_id", AsyncMock(return_value=dataset)),
+        patch(
+            "services.model_import_service.asyncio.to_thread",
+            AsyncMock(side_effect=lambda fn, *a, **k: fn(*a, **k)),
+        ),
+        patch("services.model_import_service.ModelService.create_model", AsyncMock(side_effect=lambda m: m)),
+    ):
+        with pytest.raises(InvalidArchiveError, match="--allow-unknown-policy"):
+            await ModelImportService().import_from_lerobot_directory(
+                source_dir=source_dir,
+                project_id=project_id,
+                dataset_id=dataset_id,
+                model_name="imported-lerobot",
+            )
+
+
+@pytest.mark.anyio
+async def test_import_from_lerobot_directory_unknown_policy_allowed(
+    tmp_path,
+    project_id,
+    dataset_id,
+    settings,
+    dataset,
+):
+    source_dir = tmp_path / "lerobot_source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "config.json").write_text(json.dumps({"type": "xvla"}), encoding="utf-8")
+    (source_dir / "model.safetensors").write_text("weights", encoding="utf-8")
+
+    with (
+        patch("services.model_import_service.get_settings", return_value=settings),
+        patch("services.model_import_service.DatasetService.get_dataset_by_id", AsyncMock(return_value=dataset)),
+        patch(
+            "services.model_import_service.asyncio.to_thread",
+            AsyncMock(side_effect=lambda fn, *a, **k: fn(*a, **k)),
+        ),
+        patch("services.model_import_service.ModelService.create_model", AsyncMock(side_effect=lambda m: m)),
+        patch.object(ModelImportService, "_load_policy_from_lerobot_dir", return_value=object()),
+        patch.object(ModelImportService, "_write_model_checkpoint"),
+        patch.object(ModelImportService, "_export_all_supported_backends"),
+    ):
+        model = await ModelImportService().import_from_lerobot_directory(
+            source_dir=source_dir,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            model_name="imported-lerobot",
+            allow_unknown_policy=True,
+        )
+
+    assert model.policy == "xvla"
