@@ -183,6 +183,17 @@ def import_dir(
         sys.exit(1)
 
 
+        #  uv run src/cli.py models import-from-lerobot \
+        #     --source-dir=/home/mark/data/models/smolvla-tests/dice-cleanup-act-lerobot \
+        #     --project-id="6e89a6e5-40f9-4e95-b4ba-6956f2c960d8"\
+        #     --dataset-id="07accbb1-0341-42c2-97d5-29326a41cadf" \
+        #     --model-name "Imported LeRobot Act Model"
+
+        # uv run src/cli.py models import-from-lerobot \
+        #    --source-dir=/home/mark/data/models/smolvla-tests/dice-cleanup-combined-smolvla-lerobot \
+        #    --project-id="6e89a6e5-40f9-4e95-b4ba-6956f2c960d8"\
+        #    --dataset-id="07accbb1-0341-42c2-97d5-29326a41cadf" \
+        #    --model-name "Imported LeRobot SmolVLA Model"
 @models.command("import-from-lerobot")
 @click.option("--source-dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--project-id", required=True, type=click.UUID)
