@@ -1,26 +1,28 @@
 ---
 slides:
-  title: ACT Policy Configuration Proposal
+  title: Policy Configuration Proposal
   theme: ./policy-configuration/theme.css 
 ---
 
 
-# ACT Policy Configuration Proposal
+# Policy Configuration Proposal
 
-Quick reference for the proof of concept to make ACT hyperparameters easier to configure, document, and expose through the backend.
+Quick reference for the proof of concept to make policy hyperparameters easier to configure, document, and expose through the backend.
 
-Scope: ACT model only.
+Scope: all policy models. Examples use ACT as the running example.
 
 ---
 
 ## Problem Summary
 
-ACT policy configuration is spread across multiple places:
+Policy configuration is spread across multiple places:
 
 - A large `ACT.__init__` constructor accepts every user-facing hyperparameter.
 - `ACT.__init__` manually copies those values into `ACTConfig`.
 - `ACTConfig` owns defaults and validation, but was not the main public construction path.
 - Backend/API code had no structured source for hyperparameter descriptions.
+
+ACT is shown here because it is a compact example of the broader model configuration issue.
 
 ---
 
@@ -109,9 +111,11 @@ self.config = ACTConfig(
 
 ---
 
-## Proposal: Make `ACTConfig` The Entry Point
+## Proposal: Config As The Entry Point
 
-Prefer `ACTConfig` as the canonical contract for ACT hyperparameters.
+Prefer each model's config class as the canonical contract for that model's hyperparameters.
+
+ACT example:
 
 ```python
 config = ACTConfig(
@@ -123,13 +127,13 @@ config = ACTConfig(
 policy = ACT(config=config)
 ```
 
-This matches the direction used by other config-driven model APIs: construct a config first, then pass it to the model/policy.
+This aligns policies with the repo's config-based construction helpers, such as `FromConfig.from_config(...)`, and keeps serialization/deserialization simple.
 
 ---
 
 ## What This Changes
 
-`ACTConfig` becomes responsible for:
+Each model config becomes responsible for:
 
 - Defaults.
 - Types.
@@ -137,7 +141,7 @@ This matches the direction used by other config-driven model APIs: construct a c
 - Field-level documentation.
 - API-readable metadata.
 
-`ACT` becomes responsible for:
+Each policy class becomes responsible for:
 
 - Owning the Lightning policy lifecycle.
 - Building the model.
@@ -147,7 +151,9 @@ This matches the direction used by other config-driven model APIs: construct a c
 
 ## Document Hyperparameters With `field`
 
-The POC adds dataclass `field(metadata=...)` to ACT config fields.
+The POC adds dataclass `field(metadata=...)` to policy config fields.
+
+ACT example:
 
 ```python
 chunk_size: int = field(
@@ -204,9 +210,11 @@ Use Pydantic-compatible keys where possible:
 
 ---
 
-## ACT Config Groups
+## Config Groups
 
-The current ACT metadata groups fields into API/UI sections:
+Metadata groups fields into API/UI sections.
+
+ACT example groups:
 
 - `io`: observation and action chunking settings.
 - `vision`: backbone and image preprocessing settings.
@@ -226,13 +234,13 @@ New endpoint:
 GET /api/policies/{policy}/hyper_parameters
 ```
 
-For ACT:
+ACT example:
 
 ```http
 GET /api/policies/act/hyper_parameters
 ```
 
-The backend reads `ACTConfig` dataclass fields instead of maintaining a separate ACT schema by hand.
+The backend reads policy config dataclass fields instead of maintaining separate hand-written schemas.
 
 ---
 
@@ -277,7 +285,7 @@ for config_field in dataclasses.fields(config):
     group_name, group_title = _group_info(config_field.metadata)
 ```
 
-This keeps the backend generic while preserving ACT-specific docs in ACT code.
+This keeps the backend generic while preserving model-specific docs in model config code.
 
 ---
 
@@ -340,13 +348,13 @@ It can contain:
 - A nested `config` dict.
 - Runtime values such as `dataset_stats`.
 
-The API contract should come from `ACTConfig`, not from logger output.
+The API contract should come from model config classes, not from logger output.
 
 ---
 
-## Optional: Smaller ACT Config Classes
+## Optional: Smaller Config Classes
 
-An earlier POC commit explored splitting ACT config into focused classes:
+An earlier POC commit explored splitting ACT config into focused classes. The same idea can apply to other large model configs.
 
 ```python
 ACTInputOutputConfig
@@ -383,7 +391,7 @@ Costs:
 - Requires compatibility helpers for existing flat checkpoints/configs.
 - Adds migration complexity before the backend has full config payload support.
 
-Recommendation: keep flat `ACTConfig` with metadata first; consider nested classes later as a breaking cleanup.
+Recommendation: keep flat config classes with metadata first; consider nested classes later as a breaking cleanup.
 
 ---
 
@@ -429,20 +437,20 @@ Do not keep compatibility code indefinitely unless there is a concrete external 
 
 ## Suggested Migration Path
 
-1. Add `field(metadata=...)` to `ACTConfig`.
-2. Expose `/api/policies/act/hyper_parameters` from config metadata.
-3. Add backend training payload support for ACT policy config values.
-4. Prefer `ACT(config=ACTConfig(...))` in new code.
-5. Optionally split `ACTConfig` into smaller classes.
+1. Add `field(metadata=...)` to policy config classes.
+2. Expose `/api/policies/{policy}/hyper_parameters` from config metadata.
+3. Add backend training payload support for policy config values.
+4. Prefer config-first policy construction in new code.
+5. Optionally split large config classes into smaller classes.
 6. Remove old flat constructor arguments when migration risk is acceptable.
 
 ---
 
 ## Team Takeaway
 
-The proposal makes `ACTConfig` the source of truth.
+The proposal makes each model's config class the source of truth.
 
 - Library config owns defaults, types, validation, and docs.
 - Backend reads config metadata to expose hyperparameters.
 - UI/API can render grouped controls without duplicated schemas.
-- ACT constructor can eventually shrink to a config-first API.
+- Policy constructors can eventually shrink to config-first APIs.
