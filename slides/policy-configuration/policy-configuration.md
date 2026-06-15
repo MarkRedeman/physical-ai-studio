@@ -214,6 +214,18 @@ Use Pydantic-compatible keys where possible:
 
 Metadata groups fields into API/UI sections.
 
+```python
+chunk_size: int = field(
+    default=100,
+    metadata=_metadata(
+        "Number of future action steps predicted per policy invocation.",
+        group="io",
+        group_title="Input / Output",
+        ge=1,
+    ),
+)
+```
+
 ACT example groups:
 
 - `io`: observation and action chunking settings.
@@ -223,6 +235,7 @@ ACT example groups:
 - `inference`: inference-time behavior.
 - `training`: general training/loss settings.
 - `optimizer`: optimizer and gradient clipping settings.
+
 
 ---
 
@@ -241,6 +254,35 @@ GET /api/policies/act/hyper_parameters
 ```
 
 The backend reads policy config dataclass fields instead of maintaining separate hand-written schemas.
+
+---
+
+## Response Shape
+
+Simplified response for `chunk_size`:
+
+```json
+{
+  "policy": "act",
+  "hyper_parameters": [
+    {
+      "name": "io",
+      "field_type": "group",
+      "human_name": "Input / Output",
+      "description": "Input / Output hyperparameters",
+      "hyper_parameters": [
+        {
+          "name": "chunk_size",
+          "field_type": "integer",
+          "default_value": 100,
+          "description": "Number of future action steps predicted per policy invocation.",
+          "human_name": "Chunk Size"
+        }
+      ]
+    }
+  ]
+}
+```
 
 ---
 
@@ -289,35 +331,6 @@ This keeps the backend generic while preserving model-specific docs in model con
 
 ---
 
-## Response Shape
-
-Simplified response for `chunk_size`:
-
-```json
-{
-  "policy": "act",
-  "hyper_parameters": [
-    {
-      "name": "io",
-      "field_type": "group",
-      "human_name": "Input / Output",
-      "description": "Input / Output hyperparameters",
-      "hyper_parameters": [
-        {
-          "name": "chunk_size",
-          "field_type": "integer",
-          "default_value": 100,
-          "description": "Number of future action steps predicted per policy invocation.",
-          "human_name": "Chunk Size"
-        }
-      ]
-    }
-  ]
-}
-```
-
----
-
 ## Response Types
 
 The API uses discriminated hyperparameter types:
@@ -354,7 +367,11 @@ The API contract should come from model config classes, not from logger output.
 
 ## Optional: Smaller Config Classes
 
-An earlier POC commit explored splitting ACT config into focused classes. The same idea can apply to other large model configs.
+Current config classes are large, which makes it hard to reason about which variables are related to each other.
+
+Proposal: split large config classes into smaller sub-configs that build an explicit hierarchy.
+
+ACT example:
 
 ```python
 ACTInputOutputConfig
