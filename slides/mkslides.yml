@@ -1,0 +1,18 @@
+---
+index:
+  title: Policy Configuration Slides
+  nav:
+    - ACT Policy Configuration: policy-configuration/policy-configuration.md
+slides:
+  title: ACT Policy Configuration Proposal
+  #theme: ./policy-configuration/theme.css
+  theme: https://hogenttin.github.io/cdn/styles/reveal-js/slides.css
+  highlight_theme: github
+revealjs:
+  #height: 1080
+  #width: 1920
+  height: 640
+  width: 480
+  history: true
+  slideNumber: c/t
+  #transition: fade
