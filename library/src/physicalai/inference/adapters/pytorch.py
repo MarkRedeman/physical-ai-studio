@@ -134,9 +134,6 @@ class TorchAdapter(RuntimeAdapter):
         try:
             # Build Observation from numpy dict and convert to torch tensors on device
             observation = Observation.from_dict(inputs).to_torch(self.device)
-            policy_dtype = self._infer_policy_dtype()
-            if policy_dtype is not None:
-                observation = self._cast_observation_floats(observation, policy_dtype)
 
             torch_outputs = self._policy(observation)
             return self._convert_outputs_to_numpy(torch_outputs)
@@ -144,36 +141,6 @@ class TorchAdapter(RuntimeAdapter):
         except Exception as e:
             msg = f"Inference failed: {e}"
             raise RuntimeError(msg) from e
-
-    def _infer_policy_dtype(self) -> torch.dtype | None:
-        if self._policy is None:
-            return None
-
-        for parameter in self._policy.parameters():
-            if parameter.is_floating_point():
-                return parameter.dtype
-
-        for buffer in self._policy.buffers():
-            if buffer.is_floating_point():
-                return buffer.dtype
-
-        return None
-
-    def _cast_observation_floats(self, observation: Observation, dtype: torch.dtype) -> Observation:
-        casted = {
-            key: self._cast_floating_tensors(value, dtype)
-            for key, value in observation.items()
-        }
-        return Observation.from_dict(casted)
-
-    def _cast_floating_tensors(self, value: Any, dtype: torch.dtype) -> Any:
-        if isinstance(value, dict):
-            return {k: self._cast_floating_tensors(v, dtype) for k, v in value.items()}
-
-        if isinstance(value, torch.Tensor) and value.is_floating_point() and value.dtype != dtype:
-            return value.to(dtype=dtype)
-
-        return value
 
     def _convert_outputs_to_numpy(self, torch_outputs: torch.Tensor | dict | list | tuple) -> dict[str, np.ndarray]:
         """Convert model outputs to numpy format.

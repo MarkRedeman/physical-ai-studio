@@ -6,6 +6,7 @@ from multiprocessing.synchronize import Event as EventClass
 from typing import TYPE_CHECKING
 
 from loguru import logger
+import numpy as np
 from physicalai.inference import InferenceModel
 
 from control.inference_result import InferenceResult
@@ -82,7 +83,8 @@ class ModelWorker(BaseProcessWorker):
                 try:
                     observation: Observation = self.observation_queue.get(timeout=1)
                     start_time = time.perf_counter()
-                    output = self.inference_model.predict_action_chunk(observation.to_numpy().to_dict(flatten=False))
+                    np_observation = observation.to_numpy().to_dict(flatten=False)
+                    output = self.inference_model.predict_action_chunk(self._cast_float_arrays_to_float32(np_observation))
                     elapsed_time = time.perf_counter() - start_time
                     logger.debug(f"Inference: ({elapsed_time}): {output.shape}")
                     self.output_queue.put(InferenceResult(time=elapsed_time, data=output))
@@ -93,6 +95,15 @@ class ModelWorker(BaseProcessWorker):
             self.unload_event.clear()
             self.model_loaded_event.clear()
             del self.inference_model
+
+    def _cast_float_arrays_to_float32(self, value: object) -> object:
+        if isinstance(value, dict):
+            return {k: self._cast_float_arrays_to_float32(v) for k, v in value.items()}
+
+        if isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.floating) and value.dtype != np.float32:
+            return value.astype(np.float32, copy=False)
+
+        return value
 
     async def teardown(self) -> None:
         self.command_queue.close()
