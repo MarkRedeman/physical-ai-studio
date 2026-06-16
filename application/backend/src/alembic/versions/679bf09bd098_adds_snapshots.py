@@ -7,10 +7,8 @@ Create Date: 2025-12-03 10:22:29.373172
 """
 
 from collections.abc import Sequence
-from shutil import rmtree
 
 import sqlalchemy as sa
-from src.settings import get_settings
 
 from alembic import op
 
@@ -48,10 +46,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["dataset_id"], ["datasets.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-
-    settings = get_settings()
-    if settings.models_dir.exists():
-        rmtree(settings.models_dir)
 
     op.drop_table("models")
     op.create_table(
