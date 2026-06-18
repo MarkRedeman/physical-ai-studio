@@ -79,7 +79,8 @@ class RobotCalibrationService:
             repo = RobotCalibrationRepository(db)
             return await repo.get_robot_calibration(robot.id)
 
-    async def get_calibration(self, calibration_id: UUID) -> Calibration:
+    @staticmethod
+    async def get_calibration(calibration_id: UUID) -> Calibration:
         async with get_async_db_session_ctx() as db:
             repo = RobotCalibrationRepository(db)
             calibration = await repo.get_by_id(calibration_id)
