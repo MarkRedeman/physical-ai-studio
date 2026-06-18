@@ -4,6 +4,7 @@ on:
     types:
       - opened
       - synchronize
+      # The labeler doesn't checkout/execute any contributed code, so it should be safe.
       - reopened # zizmor: ignore[dangerous-triggers]
 
 permissions: {}
