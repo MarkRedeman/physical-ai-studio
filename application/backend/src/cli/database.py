@@ -1,10 +1,9 @@
-"""Command line interface for interacting with the Physical AI Studio application."""
+"""Database management CLI commands."""
 
 import sys
 
 import click
 
-from cli.models import models
 from db.engine import get_sync_db_session
 from db.migration import MigrationManager
 from db.schema import (
@@ -23,42 +22,21 @@ from storage_migration import StorageMigrationError, migrate_default_storage_dir
 settings = get_settings()
 
 
-@click.group()
-def cli() -> None:
-    """Physical AI Studio CLI"""
-
-
-@cli.command()
-@click.option("--target-path", default="docs/openapi.json")
-def gen_api(target_path: str) -> None:
-    """Generate OpenAPI specification JSON file."""
-    # Importing create_openapi imports threading which is slow. Importing here to not slow down other cli commands.
-    from create_openapi import create_openapi
-
-    try:
-        create_openapi(target_path=target_path)
-        click.echo("✓ OpenAPI specification generated successfully!")
-    except Exception as e:
-        click.echo(f"✗ Failed to generate OpenAPI specification: {e}")
-        sys.exit(1)
-    click.echo("Waiting for threading to finish...")
-
-
-@cli.command()
+@click.command("init-db")
 def init_db() -> None:
-    """Initialize database with migrations"""
+    """Initialize database with migrations."""
     click.echo("Initializing database...")
 
     migration_manager = MigrationManager(settings)
     if migration_manager.initialize_database():
         click.echo("✓ Database initialized successfully!")
         sys.exit(0)
-    else:
-        click.echo("✗ Database initialization failed!")
-        sys.exit(1)
+
+    click.echo("✗ Database initialization failed!")
+    sys.exit(1)
 
 
-@cli.command()
+@click.command()
 def clean_db() -> None:
     """Remove all data from the database (clean but don't drop tables)."""
     with get_sync_db_session() as db:
@@ -74,35 +52,33 @@ def clean_db() -> None:
     click.echo("✓ Database cleaned successfully!")
 
 
-@cli.command()
+@click.command()
 def check_db() -> None:
-    """Check database status"""
+    """Check database status."""
     click.echo("Checking database status...")
 
     migration_manager = MigrationManager(settings)
 
-    # Check connection
     if not migration_manager.check_connection():
         click.echo("✗ Cannot connect to database")
         sys.exit(1)
 
     click.echo("✓ Database connection OK")
 
-    # Check migration status
     needs_migration, status = migration_manager.check_migration_status()
     click.echo(f"Migration status: {status}")
 
     if needs_migration:
         click.echo("⚠ Database needs migration")
         sys.exit(2)
-    else:
-        click.echo("✓ Database is up to date")
-        sys.exit(0)
+
+    click.echo("✓ Database is up to date")
+    sys.exit(0)
 
 
-@cli.command()
+@click.command()
 def migrate() -> None:
-    """Run database migrations"""
+    """Run database migrations."""
     click.echo("Running database migrations...")
 
     try:
@@ -115,13 +91,6 @@ def migrate() -> None:
     if migration_manager.run_migrations():
         click.echo("✓ Migrations completed successfully!")
         sys.exit(0)
-    else:
-        click.echo("✗ Migration failed!")
-        sys.exit(1)
 
-
-cli.add_command(models)
-
-
-if __name__ == "__main__":
-    cli()
+    click.echo("✗ Migration failed!")
+    sys.exit(1)
