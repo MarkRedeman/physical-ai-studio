@@ -78,10 +78,10 @@ uv run alembic downgrade -1
 
 ```bash
 # Initialize database
-uv run -m src.cli db init
+PYTHONPATH=src uv run -m cli db init
 
 # Run migrations
-uv run -m src.cli db migrate
+PYTHONPATH=src uv run -m cli db migrate
 ```
 
 ## API Documentation

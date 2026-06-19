@@ -4,8 +4,8 @@ import sys
 
 import click
 
-from .database import check_db, clean_db, init_db, migrate
-from .models import models
+from cli.database import check_db, clean_db, init_db, migrate
+from cli.models import models
 
 
 @click.group()
@@ -41,3 +41,6 @@ database.add_command(migrate)
 
 cli.add_command(database)
 cli.add_command(models)
+
+if __name__ == "__main__":
+    cli()
