@@ -51,10 +51,18 @@ COPY --link pyproject.toml uv.lock LICENSE README.md /app/
 COPY --link application/backend/src /app/application/backend/src
 COPY --link application/backend/pyproject.toml application/backend/uv.lock \
     /app/application/backend/
+COPY --link application/backend/README.md /app/application/backend/README.md
 COPY --link application/backend/run.sh /app/application/backend/run.sh
 
 # Built UI assets
 COPY --link --from=web-ui /home/app/web_ui/dist /app/application/ui/
+
+# Lightweight source snapshot used only for building/installing the backend
+# package in dependency builder stages.
+FROM scratch AS backend-package-source
+
+COPY --link application/backend/src /app/application/backend/src
+COPY --link application/backend/README.md /app/application/backend/README.md
 
 # ===========================================================================
 # Stage 4: Python builder base
@@ -126,6 +134,8 @@ FROM builder-base AS builder-cpu
 
 RUN --mount=type=cache,id=uv-cpu,target=/root/.cache/uv \
     --mount=type=bind,from=libs,target=/app/library \
+    --mount=type=bind,from=backend-package-source,source=/app/application/backend/src,target=/app/application/backend/src,rw \
+    --mount=type=bind,from=backend-package-source,source=/app/application/backend/README.md,target=/app/application/backend/README.md,rw \
     uv sync --frozen --no-dev --no-editable --extra cpu
 
 # Remove test-only packages that executorch ships as unconditional runtime dependencies.
@@ -143,6 +153,8 @@ FROM builder-base AS builder-xpu
 
 RUN --mount=type=cache,id=uv-xpu,target=/root/.cache/uv \
     --mount=type=bind,from=libs,target=/app/library \
+    --mount=type=bind,from=backend-package-source,source=/app/application/backend/src,target=/app/application/backend/src,rw \
+    --mount=type=bind,from=backend-package-source,source=/app/application/backend/README.md,target=/app/application/backend/README.md,rw \
     uv sync --frozen --no-dev --no-editable --extra xpu
 
 # Remove test-only packages that executorch ships as unconditional runtime dependencies.
@@ -171,6 +183,8 @@ FROM builder-base AS builder-cuda
 
 RUN --mount=type=cache,id=uv-cuda,target=/root/.cache/uv \
     --mount=type=bind,from=libs,target=/app/library \
+    --mount=type=bind,from=backend-package-source,source=/app/application/backend/src,target=/app/application/backend/src,rw \
+    --mount=type=bind,from=backend-package-source,source=/app/application/backend/README.md,target=/app/application/backend/README.md,rw \
     uv sync --frozen --no-dev --no-editable --extra cuda
 
 # Remove test-only packages that executorch ships as unconditional runtime dependencies.
