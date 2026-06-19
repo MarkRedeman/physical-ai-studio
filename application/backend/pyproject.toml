@@ -36,6 +36,19 @@ dependencies = [
   "torchao===0.15.0",
 ]
 
+[project.scripts]
+physicalai-studio = "cli:cli"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [project.optional-dependencies]
 cpu = [
     "torch<2.13",
@@ -124,6 +137,7 @@ all = [
 ]
 
 [tool.uv]
+package = true
 default-groups = ["all"]
 exclude-newer = "7 days"
 exclude-newer-package = { physicalai = false }

@@ -78,10 +78,10 @@ uv run alembic downgrade -1
 
 ```bash
 # Initialize database
-PYTHONPATH=src uv run -m cli db init
+uv run physicalai-studio db init
 
 # Run migrations
-PYTHONPATH=src uv run -m cli db migrate
+uv run physicalai-studio db migrate
 ```
 
 ## API Documentation
