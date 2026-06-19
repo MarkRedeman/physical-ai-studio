@@ -4,30 +4,21 @@ import sys
 
 import click
 
-from db.engine import get_sync_db_session
-from db.migration import MigrationManager
-from db.schema import (
-    CalibrationValuesDB,
-    DatasetDB,
-    JobDB,
-    ProjectCameraDB,
-    ProjectDB,
-    ProjectEnvironmentDB,
-    ProjectRobotDB,
-    SnapshotDB,
-)
-from settings import get_settings
-from storage_migration import StorageMigrationError, migrate_default_storage_dir
 
-settings = get_settings()
+@click.group(name="db")
+def database() -> None:
+    """Database management commands."""
 
 
-@click.command("init-db")
+@database.command("init")
 def init_db() -> None:
-    """Initialize database with migrations."""
+    """Initialize database with migrations"""
+    from db.migration import MigrationManager
+    from settings import get_settings
+
     click.echo("Initializing database...")
 
-    migration_manager = MigrationManager(settings)
+    migration_manager = MigrationManager(get_settings())
     if migration_manager.initialize_database():
         click.echo("✓ Database initialized successfully!")
         sys.exit(0)
@@ -36,9 +27,21 @@ def init_db() -> None:
     sys.exit(1)
 
 
-@click.command()
+@database.command("clean")
 def clean_db() -> None:
     """Remove all data from the database (clean but don't drop tables)."""
+    from db.engine import get_sync_db_session
+    from db.schema import (
+        CalibrationValuesDB,
+        DatasetDB,
+        JobDB,
+        ProjectCameraDB,
+        ProjectDB,
+        ProjectEnvironmentDB,
+        ProjectRobotDB,
+        SnapshotDB,
+    )
+
     with get_sync_db_session() as db:
         db.query(ProjectDB).delete()
         db.query(ProjectRobotDB).delete()
@@ -52,12 +55,15 @@ def clean_db() -> None:
     click.echo("✓ Database cleaned successfully!")
 
 
-@click.command()
+@database.command("check")
 def check_db() -> None:
-    """Check database status."""
+    """Check database status"""
+    from db.migration import MigrationManager
+    from settings import get_settings
+
     click.echo("Checking database status...")
 
-    migration_manager = MigrationManager(settings)
+    migration_manager = MigrationManager(get_settings())
 
     if not migration_manager.check_connection():
         click.echo("✗ Cannot connect to database")
@@ -76,10 +82,15 @@ def check_db() -> None:
     sys.exit(0)
 
 
-@click.command()
+@database.command("migrate")
 def migrate() -> None:
     """Run database migrations."""
+    from db.migration import MigrationManager
+    from settings import get_settings
+    from storage_migration import StorageMigrationError, migrate_default_storage_dir
+
     click.echo("Running database migrations...")
+    settings = get_settings()
 
     try:
         migrate_default_storage_dir(settings)
@@ -88,9 +99,7 @@ def migrate() -> None:
         sys.exit(1)
 
     migration_manager = MigrationManager(settings)
-    if migration_manager.run_migrations():
-        click.echo("✓ Migrations completed successfully!")
-        sys.exit(0)
-
-    click.echo("✗ Migration failed!")
-    sys.exit(1)
+    if not migration_manager.run_migrations():
+        click.echo("✗ Migration failed!", err=True)
+        sys.exit(1)
+    click.echo("✓ Migrations completed successfully!")

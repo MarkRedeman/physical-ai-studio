@@ -4,7 +4,7 @@ import sys
 
 import click
 
-from cli.database import check_db, clean_db, init_db, migrate
+from cli.database import database
 from cli.models import models
 
 
@@ -28,16 +28,6 @@ def gen_api(target_path: str) -> None:
         sys.exit(1)
     click.echo("Waiting for threading to finish...")
 
-
-@click.group(name="db")
-def database() -> None:
-    """Database management commands."""
-
-
-database.add_command(init_db, name="init")
-database.add_command(clean_db, name="clean")
-database.add_command(check_db, name="check")
-database.add_command(migrate)
 
 cli.add_command(database)
 cli.add_command(models)
