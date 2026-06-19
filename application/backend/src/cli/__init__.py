@@ -41,6 +41,3 @@ database.add_command(migrate)
 
 cli.add_command(database)
 cli.add_command(models)
-
-if __name__ == "__main__":
-    cli()
