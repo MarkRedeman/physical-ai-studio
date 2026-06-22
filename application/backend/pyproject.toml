@@ -1,3 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+exclude = [
+  "src/**/*.egg-info/**",
+  "src/**/__pycache__/**",
+  "src/regeneragte-readme.py",
+]
+
+[tool.hatch.build.force-include]
+"../ui/dist" = "webui"
+
+[tool.hatch.build.hooks.custom]
+path = "scripts/hatch_build.py"
+
 [project]
 name = "physicalai-studio"
 version = "0.1.0"
@@ -38,16 +57,6 @@ dependencies = [
 
 [project.scripts]
 physicalai-studio = "cli:cli"
-
-[build-system]
-requires = ["setuptools>=69", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
 
 [project.optional-dependencies]
 cpu = [
