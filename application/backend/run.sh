@@ -24,12 +24,4 @@ UV_CMD=${UV_CMD:-uv run --no-sync}
 
 export PYTHONUNBUFFERED=1
 
-# Always run migrations — Alembic is idempotent and will skip
-# already-applied migrations. This ensures the persistent volume
-# has an up-to-date schema regardless of how it was created.
-echo "Running database migrations..."
-$UV_CMD physicalai-studio db migrate
-
-echo "Starting FastAPI server..."
-echo $UV_CMD "$APP_MODULE"
-exec $UV_CMD "$APP_MODULE"
+$UV_CMD physicalai-studio serve
