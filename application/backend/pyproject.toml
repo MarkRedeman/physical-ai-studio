@@ -9,7 +9,7 @@ dependencies = [
   "opencv-python",
   "cv2-enumerate-cameras",
   'harvesters; sys_platform != "darwin"',
-  "fastapi[standard]",
+  "fastapi[standard]<1",
   "physicalai-train[pi0,smolvla]",
   "physicalai[robots, capture]",
   "lerobot[feetech]==0.5.1",
