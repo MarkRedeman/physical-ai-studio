@@ -49,7 +49,6 @@ sources = ["src"]
 exclude = [
   "src/**/*.egg-info/**",
   "src/**/__pycache__/**",
-  "src/regeneragte-readme.py",
 ]
 
 [tool.hatch.build.force-include]

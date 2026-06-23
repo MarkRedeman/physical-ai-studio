@@ -82,7 +82,7 @@ The UI is included through Hatch `force-include`:
 
 ## GitHub Actions
 
-The wheel is build and published using Github Actions.
+The wheel is build and published using GitHub Actions.
 
 - **TestPyPI** — Publishes on every push to `main` (or manual dispatch). Appends `.dev<timestamp>` to the version for unique uploads.
 - **PyPI** — Publishes when an `app/vX.Y.Z` tag is pushed. Validates the tag matches `application/VERSION` and `pyproject.toml` before building.
@@ -166,8 +166,7 @@ uvx --isolated --no-cache \
   physicalai-studio serve
 ```
 
-Use `--no-cache` while and `--isolated` to avoid reusing an installed tool environment.
-
+Use `--no-cache` and `--isolated` to avoid reusing an installed tool environment.
 
 ## Common Issues
 

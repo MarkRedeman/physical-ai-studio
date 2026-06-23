@@ -2,26 +2,15 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# run.sh - Script to run the Physical AI Studio server
+# run.sh - Entry point to start the Physical AI Studio server
 #
-# Features:
-# - Runs database migrations on every start (idempotent via Alembic)
+# Runs database migrations (idempotent via Alembic) and starts the backend
+# with the bundled UI via the physicalai-studio serve CLI.
 #
 # Usage:
-#   ./run.sh                    # Run server
-#
-# Environment variables:
-#   APP_MODULE    Python module to run (default: src/main.py)
-#   UV_CMD        Command to launch Uvicorn (default: "uv run")
-#
-# Requirements:
-# - 'uv' CLI tool (Uvicorn) installed and available in PATH
-# - Python modules and dependencies installed correctly
+#   ./run.sh
 # -----------------------------------------------------------------------------
-
-APP_MODULE=${APP_MODULE:-src/main.py}
-UV_CMD=${UV_CMD:-uv run --no-sync}
 
 export PYTHONUNBUFFERED=1
 
-$UV_CMD physicalai-studio serve
+exec uv run --no-sync physicalai-studio serve
