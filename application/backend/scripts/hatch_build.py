@@ -45,7 +45,7 @@ def _transform_readme(content: str) -> str:
 
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict) -> None:  # noqa: ARG002
-        if build_data.get("editable", False) or build_data.get("target_name") == "editable":
+        if version == "editable":
             return
 
         ui_dist = Path(self.root).parent / "ui" / "dist"
