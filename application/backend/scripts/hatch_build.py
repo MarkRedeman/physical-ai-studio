@@ -44,7 +44,7 @@ def _transform_readme(content: str) -> str:
 
 
 class CustomBuildHook(BuildHookInterface):
-    def initialize(self, version: str, build_data: dict) -> None:  # noqa: ARG002
+    def initialize(self, version: str, build_data: dict) -> None:
         if version == "editable":
             return
 
