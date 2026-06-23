@@ -7,7 +7,7 @@ GITHUB_REPO = "https://github.com/open-edge-platform/physical-ai-studio"
 RAW_REPO = "https://raw.githubusercontent.com/open-edge-platform/physical-ai-studio"
 BRANCH = "main"
 
-_RELATIVE_URL_RE = re.compile(r'(!?)\[([^\]]*)\]\(([^)]+)\)')
+_RELATIVE_URL_RE = re.compile(r"(!?)\[([^\]]*)\]\(([^)]+)\)")
 _IMG_SRC_RE = re.compile(r'(<img\s[^>]*src=")([^"]+)(")')
 
 
@@ -35,13 +35,12 @@ def _make_img_src_absolute(match: re.Match) -> str:
     if url.startswith(("http://", "https://", "#")):
         return match.group(0)
     resolved = _resolve_relative(url)
-    return f'{match.group(1)}{RAW_REPO}/{BRANCH}/{resolved}{match.group(3)}'
+    return f"{match.group(1)}{RAW_REPO}/{BRANCH}/{resolved}{match.group(3)}"
 
 
 def _transform_readme(content: str) -> str:
     content = _RELATIVE_URL_RE.sub(_make_link_absolute, content)
-    content = _IMG_SRC_RE.sub(_make_img_src_absolute, content)
-    return content
+    return _IMG_SRC_RE.sub(_make_img_src_absolute, content)
 
 
 class CustomBuildHook(BuildHookInterface):
