@@ -71,14 +71,7 @@ The wheel contains:
 
 Supported options: `--host 127.0.0.1 --port 7860`.
 
-The UI is included through Hatch `force-include`:
-
-```toml
-[tool.hatch.build.force-include]
-"../ui/dist" = "webui"
-```
-
-`scripts/hatch_build.py` prevents publishing a wheel without the frontend and transforms relative URLs in the app README to absolute GitHub URLs for the PyPI description.
+The UI is included through a `force_include` entry that `scripts/hatch_build.py` adds to `build_data` during non-editable builds. The hatch hook also prevents publishing a wheel without the frontend and transforms relative URLs in the app README to absolute GitHub URLs for the PyPI description.
 
 ## GitHub Actions
 

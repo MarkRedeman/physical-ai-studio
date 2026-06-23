@@ -51,9 +51,6 @@ exclude = [
   "src/**/__pycache__/**",
 ]
 
-[tool.hatch.build.force-include]
-"../ui/dist" = "webui"
-
 [tool.hatch.build.hooks.custom]
 path = "scripts/hatch_build.py"
 

@@ -59,6 +59,8 @@ class CustomBuildHook(BuildHookInterface):
             )
             raise FileNotFoundError(msg)
 
+        build_data["force_include"] = {"../ui/dist": "webui"}
+
         app_readme = Path(self.root).parent / "README.md"
         target = Path(self.root) / "README.md"
         content = app_readme.read_text(encoding="utf-8")
