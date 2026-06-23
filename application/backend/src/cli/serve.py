@@ -6,6 +6,9 @@ from pathlib import Path
 import click
 
 from cli.database import _run_migrations
+from settings import get_settings
+
+settings = get_settings()
 
 
 def _package_root() -> Path:
@@ -24,8 +27,8 @@ def _configure_packaged_runtime() -> None:
 
 
 @click.command()
-@click.option("--host", default="127.0.0.1", show_default=True)
-@click.option("--port", default=7860, show_default=True, type=int)
+@click.option("--host", default=settings.host, show_default=True)
+@click.option("--port", default=settings.port, show_default=True, type=int)
 def serve(host: str, port: int) -> None:
     """Start the Physical AI Studio web application."""
     _configure_packaged_runtime()
