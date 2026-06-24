@@ -1,109 +1,105 @@
-import { createContext, Dispatch, ReactNode, SetStateAction, useContext, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 
 import { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../robot-types';
+import {
+    buildRobotBody,
+    typeForSchema,
+    type RobotType,
+    type RobotTypeData,
+    type AnyRobotFormData,
+} from './form-data';
+import { getInitialSO101FormData } from './catalog/so101';
+import { getInitialWidowxFormData } from './catalog/widowxai';
+import { getInitialBimanualFormData } from './catalog/widowxai-bimanual';
 
-export type RobotForm = {
-    name: string;
-    type: SchemaRobotType;
-    connection_string: string;
-    serial_number: string;
-    connection_string_left: string;
-    connection_string_right: string;
+type RobotFormState = {
+    activeType: SchemaRobotType;
+    so101: RobotTypeData['so101'];
+    widowx: RobotTypeData['widowx'];
+    bimanual: RobotTypeData['bimanual'];
 };
 
-export type RobotFormState = RobotForm | null;
+const RobotFormContext = createContext<RobotFormState | null>(null);
 
-export const RobotFormContext = createContext<RobotFormState>(null);
-export const SetRobotFormContext = createContext<Dispatch<SetStateAction<RobotForm>> | null>(null);
-
-export const buildRobotBodyFromForm = (robotForm: RobotForm, robot_id: string): SchemaRobotInput | null => {
-    if (!robotForm.type) {
-        return null;
-    }
-
-    switch (robotForm.type) {
-        case 'SO101_Follower':
-        case 'SO101_Leader':
-            if (!robotForm.serial_number) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string: robotForm.connection_string ?? '',
-                    serial_number: robotForm.serial_number,
-                },
-            };
-        case 'Trossen_WidowXAI_Follower':
-        case 'Trossen_WidowXAI_Leader':
-            if (!robotForm.connection_string) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string: robotForm.connection_string,
-                    serial_number: robotForm.serial_number ?? '',
-                },
-            };
-        case 'Trossen_Bimanual_WidowXAI_Follower':
-        case 'Trossen_Bimanual_WidowXAI_Leader':
-            if (!robotForm.connection_string_left || !robotForm.connection_string_right) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string_left: robotForm.connection_string_left,
-                    connection_string_right: robotForm.connection_string_right,
-                    serial_number: robotForm.serial_number ?? '',
-                },
-            };
-        default:
-            return null;
-    }
+type SetRobotFormContextType = {
+    setActiveType: (type: SchemaRobotType) => void;
+    updateFormData: <R extends RobotType>(
+        robotType: R,
+        update: Partial<RobotTypeData[R]> | ((prev: RobotTypeData[R]) => RobotTypeData[R])
+    ) => void;
 };
 
-export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
-    const robotForm = useRobotForm();
+const SetRobotFormContext = createContext<SetRobotFormContextType | null>(null);
 
-    if (robotForm === undefined) {
-        return null;
-    }
+const getInitialState = (robot?: SchemaRobot): RobotFormState => {
+    const activeType = robot?.type ?? 'SO101_Follower';
+    const robotType = typeForSchema[activeType];
 
-    return buildRobotBodyFromForm(robotForm, robot_id);
+    return {
+        activeType,
+        so101: getInitialSO101FormData(
+            robotType === 'so101' && robot
+                ? {
+                      name: robot.name,
+                      serial_number: robot.payload.serial_number,
+                      connection_string:
+                          'connection_string' in robot.payload ? robot.payload.connection_string : '',
+                  }
+                : undefined
+        ),
+        widowx: getInitialWidowxFormData(
+            robotType === 'widowx' && robot
+                ? {
+                      name: robot.name,
+                      connection_string:
+                          'connection_string' in robot.payload ? robot.payload.connection_string : '',
+                      serial_number: robot.payload.serial_number,
+                  }
+                : undefined
+        ),
+        bimanual: getInitialBimanualFormData(
+            robotType === 'bimanual' && robot
+                ? {
+                      name: robot.name,
+                      connection_string_left:
+                          'connection_string_left' in robot.payload ? robot.payload.connection_string_left : '',
+                      connection_string_right:
+                          'connection_string_right' in robot.payload ? robot.payload.connection_string_right : '',
+                      serial_number: robot.payload.serial_number,
+                  }
+                : undefined
+        ),
+    };
 };
 
 export const RobotFormProvider = ({ children, robot }: { children: ReactNode; robot?: SchemaRobot }) => {
-    const initialConnectionString =
-        robot !== undefined && 'connection_string' in robot.payload ? robot.payload.connection_string : '';
-    const initialSerialNumber = robot?.payload.serial_number ?? '';
-    const initialLeftConnection =
-        robot !== undefined && 'connection_string_left' in robot.payload ? robot.payload.connection_string_left : '';
-    const initialRightConnection =
-        robot !== undefined && 'connection_string_right' in robot.payload ? robot.payload.connection_string_right : '';
+    const [state, setState] = useState(() => getInitialState(robot));
 
-    const [value, setValue] = useState<RobotForm>({
-        name: robot?.name ?? '',
-        type: robot?.type ?? 'SO101_Follower',
-        connection_string: initialConnectionString,
-        serial_number: initialSerialNumber,
-        connection_string_left: initialLeftConnection,
-        connection_string_right: initialRightConnection,
-    });
+    const setActiveType = useCallback((type: SchemaRobotType) => {
+        setState((prev) => ({ ...prev, activeType: type }));
+    }, []);
+
+    const updateFormData = useCallback(
+        <R extends RobotType>(
+            robotType: R,
+            update: Partial<RobotTypeData[R]> | ((prev: RobotTypeData[R]) => RobotTypeData[R])
+        ) => {
+            setState((prev) => ({
+                ...prev,
+                [robotType]:
+                    typeof update === 'function'
+                        ? (update as (prev: RobotTypeData[R]) => RobotTypeData[R])(prev[robotType])
+                        : { ...prev[robotType], ...update },
+            }));
+        },
+        []
+    );
+
+    const setContextValue = useMemo(() => ({ setActiveType, updateFormData }), [setActiveType, updateFormData]);
 
     return (
-        <RobotFormContext.Provider value={value}>
-            <SetRobotFormContext.Provider value={setValue}>{children}</SetRobotFormContext.Provider>
+        <RobotFormContext.Provider value={state}>
+            <SetRobotFormContext.Provider value={setContextValue}>{children}</SetRobotFormContext.Provider>
         </RobotFormContext.Provider>
     );
 };
@@ -126,4 +122,23 @@ export const useSetRobotForm = () => {
     }
 
     return context;
+};
+
+export const useRobotFormFields = <R extends RobotType>(robotType: R) => {
+    const state = useRobotForm();
+    const { updateFormData } = useSetRobotForm();
+
+    const updateField = <K extends keyof RobotTypeData[R]>(field: K, value: RobotTypeData[R][K]) => {
+        updateFormData(robotType, { [field]: value } as unknown as Partial<RobotTypeData[R]>);
+    };
+
+    return { formData: state[robotType] as RobotTypeData[R], activeType: state.activeType, updateField };
+};
+
+export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
+    const state = useRobotForm();
+    const robotType = typeForSchema[state.activeType];
+    const formData = state[robotType] as AnyRobotFormData;
+
+    return buildRobotBody(robotType, formData, state.activeType, robot_id);
 };

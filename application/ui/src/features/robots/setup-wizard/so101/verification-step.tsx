@@ -9,7 +9,8 @@ import { $api } from '../../../../api/client';
 import { SchemaCalibration } from '../../../../api/openapi-spec';
 import { paths } from '../../../../router';
 import { useProjectId } from '../../../projects/use-project';
-import { buildRobotBodyFromForm, useRobotForm } from '../../robot-form/provider';
+import { buildRobotBody } from '../../robot-form/form-data';
+import { useRobotForm } from '../../robot-form/provider';
 import { useRobotModels } from '../../robot-models-context';
 import { SchemaRobotInput } from '../../robot-types';
 import { InlineAlert } from '../shared/inline-alert';
@@ -101,10 +102,10 @@ export const VerificationStep = () => {
     const { project_id } = useProjectId();
     const { goBack } = useSetupActions();
     const { wsState } = useSetupState();
-    const robotForm = useRobotForm();
+    const { activeType, so101 } = useRobotForm();
 
-    const serialNumber = robotForm.serial_number ?? '';
-    const robotType = robotForm.type ?? '';
+    const serialNumber = so101.serial_number;
+    const robotType = activeType ?? '';
 
     const [robotId] = useState(() => uuidv4());
     const [calibrationId] = useState(() => uuidv4());
@@ -137,7 +138,7 @@ export const VerificationStep = () => {
         },
     });
 
-    const robotBody: SchemaRobotInput | null = buildRobotBodyFromForm(robotForm, robotId);
+    const robotBody: SchemaRobotInput | null = buildRobotBody('so101', so101, activeType, robotId);
 
     const hasCalibration = wsState.calibrationResult !== null;
 
@@ -200,7 +201,7 @@ export const VerificationStep = () => {
                     <Heading level={4}>Robot Details</Heading>
                     <Flex direction='column' gap='size-50'>
                         <Text>
-                            <strong>Name:</strong> {robotForm.name}
+                            <strong>Name:</strong> {so101.name}
                         </Text>
                         <Text>
                             <strong>Type:</strong> {robotType}

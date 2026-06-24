@@ -79,7 +79,7 @@ const SetupActionsContext = createContext<SetupActions | null>(null);
 
 export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
     const { project_id: projectId } = useProjectId();
-    const robotForm = useRobotForm();
+    const { activeType, so101 } = useRobotForm();
 
     // -----------------------------------------------------------------------
     // Wizard step state
@@ -159,8 +159,8 @@ export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
     // WebSocket hook
     // -----------------------------------------------------------------------
 
-    const serialNumber = robotForm.serial_number ?? '';
-    const robotType = robotForm.type ?? '';
+    const serialNumber = so101.serial_number;
+    const robotType = activeType ?? '';
     const wsEnabled = !!serialNumber && !!robotType;
 
     const { state: wsState, commands } = useSetupWebSocket({
