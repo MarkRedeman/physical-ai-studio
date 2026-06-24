@@ -5,11 +5,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { $api } from '../../../api/client';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
-import { useRobotFormBody } from './provider';
+import { useRobotFormElement } from './form-element-context';
+import { useRobotFormBodyFromElement } from './provider';
 
 export const SubmitNewRobotButton = () => {
     const navigate = useNavigate();
     const { project_id } = useProjectId();
+    const formId = useRobotFormElement();
 
     const addRobotMutation = $api.useMutation('post', '/api/projects/{project_id}/robots', {
         meta: {
@@ -20,7 +22,8 @@ export const SubmitNewRobotButton = () => {
         },
     });
 
-    const body = useRobotFormBody(uuidv4());
+    const formElement = formId !== null ? (document.getElementById(formId) as HTMLFormElement | null) : null;
+    const body = useRobotFormBodyFromElement(uuidv4(), formElement);
 
     return (
         <Button

@@ -1,15 +1,9 @@
 import { createContext, Dispatch, ReactNode, SetStateAction, useContext, useState } from 'react';
 
-import { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../robot-types';
+import { SchemaRobot, SchemaRobotInput } from '../robot-types';
+import { buildRobotBodyFromFields, parseRobotFormFromFormData, type RobotFormFields } from './form-data';
 
-export type RobotForm = {
-    name: string;
-    type: SchemaRobotType;
-    connection_string: string;
-    serial_number: string;
-    connection_string_left: string;
-    connection_string_right: string;
-};
+export type RobotForm = RobotFormFields;
 
 export type RobotFormState = RobotForm | null;
 
@@ -17,60 +11,30 @@ export const RobotFormContext = createContext<RobotFormState>(null);
 export const SetRobotFormContext = createContext<Dispatch<SetStateAction<RobotForm>> | null>(null);
 
 export const buildRobotBodyFromForm = (robotForm: RobotForm, robot_id: string): SchemaRobotInput | null => {
-    if (!robotForm.type) {
+    return buildRobotBodyFromFields(robotForm, robot_id);
+};
+
+export const buildRobotBodyFromFormElement = (
+    formElement: HTMLFormElement,
+    fallback: RobotForm,
+    robot_id: string
+): SchemaRobotInput | null => {
+    const formData = new FormData(formElement);
+    const parsed = parseRobotFormFromFormData(formData, fallback);
+    return buildRobotBodyFromFields(parsed, robot_id);
+};
+
+export const useRobotFormBodyFromElement = (
+    robot_id: string,
+    formElement: HTMLFormElement | null
+): SchemaRobotInput | null => {
+    const robotForm = useRobotForm();
+
+    if (robotForm === undefined || formElement === null) {
         return null;
     }
 
-    switch (robotForm.type) {
-        case 'SO101_Follower':
-        case 'SO101_Leader':
-            if (!robotForm.serial_number) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string: robotForm.connection_string ?? '',
-                    serial_number: robotForm.serial_number,
-                },
-            };
-        case 'Trossen_WidowXAI_Follower':
-        case 'Trossen_WidowXAI_Leader':
-            if (!robotForm.connection_string) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string: robotForm.connection_string,
-                    serial_number: robotForm.serial_number ?? '',
-                },
-            };
-        case 'Trossen_Bimanual_WidowXAI_Follower':
-        case 'Trossen_Bimanual_WidowXAI_Leader':
-            if (!robotForm.connection_string_left || !robotForm.connection_string_right) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: robotForm.name,
-                type: robotForm.type,
-                payload: {
-                    connection_string_left: robotForm.connection_string_left,
-                    connection_string_right: robotForm.connection_string_right,
-                    serial_number: robotForm.serial_number ?? '',
-                },
-            };
-        default:
-            return null;
-    }
+    return buildRobotBodyFromFormElement(formElement, robotForm, robot_id);
 };
 
 export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
@@ -91,6 +55,34 @@ export const RobotFormProvider = ({ children, robot }: { children: ReactNode; ro
         robot !== undefined && 'connection_string_left' in robot.payload ? robot.payload.connection_string_left : '';
     const initialRightConnection =
         robot !== undefined && 'connection_string_right' in robot.payload ? robot.payload.connection_string_right : '';
+    const initialCanAdapter =
+        robot !== undefined && 'can_adapter' in robot.payload && robot.payload.can_adapter === 'socketcan'
+            ? 'socketcan'
+            : 'damiao';
+    const initialDmSerialBaud =
+        robot !== undefined && 'dm_serial_baud' in robot.payload ? String(robot.payload.dm_serial_baud) : '921600';
+    const initialDisableTorqueOnDisconnect =
+        robot !== undefined && 'disable_torque_on_disconnect' in robot.payload
+            ? (robot.payload.disable_torque_on_disconnect as boolean)
+            : true;
+    const initialForcePosTorqueRatio =
+        robot !== undefined && 'force_pos_torque_ratio' in robot.payload
+            ? String(robot.payload.force_pos_torque_ratio)
+            : '0.1';
+    const initialBaudrate =
+        robot !== undefined && 'baudrate' in robot.payload ? String(robot.payload.baudrate) : '1000000';
+    const initialUnlockOnConnect =
+        robot !== undefined && 'unlock_on_connect' in robot.payload
+            ? (robot.payload.unlock_on_connect as boolean)
+            : true;
+    const initialResetMultiTurnOnConnect =
+        robot !== undefined && 'reset_multi_turn_on_connect' in robot.payload
+            ? (robot.payload.reset_multi_turn_on_connect as boolean)
+            : true;
+    const initialZeroOnConnect =
+        robot !== undefined && 'zero_on_connect' in robot.payload
+            ? (robot.payload.zero_on_connect as boolean)
+            : false;
 
     const [value, setValue] = useState<RobotForm>({
         name: robot?.name ?? '',
@@ -99,6 +91,14 @@ export const RobotFormProvider = ({ children, robot }: { children: ReactNode; ro
         serial_number: initialSerialNumber,
         connection_string_left: initialLeftConnection,
         connection_string_right: initialRightConnection,
+        can_adapter: initialCanAdapter,
+        dm_serial_baud: initialDmSerialBaud,
+        disable_torque_on_disconnect: initialDisableTorqueOnDisconnect,
+        force_pos_torque_ratio: initialForcePosTorqueRatio,
+        baudrate: initialBaudrate,
+        unlock_on_connect: initialUnlockOnConnect,
+        reset_multi_turn_on_connect: initialResetMultiTurnOnConnect,
+        zero_on_connect: initialZeroOnConnect,
     });
 
     return (

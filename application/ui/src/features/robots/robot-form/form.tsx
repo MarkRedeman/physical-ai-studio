@@ -1,4 +1,4 @@
-import { useRef, type FormEvent } from 'react';
+import { useId, useRef, type FormEvent } from 'react';
 
 import { Button, Divider, Flex, Form, Heading, Icon, Item, Picker, TextField } from '@geti-ui/ui';
 import { ChevronLeft } from '@geti-ui/ui/icons';
@@ -6,6 +6,7 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { SchemaRobotType } from '../robot-types';
+import { RobotFormElementContext } from './form-element-context';
 import { useRobotForm, useSetRobotForm } from './provider';
 import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
 import { SO101FormFields } from './catalog/so101';
@@ -74,6 +75,7 @@ export const RobotForm = ({ heading = 'Add new robot', submitButton = <SubmitNew
     const setRobotForm = useSetRobotForm();
 
     const submitContainerRef = useRef<HTMLDivElement>(null);
+    const formId = useId();
 
     // Make Enter behave like clicking the submit button. A disabled button ignores
     // the click, so validation still applies.
@@ -100,28 +102,30 @@ export const RobotForm = ({ heading = 'Add new robot', submitButton = <SubmitNew
             <Divider orientation='horizontal' size='S' />
             {/* Prevent native form submission, which reloads the page and discards form state.
                 Advancing to the next step is handled by the submit button's onPress. */}
-            <Form onSubmit={handleSubmit}>
-                <Flex direction='column' gap='size-200'>
-                    <Flex direction='column' gap='size-200' width='100%'>
-                        <TextField
-                            isRequired
-                            label='Robot name'
-                            width='100%'
-                            onChange={(name) => {
-                                setRobotForm((oldForm) => ({ ...oldForm, name }));
-                            }}
-                            value={robotForm.name}
-                        />
+            <Form id={formId} onSubmit={handleSubmit}>
+                <RobotFormElementContext.Provider value={formId}>
+                    <Flex direction='column' gap='size-200'>
+                        <Flex direction='column' gap='size-200' width='100%'>
+                            <TextField
+                                isRequired
+                                label='Robot name'
+                                width='100%'
+                                onChange={(name) => {
+                                    setRobotForm((oldForm) => ({ ...oldForm, name }));
+                                }}
+                                value={robotForm.name}
+                            />
 
-                        {/* Put robot type first as we can use it to visualize the robot
-                          and determine how to connect with it */}
-                        <RobotType />
+                            {/* Put robot type first as we can use it to visualize the robot
+                              and determine how to connect with it */}
+                            <RobotType />
 
-                        <FormFields robotType={robotForm.type} />
+                            <FormFields robotType={robotForm.type} />
+                        </Flex>
+                        <Divider orientation='horizontal' size='S' />
+                        <div ref={submitContainerRef}>{submitButton}</div>
                     </Flex>
-                    <Divider orientation='horizontal' size='S' />
-                    <div ref={submitContainerRef}>{submitButton}</div>
-                </Flex>
+                </RobotFormElementContext.Provider>
             </Form>
         </Flex>
     );

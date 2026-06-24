@@ -4,11 +4,13 @@ import { useNavigate } from 'react-router';
 import { $api } from '../../../api/client';
 import { paths } from '../../../router';
 import { useRobotId } from '../use-robot';
-import { useRobotFormBody } from './provider';
+import { useRobotFormElement } from './form-element-context';
+import { useRobotFormBodyFromElement } from './provider';
 
 export const UpdateRobotButton = () => {
     const navigate = useNavigate();
     const { project_id, robot_id } = useRobotId();
+    const formId = useRobotFormElement();
 
     const updateRobotMutation = $api.useMutation('put', '/api/projects/{project_id}/robots/{robot_id}', {
         meta: {
@@ -18,7 +20,9 @@ export const UpdateRobotButton = () => {
             ],
         },
     });
-    const body = useRobotFormBody(robot_id);
+
+    const formElement = formId !== null ? (document.getElementById(formId) as HTMLFormElement | null) : null;
+    const body = useRobotFormBodyFromElement(robot_id, formElement);
 
     return (
         <Button
