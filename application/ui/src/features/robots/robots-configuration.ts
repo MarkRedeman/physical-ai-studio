@@ -25,6 +25,11 @@ export const urdfPathForType = (robotType: SchemaRobotType): string => {
     if (robotType !== undefined && robotType.toLowerCase().includes('trossen')) {
         return '/widowx/urdf/generated/wxai/wxai_follower.urdf';
     }
+
+    if (robotType !== undefined && robotType.toLowerCase().includes('rebot')) {
+        return '';
+    }
+
     return '/SO101/so101_new_calib.urdf';
 };
 
@@ -71,4 +76,6 @@ export const ROBOT_TYPE_TO_URDF_MAP: Record<SchemaRobotType, Record<string, stri
     Trossen_WidowXAI_Follower: TROSSEN_TO_URDF,
     Trossen_Bimanual_WidowXAI_Leader: BIMANUAL_TROSSEN_TO_URDF,
     Trossen_Bimanual_WidowXAI_Follower: BIMANUAL_TROSSEN_TO_URDF,
+    ReBot_B601_DM_Follower: {},
+    ReBot_Arm102_Leader: {},
 };

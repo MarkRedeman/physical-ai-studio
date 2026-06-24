@@ -111,7 +111,7 @@ const useLoadURDF = (robotType: SchemaRobotType) => {
 };
 
 interface RobotViewerProps {
-    robot: Pick<SchemaRobot, 'type'>;
+    robot: { type: SchemaRobotType };
     featureValues?: number[];
     featureNames?: string[];
 }
