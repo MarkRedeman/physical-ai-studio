@@ -6,29 +6,22 @@ import { degToRad } from 'three/src/math/MathUtils.js';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 
 import { SchemaRobotType } from './robot-types';
-import { ROBOT_TYPE_TO_URDF_MAP } from './robots-configuration';
-import type { CatalogEntry } from './robot-catalog';
-
-// ---------------------------------------------------------------------------
-// Path resolution
-// ---------------------------------------------------------------------------
+import { usePackageMapForType } from './robot-catalog';
 
 export const mapJointToURDFJoint = (
     joint: { name: string; value: number },
     model: URDFRobot,
-    robotType: SchemaRobotType,
-    jointMap?: Record<string, string[]>
+    jointMap: Record<string, string[]>
 ) => {
     if (!joint.name.endsWith('.pos')) {
         return;
     }
-    const modelJointMap = jointMap ?? ROBOT_TYPE_TO_URDF_MAP[robotType];
-    const modelJoints = modelJointMap[joint.name] ?? [];
+    const modelJoints = jointMap[joint.name] ?? [];
 
     modelJoints.forEach((modelJointName) => {
         const isRevolute = model.joints[modelJointName].jointType === 'revolute';
 
-        model.setJointValue(modelJointName, isRevolute ? degToRad(joint.value) : joint.value); // meters
+        model.setJointValue(modelJointName, isRevolute ? degToRad(joint.value) : joint.value);
     });
 };
 
@@ -93,33 +86,18 @@ export const useRobotModels = () => {
 
 export const useLoadModelMutation = () => {
     const { setModel } = useRobotModels();
+    const packageMapForType = usePackageMapForType();
 
-    // Track the path being loaded so onSuccess can key it correctly.
-    // We use a ref because the mutationFn arg isn't available in onSuccess
-    // when using useMutation (variables are on the mutation object, but
-    // onSuccess receives (data, variables, context)).
     const pathRef = useRef<string>('');
 
     return useMutation({
-        mutationFn: async ({
-            path,
-            packages,
-        }: {
-            path: string;
-            packages?: Record<string, string>;
-        }) => {
+        mutationFn: async ({ path, robotType }: { path: string; robotType: SchemaRobotType }) => {
             pathRef.current = path;
 
-            // Use a custom LoadingManager so the promise only resolves after
-            // all STL meshes have finished loading — not just after the URDF
-            // XML is parsed.  URDFLoader.load() calls onComplete as soon as
-            // parse() returns, but STL files are fetched asynchronously via
-            // the manager.  By resolving on manager.onLoad we guarantee the
-            // model's mesh children exist in the scene graph.
             const manager = new THREE.LoadingManager();
             const loader = new URDFLoader(manager);
 
-            loader.packages = packages ?? {};
+            loader.packages = packageMapForType(robotType);
 
             return new Promise<URDFRobot>((resolve, reject) => {
                 let model: URDFRobot | null = null;

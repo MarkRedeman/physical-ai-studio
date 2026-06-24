@@ -6,7 +6,7 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { SchemaRobotType } from '../robot-types';
-import { useCatalog } from '../robot-catalog';
+import { useRobotCatalogQuery } from '../robot-catalog';
 import { RobotFormElementContext } from './form-element-context';
 import { useRobotForm, useSetRobotForm } from './provider';
 import { ReBotArm102LeaderFormFields } from './catalog/rebot-arm102-leader';
@@ -19,7 +19,7 @@ import { SubmitNewRobotButton } from './submit-new-robot-button';
 const RobotType = () => {
     const setRobotForm = useSetRobotForm();
     const robotForm = useRobotForm();
-    const catalogQuery = useCatalog();
+    const catalogQuery = useRobotCatalogQuery();
 
     return (
         <Picker

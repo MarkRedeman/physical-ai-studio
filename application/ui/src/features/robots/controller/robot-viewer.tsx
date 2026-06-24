@@ -9,8 +9,8 @@ import { degToRad } from 'three/src/math/MathUtils.js';
 import { URDFRobot } from 'urdf-loader';
 
 import { useContainerSize } from '../../../components/zoom/use-container-size';
-import { SchemaRobotType } from '../robot-types';
-import { useCatalog } from '../robot-catalog';
+import { useJointMapForType, useUrdfPathForType } from '../robot-catalog';
+import { SchemaRobot, SchemaRobotType } from '../robot-types';
 import { mapJointToURDFJoint, useLoadModelMutation, useRobotModels } from './../robot-models-context';
 
 /** Material name used by the dark parts in the Trossen URDF. */
@@ -96,34 +96,34 @@ const ActualURDFModel = ({ model, isTrossen }: { model: URDFRobot; isTrossen: bo
 };
 
 const useLoadURDF = (robotType: SchemaRobotType) => {
-    const catalogQuery = useCatalog();
     const loadModelMutation = useLoadModelMutation();
     const { hasModel } = useRobotModels();
+    const urdfPathForType = useUrdfPathForType();
 
-    const entry = catalogQuery.data.find((e) => e.type === robotType);
-    const PATH = entry?.urdf_path ?? '';
+    const PATH = urdfPathForType(robotType);
 
     useEffect(() => {
-        if (!PATH || hasModel(PATH)) {
+        if (hasModel(PATH)) {
             return;
         }
 
-        loadModelMutation.mutate({ path: PATH, packages: entry?.package_map });
-    }, [PATH, hasModel, loadModelMutation, entry?.package_map]);
+        loadModelMutation.mutate({ path: PATH, robotType });
+    }, [PATH, hasModel, loadModelMutation, robotType]);
 };
 
 interface RobotViewerProps {
-    robot: { type: SchemaRobotType };
+    robot: Pick<SchemaRobot, 'type'>;
     featureValues?: number[];
     featureNames?: string[];
 }
-export const RobotViewer = ({ robot = { type: 'SO101_Follower' }, featureValues, featureNames }: RobotViewerProps) => {
-    const catalogQuery = useCatalog();
+export const RobotViewer = ({ robot = { type: 'SO101_Follower' as const }, featureValues, featureNames }: RobotViewerProps) => {
     const angle = degToRad(-45);
     const isTrossen = robot.type.toLowerCase().includes('trossen');
+    const urdfPathForType = useUrdfPathForType();
+    const jointMapForType = useJointMapForType();
 
-    const entry = catalogQuery.data.find((e) => e.type === robot.type);
-    const PATH = entry?.urdf_path ?? '';
+    const PATH = urdfPathForType(robot.type);
+    const jointMap = jointMapForType(robot.type);
     useLoadURDF(robot.type);
     const ref = useRef<HTMLDivElement>(null);
     const size = useContainerSize(ref);
@@ -139,12 +139,11 @@ export const RobotViewer = ({ robot = { type: 'SO101_Follower' }, featureValues,
                         value: featureValues[index],
                     },
                     model,
-                    robot.type,
-                    entry?.joint_map
+                    jointMap
                 );
             });
         }
-    }, [featureValues, featureNames, model, robot.type, entry?.joint_map]);
+    }, [featureValues, featureNames, model, jointMap]);
 
     return (
         <div ref={ref} style={{ width: '100%', height: '100%' }}>
