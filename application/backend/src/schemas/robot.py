@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from schemas.base import BaseIDModel
 
@@ -40,6 +40,8 @@ class RobotType(StrEnum):
     TROSSEN_WIDOWXAI_FOLLOWER = "Trossen_WidowXAI_Follower"
     TROSSEN_BIMANUAL_WIDOWXAI_LEADER = "Trossen_Bimanual_WidowXAI_Leader"
     TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER = "Trossen_Bimanual_WidowXAI_Follower"
+    REBOT_B601_DM_FOLLOWER = "ReBot_B601_DM_Follower"
+    REBOT_ARM102_LEADER = "ReBot_Arm102_Leader"
 
 
 # ============================================================================
@@ -72,6 +74,39 @@ class TrossenBimanualPayload(BaseModel):
     serial_number: str = Field(default="", description="Serial number (unused for IP robots)")
 
 
+class ReBotB601DMPayload(BaseModel):
+    """Connection configuration for ReBot B601 DM follower."""
+
+    connection_string: str = Field(default="", description="Serial port path; empty = auto-discover")
+    serial_number: str = Field(..., description="Unique serial number for the robot")
+    can_adapter: str = Field(default="damiao", description="CAN adapter type: damiao or socketcan")
+    dm_serial_baud: int = Field(default=921600, description="Baud rate for DM-series serial communication")
+    disable_torque_on_disconnect: bool = Field(default=True, description="Disable torque on disconnect")
+    force_pos_torque_ratio: float = Field(default=0.1, description="Force-position torque ratio")
+
+
+class ReBotArm102LeaderPayload(BaseModel):
+    """Connection configuration for ReBot Arm 102 leader."""
+
+    connection_string: str = Field(default="", description="Serial port path; empty = auto-discover")
+    serial_number: str = Field(..., description="Unique serial number for the robot")
+    baudrate: int = Field(default=1000000, description="Serial baud rate")
+    unlock_on_connect: bool = Field(default=True, description="Unlock the motors on connect")
+    reset_multi_turn_on_connect: bool = Field(default=True, description="Reset multi-turn angles on connect")
+    zero_on_connect: bool = Field(default=False, description="Zero all joints on connect")
+
+
+class CatalogRobotPayload(BaseModel):
+    """Generic payload model for catalog-registered robots that accept extra fields."""
+
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _passthrough(cls, data, handler):
+        return data
+
+
 # ============================================================================
 # Concrete Robot Models
 # ============================================================================
@@ -82,6 +117,8 @@ _TrossenTypes = Literal[RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WID
 _TrossenBimanualTypes = Literal[
     RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER, RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER
 ]
+_ReBotB601DMType = Literal[RobotType.REBOT_B601_DM_FOLLOWER]
+_ReBotArm102LeaderType = Literal[RobotType.REBOT_ARM102_LEADER]
 
 
 class BaseRobot(BaseIDModel):
@@ -166,9 +203,23 @@ class TrossenBimanualRobot(BaseRobot):
     )
 
 
+class ReBotB601DMRobot(BaseRobot):
+    """ReBot B601 DM follower robot."""
+
+    type: _ReBotB601DMType = Field(..., description="Type of robot configuration")
+    payload: ReBotB601DMPayload = Field(..., description="ReBot B601 DM connection configuration")
+
+
+class ReBotArm102LeaderRobot(BaseRobot):
+    """ReBot Arm 102 leader robot."""
+
+    type: _ReBotArm102LeaderType = Field(..., description="Type of robot configuration")
+    payload: ReBotArm102LeaderPayload = Field(..., description="ReBot Arm 102 leader connection configuration")
+
+
 # Discriminated union of all robot types
 Robot = Annotated[
-    SO101Robot | TrossenSingleArmRobot | TrossenBimanualRobot,
+    SO101Robot | TrossenSingleArmRobot | TrossenBimanualRobot | ReBotB601DMRobot | ReBotArm102LeaderRobot,
     Field(discriminator="type"),
 ]
 
@@ -194,8 +245,20 @@ class TrossenBimanualRobotWithConnectionState(TrossenBimanualRobot):
     connection_status: _ConnectionStatus = "unknown"
 
 
+class ReBotB601DMRobotWithConnectionState(ReBotB601DMRobot):
+    connection_status: _ConnectionStatus = "unknown"
+
+
+class ReBotArm102LeaderRobotWithConnectionState(ReBotArm102LeaderRobot):
+    connection_status: _ConnectionStatus = "unknown"
+
+
 RobotWithConnectionState = Annotated[
-    SO101RobotWithConnectionState | TrossenSingleArmRobotWithConnectionState | TrossenBimanualRobotWithConnectionState,
+    SO101RobotWithConnectionState
+    | TrossenSingleArmRobotWithConnectionState
+    | TrossenBimanualRobotWithConnectionState
+    | ReBotB601DMRobotWithConnectionState
+    | ReBotArm102LeaderRobotWithConnectionState,
     Field(discriminator="type"),
 ]
 
