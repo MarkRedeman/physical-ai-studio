@@ -4,7 +4,8 @@ export const isFollower = (robot: SchemaRobot) => {
     return (
         robot.type === 'SO101_Follower' ||
         robot.type === 'Trossen_WidowXAI_Follower' ||
-        robot.type === 'Trossen_Bimanual_WidowXAI_Follower'
+        robot.type === 'Trossen_Bimanual_WidowXAI_Follower' ||
+        robot.type === 'ReBot_B601_DM_Follower'
     );
 };
 
@@ -12,7 +13,8 @@ export const isLeader = (robot: SchemaRobot) => {
     return (
         robot.type === 'SO101_Leader' ||
         robot.type === 'Trossen_WidowXAI_Leader' ||
-        robot.type === 'Trossen_Bimanual_WidowXAI_Leader'
+        robot.type === 'Trossen_Bimanual_WidowXAI_Leader' ||
+        robot.type === 'ReBot_Arm102_Leader'
     );
 };
 
