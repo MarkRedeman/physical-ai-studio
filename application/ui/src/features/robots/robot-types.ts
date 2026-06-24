@@ -66,11 +66,18 @@ export type SchemaReBotArm102LeaderRobotWithConnectionState = SchemaReBotArm102L
 };
 
 /** Union of all concrete robot output schemas (as returned by the API). */
-export type SchemaRobot = SchemaSo101RobotOutput | SchemaTrossenSingleArmRobotOutput | SchemaTrossenBimanualRobotOutput;
+export type SchemaRobot =
+    | SchemaSo101RobotOutput
+    | SchemaReBotB601DMRobotOutput
+    | SchemaReBotArm102LeaderRobotOutput
+    | SchemaTrossenSingleArmRobotOutput
+    | SchemaTrossenBimanualRobotOutput;
 
 /** Union of all concrete robot input schemas (for create/update requests). */
 export type SchemaRobotInput =
     | SchemaSo101RobotInput
+    | SchemaReBotB601DMRobotInput
+    | SchemaReBotArm102LeaderRobotInput
     | SchemaTrossenSingleArmRobotInput
     | SchemaTrossenBimanualRobotInput;
 
@@ -83,5 +90,7 @@ export type SchemaRobotType =
 /** Union of all robot-with-connection-state schemas (as returned by the online endpoint). */
 export type SchemaRobotWithConnectionState =
     | SchemaSo101RobotWithConnectionState
+    | SchemaReBotB601DMRobotWithConnectionState
+    | SchemaReBotArm102LeaderRobotWithConnectionState
     | SchemaTrossenSingleArmRobotWithConnectionState
     | SchemaTrossenBimanualRobotWithConnectionState;

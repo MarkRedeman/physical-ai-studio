@@ -1,4 +1,9 @@
-import { SchemaRobotInput, SchemaRobotType } from '../robot-types';
+import {
+    SchemaReBotB601DMRobotInput,
+    SchemaReBotArm102LeaderRobotInput,
+    SchemaRobotInput,
+    SchemaRobotType,
+} from '../robot-types';
 
 export type RobotFormFields = {
     name: string;
@@ -141,6 +146,42 @@ export const buildRobotBodyFromFields = (robotForm: RobotFormFields, robot_id: s
                     connection_string_left: robotForm.connection_string_left,
                     connection_string_right: robotForm.connection_string_right,
                     serial_number: robotForm.serial_number ?? '',
+                },
+            };
+        case 'ReBot_B601_DM_Follower':
+            if (!robotForm.serial_number) {
+                return null;
+            }
+
+            return {
+                id: robot_id,
+                name: robotForm.name,
+                type: robotForm.type,
+                payload: {
+                    connection_string: robotForm.connection_string ?? '',
+                    serial_number: robotForm.serial_number,
+                    can_adapter: robotForm.can_adapter,
+                    dm_serial_baud: Number(robotForm.dm_serial_baud),
+                    disable_torque_on_disconnect: robotForm.disable_torque_on_disconnect,
+                    force_pos_torque_ratio: Number(robotForm.force_pos_torque_ratio),
+                },
+            };
+        case 'ReBot_Arm102_Leader':
+            if (!robotForm.connection_string) {
+                return null;
+            }
+
+            return {
+                id: robot_id,
+                name: robotForm.name,
+                type: robotForm.type,
+                payload: {
+                    connection_string: robotForm.connection_string,
+                    serial_number: robotForm.serial_number ?? '',
+                    baudrate: Number(robotForm.baudrate),
+                    unlock_on_connect: robotForm.unlock_on_connect,
+                    reset_multi_turn_on_connect: robotForm.reset_multi_turn_on_connect,
+                    zero_on_connect: robotForm.zero_on_connect,
                 },
             };
         default:

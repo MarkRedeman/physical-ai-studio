@@ -8,6 +8,8 @@ import { paths } from '../../../router';
 import { SchemaRobotType } from '../robot-types';
 import { RobotFormElementContext } from './form-element-context';
 import { useRobotForm, useSetRobotForm } from './provider';
+import { ReBotArm102LeaderFormFields } from './catalog/rebot-arm102-leader';
+import { ReBotB601DMFormFields } from './catalog/rebot-b601-dm';
 import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
@@ -26,15 +28,16 @@ const RobotType = () => {
             onSelectionChange={(selected) => {
                 const newType = selected as typeof robotForm.type;
 
-                const wasSerial = robotForm.type?.toLowerCase().startsWith('so101') ?? false;
-                const isSerial = newType?.toLowerCase().startsWith('so101') ?? false;
+                const serialTypes = ['so101', 'rebot_b601'];
+                const wasSerial = serialTypes.some((t) => robotForm.type?.toLowerCase().startsWith(t)) ?? false;
+                const isSerial = serialTypes.some((t) => newType?.toLowerCase().startsWith(t)) ?? false;
 
                 setRobotForm((oldForm) => ({
                     ...oldForm,
                     type: newType,
                     ...(wasSerial !== isSerial
                         ? {
-                              // Only reset when switching families (SO -> Trossen, etc)
+                              // Only reset when switching families (SO/ReBot B601 -> Trossen/ReBot Arm102, etc)
                               serial_number: '',
                               connection_string: '',
                               connection_string_left: '',
@@ -50,6 +53,8 @@ const RobotType = () => {
             <Item key={'Trossen_WidowXAI_Leader'}>Trossen WidowX AI Leader</Item>
             <Item key={'Trossen_Bimanual_WidowXAI_Follower'}>Trossen Bimanual WidowX AI Follower</Item>
             <Item key={'Trossen_Bimanual_WidowXAI_Leader'}>Trossen Bimanual WidowX AI Leader</Item>
+            <Item key={'ReBot_B601_DM_Follower'}>ReBot B601 DM Follower</Item>
+            <Item key={'ReBot_Arm102_Leader'}>ReBot Arm102 Leader</Item>
         </Picker>
     );
 };
@@ -65,6 +70,10 @@ const FormFields = ({ robotType }: { robotType: SchemaRobotType }) => {
         case 'Trossen_Bimanual_WidowXAI_Leader':
         case 'Trossen_Bimanual_WidowXAI_Follower':
             return <BiManualWidowxAIFormFields />;
+        case 'ReBot_B601_DM_Follower':
+            return <ReBotB601DMFormFields />;
+        case 'ReBot_Arm102_Leader':
+            return <ReBotArm102LeaderFormFields />;
     }
 };
 
