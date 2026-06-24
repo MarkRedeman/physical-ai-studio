@@ -11,8 +11,8 @@ import { URDFRobot } from 'urdf-loader';
 
 import { useContainerSize } from '../../../../components/zoom/use-container-size';
 import { useLoadModelMutation, useRobotModels } from '../../robot-models-context';
+import { useCatalog } from '../../robot-catalog';
 import { SchemaRobotType } from '../../robot-types';
-import { urdfPathForType } from '../../robots-configuration';
 import { JointHighlight, useJointHighlight } from './use-joint-highlight';
 
 // ---------------------------------------------------------------------------
@@ -126,18 +126,20 @@ const CameraController = ({ controlsRef, model, highlights }: CameraControllerPr
 // ---------------------------------------------------------------------------
 
 const useLoadURDF = (robotType: SchemaRobotType) => {
+    const catalogQuery = useCatalog();
     const loadModelMutation = useLoadModelMutation();
     const { hasModel } = useRobotModels();
 
-    const PATH = urdfPathForType(robotType);
+    const entry = catalogQuery.data.find((e) => e.type === robotType);
+    const PATH = entry?.urdf_path ?? '';
 
     useEffect(() => {
-        if (hasModel(PATH)) {
+        if (!PATH || hasModel(PATH)) {
             return;
         }
 
-        loadModelMutation.mutate(PATH);
-    }, [PATH, hasModel, loadModelMutation]);
+        loadModelMutation.mutate({ path: PATH, packages: entry?.package_map });
+    }, [PATH, hasModel, loadModelMutation, entry?.package_map]);
 };
 
 // ---------------------------------------------------------------------------
@@ -159,9 +161,11 @@ interface SetupRobotViewerProps {
  * component just renders the model and applies the highlight.
  */
 export const SetupRobotViewer = ({ robotType, highlights = [] }: SetupRobotViewerProps) => {
+    const catalogQuery = useCatalog();
     const angle = degToRad(-45);
 
-    const PATH = urdfPathForType(robotType);
+    const entry = catalogQuery.data.find((e) => e.type === robotType);
+    const PATH = entry?.urdf_path ?? '';
     useLoadURDF(robotType);
     const ref = useRef<HTMLDivElement>(null);
     const controlsRef = useRef<OrbitControlsImpl>(null);

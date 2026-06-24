@@ -37,8 +37,6 @@ export const UpdateRobotButton = () => {
                 await updateRobotMutation.mutateAsync(
                     {
                         params: { path: { project_id, robot_id } },
-                        // ReBot types aren't in the generated OpenAPI spec yet, but the backend accepts them.
-                        // @ts-expect-error
                         body,
                     },
                     {

@@ -18,8 +18,6 @@ export const Robot = () => {
     const onIdentify = identifyMutation.isPending
         ? undefined
         : () => {
-              // ReBot types aren't in the generated OpenAPI spec yet, but the backend accepts them.
-              // @ts-expect-error
               identifyMutation.mutate({ body: robot });
           };
 

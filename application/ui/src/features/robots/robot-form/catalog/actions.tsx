@@ -45,8 +45,6 @@ export const IdentifyRobot = ({
         if (isDisabled || robot === null) {
             return;
         }
-        // ReBot types aren't in the generated OpenAPI spec yet, but the backend accepts them.
-        // @ts-expect-error
         identifyMutation.mutate({ body: robot });
     };
 
