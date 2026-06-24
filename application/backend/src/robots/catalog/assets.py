@@ -36,7 +36,7 @@ def resolve_robot_urdf_path(registry, robot_type: RobotType) -> Path | None:
     if asset_root is None:
         return None
 
-    return asset_root / definition.urdf_relative_path.name
+    return asset_root / definition.urdf_relative_path
 
 
 def resolve_robot_asset_path(registry, robot_type: RobotType, asset_path: str) -> Path | None:

@@ -1,61 +1,27 @@
 from pathlib import Path
-from typing import Literal
 
 from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
 
-from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
-from schemas.robot import RobotType, SerialPortInfo, TrossenBimanualRobot
+from schemas.robot import RobotType, SerialPortInfo, TrossenBimanualPayload, TrossenSingleArmPayload
 from schemas.robot_catalog import RobotCatalogEntry
 
 from .types import RobotAdapterOptions, RobotCatalogDefinition
 
-WIDOWX_URDF_RELATIVE_PATH = None
-WIDOWX_PACKAGE_ROOT = Path("widowx")
 
-
-def _get_widowx_asset_root() -> Path:
-    return Path("widowx")
-
-
-async def _discover_widowxai_devices(devices: list[SerialPortInfo]) -> list[SerialPortInfo]:
+async def _discover_noop(devices: list[SerialPortInfo]) -> list[SerialPortInfo]:
     return []
 
 
-async def _build_trossen_single_arm_driver(robot, factory) -> PhysicalAIRobotAdapter:
+async def _build_trossen_single_arm_driver(robot, _factory):
     role = "follower" if robot.type == RobotType.TROSSEN_WIDOWXAI_FOLLOWER else "leader"
-    robot_driver = WidowXAI(ip=robot.payload.connection_string, role=role)
-    return PhysicalAIRobotAdapter(
-        robot=robot_driver,
-        robot_type=robot.type,
-        config=PhysicalAIRobotAdapterConfig(
-            include_velocities=True,
-            goal_time_scale=1.0,
-            external_effort_gain=0.1,
-        ),
-    )
+    return WidowXAI(ip=robot.payload.connection_string, role=role)
 
 
-async def _build_trossen_bimanual_driver(robot: TrossenBimanualRobot, factory) -> PhysicalAIRobotAdapter:
-    mode: Literal["follower", "leader"] = (
-        "follower" if robot.type == RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER else "leader"
-    )
+async def _build_trossen_bimanual_driver(robot, _factory):
+    mode = "follower" if robot.type == RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER else "leader"
     left_driver = WidowXAI(ip=robot.payload.connection_string_left, role=mode)
     right_driver = WidowXAI(ip=robot.payload.connection_string_right, role=mode)
-    bimanual_robot = BimanualWidowXAI(left=left_driver, right=right_driver)
-    robot_type = (
-        RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER
-        if mode == "follower"
-        else RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER
-    )
-    return PhysicalAIRobotAdapter(
-        robot=bimanual_robot,
-        robot_type=robot_type,
-        config=PhysicalAIRobotAdapterConfig(
-            include_velocities=True,
-            goal_time_scale=1.0,
-            external_effort_gain=0.1,
-        ),
-    )
+    return BimanualWidowXAI(left=left_driver, right=right_driver)
 
 
 _SINGLE_ARM_JOINT_MAP: dict[str, list[str]] = {
@@ -87,23 +53,27 @@ _BIMANUAL_JOINT_MAP: dict[str, list[str]] = {
 
 
 def get_definitions() -> list[RobotCatalogDefinition]:
+    widowx_package_root = Path("widowx")
+
     return [
         RobotCatalogDefinition(
             entry=RobotCatalogEntry(
                 type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
                 display_name="Trossen WidowX AI Follower",
                 role="follower",
-                urdf_path="/widowx/urdf/generated/wxai/wxai_follower.urdf",
-                package_map={"trossen_arm_description": "/widowx"},
-                joint_map=_SINGLE_ARM_JOINT_MAP.copy(),
+                urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_FOLLOWER}/urdf",
+                package_map={
+                    "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_FOLLOWER}",
+                },
+                joint_map=_SINGLE_ARM_JOINT_MAP,
             ),
-            urdf_relative_path=WIDOWX_URDF_RELATIVE_PATH,
-            package_root=WIDOWX_PACKAGE_ROOT,
+            urdf_relative_path=Path("urdf/generated/wxai/wxai_follower.urdf"),
+            package_root=widowx_package_root,
             asset_source="builtin",
-            asset_root_resolver=_get_widowx_asset_root,
-            discover_devices=_discover_widowxai_devices,
+            asset_root_resolver=None,
+            discover_devices=_discover_noop,
             robot_builder=_build_trossen_single_arm_driver,
-            payload_model=None,
+            payload_model=TrossenSingleArmPayload,
             adapter_options=RobotAdapterOptions(
                 include_velocities=True,
                 goal_time_scale=1.0,
@@ -115,17 +85,19 @@ def get_definitions() -> list[RobotCatalogDefinition]:
                 type=RobotType.TROSSEN_WIDOWXAI_LEADER,
                 display_name="Trossen WidowX AI Leader",
                 role="leader",
-                urdf_path="/widowx/urdf/generated/wxai/wxai_follower.urdf",
-                package_map={"trossen_arm_description": "/widowx"},
-                joint_map=_SINGLE_ARM_JOINT_MAP.copy(),
+                urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_LEADER}/urdf",
+                package_map={
+                    "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_LEADER}",
+                },
+                joint_map=_SINGLE_ARM_JOINT_MAP,
             ),
-            urdf_relative_path=WIDOWX_URDF_RELATIVE_PATH,
-            package_root=WIDOWX_PACKAGE_ROOT,
+            urdf_relative_path=Path("urdf/generated/wxai/wxai_follower.urdf"),
+            package_root=widowx_package_root,
             asset_source="builtin",
-            asset_root_resolver=_get_widowx_asset_root,
-            discover_devices=_discover_widowxai_devices,
+            asset_root_resolver=None,
+            discover_devices=_discover_noop,
             robot_builder=_build_trossen_single_arm_driver,
-            payload_model=None,
+            payload_model=TrossenSingleArmPayload,
             adapter_options=RobotAdapterOptions(
                 include_velocities=True,
                 goal_time_scale=1.0,
@@ -137,17 +109,19 @@ def get_definitions() -> list[RobotCatalogDefinition]:
                 type=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
                 display_name="Trossen Bimanual WidowX AI Follower",
                 role="follower",
-                urdf_path="/widowx/urdf/generated/stationary_ai.urdf",
-                package_map={"trossen_arm_description": "/widowx"},
-                joint_map=_BIMANUAL_JOINT_MAP.copy(),
+                urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER}/urdf",
+                package_map={
+                    "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER}",
+                },
+                joint_map=_BIMANUAL_JOINT_MAP,
             ),
-            urdf_relative_path=WIDOWX_URDF_RELATIVE_PATH,
-            package_root=WIDOWX_PACKAGE_ROOT,
+            urdf_relative_path=Path("urdf/generated/stationary_ai.urdf"),
+            package_root=widowx_package_root,
             asset_source="builtin",
-            asset_root_resolver=_get_widowx_asset_root,
-            discover_devices=_discover_widowxai_devices,
+            asset_root_resolver=None,
+            discover_devices=_discover_noop,
             robot_builder=_build_trossen_bimanual_driver,
-            payload_model=None,
+            payload_model=TrossenBimanualPayload,
             adapter_options=RobotAdapterOptions(
                 include_velocities=True,
                 goal_time_scale=1.0,
@@ -159,17 +133,19 @@ def get_definitions() -> list[RobotCatalogDefinition]:
                 type=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER,
                 display_name="Trossen Bimanual WidowX AI Leader",
                 role="leader",
-                urdf_path="/widowx/urdf/generated/stationary_ai.urdf",
-                package_map={"trossen_arm_description": "/widowx"},
-                joint_map=_BIMANUAL_JOINT_MAP.copy(),
+                urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER}/urdf",
+                package_map={
+                    "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER}",
+                },
+                joint_map=_BIMANUAL_JOINT_MAP,
             ),
-            urdf_relative_path=WIDOWX_URDF_RELATIVE_PATH,
-            package_root=WIDOWX_PACKAGE_ROOT,
+            urdf_relative_path=Path("urdf/generated/stationary_ai.urdf"),
+            package_root=widowx_package_root,
             asset_source="builtin",
-            asset_root_resolver=_get_widowx_asset_root,
-            discover_devices=_discover_widowxai_devices,
+            asset_root_resolver=None,
+            discover_devices=_discover_noop,
             robot_builder=_build_trossen_bimanual_driver,
-            payload_model=None,
+            payload_model=TrossenBimanualPayload,
             adapter_options=RobotAdapterOptions(
                 include_velocities=True,
                 goal_time_scale=1.0,
