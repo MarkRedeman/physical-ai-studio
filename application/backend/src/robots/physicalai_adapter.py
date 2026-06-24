@@ -28,14 +28,18 @@ class PhysicalAIRobotAdapter(RobotClient):
         robot: Robot,
         robot_type: RobotType,
         config: PhysicalAIRobotAdapterConfig | None = None,
+        robot_role: str | None = None,
     ) -> None:
         resolved_config = config or PhysicalAIRobotAdapterConfig()
         self._robot = robot
         self._robot_type = robot_type
         self._config = resolved_config
+        self._robot_role = robot_role
         self.is_controlled = False
 
     def _is_follower(self) -> bool:
+        if self._robot_role is not None:
+            return self._robot_role == "follower"
         return self._robot_type in {
             RobotType.SO101_FOLLOWER,
             RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
