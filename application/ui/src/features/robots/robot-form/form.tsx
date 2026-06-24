@@ -5,6 +5,7 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
+import { useCatalog } from '../robot-catalog';
 import { SchemaRobotType } from '../robot-types';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
@@ -15,6 +16,7 @@ import { SubmitNewRobotButton } from './submit-new-robot-button';
 const RobotType = () => {
     const { activeType } = useRobotForm();
     const { setActiveType } = useSetRobotForm();
+    const catalogQuery = useCatalog();
 
     return (
         <Picker
@@ -28,12 +30,9 @@ const RobotType = () => {
                 }
             }}
         >
-            <Item key={'SO101_Follower'}>SO101 Follower</Item>
-            <Item key={'SO101_Leader'}>SO101 Leader</Item>
-            <Item key={'Trossen_WidowXAI_Follower'}>Trossen WidowX AI Follower</Item>
-            <Item key={'Trossen_WidowXAI_Leader'}>Trossen WidowX AI Leader</Item>
-            <Item key={'Trossen_Bimanual_WidowXAI_Follower'}>Trossen Bimanual WidowX AI Follower</Item>
-            <Item key={'Trossen_Bimanual_WidowXAI_Leader'}>Trossen Bimanual WidowX AI Leader</Item>
+            {catalogQuery.data.map((entry) => (
+                <Item key={entry.type}>{entry.display_name}</Item>
+            ))}
         </Picker>
     );
 };
