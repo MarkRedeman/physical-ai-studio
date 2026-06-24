@@ -20,8 +20,12 @@ if TYPE_CHECKING:
 AssetSource = Literal["builtin", "plugin"]
 DiscoverDevicesCallable = Callable[[list[SerialPortInfo]], Awaitable[list[SerialPortInfo]]]
 AssetRootResolver = Callable[[], Path]
-BuildRobotCallable = Callable[[SchemaRobot, RobotClientFactory], Awaitable[PhysicalAIRobot]]
 PayloadModelType = type[BaseModel]
+
+if TYPE_CHECKING:
+    BuildRobotCallable = Callable[[SchemaRobot, RobotClientFactory], Awaitable[PhysicalAIRobot]]
+else:
+    BuildRobotCallable = Callable[..., Awaitable[PhysicalAIRobot]]
 
 
 @dataclass(frozen=True)
