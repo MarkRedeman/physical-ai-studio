@@ -1,73 +1,90 @@
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { SchemaRobotCatalogEntry, SchemaRobotType } from '../../api/openapi-spec';
+import { $api } from '../../api/client';
+import { SchemaRobot } from './robot-types';
 
-import { SchemaRobotType } from './robot-types';
-
-export type CatalogEntry = {
-    type: string;
-    display_name: string;
-    role: string;
-    urdf_path?: string | null;
-    package_map?: Record<string, string>;
-    joint_map?: Record<string, string[]>;
-    asset_source?: string;
-};
-
-const fetchCatalog = (): Promise<CatalogEntry[]> =>
-    fetch('/api/robots/catalog').then((r) => {
-        if (!r.ok) throw new Error('Failed to fetch catalog');
-        return r.json();
-    });
-
-export const useCatalog = () => {
-    return useSuspenseQuery<CatalogEntry[]>({
-        queryKey: ['robot-catalog'],
-        queryFn: fetchCatalog,
+export const useRobotCatalogQuery = () => {
+    return $api.useSuspenseQuery('get', '/api/robots/catalog', {
+        meta: { skipInvalidation: true },
     });
 };
 
-export const useCatalogEntry = (type: string) => {
-    return useSuspenseQuery<CatalogEntry>({
-        queryKey: ['robot-catalog', type],
-        queryFn: () => fetch(`/api/robots/catalog/${type}`).then((r) => r.json()),
+export const useRobotCatalogMap = () => {
+    const query = useRobotCatalogQuery();
+    const byType = new Map<SchemaRobotType, SchemaRobotCatalogEntry>();
+
+    query.data.forEach((entry) => {
+        byType.set(entry.type, entry);
     });
-};
 
-const useCatalogData = () => {
-    return useQuery<CatalogEntry[]>({
-        queryKey: ['robot-catalog'],
-        queryFn: fetchCatalog,
-        staleTime: 60_000,
-    });
-};
-
-export const useUrdfPathForType = (robotType: SchemaRobotType): string => {
-    const { data } = useCatalogData();
-    const entry = data?.find((e) => e.type === robotType);
-    return entry?.urdf_path ?? '';
-};
-
-export const usePackageMapForType = (robotType: SchemaRobotType): Record<string, string> => {
-    const { data } = useCatalogData();
-    const entry = data?.find((e) => e.type === robotType);
-    return entry?.package_map ?? {};
-};
-
-export const useJointMapForType = (robotType: SchemaRobotType): Record<string, string[]> => {
-    const { data } = useCatalogData();
-    const entry = data?.find((e) => e.type === robotType);
-    return entry?.joint_map ?? {};
+    return {
+        entries: query.data,
+        byType,
+    };
 };
 
 export const useRobotRoleChecks = () => {
-    const { data } = useCatalogData();
+    const { byType } = useRobotCatalogMap();
 
-    const isFollower = (type: string): boolean => {
-        return data?.some((e) => e.type === type && e.role === 'follower') ?? false;
+    const isFollower = (robot: Pick<SchemaRobot, 'type'>) => {
+        const entry = byType.get(robot.type);
+        if (entry === undefined) {
+            throw new Error(`Missing catalog entry for robot type: ${robot.type}`);
+        }
+        return entry.role === 'follower';
     };
 
-    const isLeader = (type: string): boolean => {
-        return data?.some((e) => e.type === type && e.role === 'leader') ?? false;
+    const isLeader = (robot: Pick<SchemaRobot, 'type'>) => {
+        const entry = byType.get(robot.type);
+        if (entry === undefined) {
+            throw new Error(`Missing catalog entry for robot type: ${robot.type}`);
+        }
+        return entry.role === 'leader';
     };
 
-    return { isFollower, isLeader };
+    return {
+        isFollower,
+        isLeader,
+    };
+};
+
+export const useUrdfPathForType = () => {
+    const { byType } = useRobotCatalogMap();
+
+    return (robotType: SchemaRobotType): string => {
+        const entry = byType.get(robotType);
+        if (entry === undefined) {
+            throw new Error(`Missing catalog entry for robot type: ${robotType}`);
+        }
+        if (!entry.urdf_path) {
+            throw new Error(`Missing catalog URDF path for robot type: ${robotType}`);
+        }
+        return entry.urdf_path;
+    };
+};
+
+export const useJointMapForType = () => {
+    const { byType } = useRobotCatalogMap();
+
+    return (robotType: SchemaRobotType): Record<string, string[]> => {
+        const entry = byType.get(robotType);
+        if (entry === undefined) {
+            throw new Error(`Missing catalog entry for robot type: ${robotType}`);
+        }
+        if (!entry.joint_map) {
+            throw new Error(`Missing catalog joint map for robot type: ${robotType}`);
+        }
+        return entry.joint_map as Record<string, string[]>;
+    };
+};
+
+export const usePackageMapForType = () => {
+    const { byType } = useRobotCatalogMap();
+
+    return (robotType: SchemaRobotType): Record<string, string> => {
+        const entry = byType.get(robotType);
+        if (entry === undefined) {
+            throw new Error(`Missing catalog entry for robot type: ${robotType}`);
+        }
+        return (entry.package_map ?? {}) as Record<string, string>;
+    };
 };

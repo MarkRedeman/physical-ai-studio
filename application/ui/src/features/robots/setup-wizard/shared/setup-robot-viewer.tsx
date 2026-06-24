@@ -10,8 +10,8 @@ import { degToRad } from 'three/src/math/MathUtils.js';
 import { URDFRobot } from 'urdf-loader';
 
 import { useContainerSize } from '../../../../components/zoom/use-container-size';
+import { useUrdfPathForType } from '../../robot-catalog';
 import { useLoadModelMutation, useRobotModels } from '../../robot-models-context';
-import { useCatalog } from '../../robot-catalog';
 import { SchemaRobotType } from '../../robot-types';
 import { JointHighlight, useJointHighlight } from './use-joint-highlight';
 
@@ -126,20 +126,19 @@ const CameraController = ({ controlsRef, model, highlights }: CameraControllerPr
 // ---------------------------------------------------------------------------
 
 const useLoadURDF = (robotType: SchemaRobotType) => {
-    const catalogQuery = useCatalog();
     const loadModelMutation = useLoadModelMutation();
     const { hasModel } = useRobotModels();
+    const urdfPathForType = useUrdfPathForType();
 
-    const entry = catalogQuery.data.find((e) => e.type === robotType);
-    const PATH = entry?.urdf_path ?? '';
+    const PATH = urdfPathForType(robotType);
 
     useEffect(() => {
-        if (!PATH || hasModel(PATH)) {
+        if (hasModel(PATH)) {
             return;
         }
 
-        loadModelMutation.mutate({ path: PATH, packages: entry?.package_map });
-    }, [PATH, hasModel, loadModelMutation, entry?.package_map]);
+        loadModelMutation.mutate({ path: PATH, robotType });
+    }, [PATH, hasModel, loadModelMutation, robotType]);
 };
 
 // ---------------------------------------------------------------------------
@@ -161,11 +160,10 @@ interface SetupRobotViewerProps {
  * component just renders the model and applies the highlight.
  */
 export const SetupRobotViewer = ({ robotType, highlights = [] }: SetupRobotViewerProps) => {
-    const catalogQuery = useCatalog();
     const angle = degToRad(-45);
+    const urdfPathForType = useUrdfPathForType();
 
-    const entry = catalogQuery.data.find((e) => e.type === robotType);
-    const PATH = entry?.urdf_path ?? '';
+    const PATH = urdfPathForType(robotType);
     useLoadURDF(robotType);
     const ref = useRef<HTMLDivElement>(null);
     const controlsRef = useRef<OrbitControlsImpl>(null);
