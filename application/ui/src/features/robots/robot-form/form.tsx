@@ -6,6 +6,7 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { SchemaRobotType } from '../robot-types';
+import { useCatalog } from '../robot-catalog';
 import { RobotFormElementContext } from './form-element-context';
 import { useRobotForm, useSetRobotForm } from './provider';
 import { ReBotArm102LeaderFormFields } from './catalog/rebot-arm102-leader';
@@ -18,6 +19,7 @@ import { SubmitNewRobotButton } from './submit-new-robot-button';
 const RobotType = () => {
     const setRobotForm = useSetRobotForm();
     const robotForm = useRobotForm();
+    const catalogQuery = useCatalog();
 
     return (
         <Picker
@@ -47,14 +49,9 @@ const RobotType = () => {
                 }));
             }}
         >
-            <Item key={'SO101_Follower'}>SO101 Follower</Item>
-            <Item key={'SO101_Leader'}>SO101 Leader</Item>
-            <Item key={'Trossen_WidowXAI_Follower'}>Trossen WidowX AI Follower</Item>
-            <Item key={'Trossen_WidowXAI_Leader'}>Trossen WidowX AI Leader</Item>
-            <Item key={'Trossen_Bimanual_WidowXAI_Follower'}>Trossen Bimanual WidowX AI Follower</Item>
-            <Item key={'Trossen_Bimanual_WidowXAI_Leader'}>Trossen Bimanual WidowX AI Leader</Item>
-            <Item key={'ReBot_B601_DM_Follower'}>ReBot B601 DM Follower</Item>
-            <Item key={'ReBot_Arm102_Leader'}>ReBot Arm102 Leader</Item>
+            {catalogQuery.data.map((entry) => (
+                <Item key={entry.type}>{entry.display_name}</Item>
+            ))}
         </Picker>
     );
 };
