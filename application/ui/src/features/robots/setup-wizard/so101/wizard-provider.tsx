@@ -161,7 +161,7 @@ export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
 
     const serialNumber = robotForm.serial_number;
     const robotType = activeType ?? '';
-    const wsEnabled = !!serialNumber && !!robotType;
+    const wsEnabled = !!serialNumber && robotType.startsWith('SO101');
 
     const { state: wsState, commands } = useSetupWebSocket({
         projectId,

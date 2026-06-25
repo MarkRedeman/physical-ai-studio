@@ -24,7 +24,9 @@ const RobotType = () => {
             width='100%'
             selectedKey={activeType}
             onSelectionChange={(selected) => {
-                setActiveType(selected as SchemaRobotType);
+                if (selected !== null) {
+                    setActiveType(selected as SchemaRobotType);
+                }
             }}
         >
             <Item key={'SO101_Follower'}>SO101 Follower</Item>

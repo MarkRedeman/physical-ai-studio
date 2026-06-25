@@ -43,7 +43,7 @@ export const buildRobotBody = (
                     connection_string: data.connection_string ?? '',
                     serial_number: data.serial_number,
                 },
-            };
+            } as SchemaRobotInput;
         }
         case 'widowx': {
             const data = formData as WidowxFormData;
@@ -59,7 +59,7 @@ export const buildRobotBody = (
                     connection_string: data.connection_string,
                     serial_number: data.serial_number ?? '',
                 },
-            };
+            } as SchemaRobotInput;
         }
         case 'bimanual_widowx': {
             const data = formData as BimanualFormData;
@@ -76,7 +76,7 @@ export const buildRobotBody = (
                     connection_string_right: data.connection_string_right,
                     serial_number: data.serial_number ?? '',
                 },
-            };
+            } as SchemaRobotInput;
         }
     }
 };

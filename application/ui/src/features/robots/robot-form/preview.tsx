@@ -27,7 +27,7 @@ export const Preview = () => {
 
     return (
         <View backgroundColor={'gray-200'} height={'100%'}>
-            {activeType !== null ? <RobotViewer robot={{ type: activeType }} /> : <EmptyPreview />}
+            {activeType != null ? <RobotViewer robot={{ type: activeType }} /> : <EmptyPreview />}
         </View>
     );
 };

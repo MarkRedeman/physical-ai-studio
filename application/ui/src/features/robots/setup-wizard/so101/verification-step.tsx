@@ -138,7 +138,8 @@ export const VerificationStep = () => {
         },
     });
 
-    const robotBody: SchemaRobotInput | null = buildRobotBody('so101', robotForm, activeType, robotId);
+    const robotBody: SchemaRobotInput | null =
+        activeType.startsWith('SO101') ? buildRobotBody('so101', robotForm, activeType, robotId) : null;
 
     const hasCalibration = wsState.calibrationResult !== null;
 

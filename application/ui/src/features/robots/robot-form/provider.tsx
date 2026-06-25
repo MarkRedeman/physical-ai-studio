@@ -109,7 +109,7 @@ export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
     const state = useContext(RobotFormContext);
 
     if (state === null) {
-        return null;
+        throw new Error('useRobotFormBody was used outside of RobotFormProvider');
     }
 
     const robotType = typeForSchema[state.activeType];
