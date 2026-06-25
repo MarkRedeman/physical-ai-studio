@@ -39,6 +39,12 @@ type RobotModelsContextValue = null | {
     hasModel: (path: string) => boolean;
     /** Remove all cached models. */
     clearModels: () => void;
+    /** Check whether a model load is already in flight for a given URDF path. */
+    isModelLoading: (path: string) => boolean;
+    /** Mark a model path as loading. Returns false when already loading. */
+    beginModelLoad: (path: string) => boolean;
+    /** Clear loading marker for a model path. */
+    endModelLoad: (path: string) => void;
     /**
      * The underlying Map — exposed for the rare case where a consumer needs
      * to iterate (e.g. animations). Prefer `getModel` / `hasModel` instead.
@@ -52,10 +58,23 @@ const RobotModelsContext = createContext<RobotModelsContextValue>(null);
 
 export const RobotModelsProvider = ({ children }: { children: ReactNode }) => {
     const [models, setModels] = useState<ModelsMap>(() => new Map());
+    const loadingPathsRef = useRef<Set<string>>(new Set());
 
     const getModel = useCallback((path: string) => models.get(path), [models]);
     const hasModel = useCallback((path: string) => models.has(path), [models]);
     const clearModels = useCallback(() => setModels(new Map()), []);
+    const isModelLoading = useCallback((path: string) => loadingPathsRef.current.has(path), []);
+    const beginModelLoad = useCallback((path: string) => {
+        if (loadingPathsRef.current.has(path)) {
+            return false;
+        }
+
+        loadingPathsRef.current.add(path);
+        return true;
+    }, []);
+    const endModelLoad = useCallback((path: string) => {
+        loadingPathsRef.current.delete(path);
+    }, []);
 
     const setModel = useCallback((path: string, model: URDFRobot) => {
         setModels((prev) => {
@@ -72,6 +91,9 @@ export const RobotModelsProvider = ({ children }: { children: ReactNode }) => {
                 getModel,
                 hasModel,
                 clearModels,
+                isModelLoading,
+                beginModelLoad,
+                endModelLoad,
                 setModel,
             }}
         >
@@ -85,15 +107,11 @@ export const useRobotModels = () => {
 };
 
 export const useLoadModelMutation = () => {
-    const { setModel } = useRobotModels();
+    const { setModel, endModelLoad } = useRobotModels();
     const packageMapForType = usePackageMapForType();
-
-    const pathRef = useRef<string>('');
 
     return useMutation({
         mutationFn: async ({ path, robotType }: { path: string; robotType: SchemaRobotType }) => {
-            pathRef.current = path;
-
             const manager = new THREE.LoadingManager();
             const loader = new URDFLoader(manager);
 
@@ -121,8 +139,11 @@ export const useLoadModelMutation = () => {
                 );
             });
         },
-        onSuccess: async (model) => {
-            setModel(pathRef.current, model);
+        onSuccess: async (model, variables) => {
+            setModel(variables.path, model);
+        },
+        onSettled: async (_data, _error, variables) => {
+            endModelLoad(variables.path);
         },
         meta: { skipInvalidation: true },
     });

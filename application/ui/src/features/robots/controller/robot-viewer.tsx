@@ -97,18 +97,22 @@ const ActualURDFModel = ({ model, isTrossen }: { model: URDFRobot; isTrossen: bo
 
 const useLoadURDF = (robotType: SchemaRobotType) => {
     const loadModelMutation = useLoadModelMutation();
-    const { hasModel } = useRobotModels();
+    const { hasModel, isModelLoading, beginModelLoad } = useRobotModels();
     const urdfPathForType = useUrdfPathForType();
 
     const PATH = urdfPathForType(robotType);
 
     useEffect(() => {
-        if (hasModel(PATH)) {
+        if (hasModel(PATH) || isModelLoading(PATH)) {
+            return;
+        }
+
+        if (!beginModelLoad(PATH)) {
             return;
         }
 
         loadModelMutation.mutate({ path: PATH, robotType });
-    }, [PATH, hasModel, loadModelMutation, robotType]);
+    }, [PATH, hasModel, isModelLoading, beginModelLoad, loadModelMutation, robotType]);
 };
 
 interface RobotViewerProps {
