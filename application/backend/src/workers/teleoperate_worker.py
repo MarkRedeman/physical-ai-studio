@@ -88,6 +88,21 @@ class TeleoperateWorker(BaseProcessWorker):
         with self._action_read_state.get_lock():
             self._action_read_state.value = value
 
+    def _feature_values(
+        self,
+        primary_state: dict[str, float],
+        fallback_state: dict[str, float] | None = None,
+    ) -> list[float]:
+        values: list[float] = []
+        for key in self.features:
+            if key in primary_state:
+                values.append(primary_state[key])
+            elif fallback_state is not None and key in fallback_state:
+                values.append(fallback_state[key])
+            else:
+                values.append(0.0)
+        return values
+
     async def wait_for_loading_to_complete(self) -> None:
         await asyncio.to_thread(self.loaded_event.wait)
 
@@ -100,7 +115,7 @@ class TeleoperateWorker(BaseProcessWorker):
 
         # Set current actions to current follower state.
         state = (self.follower.read_state())["state"]
-        self._set_actions([state[key] for key in self.features])
+        self._set_actions(self._feature_values(state))
 
         self.loaded_event.set()
 
@@ -111,11 +126,13 @@ class TeleoperateWorker(BaseProcessWorker):
             while not self.should_stop():
                 async with run_at_frequency(self.frequency):
                     state = (self.follower.read_state())["state"]
-                    self._set_state([state[key] for key in self.features])
+                    self._set_state(self._feature_values(state))
                     if self.get_action_read_state() == ActionReadState.TELEOPERATION and self.leader is not None:
                         actions = (self.leader.read_state())["state"]
                         self.follower.set_joints_state(actions, goal_time * 2)
-                        self._set_actions([actions[key] for key in self.features])
+                        # Leader observations may not expose all follower features
+                        # (e.g. follower has .vel keys while leader only publishes .pos).
+                        self._set_actions(self._feature_values(actions, fallback_state=state))
                     elif self.get_action_read_state() == ActionReadState.FROM_ACTIONS:
                         raw_actions = self.get_actions()
                         actions = {i: raw_actions[k] for k, i in enumerate(self.features)}
