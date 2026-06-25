@@ -1,6 +1,7 @@
 import { Flex, TextField } from '@geti-ui/ui';
 import { v4 as uuidv4 } from 'uuid';
 
+import type { SchemaRobot } from '../../robot-types';
 import { buildRobotBody } from '../form-data';
 import { useRobotFormFields } from '../provider';
 import { IdentifyRobot, useIdentifyMutation } from './actions';
@@ -11,10 +12,10 @@ export interface WidowxFormData {
     serial_number: string;
 }
 
-export const getInitialWidowxFormData = (existing?: Partial<WidowxFormData>): WidowxFormData => ({
-    name: existing?.name ?? '',
-    connection_string: existing?.connection_string ?? '',
-    serial_number: existing?.serial_number ?? '',
+export const getInitialWidowxFormData = (robot?: SchemaRobot): WidowxFormData => ({
+    name: robot?.name ?? '',
+    connection_string: robot && 'connection_string' in robot.payload ? robot.payload.connection_string : '',
+    serial_number: robot?.payload?.serial_number ?? '',
 });
 
 export const WidowxAIFormFields = () => {

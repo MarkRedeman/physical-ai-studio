@@ -2,6 +2,7 @@ import { Flex, Item, Picker, Text } from '@geti-ui/ui';
 import { v4 as uuidv4 } from 'uuid';
 
 import { $api } from '../../../../api/client';
+import type { SchemaRobot } from '../../robot-types';
 import { PermissionDeniedError } from '../../setup-wizard/so101/diagnostics-step-error';
 import { buildRobotBody } from '../form-data';
 import { useRobotFormFields } from '../provider';
@@ -13,10 +14,10 @@ export interface SO101FormData {
     connection_string: string;
 }
 
-export const getInitialSO101FormData = (existing?: Partial<SO101FormData>): SO101FormData => ({
-    name: existing?.name ?? '',
-    serial_number: existing?.serial_number ?? '',
-    connection_string: existing?.connection_string ?? '',
+export const getInitialSO101FormData = (robot?: SchemaRobot): SO101FormData => ({
+    name: robot?.name ?? '',
+    serial_number: robot?.payload?.serial_number ?? '',
+    connection_string: robot && 'connection_string' in robot.payload ? robot.payload.connection_string : '',
 });
 
 export const SO101FormFields = () => {

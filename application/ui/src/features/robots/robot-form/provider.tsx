@@ -25,44 +25,12 @@ type SetRobotFormContextType = {
 
 const SetRobotFormContext = createContext<SetRobotFormContextType | null>(null);
 
-const getInitialState = (robot?: SchemaRobot): RobotFormState => {
-    const activeType = robot?.type ?? 'SO101_Follower';
-    const robotType = typeForSchema[activeType];
-
-    return {
-        activeType,
-        so101: getInitialSO101FormData(
-            robotType === 'so101' && robot
-                ? {
-                      name: robot.name,
-                      serial_number: robot.payload.serial_number,
-                      connection_string: 'connection_string' in robot.payload ? robot.payload.connection_string : '',
-                  }
-                : undefined
-        ),
-        widowx: getInitialWidowxFormData(
-            robotType === 'widowx' && robot
-                ? {
-                      name: robot.name,
-                      connection_string: 'connection_string' in robot.payload ? robot.payload.connection_string : '',
-                      serial_number: robot.payload.serial_number,
-                  }
-                : undefined
-        ),
-        bimanual_widowx: getInitialBimanualFormData(
-            robotType === 'bimanual_widowx' && robot
-                ? {
-                      name: robot.name,
-                      connection_string_left:
-                          'connection_string_left' in robot.payload ? robot.payload.connection_string_left : '',
-                      connection_string_right:
-                          'connection_string_right' in robot.payload ? robot.payload.connection_string_right : '',
-                      serial_number: robot.payload.serial_number,
-                  }
-                : undefined
-        ),
-    };
-};
+const getInitialState = (robot?: SchemaRobot): RobotFormState => ({
+    activeType: robot?.type ?? 'SO101_Follower',
+    so101: getInitialSO101FormData(robot),
+    widowx: getInitialWidowxFormData(robot),
+    bimanual_widowx: getInitialBimanualFormData(robot),
+});
 
 export const RobotFormProvider = ({ children, robot }: { children: ReactNode; robot?: SchemaRobot }) => {
     const [state, setState] = useState(() => getInitialState(robot));

@@ -1,6 +1,7 @@
 import { Flex, TextField, View } from '@geti-ui/ui';
 import { v4 as uuidv4 } from 'uuid';
 
+import type { SchemaRobot } from '../../robot-types';
 import { buildRobotBody } from '../form-data';
 import { useRobotFormFields } from '../provider';
 import { IdentifyRobot, useIdentifyMutation } from './actions';
@@ -12,11 +13,13 @@ export interface BimanualFormData {
     serial_number: string;
 }
 
-export const getInitialBimanualFormData = (existing?: Partial<BimanualFormData>): BimanualFormData => ({
-    name: existing?.name ?? '',
-    connection_string_left: existing?.connection_string_left ?? '',
-    connection_string_right: existing?.connection_string_right ?? '',
-    serial_number: existing?.serial_number ?? '',
+export const getInitialBimanualFormData = (robot?: SchemaRobot): BimanualFormData => ({
+    name: robot?.name ?? '',
+    connection_string_left:
+        robot && 'connection_string_left' in robot.payload ? robot.payload.connection_string_left : '',
+    connection_string_right:
+        robot && 'connection_string_right' in robot.payload ? robot.payload.connection_string_right : '',
+    serial_number: robot?.payload?.serial_number ?? '',
 });
 
 export const BiManualWidowxAIFormFields = () => {
