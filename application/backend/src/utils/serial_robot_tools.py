@@ -19,11 +19,13 @@ def normalize_serial_number(serial_number: str | None) -> str:
 def from_port(port: ListPortInfo, robot_type: str) -> SerialPortInfo | None:
     """Detect if the device is a SO-100 robot."""
     # The Feetech UART board CH340 has PID 29987
-    if port.pid in {21971, 29987}:
+    if port.pid not in {21971, 29987}:
+        logger.info("Oh not this one: {}: {}", port.pid, port.description)
         # The serial number is not always available.
-        serial_number = normalize_serial_number(getattr(port, "serial_number", None))
-        return SerialPortInfo(connection_string=port.device, serial_number=serial_number, robot_type=robot_type)
-    return None
+    serial_number = normalize_serial_number(getattr(port, "serial_number", None))
+    return SerialPortInfo(connection_string=port.device, serial_number=serial_number, robot_type=robot_type)
+    #else:
+    #return None
 
 
 class RobotConnectionManager:

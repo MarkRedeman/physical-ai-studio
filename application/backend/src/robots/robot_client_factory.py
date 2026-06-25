@@ -14,6 +14,7 @@ class RobotClientFactory:
     calibration_service: RobotCalibrationService
     robot_manager: RobotConnectionManager
     catalog_registry: RobotCatalogRegistry
+    _active_connection_string: str | None
 
     def __init__(
         self,
@@ -24,6 +25,7 @@ class RobotClientFactory:
         self.robot_manager = robot_manager
         self.calibration_service = calibration_service
         self.catalog_registry = catalog_registry or RobotCatalogRegistry()
+        self._active_connection_string = None
 
     def _get_robot_role(self, robot_type: RobotType):
         definition = self.catalog_registry.get_definition(robot_type)
@@ -40,7 +42,12 @@ class RobotClientFactory:
         if definition is None:
             raise ValueError(f"Robot type is not part of the catalog: {robot.type}")
 
-        robot_driver = await builder(robot, self)
+        self._active_connection_string = getattr(robot.payload, "connection_string", None)
+        try:
+            robot_driver = await builder(robot, self)
+        finally:
+            self._active_connection_string = None
+
         adapter_options = definition.adapter_options
         return PhysicalAIRobotAdapter(
             robot=robot_driver,
@@ -71,11 +78,17 @@ class RobotClientFactory:
     async def find_port_by_serial(self, serial_number: str) -> str | None:
         normalized_serial = normalize_serial_number(serial_number)
         if normalized_serial == "":
-            return None
+            return await self.find_port_by_connection_string(self._active_connection_string or "")
 
         for managed_robot in self.robot_manager.robots:
             if normalize_serial_number(managed_robot.serial_number) == normalized_serial:
                 return managed_robot.connection_string
+
+        await self.robot_manager.find_robots()
+        for managed_robot in self.robot_manager.robots:
+            if normalize_serial_number(managed_robot.serial_number) == normalized_serial:
+                return managed_robot.connection_string
+
         return None
 
     async def find_port_by_connection_string(self, connection_string: str) -> str | None:
@@ -85,6 +98,12 @@ class RobotClientFactory:
         for managed_robot in self.robot_manager.robots:
             if managed_robot.connection_string == connection_string:
                 return managed_robot.connection_string
+
+        await self.robot_manager.find_robots()
+        for managed_robot in self.robot_manager.robots:
+            if managed_robot.connection_string == connection_string:
+                return managed_robot.connection_string
+
         return None
 
     async def find_port_for_robot_identifiers(self, serial_number: str, connection_string: str) -> str | None:
