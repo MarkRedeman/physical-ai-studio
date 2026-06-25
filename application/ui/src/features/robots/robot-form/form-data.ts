@@ -1,15 +1,14 @@
-import {
-    SchemaReBotB601DMRobotInput,
-    SchemaReBotArm102LeaderRobotInput,
-    SchemaRobotInput,
-    SchemaRobotType,
-} from '../robot-types';
+import { SchemaRobotInput, SchemaRobotType } from '../robot-types';
 
 export type RobotFormFields = {
     name: string;
     type: SchemaRobotType;
     connection_string: string;
     serial_number: string;
+    serial_number_left: string;
+    serial_number_right: string;
+    active_calibration_id_left: string;
+    active_calibration_id_right: string;
     connection_string_left: string;
     connection_string_right: string;
     can_adapter: 'damiao' | 'socketcan';
@@ -57,6 +56,10 @@ export const parseRobotFormFromFormData = (
         | 'type'
         | 'connection_string'
         | 'serial_number'
+        | 'serial_number_left'
+        | 'serial_number_right'
+        | 'active_calibration_id_left'
+        | 'active_calibration_id_right'
         | 'connection_string_left'
         | 'connection_string_right'
         | 'can_adapter'
@@ -74,6 +77,12 @@ export const parseRobotFormFromFormData = (
         type: fallback.type,
         connection_string: toStringValue(formData.get('payload.connection_string')) || fallback.connection_string,
         serial_number: toStringValue(formData.get('payload.serial_number')) || fallback.serial_number,
+        serial_number_left: toStringValue(formData.get('payload.serial_number_left')) || fallback.serial_number_left,
+        serial_number_right: toStringValue(formData.get('payload.serial_number_right')) || fallback.serial_number_right,
+        active_calibration_id_left:
+            toStringValue(formData.get('payload.active_calibration_id_left')) || fallback.active_calibration_id_left,
+        active_calibration_id_right:
+            toStringValue(formData.get('payload.active_calibration_id_right')) || fallback.active_calibration_id_right,
         connection_string_left:
             toStringValue(formData.get('payload.connection_string_left')) || fallback.connection_string_left,
         connection_string_right:
@@ -148,8 +157,15 @@ export const buildRobotBodyFromFields = (robotForm: RobotFormFields, robot_id: s
                     serial_number: robotForm.serial_number ?? '',
                 },
             };
-        case 'ReBot_B601_DM_Follower':
+        case 'ReBot_B601_DM_Follower': {
             if (!robotForm.serial_number) {
+                return null;
+            }
+
+            const dmSerialBaud = Number.parseInt(robotForm.dm_serial_baud, 10);
+            const forcePosTorqueRatio = Number.parseFloat(robotForm.force_pos_torque_ratio);
+
+            if (Number.isNaN(dmSerialBaud) || Number.isNaN(forcePosTorqueRatio)) {
                 return null;
             }
 
@@ -161,13 +177,19 @@ export const buildRobotBodyFromFields = (robotForm: RobotFormFields, robot_id: s
                     connection_string: robotForm.connection_string ?? '',
                     serial_number: robotForm.serial_number,
                     can_adapter: robotForm.can_adapter,
-                    dm_serial_baud: Number(robotForm.dm_serial_baud),
+                    dm_serial_baud: dmSerialBaud,
                     disable_torque_on_disconnect: robotForm.disable_torque_on_disconnect,
-                    force_pos_torque_ratio: Number(robotForm.force_pos_torque_ratio),
+                    force_pos_torque_ratio: forcePosTorqueRatio,
                 },
             };
-        case 'ReBot_Arm102_Leader':
-            if (!robotForm.connection_string) {
+        }
+        case 'ReBot_Arm102_Leader': {
+            if (!robotForm.serial_number) {
+                return null;
+            }
+
+            const baudrate = Number.parseInt(robotForm.baudrate, 10);
+            if (Number.isNaN(baudrate)) {
                 return null;
             }
 
@@ -176,14 +198,15 @@ export const buildRobotBodyFromFields = (robotForm: RobotFormFields, robot_id: s
                 name: robotForm.name,
                 type: robotForm.type,
                 payload: {
-                    connection_string: robotForm.connection_string,
-                    serial_number: robotForm.serial_number ?? '',
-                    baudrate: Number(robotForm.baudrate),
+                    connection_string: robotForm.connection_string ?? '',
+                    serial_number: robotForm.serial_number,
+                    baudrate,
                     unlock_on_connect: robotForm.unlock_on_connect,
                     reset_multi_turn_on_connect: robotForm.reset_multi_turn_on_connect,
                     zero_on_connect: robotForm.zero_on_connect,
                 },
             };
+        }
         default:
             return null;
     }

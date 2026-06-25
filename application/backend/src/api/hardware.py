@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from loguru import logger
 from physicalai.capture import DeviceInfo, discover_all
 
 from schemas import CalibrationConfig, Camera, CameraProfile, Robot, SerialPortInfo
-from schemas.robot import RobotType
+from schemas.robot import RobotType, SO101Robot
 from utils.calibration import get_calibrations
 from utils.camera_factory import DRIVER_KEY_MAP
 from utils.serial_robot_tools import find_robots, identify_so101_robot_visually
@@ -72,3 +72,6 @@ async def identify_robot(robot: Robot, joint: str | None = None) -> None:
 
     if robot.type in {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}:
         await identify_trossen_robot_visually(robot)
+
+    if robot.type in {RobotType.REBOT_B601_DM_FOLLOWER, RobotType.REBOT_ARM102_LEADER}:
+        logger.info(f"Dummy identify call for unsupported robot type={robot.type}")

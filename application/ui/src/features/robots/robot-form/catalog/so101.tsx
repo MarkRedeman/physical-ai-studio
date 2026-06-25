@@ -17,6 +17,7 @@ export const SO101FormFields = () => {
         <>
             <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
                 <Picker
+                    name='payload.serial_number'
                     label='Select robot'
                     isRequired
                     width='100%'

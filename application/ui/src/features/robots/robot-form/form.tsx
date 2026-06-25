@@ -5,15 +5,15 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
-import { SchemaRobotType } from '../robot-types';
 import { useRobotCatalogQuery } from '../robot-catalog';
-import { RobotFormElementContext } from './form-element-context';
-import { useRobotForm, useSetRobotForm } from './provider';
+import { SchemaRobotType } from '../robot-types';
 import { ReBotArm102LeaderFormFields } from './catalog/rebot-arm102-leader';
 import { ReBotB601DMFormFields } from './catalog/rebot-b601-dm';
-import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
+import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
+import { RobotFormElementContext } from './form-element-context';
+import { useRobotForm, useSetRobotForm } from './provider';
 import { SubmitNewRobotButton } from './submit-new-robot-button';
 
 const RobotType = () => {
@@ -23,6 +23,7 @@ const RobotType = () => {
 
     return (
         <Picker
+            name='type'
             isRequired
             label='Robot type'
             width='100%'
@@ -30,17 +31,20 @@ const RobotType = () => {
             onSelectionChange={(selected) => {
                 const newType = selected as typeof robotForm.type;
 
-                const serialTypes = ['so101', 'rebot_b601'];
-                const wasSerial = serialTypes.some((t) => robotForm.type?.toLowerCase().startsWith(t)) ?? false;
-                const isSerial = serialTypes.some((t) => newType?.toLowerCase().startsWith(t)) ?? false;
+                const wasSerial = robotForm.type?.toLowerCase().startsWith('so101') ?? false;
+                const isSerial = newType?.toLowerCase().startsWith('so101') ?? false;
 
                 setRobotForm((oldForm) => ({
                     ...oldForm,
                     type: newType,
                     ...(wasSerial !== isSerial
                         ? {
-                              // Only reset when switching families (SO/ReBot B601 -> Trossen/ReBot Arm102, etc)
+                              // Only reset when switching families (SO -> Trossen, etc)
                               serial_number: '',
+                              serial_number_left: '',
+                              serial_number_right: '',
+                              active_calibration_id_left: '',
+                              active_calibration_id_right: '',
                               connection_string: '',
                               connection_string_left: '',
                               connection_string_right: '',
@@ -49,9 +53,13 @@ const RobotType = () => {
                 }));
             }}
         >
-            {catalogQuery.data.map((entry) => (
-                <Item key={entry.type}>{entry.display_name}</Item>
-            ))}
+            {catalogQuery.data.map((entry) => {
+                return (
+                    <Item key={entry.type as SchemaRobotType} textValue={entry.display_name}>
+                        {entry.display_name}
+                    </Item>
+                );
+            })}
         </Picker>
     );
 };
@@ -64,13 +72,13 @@ const FormFields = ({ robotType }: { robotType: SchemaRobotType }) => {
         case 'Trossen_WidowXAI_Follower':
         case 'Trossen_WidowXAI_Leader':
             return <WidowxAIFormFields />;
-        case 'Trossen_Bimanual_WidowXAI_Leader':
-        case 'Trossen_Bimanual_WidowXAI_Follower':
-            return <BiManualWidowxAIFormFields />;
         case 'ReBot_B601_DM_Follower':
             return <ReBotB601DMFormFields />;
         case 'ReBot_Arm102_Leader':
             return <ReBotArm102LeaderFormFields />;
+        case 'Trossen_Bimanual_WidowXAI_Leader':
+        case 'Trossen_Bimanual_WidowXAI_Follower':
+            return <BiManualWidowxAIFormFields />;
     }
 };
 
@@ -113,6 +121,7 @@ export const RobotForm = ({ heading = 'Add new robot', submitButton = <SubmitNew
                     <Flex direction='column' gap='size-200'>
                         <Flex direction='column' gap='size-200' width='100%'>
                             <TextField
+                                name='name'
                                 isRequired
                                 label='Robot name'
                                 width='100%'

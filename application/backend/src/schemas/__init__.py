@@ -7,6 +7,7 @@ from .job import DatasetImportJob, Job, TrainJob
 from .model import BackendExportDetail, Model, ModelDetailResponse
 from .project import Project
 from .robot import LeRobotConfig, NetworkIpRobotConfig, Robot, SerialPortInfo
+from .robot_catalog import RobotCatalogDiscoverResponse, RobotCatalogEntry, RobotCatalogOnlineResponse
 
 __all__ = [
     "BackendExportDetail",
@@ -32,6 +33,9 @@ __all__ = [
     "ModelDetailResponse",
     "NetworkIpRobotConfig",
     "Project",
+    "RobotCatalogDiscoverResponse",
+    "RobotCatalogEntry",
+    "RobotCatalogOnlineResponse",
     "Robot",
     "SerialPortInfo",
     "Snapshot",

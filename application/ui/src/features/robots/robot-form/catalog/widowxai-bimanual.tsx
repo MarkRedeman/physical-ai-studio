@@ -14,6 +14,7 @@ export const BiManualWidowxAIFormFields = () => {
             <Flex direction='column' gap='size-100' width='100%'>
                 <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
                     <TextField
+                        name='payload.connection_string_left'
                         isRequired
                         label='Left arm IP address'
                         width='100%'
@@ -42,6 +43,7 @@ export const BiManualWidowxAIFormFields = () => {
 
             <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
                 <TextField
+                    name='payload.connection_string_right'
                     isRequired
                     label='Right arm IP address'
                     width='100%'

@@ -16,6 +16,7 @@ from services import (
     ModelService,
     ProjectCameraService,
     ProjectService,
+    RobotCatalogService,
     RobotService,
 )
 from services.dataset_import.service import DatasetImportService
@@ -24,7 +25,6 @@ from services.event_processor import EventProcessor
 from services.job_service import JobService
 from services.log_service import LogService
 from services.robot_calibration_service import RobotCalibrationService
-from services.robot_catalog_service import RobotCatalogService
 from services.system_service import SystemService
 from settings import get_settings
 from utils.serial_robot_tools import RobotConnectionManager
@@ -62,6 +62,12 @@ def get_robot_service() -> RobotService:
     return RobotService()
 
 
+@lru_cache
+def get_robot_catalog_service() -> RobotCatalogService:
+    """Provide a RobotCatalogService instance for robot type metadata."""
+    return RobotCatalogService()
+
+
 def get_robot_manager_service(request: HTTPConnection) -> RobotConnectionManager:
     """Provide a RobotConnectionManager instance."""
     robot_manager = getattr(request.app.state, "robot_manager", None)
@@ -81,15 +87,6 @@ def get_robot_calibration_service(robot_manager: RobotConnectionManagerDep) -> R
 
 
 RobotCalibrationServiceDep = Annotated[RobotCalibrationService, Depends(get_robot_calibration_service)]
-
-
-@lru_cache
-def get_robot_catalog_service() -> RobotCatalogService:
-    """Provide a RobotCatalogService instance for the robot catalog."""
-    return RobotCatalogService()
-
-
-RobotCatalogServiceDep = Annotated[RobotCatalogService, Depends(get_robot_catalog_service)]
 
 
 @lru_cache

@@ -4,20 +4,7 @@
 ARG PYTHON_VERSION=3.13
 
 # ===========================================================================
-# Stage 1: Clone Geti UI packages and URDF robot models
-# ===========================================================================
-FROM node:24-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a AS ui-packages
-
-WORKDIR /home/app/web_ui/
-RUN apk add --no-cache git
-COPY --link ./application/ui/package.json ./
-
-# Clone URDF files
-RUN npm run clone-so101
-RUN npm run clone-widowx
-
-# ===========================================================================
-# Stage 2: Build Web UI
+# Stage 1: Build Web UI
 # ===========================================================================
 FROM node:24-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a AS web-ui
 
@@ -25,7 +12,6 @@ WORKDIR /home/app/web_ui/
 
 COPY --link application/ui/package.json ./
 COPY --link application/ui/package-lock.json ./
-COPY --from=ui-packages /home/app/web_ui/public/ /home/app/web_ui/public/
 RUN npm ci --audit=false --ignore-scripts
 
 COPY --link application/ui/tsconfig.base.json ./
@@ -53,6 +39,7 @@ COPY --link application/README.md /app/application/README.md
 
 # Backend source, entrypoint, manifests, and build hook
 COPY --link application/backend/src /app/application/backend/src
+COPY --link application/backend/scripts /app/application/backend/scripts
 COPY --link application/backend/pyproject.toml application/backend/uv.lock \
     /app/application/backend/
 COPY --link application/backend/README.md /app/application/backend/README.md
@@ -62,6 +49,9 @@ COPY --link application/backend/scripts/hatch_build.py \
 
 # Built UI assets (subdirectory matches the hatch hook's expected path: ../ui/dist/)
 COPY --link --from=web-ui /home/app/web_ui/dist /app/application/ui/dist
+
+# Sync backend-owned robot assets used by catalog URDF endpoints
+RUN sh /app/application/backend/scripts/clone-robot-assets.sh /app/application/backend/src/static/robot-assets
 
 # ===========================================================================
 # Stage 4: Python builder base

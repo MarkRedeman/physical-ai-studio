@@ -10,8 +10,8 @@ from .model_import_service import ModelImportService
 from .model_metrics_service import ModelMetricsService
 from .model_service import ModelService
 from .project_camera_service import ProjectCameraService
-from .robot_catalog_service import RobotCatalogService
 from .project_service import ProjectService
+from .robot_catalog_service import RobotCatalogService
 from .system_service import SystemService
 
 __all__ = [
@@ -20,6 +20,8 @@ __all__ = [
     "DatasetService",
     "EpisodeThumbnailService",
     "JobService",
+    "ModelDownloadService",
+    "ModelImportService",
     "ModelMetricsService",
     "ModelService",
     "ProjectCameraService",

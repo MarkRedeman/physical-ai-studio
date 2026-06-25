@@ -22,9 +22,9 @@ from api.project import router as project_router
 from api.project_camera import router as project_cameras_router
 from api.record import router as record_router
 from api.robot_calibration import router as robot_calibration_router
+from api.robot_catalog import router as robot_catalog_router
 from api.robot_control import router as robot_control_router
 from api.robot_setup import router as robot_setup_router
-from api.robot_catalog import router as robot_catalog_router
 from api.robots import router as project_robots_router
 from api.settings import router as settings_router
 from api.system import system_router
@@ -46,9 +46,9 @@ app = FastAPI(
 
 app.include_router(project_router)
 app.include_router(project_robots_router)
-app.include_router(robot_catalog_router)
 app.include_router(project_cameras_router)
 app.include_router(robot_calibration_router)
+app.include_router(robot_catalog_router)
 app.include_router(robot_setup_router)
 app.include_router(robot_control_router)
 app.include_router(project_environments_router)

@@ -3,15 +3,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from api.dependencies import get_project_id, get_robot_id, get_robot_service
+from api.dependencies import get_project_id, get_robot_catalog_service, get_robot_id, get_robot_service
 from schemas import Robot
 from schemas.robot import RobotWithConnectionState
+from services import RobotCatalogService
 from services import RobotService
-from services.robot_catalog_service import RobotCatalogServiceDep
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
 
 ProjectID = Annotated[UUID, Depends(get_project_id)]
+RobotCatalogServiceDep = Annotated[RobotCatalogService, Depends(get_robot_catalog_service)]
 
 
 @router.get("")
@@ -36,11 +37,12 @@ async def list_online_project_robots(
 async def create_project_robot(
     project_id: ProjectID,
     robot: Robot,
-    robot_service: Annotated[RobotService, Depends(get_robot_service)],
     catalog_service: RobotCatalogServiceDep,
+    robot_service: Annotated[RobotService, Depends(get_robot_service)],
 ) -> Robot:
     """Create a new robot."""
-    robot.payload = catalog_service.validate_payload(robot.type, robot.payload)
+    validated_payload = catalog_service.validate_payload(robot.type, robot.payload.model_dump(mode="json"))
+    robot = robot.model_copy(update={"payload": validated_payload})
     return await robot_service.create_robot(project_id, robot)
 
 
@@ -58,13 +60,13 @@ async def get_project_robot(
 async def update_project_robot(
     project_id: Annotated[UUID, Depends(get_project_id)],
     robot_id: Annotated[UUID, Depends(get_robot_id)],
-    robot_service: Annotated[RobotService, Depends(get_robot_service)],
     catalog_service: RobotCatalogServiceDep,
+    robot_service: Annotated[RobotService, Depends(get_robot_service)],
     robot: Robot,
 ) -> Robot:
     """Set robot."""
-    robot.payload = catalog_service.validate_payload(robot.type, robot.payload)
-    robot_with_id = robot.model_copy(update={"id": robot_id})
+    validated_payload = catalog_service.validate_payload(robot.type, robot.payload.model_dump(mode="json"))
+    robot_with_id = robot.model_copy(update={"id": robot_id, "payload": validated_payload})
 
     return await robot_service.update_robot(
         project_id,

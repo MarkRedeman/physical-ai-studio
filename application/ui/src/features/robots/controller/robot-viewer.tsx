@@ -108,7 +108,7 @@ const useLoadURDF = (robotType: SchemaRobotType) => {
         }
 
         loadModelMutation.mutate({ path: PATH, robotType });
-    }, [PATH, hasModel, loadModelMutation, robotType]);
+    }, [PATH, hasModel, loadModelMutation]);
 };
 
 interface RobotViewerProps {
@@ -116,7 +116,7 @@ interface RobotViewerProps {
     featureValues?: number[];
     featureNames?: string[];
 }
-export const RobotViewer = ({ robot = { type: 'SO101_Follower' as const }, featureValues, featureNames }: RobotViewerProps) => {
+export const RobotViewer = ({ robot = { type: 'SO101_Follower' }, featureValues, featureNames }: RobotViewerProps) => {
     const angle = degToRad(-45);
     const isTrossen = robot.type.toLowerCase().includes('trossen');
     const urdfPathForType = useUrdfPathForType();

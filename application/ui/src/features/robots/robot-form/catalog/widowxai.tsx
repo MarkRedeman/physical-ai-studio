@@ -12,6 +12,7 @@ export const WidowxAIFormFields = () => {
     return (
         <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
             <TextField
+                name='payload.connection_string'
                 isRequired
                 label='Robot IP address'
                 width='100%'

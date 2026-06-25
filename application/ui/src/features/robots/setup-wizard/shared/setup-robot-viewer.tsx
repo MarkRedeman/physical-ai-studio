@@ -138,7 +138,7 @@ const useLoadURDF = (robotType: SchemaRobotType) => {
         }
 
         loadModelMutation.mutate({ path: PATH, robotType });
-    }, [PATH, hasModel, loadModelMutation, robotType]);
+    }, [PATH, hasModel, loadModelMutation]);
 };
 
 // ---------------------------------------------------------------------------

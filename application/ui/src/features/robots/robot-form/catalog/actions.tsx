@@ -1,9 +1,15 @@
-import { ActionButton, Flex, Icon } from '@geti-ui/ui';
+import { ActionButton, Icon } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 import { v4 as uuidv4 } from 'uuid';
 
 import { $api } from '../../../../api/client';
-import { buildRobotBodyFromForm, type RobotForm } from '../provider';
+import {
+    buildRobotBodyFromForm,
+    buildRobotBodyFromFormElement,
+    useRobotForm,
+    type RobotForm as RobotFormType,
+} from '../provider';
+import { useRobotFormElement } from '../form-element-context';
 
 import classes from '../form.module.css';
 
@@ -36,15 +42,21 @@ export const IdentifyRobot = ({
     robotForm,
 }: {
     identifyMutation: ReturnType<typeof useIdentifyMutation>;
-    robotForm: RobotForm;
+    robotForm: RobotFormType;
 }) => {
-    const robot = buildRobotBodyFromForm(robotForm, uuidv4());
+    const formElement = useRobotFormElement();
+    const previewRobotId = uuidv4();
+    const robot =
+        formElement === null
+            ? buildRobotBodyFromForm(robotForm, previewRobotId)
+            : buildRobotBodyFromFormElement(formElement, robotForm, previewRobotId);
     const isDisabled = robot === null || identifyMutation.isPending;
 
     const onIdentify = () => {
         if (isDisabled || robot === null) {
             return;
         }
+
         identifyMutation.mutate({ body: robot });
     };
 

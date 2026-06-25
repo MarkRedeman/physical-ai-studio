@@ -1,59 +1,74 @@
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
+from api.dependencies import get_robot_catalog_service
 from robots.catalog import resolve_robot_asset_path, resolve_robot_urdf_path
 from schemas.robot import RobotType
 from schemas.robot_catalog import RobotCatalogDiscoverResponse, RobotCatalogEntry, RobotCatalogOnlineResponse
-from services.robot_catalog_service import RobotCatalogService, RobotCatalogServiceDep
+from services import RobotCatalogService
 
 router = APIRouter(prefix="/api/robots/catalog", tags=["Robot Catalog"])
 
+CatalogServiceDep = Annotated[RobotCatalogService, Depends(get_robot_catalog_service)]
+
 
 @router.get("")
-async def list_catalog(service: RobotCatalogServiceDep) -> list[RobotCatalogEntry]:
-    return service.list_entries()
+async def list_robot_catalog(catalog_service: CatalogServiceDep) -> list[RobotCatalogEntry]:
+    return catalog_service.list_entries()
 
 
 @router.get("/{robot_type}")
-async def get_catalog_entry(robot_type: RobotType, service: RobotCatalogServiceDep) -> RobotCatalogEntry:
-    entry = service.get_entry(robot_type)
+async def get_robot_catalog_entry(robot_type: RobotType, catalog_service: CatalogServiceDep) -> RobotCatalogEntry:
+    entry = catalog_service.get_entry(robot_type)
     if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Robot type not found: {robot_type}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot type is not part of the catalog.")
     return entry
 
 
 @router.get("/{robot_type}/online")
-async def is_robot_type_online(robot_type: RobotType, service: RobotCatalogServiceDep) -> RobotCatalogOnlineResponse:
-    online = await service.is_type_online(robot_type)
-    return RobotCatalogOnlineResponse(online=online)
+async def get_robot_catalog_online_status(
+    robot_type: RobotType, catalog_service: CatalogServiceDep
+) -> RobotCatalogOnlineResponse:
+    entry = catalog_service.get_entry(robot_type)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot type is not part of the catalog.")
+
+    return RobotCatalogOnlineResponse(type=robot_type, online=await catalog_service.is_type_online(robot_type))
 
 
 @router.get("/{robot_type}/discover")
-async def discover_robots(robot_type: RobotType, service: RobotCatalogServiceDep) -> RobotCatalogDiscoverResponse:
-    ports = await service.discover_devices(robot_type)
-    return RobotCatalogDiscoverResponse(ports=ports)
+async def discover_robot_catalog_devices(
+    robot_type: RobotType, catalog_service: CatalogServiceDep
+) -> RobotCatalogDiscoverResponse:
+    entry = catalog_service.get_entry(robot_type)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot type is not part of the catalog.")
+
+    devices = await catalog_service.discover_devices(robot_type)
+    return RobotCatalogDiscoverResponse(type=robot_type, devices=devices)
 
 
 @router.get("/{robot_type}/urdf")
-async def get_robot_urdf(robot_type: RobotType) -> FileResponse:
-    from robots.catalog.registry import RobotCatalogRegistry
+async def get_robot_catalog_urdf(robot_type: RobotType, catalog_service: CatalogServiceDep) -> FileResponse:
+    entry = catalog_service.get_entry(robot_type)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot type is not part of the catalog.")
 
-    registry = RobotCatalogRegistry()
-    path = resolve_robot_urdf_path(registry, robot_type)
-    if path is None or not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="URDF not found")
-    return FileResponse(str(path), media_type="application/xml")
+    resolved_path = resolve_robot_urdf_path(robot_type=robot_type, registry=catalog_service.registry)
+    return FileResponse(resolved_path)
 
 
 @router.get("/{robot_type}/{asset_path:path}")
-async def get_robot_asset(robot_type: RobotType, asset_path: str) -> FileResponse:
-    from robots.catalog.registry import RobotCatalogRegistry
+async def get_robot_catalog_asset(
+    robot_type: RobotType,
+    asset_path: str,
+    catalog_service: CatalogServiceDep,
+) -> FileResponse:
+    entry = catalog_service.get_entry(robot_type)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Robot type is not part of the catalog.")
 
-    registry = RobotCatalogRegistry()
-    path = resolve_robot_asset_path(registry, robot_type, asset_path)
-    if path is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    return FileResponse(str(path))
+    resolved_path = resolve_robot_asset_path(robot_type=robot_type, asset_path=asset_path, registry=catalog_service.registry)
+    return FileResponse(resolved_path)

@@ -5,8 +5,12 @@ import * as THREE from 'three';
 import { degToRad } from 'three/src/math/MathUtils.js';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 
-import { SchemaRobotType } from './robot-types';
 import { usePackageMapForType } from './robot-catalog';
+import { SchemaRobotType } from './robot-types';
+
+// ---------------------------------------------------------------------------
+// Path resolution
+// ---------------------------------------------------------------------------
 
 export const mapJointToURDFJoint = (
     joint: { name: string; value: number },
@@ -21,7 +25,7 @@ export const mapJointToURDFJoint = (
     modelJoints.forEach((modelJointName) => {
         const isRevolute = model.joints[modelJointName].jointType === 'revolute';
 
-        model.setJointValue(modelJointName, isRevolute ? degToRad(joint.value) : joint.value);
+        model.setJointValue(modelJointName, isRevolute ? degToRad(joint.value) : joint.value); // meters
     });
 };
 
@@ -88,12 +92,22 @@ export const useLoadModelMutation = () => {
     const { setModel } = useRobotModels();
     const packageMapForType = usePackageMapForType();
 
+    // Track the path being loaded so onSuccess can key it correctly.
+    // We use a ref because the mutationFn arg isn't available in onSuccess
+    // when using useMutation (variables are on the mutation object, but
+    // onSuccess receives (data, variables, context)).
     const pathRef = useRef<string>('');
 
     return useMutation({
         mutationFn: async ({ path, robotType }: { path: string; robotType: SchemaRobotType }) => {
             pathRef.current = path;
 
+            // Use a custom LoadingManager so the promise only resolves after
+            // all STL meshes have finished loading — not just after the URDF
+            // XML is parsed.  URDFLoader.load() calls onComplete as soon as
+            // parse() returns, but STL files are fetched asynchronously via
+            // the manager.  By resolving on manager.onLoad we guarantee the
+            // model's mesh children exist in the scene graph.
             const manager = new THREE.LoadingManager();
             const loader = new URDFLoader(manager);
 

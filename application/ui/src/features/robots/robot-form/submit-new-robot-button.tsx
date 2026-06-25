@@ -11,7 +11,6 @@ import { useRobotFormBodyFromElement } from './provider';
 export const SubmitNewRobotButton = () => {
     const navigate = useNavigate();
     const { project_id } = useProjectId();
-    const formId = useRobotFormElement();
 
     const addRobotMutation = $api.useMutation('post', '/api/projects/{project_id}/robots', {
         meta: {
@@ -22,7 +21,7 @@ export const SubmitNewRobotButton = () => {
         },
     });
 
-    const formElement = formId !== null ? (document.getElementById(formId) as HTMLFormElement | null) : null;
+    const formElement = useRobotFormElement();
     const body = useRobotFormBodyFromElement(uuidv4(), formElement);
 
     return (

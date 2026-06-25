@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import pytest
 from physicalai.capture import DeviceInfo
-
 from api.hardware import _fingerprint_from_device_info, get_cameras
 
 
