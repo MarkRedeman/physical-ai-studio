@@ -112,8 +112,7 @@ export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
         throw new Error('useRobotFormBody was used outside of RobotFormProvider');
     }
 
-    const robotType = typeForSchema[state.activeType];
-    const formData = state[robotType] as AnyRobotFormData;
+    const formData = state[typeForSchema[state.activeType]] as AnyRobotFormData;
 
-    return buildRobotBody(robotType, formData, state.activeType, robot_id);
+    return buildRobotBody(formData, state.activeType, robot_id);
 };

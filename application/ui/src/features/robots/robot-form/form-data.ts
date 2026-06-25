@@ -23,12 +23,11 @@ export const typeForSchema: Record<SchemaRobotType, RobotType> = {
 };
 
 export const buildRobotBody = (
-    robotType: RobotType,
     formData: AnyRobotFormData,
     schemaType: SchemaRobotType,
     robot_id: string
 ): SchemaRobotInput | null => {
-    switch (robotType) {
+    switch (typeForSchema[schemaType]) {
         case 'so101':
             return buildSO101Body(formData as SO101FormData, schemaType, robot_id);
         case 'widowx':
