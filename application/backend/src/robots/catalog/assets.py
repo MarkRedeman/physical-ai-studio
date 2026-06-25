@@ -1,55 +1,64 @@
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from fastapi import HTTPException, status
 
 from schemas.robot import RobotType
 
-BASE_ASSET_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "robot-assets"
+if TYPE_CHECKING:
+    from .registry import RobotCatalogRegistry
 
 
-def _get_asset_root_for_robot_type(registry, robot_type: RobotType) -> Path | None:
-    definition = registry.get_definition(robot_type)
-    if definition is None:
-        return None
-
-    resolver = definition.asset_root_resolver
-    if resolver is not None:
-        return BASE_ASSET_DIR / resolver()
-
-    source = definition.asset_source
-    if source == "builtin":
-        package_root = definition.package_root
-        if package_root:
-            return BASE_ASSET_DIR / package_root
-    elif source == "plugin":
-        urdf_relative = definition.urdf_relative_path
-        if urdf_relative:
-            return BASE_ASSET_DIR / urdf_relative.parent
-
-    return None
+def get_builtin_robot_assets_root() -> Path:
+    return Path(__file__).resolve().parents[2] / "static" / "robot-assets"
 
 
-def resolve_robot_urdf_path(registry, robot_type: RobotType) -> Path | None:
-    definition = registry.get_definition(robot_type)
-    if definition is None or definition.urdf_relative_path is None:
-        return None
+def resolve_robot_urdf_path(robot_type: RobotType, registry: RobotCatalogRegistry) -> Path:
+    relative_path = registry.get_urdf_relative_path(robot_type)
+    if relative_path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="URDF is unavailable for the requested robot type."
+        )
 
-    asset_root = _get_asset_root_for_robot_type(registry, robot_type)
-    if asset_root is None:
-        return None
-
-    return asset_root / definition.urdf_relative_path
+    return _resolve_robot_path(robot_type=robot_type, relative_path=relative_path, registry=registry)
 
 
-def resolve_robot_asset_path(registry, robot_type: RobotType, asset_path: str) -> Path | None:
-    asset_root = _get_asset_root_for_robot_type(registry, robot_type)
-    if asset_root is None:
-        return None
+def resolve_robot_asset_path(robot_type: RobotType, asset_path: str, registry: RobotCatalogRegistry) -> Path:
+    relative_path = Path(asset_path)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access to the requested file is forbidden.")
 
-    resolved = (asset_root / asset_path).resolve()
+    package_root = registry.get_package_root(robot_type)
+    if package_root is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assets are unavailable for the requested robot type."
+        )
 
-    if not str(resolved).startswith(str(asset_root.resolve())):
-        return None
+    return _resolve_robot_path(robot_type=robot_type, relative_path=package_root / relative_path, registry=registry)
 
-    if not resolved.exists():
-        return None
 
-    return resolved
+def _resolve_robot_path(robot_type: RobotType, relative_path: Path, registry: RobotCatalogRegistry) -> Path:
+    root = _get_asset_root_for_robot_type(robot_type=robot_type, registry=registry).resolve()
+
+    requested_path = (root / relative_path).resolve()
+    if not requested_path.is_relative_to(root):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access to the requested file is forbidden.")
+    if not requested_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
+
+    return requested_path
+
+
+def _get_asset_root_for_robot_type(robot_type: RobotType, registry: RobotCatalogRegistry) -> Path:
+    if registry.get_asset_source(robot_type) == "builtin":
+        return get_builtin_robot_assets_root()
+
+    asset_root_resolver = registry.get_asset_root_resolver(robot_type)
+    if asset_root_resolver is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assets are unavailable for the requested robot type."
+        )
+
+    return asset_root_resolver()

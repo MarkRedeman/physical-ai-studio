@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from schemas.base import BaseIDModel
 
@@ -73,14 +73,7 @@ class TrossenBimanualPayload(BaseModel):
 
 
 class CatalogRobotPayload(BaseModel):
-    """Generic payload model for catalog-registered robots that accept extra fields."""
-
     model_config = ConfigDict(extra="allow")
-
-    @model_validator(mode="wrap")
-    @classmethod
-    def _passthrough(cls, data, handler):
-        return data
 
 
 # ============================================================================
