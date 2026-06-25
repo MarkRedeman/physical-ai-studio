@@ -3,14 +3,14 @@ import type { SO101FormData } from './catalog/so101';
 import type { WidowxFormData } from './catalog/widowxai';
 import type { BimanualFormData } from './catalog/widowxai-bimanual';
 
-export type RobotType = 'so101' | 'widowx' | 'bimanual';
+export type RobotType = 'so101' | 'widowx' | 'bimanual_widowx';
 
 export type AnyRobotFormData = SO101FormData | WidowxFormData | BimanualFormData;
 
 export type RobotTypeData = {
     so101: SO101FormData;
     widowx: WidowxFormData;
-    bimanual: BimanualFormData;
+    bimanual_widowx: BimanualFormData;
 };
 
 export const typeForSchema: Record<SchemaRobotType, RobotType> = {
@@ -18,8 +18,8 @@ export const typeForSchema: Record<SchemaRobotType, RobotType> = {
     SO101_Leader: 'so101',
     Trossen_WidowXAI_Follower: 'widowx',
     Trossen_WidowXAI_Leader: 'widowx',
-    Trossen_Bimanual_WidowXAI_Follower: 'bimanual',
-    Trossen_Bimanual_WidowXAI_Leader: 'bimanual',
+    Trossen_Bimanual_WidowXAI_Follower: 'bimanual_widowx',
+    Trossen_Bimanual_WidowXAI_Leader: 'bimanual_widowx',
 };
 
 export const buildRobotBody = (
@@ -61,7 +61,7 @@ export const buildRobotBody = (
                 },
             };
         }
-        case 'bimanual': {
+        case 'bimanual_widowx': {
             const data = formData as BimanualFormData;
             if (!data.connection_string_left || !data.connection_string_right) {
                 return null;

@@ -10,7 +10,7 @@ type RobotFormState = {
     activeType: SchemaRobotType;
     so101: RobotTypeData['so101'];
     widowx: RobotTypeData['widowx'];
-    bimanual: RobotTypeData['bimanual'];
+    bimanual_widowx: RobotTypeData['bimanual_widowx'];
 };
 
 const RobotFormContext = createContext<RobotFormState | null>(null);
@@ -49,8 +49,8 @@ const getInitialState = (robot?: SchemaRobot): RobotFormState => {
                   }
                 : undefined
         ),
-        bimanual: getInitialBimanualFormData(
-            robotType === 'bimanual' && robot
+        bimanual_widowx: getInitialBimanualFormData(
+            robotType === 'bimanual_widowx' && robot
                 ? {
                       name: robot.name,
                       connection_string_left:

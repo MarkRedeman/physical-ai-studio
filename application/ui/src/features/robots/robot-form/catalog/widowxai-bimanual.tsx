@@ -20,7 +20,7 @@ export const getInitialBimanualFormData = (existing?: Partial<BimanualFormData>)
 });
 
 export const BiManualWidowxAIFormFields = () => {
-    const { formData, updateField } = useRobotFormFields('bimanual');
+    const { formData, updateField } = useRobotFormFields('bimanual_widowx');
 
     const identifyMutation = useIdentifyMutation();
     const leftIdentifyRobot = buildRobotBody(

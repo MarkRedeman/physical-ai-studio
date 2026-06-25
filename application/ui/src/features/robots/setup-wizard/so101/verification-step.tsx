@@ -201,7 +201,7 @@ export const VerificationStep = () => {
                     <Heading level={4}>Robot Details</Heading>
                     <Flex direction='column' gap='size-50'>
                         <Text>
-                            <strong>Name:</strong> {so101.name}
+                            <strong>Name:</strong> {robotForm.name}
                         </Text>
                         <Text>
                             <strong>Type:</strong> {robotType}
