@@ -12,19 +12,28 @@ from repositories.robot_calibration_repo import RobotCalibrationRepository
 from schemas.calibration import Calibration
 from schemas.robot import Robot, RobotType
 from settings import Settings
-from utils.serial_robot_tools import RobotConnectionManager
+from utils.serial_robot_tools import RobotConnectionManager, normalize_serial_number
 
 
 async def find_robot_port(manager: RobotConnectionManager, robot: Robot) -> str | None:
     """Find the port associated with a robot."""
+    target_serial = normalize_serial_number(robot.payload.serial_number)
+    target_connection = robot.payload.connection_string
+
     for managed_robot in manager.robots:
-        if managed_robot.serial_number == robot.payload.serial_number:
+        managed_serial = normalize_serial_number(managed_robot.serial_number)
+        if target_serial != "" and managed_serial == target_serial:
+            return managed_robot.connection_string
+        if target_serial == "" and managed_robot.connection_string == target_connection:
             return managed_robot.connection_string
 
     await manager.find_robots()
 
     for managed_robot in manager.robots:
-        if managed_robot.serial_number == robot.payload.serial_number:
+        managed_serial = normalize_serial_number(managed_robot.serial_number)
+        if target_serial != "" and managed_serial == target_serial:
+            return managed_robot.connection_string
+        if target_serial == "" and managed_robot.connection_string == target_connection:
             return managed_robot.connection_string
 
     return None
@@ -104,7 +113,8 @@ class RobotCalibrationService:
         port = await find_robot_port(self.robot_manager, robot)
 
         if port is None:
-            raise ResourceNotFoundError(ResourceType.ROBOT, robot.payload.serial_number)
+            resource_key = normalize_serial_number(robot.payload.serial_number) or robot.payload.connection_string
+            raise ResourceNotFoundError(ResourceType.ROBOT, resource_key)
 
         # TODO: make this depend on the robot type
         # Assume follower since leader shares same FeetechMotorBus layout

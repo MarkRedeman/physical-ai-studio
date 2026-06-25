@@ -39,6 +39,20 @@ export const buildSO101Body = (
     } as SchemaRobotInput;
 };
 
+const getDeviceKey = ({ serial_number, connection_string }: { serial_number: string; connection_string: string }) => {
+    if (serial_number !== '') {
+        return `serial:${serial_number}`;
+    }
+    return `port:${connection_string}`;
+};
+
+const normalizeSerialNumber = (serialNumber: string | null | undefined): string => {
+    if (!serialNumber || serialNumber === 'no_serial') {
+        return '';
+    }
+    return serialNumber;
+};
+
 export const SO101FormFields = () => {
     const serialDevicesQuery = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
 
@@ -46,26 +60,50 @@ export const SO101FormFields = () => {
 
     const identifyMutation = useIdentifyMutation();
     const identifyRobot = buildSO101Body(formData, activeType, uuidv4());
+    const selectedKey =
+        formData.serial_number !== '' || formData.connection_string !== ''
+            ? getDeviceKey({
+                  serial_number: normalizeSerialNumber(formData.serial_number),
+                  connection_string: formData.connection_string,
+              })
+            : null;
 
     return (
         <>
             <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
                 <Picker
+                    name='payload.device_key'
                     label='Select robot'
                     isRequired
                     width='100%'
-                    selectedKey={formData.serial_number}
-                    onSelectionChange={(serial_number) => {
-                        const device = serialDevicesQuery.data.find((d) => d.serial_number === serial_number);
+                    selectedKey={selectedKey}
+                    onSelectionChange={(selectedKey) => {
+                        const device = serialDevicesQuery.data.find((d) => getDeviceKey(d) === String(selectedKey));
 
-                        updateField('serial_number', String(serial_number));
+                        if (device === undefined) {
+                            return;
+                        }
+
+                        const serial_number = normalizeSerialNumber(device.serial_number);
+
+                        updateField('serial_number', serial_number);
                         updateField('connection_string', device?.connection_string ?? '');
                     }}
                 >
                     {serialDevicesQuery.data.map((serial_device) => {
+                        const serial_number = normalizeSerialNumber(serial_device.serial_number);
+                        const hasSerial = serial_number !== '';
+                        const label = hasSerial ? serial_number : 'No serial number';
+
                         return (
-                            <Item key={serial_device.serial_number} textValue={serial_device.serial_number}>
-                                <Text>{serial_device.serial_number}</Text>
+                            <Item
+                                key={getDeviceKey({
+                                    serial_number,
+                                    connection_string: serial_device.connection_string,
+                                })}
+                                textValue={label}
+                            >
+                                <Text>{label}</Text>
                                 <Text slot='description'>{serial_device.connection_string}</Text>
                             </Item>
                         );

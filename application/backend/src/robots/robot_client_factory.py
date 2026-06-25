@@ -7,7 +7,7 @@ from robots.robot_client import RobotClient
 from schemas.calibration import Calibration
 from schemas.robot import Robot, RobotType, SO101Robot
 from services.robot_calibration_service import RobotCalibrationService
-from utils.serial_robot_tools import RobotConnectionManager
+from utils.serial_robot_tools import RobotConnectionManager, normalize_serial_number
 
 
 class RobotClientFactory:
@@ -54,9 +54,13 @@ class RobotClientFactory:
         )
 
     async def find_robot_port(self, robot: SO101Robot) -> str:
-        port = await self.find_port_by_serial(robot.payload.serial_number)
+        port = await self.find_port_for_robot_identifiers(
+            serial_number=robot.payload.serial_number,
+            connection_string=robot.payload.connection_string,
+        )
         if port is None:
-            raise ResourceNotFoundError(ResourceType.ROBOT, robot.payload.serial_number)
+            resource_key = normalize_serial_number(robot.payload.serial_number) or robot.payload.connection_string
+            raise ResourceNotFoundError(ResourceType.ROBOT, resource_key)
         return port
 
     async def get_robot_calibration(self, robot: SO101Robot) -> Calibration | None:
@@ -65,10 +69,29 @@ class RobotClientFactory:
         return await self.calibration_service.get_calibration(robot.active_calibration_id)
 
     async def find_port_by_serial(self, serial_number: str) -> str | None:
+        normalized_serial = normalize_serial_number(serial_number)
+        if normalized_serial == "":
+            return None
+
         for managed_robot in self.robot_manager.robots:
-            if managed_robot.serial_number == serial_number:
+            if normalize_serial_number(managed_robot.serial_number) == normalized_serial:
                 return managed_robot.connection_string
         return None
+
+    async def find_port_by_connection_string(self, connection_string: str) -> str | None:
+        if connection_string == "":
+            return None
+
+        for managed_robot in self.robot_manager.robots:
+            if managed_robot.connection_string == connection_string:
+                return managed_robot.connection_string
+        return None
+
+    async def find_port_for_robot_identifiers(self, serial_number: str, connection_string: str) -> str | None:
+        normalized_serial = normalize_serial_number(serial_number)
+        if normalized_serial != "":
+            return await self.find_port_by_serial(normalized_serial)
+        return await self.find_port_by_connection_string(connection_string)
 
     async def get_calibration_by_id(self, calibration_id: UUID | None) -> Calibration | None:
         if calibration_id is None:

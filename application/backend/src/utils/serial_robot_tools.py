@@ -9,12 +9,19 @@ from schemas import Robot, SerialPortInfo
 from schemas.robot import SO101Robot
 
 
+def normalize_serial_number(serial_number: str | None) -> str:
+    normalized = (serial_number or "").strip()
+    if normalized == "no_serial":
+        return ""
+    return normalized
+
+
 def from_port(port: ListPortInfo, robot_type: str) -> SerialPortInfo | None:
     """Detect if the device is a SO-100 robot."""
     # The Feetech UART board CH340 has PID 29987
     if port.pid in {21971, 29987}:
-        # The serial number is not always available
-        serial_number = port.serial_number or "no_serial"
+        # The serial number is not always available.
+        serial_number = normalize_serial_number(getattr(port, "serial_number", None))
         return SerialPortInfo(connection_string=port.device, serial_number=serial_number, robot_type=robot_type)
     return None
 
@@ -47,7 +54,7 @@ class RobotConnectionManager:
 
         # Try each serial port exactly once
         for port in self.available_ports:
-            serial_num = getattr(port, "serial_number", None)
+            serial_num = normalize_serial_number(getattr(port, "serial_number", None))
             # Skip if this port or its serial has already been connected
             if port.device in connected_devices or (serial_num and serial_num in connected_serials):
                 logger.debug(f"Skipping {port.device}: already connected (or alias).")
@@ -86,12 +93,30 @@ async def find_robots() -> list[SerialPortInfo]:
 
 def find_port_for_serial(serial_number: str) -> str:
     """Find the serial port path given the serial number of the device"""
+    normalized_serial = normalize_serial_number(serial_number)
+    if normalized_serial == "":
+        return ""
+
     ports = list_ports.comports()
     for port in ports:
-        serial_num = getattr(port, "serial_number", None)
-        if serial_num == serial_number:
+        serial_num = normalize_serial_number(getattr(port, "serial_number", None))
+        if serial_num == normalized_serial:
             return port.device
     return ""
+
+
+def resolve_so101_connection_string(serial_number: str, connection_string: str) -> str:
+    """Resolve a current serial port path for SO101.
+
+    Serial number is the source of truth when available. If serial number is
+    missing, fall back to the configured connection string.
+    """
+    normalized_serial = normalize_serial_number(serial_number)
+
+    if normalized_serial != "":
+        return find_port_for_serial(normalized_serial)
+
+    return connection_string
 
 
 async def identify_so101_robot_visually(robot: Robot, joint: str | None = None) -> None:
@@ -102,14 +127,16 @@ async def identify_so101_robot_visually(robot: Robot, joint: str | None = None) 
     if joint is None:
         joint = "gripper"
 
-    connection_string = robot.payload.connection_string
-    serial_number = robot.payload.serial_number
-
-    if connection_string == "" and serial_number != "":
-        connection_string = find_port_for_serial(serial_number)
+    connection_string = resolve_so101_connection_string(
+        serial_number=robot.payload.serial_number,
+        connection_string=robot.payload.connection_string,
+    )
 
     if connection_string == "":
-        raise ValueError(f"Could not find the serial port for serial number {serial_number}")
+        serial_number = normalize_serial_number(robot.payload.serial_number)
+        if serial_number != "":
+            raise ValueError(f"Could not find the serial port for serial number {serial_number}")
+        raise ValueError("Could not resolve a serial port from connection_string")
     # Assume follower since leader shares same FeetechMotorBus layout
     connection = SOFollower(SOFollowerRobotConfig(port=connection_string))
     connection.bus.connect()

@@ -2,7 +2,7 @@ from robots.discovery.ip import IPDiscovery
 from robots.discovery.serial import SerialDiscovery
 from schemas import Robot
 from schemas.robot import RobotType
-from utils.serial_robot_tools import RobotConnectionManager
+from utils.serial_robot_tools import RobotConnectionManager, normalize_serial_number
 
 _IP_SINGLE_TYPES = {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}
 _IP_BIMANUAL_TYPES = {RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER, RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER}
@@ -19,7 +19,10 @@ class DiscoveryManager:
 
     async def is_robot_online(self, robot: Robot) -> bool:
         if robot.type in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER}:
-            return robot.payload.serial_number in [cs.serial_number for cs in self.serial_manager.robots]
+            serial_number = normalize_serial_number(robot.payload.serial_number)
+            if serial_number != "":
+                return serial_number in [normalize_serial_number(cs.serial_number) for cs in self.serial_manager.robots]
+            return robot.payload.connection_string in [cs.connection_string for cs in self.serial_manager.robots]
         if robot.type in _IP_SINGLE_TYPES:
             return await self.ip.is_reachable(robot)
         if robot.type in _IP_BIMANUAL_TYPES:

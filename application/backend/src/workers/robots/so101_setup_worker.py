@@ -21,7 +21,7 @@ from lerobot.motors.feetech.feetech import FeetechMotorsBus
 from lerobot.motors.motors_bus import Motor, MotorCalibration, MotorNormMode
 from loguru import logger
 
-from utils.serial_robot_tools import find_port_for_serial
+from utils.serial_robot_tools import normalize_serial_number, resolve_so101_connection_string
 from workers.transport.worker_transport import WorkerTransport
 from workers.transport_worker import TransportWorker, WorkerState
 
@@ -141,10 +141,12 @@ class SO101SetupWorker(TransportWorker):
         transport: WorkerTransport,
         robot_type: str,
         serial_number: str,
+        connection_string: str,
     ) -> None:
         super().__init__(transport)
         self.robot_type = robot_type  # "SO101_Follower" or "SO101_Leader"
-        self.serial_number = serial_number
+        self.serial_number = normalize_serial_number(serial_number)
+        self.connection_string = connection_string
         self.phase = SetupPhase.CONNECTING
 
         self.bus: FeetechMotorsBus | None = None
@@ -242,13 +244,18 @@ class SO101SetupWorker(TransportWorker):
     # ------------------------------------------------------------------
 
     async def _connect_bus(self) -> None:
-        """Resolve serial number and open the motor bus."""
+        """Resolve the device path and open the motor bus."""
         self.phase = SetupPhase.CONNECTING
-        await self._send_phase_status("Resolving serial port...")
+        await self._send_phase_status("Resolving connection port...")
 
-        port = find_port_for_serial(self.serial_number)
+        port = resolve_so101_connection_string(
+            serial_number=self.serial_number,
+            connection_string=self.connection_string,
+        )
         if not port:
-            raise ConnectionError(f"No USB device found with serial number '{self.serial_number}'")
+            if self.serial_number:
+                raise ConnectionError(f"No USB device found with serial number '{self.serial_number}'")
+            raise ConnectionError(f"No USB device found at '{self.connection_string}'")
 
         self.port = port
         logger.info(f"Setup worker: connecting to {port} (serial={self.serial_number})")
