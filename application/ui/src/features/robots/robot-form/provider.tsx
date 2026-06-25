@@ -28,21 +28,52 @@ type SetRobotFormContextType = {
 
 const SetRobotFormContext = createContext<SetRobotFormContextType | null>(null);
 
+const FORM_DATA_FAMILY: Record<SchemaRobotType, string> = {
+    SO101_Follower: 'so101',
+    SO101_Leader: 'so101',
+    Trossen_WidowXAI_Follower: 'widowx',
+    Trossen_WidowXAI_Leader: 'widowx',
+    Trossen_Bimanual_WidowXAI_Follower: 'bimanual',
+    Trossen_Bimanual_WidowXAI_Leader: 'bimanual',
+};
+
 const getInitialState = (robot?: SchemaRobot): RobotFormState => ({
     activeType: robot?.type ?? 'SO101_Follower',
-    SO101_Follower: getInitialSO101FormData(robot),
-    SO101_Leader: getInitialSO101FormData(robot),
-    Trossen_WidowXAI_Follower: getInitialWidowxFormData(robot),
-    Trossen_WidowXAI_Leader: getInitialWidowxFormData(robot),
-    Trossen_Bimanual_WidowXAI_Follower: getInitialBimanualFormData(robot),
-    Trossen_Bimanual_WidowXAI_Leader: getInitialBimanualFormData(robot),
+    SO101_Follower: getInitialSO101FormData(robot?.type === 'SO101_Follower' ? robot : undefined),
+    SO101_Leader: getInitialSO101FormData(robot?.type === 'SO101_Leader' ? robot : undefined),
+    Trossen_WidowXAI_Follower: getInitialWidowxFormData(
+        robot?.type === 'Trossen_WidowXAI_Follower' ? robot : undefined
+    ),
+    Trossen_WidowXAI_Leader: getInitialWidowxFormData(robot?.type === 'Trossen_WidowXAI_Leader' ? robot : undefined),
+    Trossen_Bimanual_WidowXAI_Follower: getInitialBimanualFormData(
+        robot?.type === 'Trossen_Bimanual_WidowXAI_Follower' ? robot : undefined
+    ),
+    Trossen_Bimanual_WidowXAI_Leader: getInitialBimanualFormData(
+        robot?.type === 'Trossen_Bimanual_WidowXAI_Leader' ? robot : undefined
+    ),
 });
 
 export const RobotFormProvider = ({ children, robot }: { children: ReactNode; robot?: SchemaRobot }) => {
     const [state, setState] = useState(() => getInitialState(robot));
 
-    const setActiveType = useCallback((type: SchemaRobotType) => {
-        setState((prev) => ({ ...prev, activeType: type }));
+    const setActiveType = useCallback(<T extends SchemaRobotType>(type: T) => {
+        setState((prev) => {
+            if (prev.activeType === type) return prev;
+
+            const oldSlice = prev[prev.activeType] as AnyRobotFormData;
+            const sameFamily = FORM_DATA_FAMILY[prev.activeType] === FORM_DATA_FAMILY[type];
+
+            if (sameFamily) {
+                return { ...prev, activeType: type, [type]: { ...oldSlice } as FormDataForSchema[T] };
+            }
+
+            return {
+                ...prev,
+                activeType: type,
+                // Don't overwrite robot name as name is presented before robot type picker
+                [type]: { ...(prev[type] as FormDataForSchema[T]), name: oldSlice.name },
+            };
+        });
     }, []);
 
     const updateFormData = useCallback(

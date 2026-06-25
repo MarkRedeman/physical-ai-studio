@@ -29,5 +29,7 @@ export const buildRobotBody = (
         case 'Trossen_Bimanual_WidowXAI_Follower':
         case 'Trossen_Bimanual_WidowXAI_Leader':
             return buildBimanualBody(formData as BimanualFormData, schemaType, robot_id);
+        default:
+            return null;
     }
 };
