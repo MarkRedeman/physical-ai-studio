@@ -6,11 +6,11 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { SchemaRobotType } from '../robot-types';
-import { typeForSchema } from './form-data';
-import { useRobotForm, useRobotFormFields, useSetRobotForm } from './provider';
-import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
+import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
+import { typeForSchema } from './form-data';
+import { useRobotForm, useRobotFormFields, useSetRobotForm } from './provider';
 import { SubmitNewRobotButton } from './submit-new-robot-button';
 
 const RobotType = () => {

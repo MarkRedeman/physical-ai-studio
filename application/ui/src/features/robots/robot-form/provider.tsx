@@ -1,16 +1,10 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 
 import { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../robot-types';
-import {
-    buildRobotBody,
-    typeForSchema,
-    type RobotType,
-    type RobotTypeData,
-    type AnyRobotFormData,
-} from './form-data';
 import { getInitialSO101FormData } from './catalog/so101';
 import { getInitialWidowxFormData } from './catalog/widowxai';
 import { getInitialBimanualFormData } from './catalog/widowxai-bimanual';
+import { buildRobotBody, typeForSchema, type AnyRobotFormData, type RobotType, type RobotTypeData } from './form-data';
 
 type RobotFormState = {
     activeType: SchemaRobotType;
@@ -42,8 +36,7 @@ const getInitialState = (robot?: SchemaRobot): RobotFormState => {
                 ? {
                       name: robot.name,
                       serial_number: robot.payload.serial_number,
-                      connection_string:
-                          'connection_string' in robot.payload ? robot.payload.connection_string : '',
+                      connection_string: 'connection_string' in robot.payload ? robot.payload.connection_string : '',
                   }
                 : undefined
         ),
@@ -51,8 +44,7 @@ const getInitialState = (robot?: SchemaRobot): RobotFormState => {
             robotType === 'widowx' && robot
                 ? {
                       name: robot.name,
-                      connection_string:
-                          'connection_string' in robot.payload ? robot.payload.connection_string : '',
+                      connection_string: 'connection_string' in robot.payload ? robot.payload.connection_string : '',
                       serial_number: robot.payload.serial_number,
                   }
                 : undefined
@@ -104,15 +96,21 @@ export const RobotFormProvider = ({ children, robot }: { children: ReactNode; ro
     );
 };
 
-export const useRobotForm = () => {
+export function useRobotForm(): { activeType: SchemaRobotType; robotForm: AnyRobotFormData };
+export function useRobotForm<R extends RobotType>(
+    robotType: R
+): { activeType: SchemaRobotType; robotForm: RobotTypeData[R] };
+export function useRobotForm(robotType?: RobotType) {
     const context = useContext(RobotFormContext);
 
     if (context === null) {
         throw new Error('useRobotForm was used outside of RobotFormProvider');
     }
 
-    return context;
-};
+    const rt = robotType ?? typeForSchema[context.activeType];
+
+    return { activeType: context.activeType, robotForm: context[rt] };
+}
 
 export const useSetRobotForm = () => {
     const context = useContext(SetRobotFormContext);
@@ -125,8 +123,12 @@ export const useSetRobotForm = () => {
 };
 
 export const useRobotFormFields = <R extends RobotType>(robotType: R) => {
-    const state = useRobotForm();
+    const state = useContext(RobotFormContext);
     const { updateFormData } = useSetRobotForm();
+
+    if (state === null) {
+        throw new Error('useRobotFormFields was used outside of RobotFormProvider');
+    }
 
     const updateField = <K extends keyof RobotTypeData[R]>(field: K, value: RobotTypeData[R][K]) => {
         updateFormData(robotType, { [field]: value } as unknown as Partial<RobotTypeData[R]>);
@@ -136,7 +138,12 @@ export const useRobotFormFields = <R extends RobotType>(robotType: R) => {
 };
 
 export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
-    const state = useRobotForm();
+    const state = useContext(RobotFormContext);
+
+    if (state === null) {
+        return null;
+    }
+
     const robotType = typeForSchema[state.activeType];
     const formData = state[robotType] as AnyRobotFormData;
 

@@ -102,9 +102,9 @@ export const VerificationStep = () => {
     const { project_id } = useProjectId();
     const { goBack } = useSetupActions();
     const { wsState } = useSetupState();
-    const { activeType, so101 } = useRobotForm();
+    const { activeType, robotForm } = useRobotForm('so101');
 
-    const serialNumber = so101.serial_number;
+    const serialNumber = robotForm.serial_number;
     const robotType = activeType ?? '';
 
     const [robotId] = useState(() => uuidv4());
@@ -138,7 +138,7 @@ export const VerificationStep = () => {
         },
     });
 
-    const robotBody: SchemaRobotInput | null = buildRobotBody('so101', so101, activeType, robotId);
+    const robotBody: SchemaRobotInput | null = buildRobotBody('so101', robotForm, activeType, robotId);
 
     const hasCalibration = wsState.calibrationResult !== null;
 

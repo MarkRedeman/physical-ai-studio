@@ -24,7 +24,7 @@ const CenteredLoading = () => {
  * - Other types (Trossen): directly creates the robot via POST (default behavior)
  */
 const NewRobotSubmitButton = () => {
-    const { activeType, so101 } = useRobotForm();
+    const { activeType, robotForm } = useRobotForm('so101');
     const navigate = useNavigate();
     const { project_id } = useProjectId();
 
@@ -34,7 +34,7 @@ const NewRobotSubmitButton = () => {
         return <SubmitNewRobotButton />;
     }
 
-    const isDisabled = !so101.name || !activeType || !so101.serial_number;
+    const isDisabled = !robotForm.name || !activeType || !robotForm.serial_number;
 
     return (
         <Button
