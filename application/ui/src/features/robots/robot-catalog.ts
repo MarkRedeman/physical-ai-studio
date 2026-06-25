@@ -47,6 +47,13 @@ export const useRobotRoleChecks = () => {
     };
 };
 
+/**
+ * Resolve the URL of the root URDF file for a robot type.
+ *
+ * This value is passed to `URDFLoader.load(...)` as the initial document path.
+ *
+ * Example: `/api/robots/catalog/ReBot_Arm102_Leader/urdf`
+ */
 export const useUrdfPathForType = () => {
     const { byType } = useRobotCatalogMap();
 
@@ -62,6 +69,12 @@ export const useUrdfPathForType = () => {
     };
 };
 
+/**
+ * Resolve observation-to-URDF joint mapping for a robot type.
+ *
+ * The returned map translates Studio joint feature names (e.g. `shoulder_pan.pos`)
+ * to URDF joint names used by the loaded model.
+ */
 export const useJointMapForType = () => {
     const { byType } = useRobotCatalogMap();
 
@@ -77,6 +90,14 @@ export const useJointMapForType = () => {
     };
 };
 
+/**
+ * Resolve URDF package mappings for a robot type.
+ *
+ * URDF files can reference meshes/textures via `package://<name>/...` paths.
+ * `URDFLoader` needs a package map (`<name> -> URL prefix`) to fetch those assets.
+ *
+ * Example: `stararm102 -> /api/robots/catalog/ReBot_Arm102_Leader`
+ */
 export const usePackageMapForType = () => {
     const { byType } = useRobotCatalogMap();
 
