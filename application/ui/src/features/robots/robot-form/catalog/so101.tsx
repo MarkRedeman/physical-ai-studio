@@ -42,7 +42,7 @@ export const buildSO101Body = (
 export const SO101FormFields = () => {
     const serialDevicesQuery = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
 
-    const { formData, updateField, activeType } = useRobotFormFields('so101');
+    const { formData, updateField, activeType } = useRobotFormFields<SO101FormData>();
 
     const identifyMutation = useIdentifyMutation();
     const identifyRobot = buildSO101Body(formData, activeType, uuidv4());

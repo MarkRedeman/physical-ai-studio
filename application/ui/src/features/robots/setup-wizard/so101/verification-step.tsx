@@ -102,7 +102,7 @@ export const VerificationStep = () => {
     const { project_id } = useProjectId();
     const { goBack } = useSetupActions();
     const { wsState } = useSetupState();
-    const { activeType, robotForm } = useRobotForm('so101');
+    const { activeType, robotForm } = useRobotForm();
 
     const serialNumber = robotForm.serial_number;
     const robotType = activeType ?? '';

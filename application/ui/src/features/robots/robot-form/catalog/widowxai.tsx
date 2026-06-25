@@ -38,7 +38,7 @@ export const buildWidowxBody = (
 };
 
 export const WidowxAIFormFields = () => {
-    const { formData, updateField, activeType } = useRobotFormFields('widowx');
+    const { formData, updateField, activeType } = useRobotFormFields<WidowxFormData>();
 
     const identifyMutation = useIdentifyMutation();
     const identifyRobot = buildWidowxBody(formData, activeType, uuidv4());

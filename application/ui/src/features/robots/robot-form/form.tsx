@@ -9,7 +9,6 @@ import { SchemaRobotType } from '../robot-types';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
 import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
-import { typeForSchema } from './form-data';
 import { useRobotForm, useRobotFormFields, useSetRobotForm } from './provider';
 import { SubmitNewRobotButton } from './submit-new-robot-button';
 
@@ -57,8 +56,7 @@ export const RobotForm = ({ heading = 'Add new robot', submitButton = <SubmitNew
     const { project_id } = useProjectId();
 
     const { activeType } = useRobotForm();
-    const robotType = typeForSchema[activeType];
-    const { formData: activeFormData, updateField } = useRobotFormFields(robotType);
+    const { formData: activeFormData, updateField } = useRobotFormFields();
 
     const submitContainerRef = useRef<HTMLDivElement>(null);
 

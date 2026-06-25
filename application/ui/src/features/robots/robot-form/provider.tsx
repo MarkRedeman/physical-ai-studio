@@ -4,22 +4,25 @@ import { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../robot-types';
 import { getInitialSO101FormData } from './catalog/so101';
 import { getInitialWidowxFormData } from './catalog/widowxai';
 import { getInitialBimanualFormData } from './catalog/widowxai-bimanual';
-import { buildRobotBody, typeForSchema, type AnyRobotFormData, type RobotType, type RobotTypeData } from './form-data';
+import { buildRobotBody, type AnyRobotFormData, type FormDataForSchema } from './form-data';
 
 type RobotFormState = {
     activeType: SchemaRobotType;
-    so101: RobotTypeData['so101'];
-    widowx: RobotTypeData['widowx'];
-    bimanual_widowx: RobotTypeData['bimanual_widowx'];
+    SO101_Follower: FormDataForSchema['SO101_Follower'];
+    SO101_Leader: FormDataForSchema['SO101_Leader'];
+    Trossen_WidowXAI_Follower: FormDataForSchema['Trossen_WidowXAI_Follower'];
+    Trossen_WidowXAI_Leader: FormDataForSchema['Trossen_WidowXAI_Leader'];
+    Trossen_Bimanual_WidowXAI_Follower: FormDataForSchema['Trossen_Bimanual_WidowXAI_Follower'];
+    Trossen_Bimanual_WidowXAI_Leader: FormDataForSchema['Trossen_Bimanual_WidowXAI_Leader'];
 };
 
 const RobotFormContext = createContext<RobotFormState | null>(null);
 
 type SetRobotFormContextType = {
     setActiveType: (type: SchemaRobotType) => void;
-    updateFormData: <R extends RobotType>(
-        robotType: R,
-        update: Partial<RobotTypeData[R]> | ((prev: RobotTypeData[R]) => RobotTypeData[R])
+    updateFormData: <K extends SchemaRobotType>(
+        schemaType: K,
+        update: Partial<FormDataForSchema[K]> | ((prev: FormDataForSchema[K]) => FormDataForSchema[K])
     ) => void;
 };
 
@@ -27,9 +30,12 @@ const SetRobotFormContext = createContext<SetRobotFormContextType | null>(null);
 
 const getInitialState = (robot?: SchemaRobot): RobotFormState => ({
     activeType: robot?.type ?? 'SO101_Follower',
-    so101: getInitialSO101FormData(robot),
-    widowx: getInitialWidowxFormData(robot),
-    bimanual_widowx: getInitialBimanualFormData(robot),
+    SO101_Follower: getInitialSO101FormData(robot),
+    SO101_Leader: getInitialSO101FormData(robot),
+    Trossen_WidowXAI_Follower: getInitialWidowxFormData(robot),
+    Trossen_WidowXAI_Leader: getInitialWidowxFormData(robot),
+    Trossen_Bimanual_WidowXAI_Follower: getInitialBimanualFormData(robot),
+    Trossen_Bimanual_WidowXAI_Leader: getInitialBimanualFormData(robot),
 });
 
 export const RobotFormProvider = ({ children, robot }: { children: ReactNode; robot?: SchemaRobot }) => {
@@ -40,16 +46,18 @@ export const RobotFormProvider = ({ children, robot }: { children: ReactNode; ro
     }, []);
 
     const updateFormData = useCallback(
-        <R extends RobotType>(
-            robotType: R,
-            update: Partial<RobotTypeData[R]> | ((prev: RobotTypeData[R]) => RobotTypeData[R])
+        <K extends SchemaRobotType>(
+            schemaType: K,
+            update: Partial<FormDataForSchema[K]> | ((prev: FormDataForSchema[K]) => FormDataForSchema[K])
         ) => {
             setState((prev) => ({
                 ...prev,
-                [robotType]:
+                [schemaType]:
                     typeof update === 'function'
-                        ? (update as (prev: RobotTypeData[R]) => RobotTypeData[R])(prev[robotType])
-                        : { ...prev[robotType], ...update },
+                        ? (update as (prev: FormDataForSchema[K]) => FormDataForSchema[K])(
+                              prev[schemaType] as FormDataForSchema[K]
+                          )
+                        : { ...(prev[schemaType] as FormDataForSchema[K]), ...update },
             }));
         },
         []
@@ -65,19 +73,19 @@ export const RobotFormProvider = ({ children, robot }: { children: ReactNode; ro
 };
 
 export function useRobotForm(): { activeType: SchemaRobotType; robotForm: AnyRobotFormData };
-export function useRobotForm<R extends RobotType>(
-    robotType: R
-): { activeType: SchemaRobotType; robotForm: RobotTypeData[R] };
-export function useRobotForm(robotType?: RobotType) {
+export function useRobotForm<K extends SchemaRobotType>(
+    schemaType: K
+): { activeType: SchemaRobotType; robotForm: FormDataForSchema[K] };
+export function useRobotForm(schemaType?: SchemaRobotType) {
     const context = useContext(RobotFormContext);
 
     if (context === null) {
         throw new Error('useRobotForm was used outside of RobotFormProvider');
     }
 
-    const rt = robotType ?? typeForSchema[context.activeType];
+    const rt = schemaType ?? context.activeType;
 
-    return { activeType: context.activeType, robotForm: context[rt] };
+    return { activeType: context.activeType, robotForm: context[rt] as AnyRobotFormData };
 }
 
 export const useSetRobotForm = () => {
@@ -90,19 +98,21 @@ export const useSetRobotForm = () => {
     return context;
 };
 
-export const useRobotFormFields = <R extends RobotType>(robotType: R) => {
-    const state = useContext(RobotFormContext);
+export const useRobotFormFields = <T extends AnyRobotFormData = AnyRobotFormData>() => {
+    const context = useContext(RobotFormContext);
     const { updateFormData } = useSetRobotForm();
 
-    if (state === null) {
+    if (context === null) {
         throw new Error('useRobotFormFields was used outside of RobotFormProvider');
     }
 
-    const updateField = <K extends keyof RobotTypeData[R]>(field: K, value: RobotTypeData[R][K]) => {
-        updateFormData(robotType, { [field]: value } as unknown as Partial<RobotTypeData[R]>);
+    const formData = context[context.activeType] as T;
+
+    const updateField = <K extends keyof T>(field: K, value: T[K]) => {
+        updateFormData(context.activeType, { [field]: value } as Partial<FormDataForSchema[typeof context.activeType]>);
     };
 
-    return { formData: state[robotType] as RobotTypeData[R], activeType: state.activeType, updateField };
+    return { formData, activeType: context.activeType, updateField };
 };
 
 export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
@@ -112,7 +122,7 @@ export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
         throw new Error('useRobotFormBody was used outside of RobotFormProvider');
     }
 
-    const formData = state[typeForSchema[state.activeType]] as AnyRobotFormData;
+    const formData = state[state.activeType] as AnyRobotFormData;
 
     return buildRobotBody(formData, state.activeType, robot_id);
 };

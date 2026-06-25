@@ -79,7 +79,7 @@ const SetupActionsContext = createContext<SetupActions | null>(null);
 
 export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
     const { project_id: projectId } = useProjectId();
-    const { activeType, robotForm } = useRobotForm('so101');
+    const { activeType, robotForm } = useRobotForm();
 
     // -----------------------------------------------------------------------
     // Wizard step state
