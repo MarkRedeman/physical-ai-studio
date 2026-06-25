@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import useWebSocket from 'react-use-websocket';
 
 import { fetchClient } from '../../api/client';
+import { useCatalog } from './robot-catalog';
 import { mapJointToURDFJoint, useRobotModels } from './robot-models-context';
 import { SchemaRobotType } from './robot-types';
-import { urdfPathForType } from './robots-configuration';
 
 type JointsState = Array<{
     name: string;
@@ -22,17 +22,20 @@ const getNewJointState = (newJoints: Record<string, number>) => {
 };
 
 export const useSynchronizeModelJoints = (joints: JointsState, robotType: SchemaRobotType) => {
+    const catalogQuery = useCatalog();
     const { getModel } = useRobotModels();
-    const urdfPath = urdfPathForType(robotType);
+
+    const entry = catalogQuery.data.find((e) => e.type === robotType);
+    const urdfPath = entry?.urdf_path ?? '';
     const model = getModel(urdfPath);
 
     useEffect(() => {
         if (!model) return;
 
         joints.forEach((joint) => {
-            mapJointToURDFJoint(joint, model, robotType);
+            mapJointToURDFJoint(joint, model, robotType, entry?.joint_map);
         });
-    }, [model, joints, robotType]);
+    }, [model, joints, robotType, entry?.joint_map]);
 };
 
 export enum RobotActionReadState {

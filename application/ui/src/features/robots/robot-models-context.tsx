@@ -7,6 +7,7 @@ import URDFLoader, { URDFRobot } from 'urdf-loader';
 
 import { SchemaRobotType } from './robot-types';
 import { ROBOT_TYPE_TO_URDF_MAP } from './robots-configuration';
+import type { CatalogEntry } from './robot-catalog';
 
 // ---------------------------------------------------------------------------
 // Path resolution
@@ -15,12 +16,13 @@ import { ROBOT_TYPE_TO_URDF_MAP } from './robots-configuration';
 export const mapJointToURDFJoint = (
     joint: { name: string; value: number },
     model: URDFRobot,
-    robotType: SchemaRobotType
+    robotType: SchemaRobotType,
+    jointMap?: Record<string, string[]>
 ) => {
     if (!joint.name.endsWith('.pos')) {
         return;
     }
-    const modelJointMap = ROBOT_TYPE_TO_URDF_MAP[robotType];
+    const modelJointMap = jointMap ?? ROBOT_TYPE_TO_URDF_MAP[robotType];
     const modelJoints = modelJointMap[joint.name] ?? [];
 
     modelJoints.forEach((modelJointName) => {
@@ -99,7 +101,13 @@ export const useLoadModelMutation = () => {
     const pathRef = useRef<string>('');
 
     return useMutation({
-        mutationFn: async (path: string) => {
+        mutationFn: async ({
+            path,
+            packages,
+        }: {
+            path: string;
+            packages?: Record<string, string>;
+        }) => {
             pathRef.current = path;
 
             // Use a custom LoadingManager so the promise only resolves after
@@ -111,9 +119,7 @@ export const useLoadModelMutation = () => {
             const manager = new THREE.LoadingManager();
             const loader = new URDFLoader(manager);
 
-            loader.packages = {
-                trossen_arm_description: '/widowx',
-            };
+            loader.packages = packages ?? {};
 
             return new Promise<URDFRobot>((resolve, reject) => {
                 let model: URDFRobot | null = null;

@@ -4,8 +4,8 @@ import { ActionButton, Flex, Grid, Heading, minmax, repeat, Slider, Switch, View
 import { ChevronDownSmallLight } from '@geti-ui/ui/icons';
 import { radToDeg } from 'three/src/math/MathUtils.js';
 
+import { useCatalog } from '../robot-catalog';
 import { useRobotModels } from '../robot-models-context';
-import { urdfPathForType } from '../robots-configuration';
 import { useJointState, useSynchronizeModelJoints } from '../use-joint-state';
 import { useRobot, useRobotId } from '../use-robot';
 
@@ -58,10 +58,12 @@ const Joints = ({ joints }: { joints: JointsState }) => {
 
 // Get the default stationary joint setting with min and max range based on the urdf model
 const useModelJoints = (): JointsState => {
+    const catalogQuery = useCatalog();
     const { getModel } = useRobotModels();
 
     const robot = useRobot();
-    const model = getModel(urdfPathForType(robot.type));
+    const entry = catalogQuery.data?.find((e) => e.type === robot.type);
+    const model = getModel(entry?.urdf_path ?? '');
 
     const modelJoints = Object.values(model?.joints ?? {});
     const joints: JointsState = modelJoints
