@@ -1,10 +1,10 @@
 import { Flex, TextField, View } from '@geti-ui/ui';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { SchemaRobot } from '../../robot-types';
-import { buildRobotBody } from '../form-data';
+import type { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../../robot-types';
 import { useRobotFormFields } from '../provider';
 import { IdentifyRobot, useIdentifyMutation } from './actions';
+import { buildWidowxBody } from './widowxai';
 
 export interface BimanualFormData {
     name: string;
@@ -22,18 +22,37 @@ export const getInitialBimanualFormData = (robot?: SchemaRobot): BimanualFormDat
     serial_number: robot?.payload?.serial_number ?? '',
 });
 
+export const buildBimanualBody = (
+    formData: BimanualFormData,
+    schemaType: SchemaRobotType,
+    robot_id: string
+): SchemaRobotInput | null => {
+    if (!formData.connection_string_left || !formData.connection_string_right) {
+        return null;
+    }
+
+    return {
+        id: robot_id,
+        name: formData.name,
+        type: schemaType,
+        payload: {
+            connection_string_left: formData.connection_string_left,
+            connection_string_right: formData.connection_string_right,
+            serial_number: formData.serial_number ?? '',
+        },
+    } as SchemaRobotInput;
+};
+
 export const BiManualWidowxAIFormFields = () => {
     const { formData, updateField } = useRobotFormFields('bimanual_widowx');
 
     const identifyMutation = useIdentifyMutation();
-    const leftIdentifyRobot = buildRobotBody(
-        'widowx',
+    const leftIdentifyRobot = buildWidowxBody(
         { name: formData.name, connection_string: formData.connection_string_left, serial_number: '' },
         'Trossen_WidowXAI_Follower',
         uuidv4()
     );
-    const rightIdentifyRobot = buildRobotBody(
-        'widowx',
+    const rightIdentifyRobot = buildWidowxBody(
         { name: formData.name, connection_string: formData.connection_string_right, serial_number: '' },
         'Trossen_WidowXAI_Follower',
         uuidv4()

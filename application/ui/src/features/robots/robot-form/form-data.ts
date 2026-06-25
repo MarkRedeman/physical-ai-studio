@@ -1,7 +1,7 @@
 import { SchemaRobotInput, SchemaRobotType } from '../robot-types';
-import type { SO101FormData } from './catalog/so101';
-import type { WidowxFormData } from './catalog/widowxai';
-import type { BimanualFormData } from './catalog/widowxai-bimanual';
+import { buildSO101Body, type SO101FormData } from './catalog/so101';
+import { buildWidowxBody, type WidowxFormData } from './catalog/widowxai';
+import { buildBimanualBody, type BimanualFormData } from './catalog/widowxai-bimanual';
 
 export type RobotType = 'so101' | 'widowx' | 'bimanual_widowx';
 
@@ -29,54 +29,11 @@ export const buildRobotBody = (
     robot_id: string
 ): SchemaRobotInput | null => {
     switch (robotType) {
-        case 'so101': {
-            const data = formData as SO101FormData;
-            if (!data.serial_number) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: data.name,
-                type: schemaType,
-                payload: {
-                    connection_string: data.connection_string ?? '',
-                    serial_number: data.serial_number,
-                },
-            } as SchemaRobotInput;
-        }
-        case 'widowx': {
-            const data = formData as WidowxFormData;
-            if (!data.connection_string) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: data.name,
-                type: schemaType,
-                payload: {
-                    connection_string: data.connection_string,
-                    serial_number: data.serial_number ?? '',
-                },
-            } as SchemaRobotInput;
-        }
-        case 'bimanual_widowx': {
-            const data = formData as BimanualFormData;
-            if (!data.connection_string_left || !data.connection_string_right) {
-                return null;
-            }
-
-            return {
-                id: robot_id,
-                name: data.name,
-                type: schemaType,
-                payload: {
-                    connection_string_left: data.connection_string_left,
-                    connection_string_right: data.connection_string_right,
-                    serial_number: data.serial_number ?? '',
-                },
-            } as SchemaRobotInput;
-        }
+        case 'so101':
+            return buildSO101Body(formData as SO101FormData, schemaType, robot_id);
+        case 'widowx':
+            return buildWidowxBody(formData as WidowxFormData, schemaType, robot_id);
+        case 'bimanual_widowx':
+            return buildBimanualBody(formData as BimanualFormData, schemaType, robot_id);
     }
 };

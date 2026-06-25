@@ -2,9 +2,8 @@ import { Flex, Item, Picker, Text } from '@geti-ui/ui';
 import { v4 as uuidv4 } from 'uuid';
 
 import { $api } from '../../../../api/client';
-import type { SchemaRobot } from '../../robot-types';
+import type { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../../robot-types';
 import { PermissionDeniedError } from '../../setup-wizard/so101/diagnostics-step-error';
-import { buildRobotBody } from '../form-data';
 import { useRobotFormFields } from '../provider';
 import { IdentifyRobot, RefreshRobotsButton, useIdentifyMutation } from './actions';
 
@@ -20,13 +19,33 @@ export const getInitialSO101FormData = (robot?: SchemaRobot): SO101FormData => (
     connection_string: robot && 'connection_string' in robot.payload ? robot.payload.connection_string : '',
 });
 
+export const buildSO101Body = (
+    formData: SO101FormData,
+    schemaType: SchemaRobotType,
+    robot_id: string
+): SchemaRobotInput | null => {
+    if (!formData.serial_number) {
+        return null;
+    }
+
+    return {
+        id: robot_id,
+        name: formData.name,
+        type: schemaType,
+        payload: {
+            connection_string: formData.connection_string ?? '',
+            serial_number: formData.serial_number,
+        },
+    } as SchemaRobotInput;
+};
+
 export const SO101FormFields = () => {
     const serialDevicesQuery = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
 
     const { formData, updateField, activeType } = useRobotFormFields('so101');
 
     const identifyMutation = useIdentifyMutation();
-    const identifyRobot = buildRobotBody('so101', formData, activeType, uuidv4());
+    const identifyRobot = buildSO101Body(formData, activeType, uuidv4());
 
     return (
         <>
