@@ -74,6 +74,137 @@ export const SO101FormFields = () => {
     );
 };
 
+export const BiManualSO101FormFields = () => {
+    const serialDevicesQuery = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
+    const { project_id } = useProjectId();
+    const robotsQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots', {
+        params: { path: { project_id } },
+    });
+
+    const robotForm = useRobotForm();
+    const setRobotForm = useSetRobotForm();
+
+    const requiredSingleType = robotForm.type === 'SO101_Bimanual_Leader' ? 'SO101_Leader' : 'SO101_Follower';
+    const eligibleRobots = robotsQuery.data.filter(
+        (robot) =>
+            robot.type === requiredSingleType &&
+            'serial_number' in robot.payload &&
+            Boolean(robot.payload.serial_number) &&
+            Boolean(robot.active_calibration_id)
+    );
+
+    const leftEligibleRobots = eligibleRobots.filter(
+        (robot) => !('serial_number' in robot.payload) || robot.payload.serial_number !== robotForm.serial_number_right
+    );
+    const rightEligibleRobots = eligibleRobots.filter(
+        (robot) => !('serial_number' in robot.payload) || robot.payload.serial_number !== robotForm.serial_number_left
+    );
+
+    const setFromExistingArm = (arm: 'left' | 'right', robotId: string | number | null) => {
+        if (robotId === null) {
+            return;
+        }
+        const selected = eligibleRobots.find((robot) => robot.id === String(robotId));
+        if (!selected || !('serial_number' in selected.payload)) {
+            return;
+        }
+
+        const serialDevice = serialDevicesQuery.data.find((device) => device.serial_number === selected.payload.serial_number);
+        const connectionString = selected.payload.connection_string || serialDevice?.connection_string || '';
+        const activeCalibration = selected.active_calibration_id ?? '';
+
+        if (arm === 'left') {
+            setRobotForm((oldForm) => ({
+                ...oldForm,
+                serial_number_left: selected.payload.serial_number,
+                connection_string_left: connectionString,
+                active_calibration_id_left: activeCalibration,
+            }));
+            return;
+        }
+
+        setRobotForm((oldForm) => ({
+            ...oldForm,
+            serial_number_right: selected.payload.serial_number,
+            connection_string_right: connectionString,
+            active_calibration_id_right: activeCalibration,
+        }));
+    };
+
+    const leftSelectedRobot = eligibleRobots.find(
+        (robot) =>
+            'serial_number' in robot.payload &&
+            robot.payload.serial_number === robotForm.serial_number_left &&
+            (robot.active_calibration_id ?? '') === robotForm.active_calibration_id_left
+    );
+
+    const rightSelectedRobot = eligibleRobots.find(
+        (robot) =>
+            'serial_number' in robot.payload &&
+            robot.payload.serial_number === robotForm.serial_number_right &&
+            (robot.active_calibration_id ?? '') === robotForm.active_calibration_id_right
+    );
+
+    return (
+        <Flex direction='column' gap='size-100'>
+            <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
+                <Picker
+                    label='Select left arm source robot'
+                    isRequired
+                    width='100%'
+                    selectedKey={leftSelectedRobot?.id}
+                    onSelectionChange={(robotId) => {
+                        setFromExistingArm('left', robotId);
+                    }}
+                >
+                    {leftEligibleRobots.map((robot) => {
+                        if (!('serial_number' in robot.payload)) {
+                            return null;
+                        }
+
+                        return (
+                            <Item key={robot.id} textValue={robot.name}>
+                                <Text>{robot.name}</Text>
+                                <Text slot='description'>
+                                    {robot.payload.serial_number} {robot.active_calibration_id ? `| ${robot.active_calibration_id}` : ''}
+                                </Text>
+                            </Item>
+                        );
+                    })}
+                </Picker>
+            </Flex>
+
+            <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
+                <Picker
+                    label='Select right arm source robot'
+                    isRequired
+                    width='100%'
+                    selectedKey={rightSelectedRobot?.id}
+                    onSelectionChange={(robotId) => {
+                        setFromExistingArm('right', robotId);
+                    }}
+                >
+                    {rightEligibleRobots.map((robot) => {
+                        if (!('serial_number' in robot.payload)) {
+                            return null;
+                        }
+
+                        return (
+                            <Item key={robot.id} textValue={robot.name}>
+                                <Text>{robot.name}</Text>
+                                <Text slot='description'>
+                                    {robot.payload.serial_number} {robot.active_calibration_id ? `| ${robot.active_calibration_id}` : ''}
+                                </Text>
+                            </Item>
+                        );
+                    })}
+                </Picker>
+            </Flex>
+            <RefreshRobotsButton />
+        </Flex>
+    );
+};
+
 export const WidowxAIFormFields = () => {
     const robotForm = useRobotForm();
     const setRobotForm = useSetRobotForm();
@@ -193,6 +324,10 @@ const RobotType = () => {
                         ? {
                               // Only reset when switching families (SO -> Trossen, etc)
                               serial_number: '',
+                              serial_number_left: '',
+                              serial_number_right: '',
+                              active_calibration_id_left: '',
+                              active_calibration_id_right: '',
                               connection_string: '',
                               connection_string_left: '',
                               connection_string_right: '',
@@ -203,6 +338,8 @@ const RobotType = () => {
         >
             <Item key={'SO101_Follower'}>SO101 Follower</Item>
             <Item key={'SO101_Leader'}>SO101 Leader</Item>
+            <Item key={'SO101_Bimanual_Follower'}>SO101 Bimanual Follower</Item>
+            <Item key={'SO101_Bimanual_Leader'}>SO101 Bimanual Leader</Item>
             <Item key={'Trossen_WidowXAI_Follower'}>Trossen WidowX AI Follower</Item>
             <Item key={'Trossen_WidowXAI_Leader'}>Trossen WidowX AI Leader</Item>
             <Item key={'Trossen_Bimanual_WidowXAI_Follower'}>Trossen Bimanual WidowX AI Follower</Item>
@@ -265,6 +402,9 @@ const FormFields = ({ robotType }: { robotType: SchemaRobotType }) => {
         case 'SO101_Follower':
         case 'SO101_Leader':
             return <SO101FormFields />;
+        case 'SO101_Bimanual_Follower':
+        case 'SO101_Bimanual_Leader':
+            return <BiManualSO101FormFields />;
         case 'Trossen_WidowXAI_Follower':
         case 'Trossen_WidowXAI_Leader':
             return <WidowxAIFormFields />;

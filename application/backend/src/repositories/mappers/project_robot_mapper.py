@@ -13,7 +13,7 @@ class ProjectRobotMapper(IBaseMapper):
             id=str(db_schema.id),
             name=db_schema.name,
             type=db_schema.type,
-            payload=db_schema.payload.model_dump(),
+            payload=db_schema.payload.model_dump(mode="json"),
             active_calibration_id=str(db_schema.active_calibration_id) if db_schema.active_calibration_id else None,
         )
 
