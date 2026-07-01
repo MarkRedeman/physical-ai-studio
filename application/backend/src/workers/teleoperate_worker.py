@@ -90,18 +90,18 @@ class TeleoperateWorker(BaseProcessWorker):
 
     def _feature_values(
         self,
-        leader_state: dict[str, float],
+        source_state: dict[str, float],
         follower_state: dict[str, float] | None = None,
     ) -> list[float]:
         # Leader observations may not expose all follower features
         # (e.g. follower has .vel keys while leader only publishes .pos).
-        # When a feature is missing from the leader state, fall back to
+        # When a feature is missing from the source state, fall back to
         # the follower's current state so we always have a value for
         # every feature in the shared memory buffer.
         values: list[float] = []
         for key in self.features:
-            if key in leader_state:
-                values.append(leader_state[key])
+            if key in source_state:
+                values.append(source_state[key])
             elif follower_state is not None and key in follower_state:
                 values.append(follower_state[key])
             else:
