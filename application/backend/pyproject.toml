@@ -34,6 +34,7 @@ dependencies = [
   # Executorch pulls in torchao transitively; use an exact public version so
   # uv doesn't select XPU local-version wheels (e.g. 0.15.0+xpu) for CUDA runs.
   "torchao===0.15.0",
+  "physicalai-rebot-b601-plugin>=0.3.0",
 ]
 
 [project.scripts]
@@ -146,7 +147,7 @@ all = [
 package = true
 default-groups = ["all"]
 exclude-newer = "7 days"
-exclude-newer-package = { physicalai = false }
+exclude-newer-package = { physicalai = false, physicalai-rebot-b601-plugin = false }
 # The pytorch-xpu index is non-explicit (explicit = false) because
 # transitive deps like pytorch-triton-xpu only exist on the XPU index.
 # unsafe-best-match is required because PyTorch indexes can host stale

@@ -1,5 +1,5 @@
-import { SchemaRobotCatalogEntry, SchemaRobotType } from '../../api/openapi-spec';
 import { $api } from '../../api/client';
+import { SchemaRobotCatalogEntry, SchemaRobotType } from '../../api/openapi-spec';
 import { SchemaRobot } from './robot-types';
 
 export const useRobotCatalogQuery = () => {

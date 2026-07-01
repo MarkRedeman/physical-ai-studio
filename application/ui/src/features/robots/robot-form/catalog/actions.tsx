@@ -43,7 +43,6 @@ export const IdentifyRobot = ({
         if (isDisabled || robot === null) {
             return;
         }
-
         identifyMutation.mutate({ body: robot });
     };
 

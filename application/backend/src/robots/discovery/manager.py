@@ -6,6 +6,7 @@ from utils.serial_robot_tools import RobotConnectionManager, normalize_serial_nu
 
 _IP_SINGLE_TYPES = {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}
 _IP_BIMANUAL_TYPES = {RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER, RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER}
+_REBOT_SERIAL_TYPES = {RobotType.REBOT_B601_DM_FOLLOWER, RobotType.REBOT_ARM102_LEADER}
 
 
 class DiscoveryManager:
@@ -18,7 +19,7 @@ class DiscoveryManager:
         await self.serial_manager.find_robots()
 
     async def is_robot_online(self, robot: Robot) -> bool:
-        if robot.type in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER}:
+        if robot.type in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER} or robot.type in _REBOT_SERIAL_TYPES:
             serial_number = normalize_serial_number(robot.payload.serial_number)
             if serial_number != "":
                 return serial_number in [normalize_serial_number(cs.serial_number) for cs in self.serial_manager.robots]

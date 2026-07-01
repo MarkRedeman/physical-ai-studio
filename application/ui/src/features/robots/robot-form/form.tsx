@@ -7,6 +7,8 @@ import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { useRobotCatalogQuery } from '../robot-catalog';
 import { SchemaRobotType } from '../robot-types';
+import { ReBotArm102LeaderFormFields } from './catalog/rebot-arm102-leader';
+import { ReBotB601DMFormFields } from './catalog/rebot-b601-dm';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
 import { BiManualWidowxAIFormFields } from './catalog/widowxai-bimanual';
@@ -45,6 +47,10 @@ const FormFields = ({ robotType }: { robotType: SchemaRobotType }) => {
         case 'Trossen_WidowXAI_Follower':
         case 'Trossen_WidowXAI_Leader':
             return <WidowxAIFormFields />;
+        case 'ReBot_B601_DM_Follower':
+            return <ReBotB601DMFormFields />;
+        case 'ReBot_Arm102_Leader':
+            return <ReBotArm102LeaderFormFields />;
         case 'Trossen_Bimanual_WidowXAI_Leader':
         case 'Trossen_Bimanual_WidowXAI_Follower':
             return <BiManualWidowxAIFormFields />;

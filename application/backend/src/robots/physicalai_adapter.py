@@ -39,11 +39,13 @@ class PhysicalAIRobotAdapter(RobotClient):
         self.is_controlled = False
 
     def _is_follower(self) -> bool:
-        return self._robot_type in {
-            RobotType.SO101_FOLLOWER,
-            RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
-            RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
-        }
+        if self._robot_role is None:
+            return self._robot_type in {
+                RobotType.SO101_FOLLOWER,
+                RobotType.REBOT_B601_DM_FOLLOWER,
+                RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
+                RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
+            }
         return self._robot_role == "follower"
 
     def _observation_to_state(self, observation: RobotObservation) -> dict[str, float]:

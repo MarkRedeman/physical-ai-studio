@@ -65,3 +65,6 @@ async def identify_robot(robot: Robot, joint: str | None = None) -> None:
 
     if robot.type in {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}:
         await identify_trossen_robot_visually(robot)
+
+    if robot.type in {RobotType.REBOT_B601_DM_FOLLOWER, RobotType.REBOT_ARM102_LEADER}:
+        logger.info(f"Dummy identify call for unsupported robot type={robot.type}")

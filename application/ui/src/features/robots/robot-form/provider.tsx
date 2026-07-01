@@ -1,6 +1,8 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 
 import { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../robot-types';
+import { getInitialReBotArm102LeaderFormData } from './catalog/rebot-arm102-leader';
+import { getInitialReBotB601DMFormData } from './catalog/rebot-b601-dm';
 import { getInitialSO101FormData } from './catalog/so101';
 import { getInitialWidowxFormData } from './catalog/widowxai';
 import { getInitialBimanualFormData } from './catalog/widowxai-bimanual';
@@ -14,6 +16,8 @@ type RobotFormState = {
     Trossen_WidowXAI_Leader: FormDataForSchema['Trossen_WidowXAI_Leader'];
     Trossen_Bimanual_WidowXAI_Follower: FormDataForSchema['Trossen_Bimanual_WidowXAI_Follower'];
     Trossen_Bimanual_WidowXAI_Leader: FormDataForSchema['Trossen_Bimanual_WidowXAI_Leader'];
+    ReBot_B601_DM_Follower: FormDataForSchema['ReBot_B601_DM_Follower'];
+    ReBot_Arm102_Leader: FormDataForSchema['ReBot_Arm102_Leader'];
 };
 
 const RobotFormContext = createContext<RobotFormState | null>(null);
@@ -35,6 +39,8 @@ const FORM_DATA_FAMILY: Record<SchemaRobotType, string> = {
     Trossen_WidowXAI_Leader: 'widowx',
     Trossen_Bimanual_WidowXAI_Follower: 'bimanual',
     Trossen_Bimanual_WidowXAI_Leader: 'bimanual',
+    ReBot_B601_DM_Follower: 'rebot_b601',
+    ReBot_Arm102_Leader: 'rebot_arm102',
 };
 
 const getInitialState = (robot?: SchemaRobot): RobotFormState => ({
@@ -51,6 +57,8 @@ const getInitialState = (robot?: SchemaRobot): RobotFormState => ({
     Trossen_Bimanual_WidowXAI_Leader: getInitialBimanualFormData(
         robot?.type === 'Trossen_Bimanual_WidowXAI_Leader' ? robot : undefined
     ),
+    ReBot_B601_DM_Follower: getInitialReBotB601DMFormData(robot?.type === 'ReBot_B601_DM_Follower' ? robot : undefined),
+    ReBot_Arm102_Leader: getInitialReBotArm102LeaderFormData(robot?.type === 'ReBot_Arm102_Leader' ? robot : undefined),
 });
 
 export const RobotFormProvider = ({ children, robot }: { children: ReactNode; robot?: SchemaRobot }) => {
