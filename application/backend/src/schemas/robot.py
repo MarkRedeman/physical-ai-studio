@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from schemas.base import BaseIDModel
 
@@ -70,6 +70,17 @@ class TrossenBimanualPayload(BaseModel):
     connection_string_left: str = Field(..., description="IP address of the left arm")
     connection_string_right: str = Field(..., description="IP address of the right arm")
     serial_number: str = Field(default="", description="Serial number (unused for IP robots)")
+
+
+class CatalogRobotPayload(BaseModel):
+    """Generic payload model for catalog-registered robots that accept extra fields."""
+
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _passthrough(cls, data, handler):
+        return data
 
 
 # ============================================================================

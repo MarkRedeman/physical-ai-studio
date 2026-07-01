@@ -7,6 +7,7 @@ from api.dependencies import get_project_id, get_robot_id, get_robot_service
 from schemas import Robot
 from schemas.robot import RobotWithConnectionState
 from services import RobotService
+from services.robot_catalog_service import RobotCatalogServiceDep
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
 
@@ -36,8 +37,10 @@ async def create_project_robot(
     project_id: ProjectID,
     robot: Robot,
     robot_service: Annotated[RobotService, Depends(get_robot_service)],
+    catalog_service: RobotCatalogServiceDep,
 ) -> Robot:
     """Create a new robot."""
+    robot.payload = catalog_service.validate_payload(robot.type, robot.payload)
     return await robot_service.create_robot(project_id, robot)
 
 
@@ -56,9 +59,11 @@ async def update_project_robot(
     project_id: Annotated[UUID, Depends(get_project_id)],
     robot_id: Annotated[UUID, Depends(get_robot_id)],
     robot_service: Annotated[RobotService, Depends(get_robot_service)],
+    catalog_service: RobotCatalogServiceDep,
     robot: Robot,
 ) -> Robot:
     """Set robot."""
+    robot.payload = catalog_service.validate_payload(robot.type, robot.payload)
     robot_with_id = robot.model_copy(update={"id": robot_id})
 
     return await robot_service.update_robot(
