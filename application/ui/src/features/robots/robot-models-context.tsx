@@ -92,12 +92,14 @@ export const useRobotModels = () => {
 export const useLoadModelQuery = (path: string) => {
     const { getModel, setModel } = useRobotModels();
 
+    const cachedModel = getModel(path);
     const query = useQuery({
         queryKey: ['robotModel', path],
-        queryFn: () => loadURDFModel(path),
+        queryFn: () => cachedModel ?? loadURDFModel(path),
+        initialData: cachedModel,
         staleTime: Infinity,
         gcTime: 1000 * 60 * 30,
-        enabled: path !== '',
+        enabled: path !== '' && !cachedModel,
     });
 
     useEffect(() => {
