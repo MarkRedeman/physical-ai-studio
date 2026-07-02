@@ -50,9 +50,6 @@ COPY --link application/backend/scripts/hatch_build.py \
 # Built UI assets (subdirectory matches the hatch hook's expected path: ../ui/dist/)
 COPY --link --from=web-ui /home/app/web_ui/dist /app/application/ui/dist
 
-# Sync backend-owned robot assets used by catalog URDF endpoints
-RUN sh /app/application/backend/scripts/clone-robot-assets.sh /app/application/backend/src/static/robot-assets
-
 # ===========================================================================
 # Stage 4: Python builder base
 #
@@ -150,7 +147,7 @@ RUN uv pip uninstall --python .venv/bin/python \
     pytest-rerunfailures \
     expecttest hypothesis sortedcontainers kgb parameterized
 
-# Remove redundant for XPU container image Triton GPU backends (NVIDIA and AMD) 
+# Remove redundant for XPU container image Triton GPU backends (NVIDIA and AMD)
 # that also contains non-redistributable files
 # Based on: https://docs.nvidia.com/cuda/eula/index.html
 RUN set -eu; \
@@ -203,6 +200,7 @@ RUN groupadd --gid "${APP_GID}" appuser \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         ffmpeg \
+        git \
         libgl1 \
         libglib2.0-0 \
         libusb-1.0-0 \
@@ -258,6 +256,7 @@ RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps 
 
 WORKDIR /app/application/backend
 USER appuser
+RUN physicalai-studio sync-robot-assets
 CMD ["./run.sh"]
 
 # ===========================================================================
@@ -311,6 +310,7 @@ RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps 
 
 WORKDIR /app/application/backend
 USER appuser
+RUN physicalai-studio sync-robot-assets
 CMD ["./run.sh"]
 
 # ===========================================================================
@@ -383,4 +383,5 @@ RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps 
 
 WORKDIR /app/application/backend
 USER appuser
+RUN physicalai-studio sync-robot-assets
 CMD ["./run.sh"]
