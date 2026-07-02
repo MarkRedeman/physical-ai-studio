@@ -92,6 +92,8 @@ class RobotCalibrationService:
     async def get_robot_motor_calibration(self, robot: Robot) -> dict[str, MotorCalibration]:
         if robot.type not in (RobotType.SO101_FOLLOWER, RobotType.SO101_LEADER):
             raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
+        if not isinstance(robot, SO101Robot):
+            raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
 
         port = await find_robot_port(self.robot_manager, robot)
 

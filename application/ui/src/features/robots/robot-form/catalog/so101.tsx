@@ -76,13 +76,13 @@ export const SO101FormFields = () => {
                     isRequired
                     width='100%'
                     selectedKey={selectedKey}
-                    onSelectionChange={(selectedKey) => {
+                    onSelectionChange={(key) => {
                         const device = serialDevicesQuery.data.find(
                             (d) =>
                                 getDeviceKey({
                                     serial_number: d.serial_number ?? '',
                                     connection_string: d.connection_string,
-                                }) === String(selectedKey)
+                                }) === String(key)
                         );
 
                         if (device === undefined) {

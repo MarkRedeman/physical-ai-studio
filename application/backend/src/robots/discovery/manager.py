@@ -1,7 +1,7 @@
 from robots.discovery.ip import IPDiscovery
 from robots.discovery.serial import SerialDiscovery
 from schemas import Robot
-from schemas.robot import RobotType
+from schemas.robot import RobotType, SO101Robot
 from utils.serial_robot_tools import RobotConnectionManager, find_so101_port, serial_port_from_so101
 
 _IP_SINGLE_TYPES = {RobotType.TROSSEN_WIDOWXAI_LEADER, RobotType.TROSSEN_WIDOWXAI_FOLLOWER}
@@ -19,6 +19,8 @@ class DiscoveryManager:
 
     async def is_robot_online(self, robot: Robot) -> bool:
         if robot.type in {RobotType.SO101_LEADER, RobotType.SO101_FOLLOWER}:
+            if not isinstance(robot, SO101Robot):
+                return False
             return await find_so101_port(self.serial_manager, serial_port_from_so101(robot)) is not None
         if robot.type in _IP_SINGLE_TYPES:
             return await self.ip.is_reachable(robot)
