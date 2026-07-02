@@ -20,8 +20,8 @@ async def robot_setup_websocket(
     robot_manager: RobotConnectionManagerDep,
     websocket: WebSocket,
     robot_type: str,
-    serial_number: str = "",
-    connection_string: str = "",
+    serial_number: str | None = None,
+    connection_string: str | None = None,
 ) -> None:
     """Establish a WebSocket connection for the SO101 robot setup wizard.
 
@@ -59,8 +59,8 @@ async def robot_setup_websocket(
 
     try:
         serial_port = SerialPortInfo(
-            connection_string=connection_string or None,
-            serial_number=serial_number or None,
+            connection_string=connection_string,
+            serial_number=serial_number,
         )
         worker = SO101SetupWorker(
             transport=WebSocketTransport(websocket),

@@ -124,8 +124,8 @@ export type SetupEvent =
 interface UseSetupWebSocketOptions {
     projectId: string;
     robotType: string;
-    serialNumber: string;
-    connectionString: string;
+    serialNumber?: string;
+    connectionString?: string;
     enabled?: boolean;
 }
 
@@ -244,13 +244,21 @@ export function useSetupWebSocket({
         }
     }, []);
 
-    const hasIdentifier = !!serialNumber || !!connectionString;
-    const query =
-        `?robot_type=${encodeURIComponent(robotType)}` +
-        `&serial_number=${encodeURIComponent(serialNumber)}` +
-        `&connection_string=${encodeURIComponent(connectionString)}`;
+    const searchParams = new URLSearchParams({
+        robot_type: robotType,
+    });
 
-    const url = enabled && robotType && hasIdentifier ? `/api/projects/${projectId}/robots/setup/ws${query}` : null;
+    if (serialNumber) {
+        searchParams.set('serial_number', serialNumber);
+    }
+
+    if (connectionString) {
+        searchParams.set('connection_string', connectionString);
+    }
+
+    const query = `?${searchParams.toString()}`;
+
+    const url = enabled && robotType ? `/api/projects/${projectId}/robots/setup/ws${query}` : null;
 
     const { sendJsonMessage, readyState } = useWebSocket(url, {
         onMessage: handleMessage,
