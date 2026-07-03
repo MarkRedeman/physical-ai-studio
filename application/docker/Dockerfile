@@ -252,7 +252,7 @@ ARG APP_GID=1000
 COPY --link --from=builder-cpu --chown=${APP_UID}:${APP_GID} \
     /app/application/backend/.venv /app/application/backend/.venv
 COPY --link --from=app-source --chown=${APP_UID}:${APP_GID} /app /app
-RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps /app/application/backend
+RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps -e /app/application/backend
 
 WORKDIR /app/application/backend
 USER appuser
@@ -306,7 +306,7 @@ ARG APP_GID=1000
 COPY --link --from=builder-xpu --chown=${APP_UID}:${APP_GID} \
     /app/application/backend/.venv /app/application/backend/.venv
 COPY --link --from=app-source --chown=${APP_UID}:${APP_GID} /app /app
-RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps /app/application/backend
+RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps -e /app/application/backend
 
 WORKDIR /app/application/backend
 USER appuser
@@ -379,7 +379,7 @@ ARG APP_GID=1000
 COPY --link --from=builder-cuda --chown=${APP_UID}:${APP_GID} \
     /app/application/backend/.venv /app/application/backend/.venv
 COPY --link --from=app-source --chown=${APP_UID}:${APP_GID} /app /app
-RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps /app/application/backend
+RUN uv pip install --python /app/application/backend/.venv/bin/python --no-deps -e /app/application/backend
 
 WORKDIR /app/application/backend
 USER appuser
