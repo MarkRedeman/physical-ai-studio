@@ -22,19 +22,7 @@ def sync_robot_assets(target_dir: Path | None = None) -> None:
         tmp_root = Path(tmp_dir)
 
         so101_repo_path = tmp_root / "so101-repo"
-        _run_git(
-            [
-                "clone",
-                "--depth",
-                "1",
-                "--revision",
-                SO101_REPO_REVISION,
-                "--filter=blob:none",
-                "--sparse",
-                SO101_REPO_URL,
-                str(so101_repo_path),
-            ]
-        )
+        _clone_pinned_revision(SO101_REPO_URL, SO101_REPO_REVISION, so101_repo_path, sparse=True)
         _run_git(["sparse-checkout", "set", "--no-cone", "Simulation/SO101"], cwd=so101_repo_path)
 
         so101_target = target_root / "SO101"
@@ -43,23 +31,22 @@ def sync_robot_assets(target_dir: Path | None = None) -> None:
         shutil.copytree(so101_repo_path / "Simulation" / "SO101", so101_target)
 
         widowx_repo_path = tmp_root / "widowx-repo"
-        _run_git(
-            [
-                "clone",
-                "--depth",
-                "1",
-                "--revision",
-                WIDOWX_REPO_REVISION,
-                "--filter=blob:none",
-                WIDOWX_REPO_URL,
-                str(widowx_repo_path),
-            ]
-        )
+        _clone_pinned_revision(WIDOWX_REPO_URL, WIDOWX_REPO_REVISION, widowx_repo_path)
 
         widowx_target = target_root / "widowx"
         if widowx_target.exists():
             shutil.rmtree(widowx_target)
         shutil.copytree(widowx_repo_path, widowx_target, ignore=shutil.ignore_patterns(".git"))
+
+
+def _clone_pinned_revision(repo_url: str, revision: str, target_path: Path, sparse: bool = False) -> None:
+    args = ["clone", "--depth", "1", "--filter=blob:none", "--no-checkout"]
+    if sparse:
+        args.append("--sparse")
+    args.extend([repo_url, str(target_path)])
+    _run_git(args)
+    _run_git(["fetch", "--depth", "1", "origin", revision], cwd=target_path)
+    _run_git(["checkout", "--detach", revision], cwd=target_path)
 
 
 def _run_git(args: list[str], cwd: Path | None = None) -> None:

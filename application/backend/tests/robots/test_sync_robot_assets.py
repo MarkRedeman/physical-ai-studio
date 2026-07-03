@@ -25,9 +25,39 @@ def test_sync_robot_assets_uses_default_assets_root(tmp_path, monkeypatch) -> No
     assert (tmp_path / "SO101").is_dir()
     assert (tmp_path / "widowx").is_dir()
     assert any(
-        args[:5] == ["clone", "--depth", "1", "--revision", sync_module.SO101_REPO_REVISION] for args, _ in calls
+        args[:5] == ["clone", "--depth", "1", "--filter=blob:none", "--no-checkout"]
+        and "--sparse" in args
+        and args[-2] == sync_module.SO101_REPO_URL
+        for args, _ in calls
     )
     assert any(
-        args[:5] == ["clone", "--depth", "1", "--revision", sync_module.WIDOWX_REPO_REVISION] for args, _ in calls
+        args[:5] == ["clone", "--depth", "1", "--filter=blob:none", "--no-checkout"]
+        and "--sparse" not in args
+        and args[-2] == sync_module.WIDOWX_REPO_URL
+        for args, _ in calls
     )
-    assert len(calls) == 3
+    assert any(
+        args == ["fetch", "--depth", "1", "origin", sync_module.SO101_REPO_REVISION]
+        and cwd is not None
+        and cwd.name == "so101-repo"
+        for args, cwd in calls
+    )
+    assert any(
+        args == ["checkout", "--detach", sync_module.SO101_REPO_REVISION]
+        and cwd is not None
+        and cwd.name == "so101-repo"
+        for args, cwd in calls
+    )
+    assert any(
+        args == ["fetch", "--depth", "1", "origin", sync_module.WIDOWX_REPO_REVISION]
+        and cwd is not None
+        and cwd.name == "widowx-repo"
+        for args, cwd in calls
+    )
+    assert any(
+        args == ["checkout", "--detach", sync_module.WIDOWX_REPO_REVISION]
+        and cwd is not None
+        and cwd.name == "widowx-repo"
+        for args, cwd in calls
+    )
+    assert len(calls) == 7
