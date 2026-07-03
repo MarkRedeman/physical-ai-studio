@@ -24,4 +24,10 @@ def test_sync_robot_assets_uses_default_assets_root(tmp_path, monkeypatch) -> No
 
     assert (tmp_path / "SO101").is_dir()
     assert (tmp_path / "widowx").is_dir()
+    assert any(
+        args[:5] == ["clone", "--depth", "1", "--revision", sync_module.SO101_REPO_REVISION] for args, _ in calls
+    )
+    assert any(
+        args[:5] == ["clone", "--depth", "1", "--revision", sync_module.WIDOWX_REPO_REVISION] for args, _ in calls
+    )
     assert len(calls) == 3
