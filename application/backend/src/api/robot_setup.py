@@ -43,7 +43,7 @@ async def robot_setup_websocket(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    if serial_number == "" and connection_string == "":
+    if not serial_number and not connection_string:
         await websocket.accept()
         await websocket.send_json(
             {
