@@ -88,7 +88,7 @@ class TeleoperateWorker(BaseProcessWorker):
         with self._action_read_state.get_lock():
             self._action_read_state.value = value
 
-    def _feature_values(
+    def _align_feature_values(
         self,
         source_state: dict[str, float],
         follower_state: dict[str, float] | None = None,
@@ -121,7 +121,7 @@ class TeleoperateWorker(BaseProcessWorker):
         # Set current actions to current follower state.
         # Features missing from follower state silently default to 0.0.
         state = (self.follower.read_state())["state"]
-        self._set_actions(self._feature_values(state))
+        self._set_actions(self._align_feature_values(state))
 
         self.loaded_event.set()
 
@@ -132,10 +132,10 @@ class TeleoperateWorker(BaseProcessWorker):
             while not self.should_stop():
                 async with run_at_frequency(self.frequency):
                     state = (self.follower.read_state())["state"]
-                    self._set_state(self._feature_values(state))
+                    self._set_state(self._align_feature_values(state))
                     if self.get_action_read_state() == ActionReadState.TELEOPERATION and self.leader is not None:
                         actions = (self.leader.read_state())["state"]
-                        filtered = self._feature_values(actions, follower_state=state)
+                        filtered = self._align_feature_values(actions, follower_state=state)
                         self.follower.set_joints_state(dict(zip(self.features, filtered)), goal_time * 2)
                         self._set_actions(filtered)
                     elif self.get_action_read_state() == ActionReadState.FROM_ACTIONS:
