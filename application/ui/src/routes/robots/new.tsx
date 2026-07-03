@@ -18,23 +18,12 @@ const CenteredLoading = () => {
     );
 };
 
-/**
- * Submit button that adapts to the selected robot type:
- * - SO101 types: navigates to the setup wizard (sibling route under same layout)
- * - Other types (Trossen): directly creates the robot via POST (default behavior)
- */
-const NewRobotSubmitButton = () => {
-    const { activeType, robotForm } = useRobotForm();
+const BeginSO101SetupButton = ({ activeType }: { activeType: 'SO101_Follower' | 'SO101_Leader' }) => {
+    const { robotForm } = useRobotForm(activeType);
     const navigate = useNavigate();
     const { project_id } = useProjectId();
 
-    const isSO101 = activeType?.toLowerCase().startsWith('so101') ?? false;
-
-    if (!isSO101) {
-        return <SubmitNewRobotButton />;
-    }
-
-    const isDisabled = !robotForm.name || !activeType || !robotForm.serial_number;
+    const isDisabled = !robotForm.name || !activeType || (!robotForm.serial_number && !robotForm.connection_string);
 
     return (
         <Button
@@ -47,6 +36,23 @@ const NewRobotSubmitButton = () => {
             Begin Setup
         </Button>
     );
+};
+
+/**
+ * Submit button that adapts to the selected robot type:
+ * - SO101 types: navigates to the setup wizard (sibling route under same layout)
+ * - Other types (Trossen): directly creates the robot via POST (default behavior)
+ */
+const NewRobotSubmitButton = () => {
+    const { activeType } = useRobotForm();
+
+    const isSO101 = activeType === 'SO101_Follower' || activeType === 'SO101_Leader';
+
+    if (isSO101) {
+        return <BeginSO101SetupButton activeType={activeType} />;
+    }
+
+    return <SubmitNewRobotButton />;
 };
 
 export const New = () => {
