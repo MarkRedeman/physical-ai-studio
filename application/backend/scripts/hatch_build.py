@@ -81,7 +81,6 @@ class CustomBuildHook(BuildHookInterface):
 
         build_data["force_include"] = {
             "../ui/dist": "webui",
-            "src/static/robot-assets": "static/robot-assets",
         }
 
         app_readme = Path(self.root).parent / "README.md"
