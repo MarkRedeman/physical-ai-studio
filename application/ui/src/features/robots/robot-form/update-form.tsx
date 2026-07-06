@@ -1,18 +1,17 @@
-import { type SubmitEvent } from 'react';
+import type { FormEvent } from 'react';
 
 import { Button, Divider, Flex, Form, View } from '@geti-ui/ui';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
-import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
+import { useRobotId } from '../use-robot';
 import { FormFields, RobotFormHeading } from './form';
 import { useRobotFormBody } from './provider';
 
 export const UpdateRobotForm = () => {
     const navigate = useNavigate();
-    const { project_id } = useProjectId();
-    const { robot_id = '' } = useParams<{ robot_id: string }>();
+    const { robot_id, project_id } = useRobotId();
 
     const updateRobotMutation = $api.useMutation('put', '/api/projects/{project_id}/robots/{robot_id}', {
         meta: {
@@ -25,7 +24,7 @@ export const UpdateRobotForm = () => {
 
     const body = useRobotFormBody(robot_id);
 
-    const handleSubmit = async (event: SubmitEvent) => {
+    const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
 
         if (body === null) {

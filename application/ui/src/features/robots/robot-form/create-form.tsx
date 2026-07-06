@@ -1,4 +1,4 @@
-import { type SubmitEvent } from 'react';
+import type { FormEvent } from 'react';
 
 import { Button, Divider, Flex, Form, View } from '@geti-ui/ui';
 import { useNavigate } from 'react-router';
@@ -27,14 +27,15 @@ export const CreateRobotForm = () => {
     const body = useRobotFormBody(uuidv4());
     const isSO101 = activeType === 'SO101_Follower' || activeType === 'SO101_Leader';
 
-    const handleSubmit = async (event: SubmitEvent) => {
+    const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
-        if (isSO101) {
-            navigate(paths.project.robots.so101Setup({ project_id }));
+
+        if (body === null) {
             return;
         }
 
-        if (body === null) {
+        if (isSO101) {
+            navigate(paths.project.robots.so101Setup({ project_id }));
             return;
         }
 

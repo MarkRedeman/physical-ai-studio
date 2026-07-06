@@ -2,9 +2,9 @@ import { Suspense } from 'react';
 
 import { Flex, Grid, Loading, minmax, View } from '@geti-ui/ui';
 
-import { UpdateRobotForm } from '../../features/robots/robot-form/update-form';
 import { Preview } from '../../features/robots/robot-form/preview';
 import { RobotFormProvider } from '../../features/robots/robot-form/provider';
+import { UpdateRobotForm } from '../../features/robots/robot-form/update-form';
 import { RobotModelsProvider } from '../../features/robots/robot-models-context';
 import { useRobot } from '../../features/robots/use-robot';
 
