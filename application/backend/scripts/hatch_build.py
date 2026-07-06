@@ -79,9 +79,18 @@ class CustomBuildHook(BuildHookInterface):
             )
             raise FileNotFoundError(msg)
 
-        build_data["force_include"] = {
+        force_include = {
             "../ui/dist": "webui",
         }
+
+        # When building from a git checkout, Hatch respects .gitignore and would
+        # skip src/static/robot-assets by default. In Docker/CI contexts without
+        # .git metadata, these files are already discovered under src and forcing
+        # them again would create duplicate archive entries.
+        if (Path(self.root).parent.parent / ".git").exists():
+            force_include["src/static/robot-assets"] = "static/robot-assets"
+
+        build_data["force_include"] = force_include
 
         app_readme = Path(self.root).parent / "README.md"
         target = Path(self.root) / "README.md"
