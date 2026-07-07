@@ -64,7 +64,7 @@ conflicts = [[
 ]]
 
 [options]
-exclude-newer = "2026-07-06T08:03:31.438476987Z"
+exclude-newer = "2026-07-06T08:04:28.375824841Z"
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
@@ -1083,8 +1083,8 @@ name = "harvesters"
 version = "1.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "genicam", marker = "sys_platform != 'darwin' or extra == 'extra-17-physicalai-studio-cuda' or extra == 'extra-17-physicalai-studio-xpu'" },
-    { name = "numpy", marker = "sys_platform != 'darwin' or extra == 'extra-17-physicalai-studio-cuda' or extra == 'extra-17-physicalai-studio-xpu'" },
+    { name = "genicam", marker = "(platform_machine != 'arm64' and extra == 'extra-17-physicalai-studio-cuda') or (platform_machine != 'arm64' and extra == 'extra-17-physicalai-studio-xpu') or sys_platform != 'darwin' or (extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu')" },
+    { name = "numpy", marker = "(platform_machine != 'arm64' and extra == 'extra-17-physicalai-studio-cuda') or (platform_machine != 'arm64' and extra == 'extra-17-physicalai-studio-xpu') or sys_platform != 'darwin' or (extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d3/18/ee45d896fee51dee2e35df9d371e2d213ed4488ddea4dd4bd1df6f92a5fb/harvesters-1.4.3.tar.gz", hash = "sha256:c237dd402735a66ebd570865113a3e80ae19161a21706aed80691627a8cb7da2", size = 104391, upload-time = "2024-05-16T17:09:41.805Z" }
 wheels = [
@@ -2624,6 +2624,8 @@ smolvla = [
 [package.metadata]
 requires-dist = [
     { name = "decord", marker = "(platform_machine == 'AMD64' and extra == 'groot') or (platform_machine == 'x86_64' and extra == 'groot')", specifier = ">=0.6.0,<1.0.0" },
+    { name = "diffusers", marker = "extra == 'diffusion'", specifier = ">=0.38.0" },
+    { name = "diffusers", marker = "extra == 'groot'", specifier = ">=0.38.0" },
     { name = "dm-tree", marker = "extra == 'groot'", specifier = ">=0.1.8,<1.0.0" },
     { name = "executorch", marker = "extra == 'executorch'", specifier = ">=1.1.0" },
     { name = "executorch", marker = "extra == 'executorch-openvino'", specifier = ">=1.1.0" },
@@ -2646,6 +2648,7 @@ requires-dist = [
     { name = "peft", marker = "extra == 'groot'", specifier = ">=0.13.0,<1.0.0" },
     { name = "peft", marker = "extra == 'pi0'", specifier = ">=0.13.0,<1.0.0" },
     { name = "physicalai", git = "https://github.com/openvinotoolkit/physicalai.git?rev=9881601325f724a0f00b1bf43f134d7f34fdef55" },
+    { name = "physicalai-train", extras = ["diffusion"], marker = "extra == 'tests'" },
     { name = "physicalai-train", extras = ["groot"], marker = "extra == 'all'" },
     { name = "physicalai-train", extras = ["libero"], marker = "extra == 'all'" },
     { name = "physicalai-train", extras = ["pi0"], marker = "extra == 'all'" },
@@ -2677,10 +2680,11 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'pi0'", specifier = ">=5.3.0,<5.4.0" },
     { name = "transformers", marker = "extra == 'smolvla'", specifier = ">=5.3.0,<5.4.0" },
 ]
-provides-extras = ["cpu", "cu128", "xpu", "tests", "libero", "pi0", "pi05", "groot", "smolvla", "executorch", "executorch-openvino", "all"]
+provides-extras = ["cpu", "cu128", "xpu", "tests", "libero", "diffusion", "pi0", "pi05", "groot", "smolvla", "executorch", "executorch-openvino", "all"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "diffusers", specifier = ">=0.38.0" },
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "pyrefly", specifier = ">=0.18.0" },
     { name = "ruff", specifier = ">=0.14.14" },
@@ -3388,7 +3392,7 @@ name = "pytorch-triton-xpu"
 version = "3.5.0"
 source = { registry = "https://download.pytorch.org/whl/xpu" }
 dependencies = [
-    { name = "setuptools", marker = "sys_platform != 'emscripten'" },
+    { name = "setuptools", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/pytorch_triton_xpu-3.5.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:afc8cabfbf7ed51fd278d1e0f88d6afc157b0201bad4b99d681e4d542f9e66d4", upload-time = "2025-10-14T17:16:46Z" },
