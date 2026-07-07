@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -49,7 +50,7 @@ def _resolve_upload_size_estimate(archive: UploadFile, content_length_header: st
     actual_size: int | None = None
     try:
         current_pos = archive.file.tell()
-        archive.file.seek(0, 2)
+        archive.file.seek(0, os.SEEK_END)
         actual_size = archive.file.tell()
         archive.file.seek(current_pos)
     except (AttributeError, OSError, ValueError):

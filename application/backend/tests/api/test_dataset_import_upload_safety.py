@@ -374,6 +374,9 @@ def test_upload_disk_headroom_uses_actual_archive_size_not_configured_max() -> N
     assert response.status_code == 202
     assert len(stub.calls) == 1
 
+    staged_path = Settings().cache_dir / "imports" / "datasets" / f"{_FIXED_STAGING_ID}.zip"
+    staged_path.unlink(missing_ok=True)
+
 
 def test_resolve_upload_size_estimate_falls_back_to_content_length() -> None:
     """Use Content-Length fallback when uploaded file object size cannot be read."""
