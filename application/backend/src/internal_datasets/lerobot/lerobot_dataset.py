@@ -55,14 +55,18 @@ class InternalLeRobotDataset(DatasetClient):
     def load_dataset(self) -> None:
         """Load dataset."""
         if self._check_repository_exists(self.path):
-            self._dataset = LeRobotDataset(
-                str(uuid4()),
-                self.path,
-            )
-            self.has_episodes = self._dataset.num_episodes > 0
-
             if self._access_mode is DatasetAccessMode.RECORDING_MUTATION:
-                self._resume_for_writing(getattr(self._dataset, "repo_id", None))
+                self._dataset = LeRobotDataset.resume(
+                    repo_id=str(uuid4()),
+                    root=self.path,
+                    **self._resolved_streaming_encoding_settings(),
+                )
+            else:
+                self._dataset = LeRobotDataset(
+                    str(uuid4()),
+                    self.path,
+                )
+            self.has_episodes = self._dataset.num_episodes > 0
 
     def _resolved_streaming_encoding_settings(self) -> dict:
         return self._streaming_encoding_settings.with_resolved_vcodec().model_dump()
