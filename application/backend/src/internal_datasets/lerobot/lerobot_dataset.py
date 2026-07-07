@@ -84,6 +84,10 @@ class InternalLeRobotDataset(DatasetClient):
         )
         self.has_episodes = self._dataset.num_episodes > 0
 
+    def resume_dataset(self) -> None:
+        """Load dataset in write mode for appending episodes."""
+        self._resume_for_writing()
+
     def create(
         self,
         fps: int,
