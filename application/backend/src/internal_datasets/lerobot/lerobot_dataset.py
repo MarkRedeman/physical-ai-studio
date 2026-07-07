@@ -59,7 +59,7 @@ class InternalLeRobotDataset(DatasetClient):
                 self._dataset = LeRobotDataset.resume(
                     repo_id=str(uuid4()),
                     root=self.path,
-                    **self._resolved_streaming_encoding_settings(),
+                    **self._resolved_streaming_encoding_settings_write(),
                 )
             else:
                 self._dataset = LeRobotDataset(
@@ -68,8 +68,9 @@ class InternalLeRobotDataset(DatasetClient):
                 )
             self.has_episodes = self._dataset.num_episodes > 0
 
-    def _resolved_streaming_encoding_settings(self) -> dict:
-        return self._streaming_encoding_settings.with_resolved_vcodec().model_dump()
+    def _resolved_streaming_encoding_settings_write(self) -> dict:
+        settings = self._streaming_encoding_settings.with_resolved_vcodec()
+        return settings.to_lerobot_write_kwargs()
 
     def _resume_for_writing(self, repo_id: str | None = None) -> None:
         if not self._check_repository_exists(self.path):
@@ -79,7 +80,7 @@ class InternalLeRobotDataset(DatasetClient):
         self._dataset = LeRobotDataset.resume(
             repo_id=resolved_repo_id,
             root=self.path,
-            **self._resolved_streaming_encoding_settings(),
+            **self._resolved_streaming_encoding_settings_write(),
         )
         self.has_episodes = self._dataset.num_episodes > 0
 
@@ -99,7 +100,7 @@ class InternalLeRobotDataset(DatasetClient):
             features=features,
             robot_type=robot_type,
             use_videos=True,
-            **self._resolved_streaming_encoding_settings(),
+            **self._resolved_streaming_encoding_settings_write(),
         )
         self.has_episodes = False
 
