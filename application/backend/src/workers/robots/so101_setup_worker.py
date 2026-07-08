@@ -122,6 +122,7 @@ class SO101SetupWorker(TransportWorker):
         {"command": "start_homing"}
         {"command": "start_recording"}
         {"command": "stop_recording"}
+        {"command": "apply_calibration", "calibration": {...}}
         {"command": "enter_verification"}
         {"command": "re_probe"}
 
@@ -576,6 +577,66 @@ class SO101SetupWorker(TransportWorker):
         # normalized streaming on the next iteration.
         await self._enter_verification()
 
+    async def _handle_apply_calibration(self, data: dict[str, Any]) -> None:
+        """Apply uploaded calibration JSON to motors and enter verification."""
+        payload = data.get("calibration")
+        if not isinstance(payload, dict):
+            raise ValueError("Missing calibration payload")
+
+        missing = [name for name in MOTOR_NAMES if name not in payload]
+        if missing:
+            raise ValueError(f"Calibration is missing joints: {missing}")
+
+        bus = self._require_bus()
+        self.phase = SetupPhase.CONFIGURE
+        await self._send_phase_status("Applying uploaded calibration...")
+
+        calibration: dict[str, MotorCalibration] = {}
+        for motor_name in MOTOR_NAMES:
+            motor_payload = payload.get(motor_name)
+            if not isinstance(motor_payload, dict):
+                raise ValueError(f"Calibration value for '{motor_name}' must be an object")
+
+            required_fields = ["id", "drive_mode", "homing_offset", "range_min", "range_max"]
+            for field in required_fields:
+                if field not in motor_payload:
+                    raise ValueError(f"Calibration value for '{motor_name}' is missing '{field}'")
+
+            try:
+                calibration[motor_name] = MotorCalibration(
+                    id=int(motor_payload["id"]),
+                    drive_mode=int(motor_payload["drive_mode"]),
+                    homing_offset=int(motor_payload["homing_offset"]),
+                    range_min=int(motor_payload["range_min"]),
+                    range_max=int(motor_payload["range_max"]),
+                )
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Calibration value for '{motor_name}' has invalid numeric fields") from e
+
+        async with self._bus_lock:
+            await asyncio.to_thread(bus.write_calibration, calibration)
+
+        await self._configure_motors()
+        await self._send_phase_status("Calibration complete")
+
+        await self.transport.send_json(
+            {
+                "event": "calibration_result",
+                "calibration": {
+                    name: {
+                        "id": cal.id,
+                        "drive_mode": cal.drive_mode,
+                        "homing_offset": cal.homing_offset,
+                        "range_min": cal.range_min,
+                        "range_max": cal.range_max,
+                    }
+                    for name, cal in calibration.items()
+                },
+            }
+        )
+
+        await self._enter_verification()
+
     async def _enter_verification(self) -> None:
         """Enter VERIFICATION phase, ensuring calibration is loaded on the bus.
 
@@ -818,6 +879,9 @@ class SO101SetupWorker(TransportWorker):
 
             case "stop_recording":
                 await self._handle_stop_recording()
+
+            case "apply_calibration":
+                await self._handle_apply_calibration(data)
 
             case "enter_verification":
                 await self._enter_verification()

@@ -1,14 +1,64 @@
 import { useCallback, useState } from 'react';
 
-import { Button, Flex, Heading, Loading, Text } from '@geti-ui/ui';
+import { Button, FileTrigger, Flex, Heading, Loading, Text } from '@geti-ui/ui';
 
 import { InlineAlert } from '../shared/inline-alert';
 import { StatusBadge } from '../shared/status-badge';
 import { CalibrationPhase, useSetupActions, useSetupState, WizardStep } from './wizard-provider';
+import { CalibrationUploadPayload } from './use-setup-websocket';
 
 import classes from '../shared/setup-wizard.module.css';
 
-const MOTOR_NAMES = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
+const MOTOR_NAMES = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'] as const;
+const CALIBRATION_FIELDS = ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'] as const;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toCalibrationPayload = (value: unknown): { payload: CalibrationUploadPayload | null; error: string | null } => {
+    if (!isRecord(value)) {
+        return { payload: null, error: 'Calibration file must contain a JSON object.' };
+    }
+
+    const payload: CalibrationUploadPayload = {};
+
+    for (const motorName of MOTOR_NAMES) {
+        const motorValue = value[motorName];
+        if (!isRecord(motorValue)) {
+            return { payload: null, error: `Calibration entry for '${motorName}' is missing or invalid.` };
+        }
+
+        const parsedMotor: Record<(typeof CALIBRATION_FIELDS)[number], number> = {
+            id: 0,
+            drive_mode: 0,
+            homing_offset: 0,
+            range_min: 0,
+            range_max: 0,
+        };
+
+        for (const field of CALIBRATION_FIELDS) {
+            const rawValue = motorValue[field];
+            if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) {
+                return {
+                    payload: null,
+                    error: `Calibration entry for '${motorName}' has invalid numeric field '${field}'.`,
+                };
+            }
+            parsedMotor[field] = rawValue;
+        }
+
+        if (parsedMotor.range_min >= parsedMotor.range_max) {
+            return {
+                payload: null,
+                error: `Calibration entry for '${motorName}' must have range_min < range_max.`,
+            };
+        }
+
+        payload[motorName] = parsedMotor;
+    }
+
+    return { payload, error: null };
+};
 
 /**
  * Calibration step:
@@ -27,6 +77,9 @@ export const CalibrationStep = () => {
     // Tracks whether we've already sent the enter_calibration command.
     // The backend streams raw positions in CALIBRATION_INSTRUCTIONS phase.
     const [enteredCalibration, setEnteredCalibration] = useState(false);
+    const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+    const [uploadedPayload, setUploadedPayload] = useState<CalibrationUploadPayload | null>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Helper that updates phase in context.
     // Replaces the old local state + onPhaseChange callback.
@@ -51,16 +104,52 @@ export const CalibrationStep = () => {
     }
 
     const { homingResult, positions, calibrationResult, error } = wsState;
+    const effectiveCalibration = calibrationResult;
 
     const handleApplyHoming = () => {
         changePhase('homing');
         commands.startHoming();
     };
 
+    const handleUploadedFile = async (files: FileList | null) => {
+        const file = files?.[0] ?? null;
+        if (file === null) {
+            return;
+        }
+
+        setUploadedFileName(file.name);
+        setUploadError(null);
+        setUploadedPayload(null);
+
+        try {
+            const rawText = await file.text();
+            const parsed = JSON.parse(rawText) as unknown;
+            const { payload, error: parseError } = toCalibrationPayload(parsed);
+
+            if (parseError || !payload) {
+                setUploadError(parseError ?? 'Invalid calibration file.');
+                return;
+            }
+
+            setUploadedPayload(payload);
+        } catch {
+            setUploadError('Failed to parse JSON file. Please upload a valid calibration JSON.');
+        }
+    };
+
+    const handleApplyUploadedCalibration = () => {
+        if (!uploadedPayload) {
+            return;
+        }
+
+        changePhase('done');
+        commands.applyCalibration(uploadedPayload);
+    };
+
     // After homing result arrives, move to recording phase
     const homingDone = homingResult !== null;
     const isRecording = phase === 'recording';
-    const calibrationDone = calibrationResult !== null;
+    const calibrationDone = effectiveCalibration !== null;
 
     // Auto-start recording as soon as homing offsets are applied.
     // Uses the "adjusting state during render" pattern instead of useEffect.
@@ -76,7 +165,7 @@ export const CalibrationStep = () => {
         changePhase('done');
     };
 
-    if (error && phase !== 'done') {
+    if (error && (phase !== 'done' || !calibrationDone)) {
         return (
             <Flex direction='column' gap='size-200'>
                 <InlineAlert variant='error'>
@@ -132,13 +221,61 @@ export const CalibrationStep = () => {
                         should be able to move the joints freely by hand while the live positions update above.
                     </InlineAlert>
 
+                    <div className={classes.sectionCard}>
+                        <Flex direction='column' gap='size-150'>
+                            <Heading level={4}>Import Calibration JSON</Heading>
+                            <Text>
+                                If you already have calibration values, upload them to apply directly to motors and skip
+                                manual homing and recording.
+                            </Text>
+                            <Flex gap='size-100' alignItems='center'>
+                                <FileTrigger acceptedFileTypes={['.json']} onSelect={handleUploadedFile}>
+                                    <Button variant='secondary'>Upload JSON</Button>
+                                </FileTrigger>
+                                <Text>{uploadedFileName ?? 'No file selected'}</Text>
+                            </Flex>
+                            {uploadError && <InlineAlert variant='error'>{uploadError}</InlineAlert>}
+
+                            {uploadedPayload && (
+                                <>
+                                    <InlineAlert variant='success'>Calibration JSON parsed successfully.</InlineAlert>
+                                    <table className={classes.rangeTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>Joint</th>
+                                                <th>Homing Offset</th>
+                                                <th>Min</th>
+                                                <th>Max</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.entries(uploadedPayload).map(([name, cal]) => (
+                                                <tr key={name}>
+                                                    <td>{name}</td>
+                                                    <td>{cal.homing_offset}</td>
+                                                    <td>{cal.range_min}</td>
+                                                    <td>{cal.range_max}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </>
+                            )}
+                        </Flex>
+                    </div>
+
                     <Flex justifyContent='space-between'>
                         <Button variant='secondary' onPress={goBack}>
                             Back
                         </Button>
-                        <Button variant='accent' onPress={handleApplyHoming}>
-                            Apply Homing Offsets
-                        </Button>
+                        <Flex gap='size-200'>
+                            <Button variant='secondary' onPress={handleApplyUploadedCalibration} isDisabled={!uploadedPayload}>
+                                Apply Uploaded Calibration
+                            </Button>
+                            <Button variant='accent' onPress={handleApplyHoming}>
+                                Apply Homing Offsets
+                            </Button>
+                        </Flex>
                     </Flex>
                 </>
             )}
@@ -247,7 +384,7 @@ export const CalibrationStep = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {Object.entries(calibrationResult.calibration).map(([name, cal]) => (
+                                            {Object.entries(effectiveCalibration.calibration).map(([name, cal]) => (
                                                 <tr key={name}>
                                                     <td>{name}</td>
                                                     <td>{cal.homing_offset}</td>

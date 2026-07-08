@@ -85,6 +85,16 @@ export interface CalibrationResult {
     >;
 }
 
+export interface CalibrationUploadPayload {
+    [jointName: string]: {
+        id: number;
+        drive_mode: number;
+        homing_offset: number;
+        range_min: number;
+        range_max: number;
+    };
+}
+
 export interface StatusEvent {
     event: 'status';
     state: string;
@@ -327,6 +337,13 @@ export function useSetupWebSocket({
         sendJsonMessage({ command: 'ping' });
     }, [sendJsonMessage]);
 
+    const applyCalibration = useCallback(
+        (calibration: CalibrationUploadPayload) => {
+            sendJsonMessage({ command: 'apply_calibration', calibration });
+        },
+        [sendJsonMessage]
+    );
+
     return {
         state,
         readyState,
@@ -340,6 +357,7 @@ export function useSetupWebSocket({
             reProbe,
             enterVerification,
             enterCalibration,
+            applyCalibration,
             ping,
         },
     };

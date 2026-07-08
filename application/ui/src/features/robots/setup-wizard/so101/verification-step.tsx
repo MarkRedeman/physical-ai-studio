@@ -143,7 +143,8 @@ export const VerificationStep = () => {
         ? buildRobotBody(robotForm, activeType, robotId)
         : null;
 
-    const hasCalibration = wsState.calibrationResult !== null;
+    const effectiveCalibration = wsState.calibrationResult;
+    const hasCalibration = effectiveCalibration !== null;
 
     const handleSave = async () => {
         if (robotBody === null) {
@@ -161,8 +162,8 @@ export const VerificationStep = () => {
             });
 
             // 2. Save calibration if we have it
-            if (wsState.calibrationResult) {
-                const calibrationBody = buildCalibrationBody(wsState.calibrationResult, createdRobot.id, calibrationId);
+            if (effectiveCalibration) {
+                const calibrationBody = buildCalibrationBody(effectiveCalibration, createdRobot.id, calibrationId);
 
                 await saveCalibrationMutation.mutateAsync({
                     params: { path: { project_id, robot_id: createdRobot.id } },
