@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from lerobot.configs import RGBEncoderConfig
 
+from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings
 
@@ -36,6 +37,7 @@ def test_create_uses_rgb_encoder_and_not_vcodec(tmp_path: Path) -> None:
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
     dataset._streaming_encoding_settings = settings
+    dataset._access_mode = DatasetAccessMode.READ_ONLY
 
     with (
         patch.object(InternalLeRobotDataset, "_check_repository_exists", return_value=False),
@@ -65,6 +67,7 @@ def test_load_dataset_is_read_only_and_does_not_pass_write_kwargs(tmp_path: Path
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
     dataset._streaming_encoding_settings = settings
+    dataset._access_mode = DatasetAccessMode.READ_ONLY
 
     with (
         patch.object(InternalLeRobotDataset, "_check_repository_exists", return_value=True),
@@ -93,6 +96,7 @@ def test_resume_dataset_uses_write_kwargs_and_not_vcodec(tmp_path: Path) -> None
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
     dataset._streaming_encoding_settings = settings
+    dataset._access_mode = DatasetAccessMode.READ_ONLY
 
     with (
         patch.object(InternalLeRobotDataset, "_check_repository_exists", return_value=True),
