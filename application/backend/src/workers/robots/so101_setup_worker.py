@@ -557,21 +557,7 @@ class SO101SetupWorker(TransportWorker):
         await self._send_phase_status("Calibration complete")
 
         # Send the final calibration data back
-        await self.transport.send_json(
-            {
-                "event": "calibration_result",
-                "calibration": {
-                    name: {
-                        "id": cal.id,
-                        "drive_mode": cal.drive_mode,
-                        "homing_offset": cal.homing_offset,
-                        "range_min": cal.range_min,
-                        "range_max": cal.range_max,
-                    }
-                    for name, cal in calibration.items()
-                },
-            }
-        )
+        await self._send_calibration_result(calibration)
 
         # Transition to verification — broadcast loop auto-starts
         # normalized streaming on the next iteration.
@@ -619,21 +605,7 @@ class SO101SetupWorker(TransportWorker):
         await self._configure_motors()
         await self._send_phase_status("Calibration complete")
 
-        await self.transport.send_json(
-            {
-                "event": "calibration_result",
-                "calibration": {
-                    name: {
-                        "id": cal.id,
-                        "drive_mode": cal.drive_mode,
-                        "homing_offset": cal.homing_offset,
-                        "range_min": cal.range_min,
-                        "range_max": cal.range_max,
-                    }
-                    for name, cal in calibration.items()
-                },
-            }
-        )
+        await self._send_calibration_result(calibration)
 
         await self._enter_verification()
 
@@ -655,21 +627,7 @@ class SO101SetupWorker(TransportWorker):
 
             # Send calibration_result so the frontend has calibration data
             # for the save flow, even when calibration was skipped.
-            await self.transport.send_json(
-                {
-                    "event": "calibration_result",
-                    "calibration": {
-                        name: {
-                            "id": mc.id,
-                            "drive_mode": mc.drive_mode,
-                            "homing_offset": mc.homing_offset,
-                            "range_min": mc.range_min,
-                            "range_max": mc.range_max,
-                        }
-                        for name, mc in cal.items()
-                    },
-                }
-            )
+            await self._send_calibration_result(cal)
 
         self.phase = SetupPhase.VERIFICATION
 
@@ -911,6 +869,24 @@ class SO101SetupWorker(TransportWorker):
     async def _send_event(self, event: str, **kwargs: Any) -> None:
         """Send a named event with arbitrary payload."""
         await self.transport.send_json({"event": event, **kwargs})
+
+    async def _send_calibration_result(self, calibration: dict[str, MotorCalibration]) -> None:
+        """Send normalized calibration_result payload to frontend."""
+        await self.transport.send_json(
+            {
+                "event": "calibration_result",
+                "calibration": {
+                    name: {
+                        "id": cal.id,
+                        "drive_mode": cal.drive_mode,
+                        "homing_offset": cal.homing_offset,
+                        "range_min": cal.range_min,
+                        "range_max": cal.range_max,
+                    }
+                    for name, cal in calibration.items()
+                },
+            }
+        )
 
     async def _cleanup(self) -> None:
         """Disconnect the motor bus."""

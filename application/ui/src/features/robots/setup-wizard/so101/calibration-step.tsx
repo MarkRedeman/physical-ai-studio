@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Button, FileTrigger, Flex, Heading, Loading, Text } from '@geti-ui/ui';
 
@@ -60,56 +60,14 @@ const toCalibrationPayload = (value: unknown): { payload: CalibrationUploadPaylo
     return { payload, error: null };
 };
 
-/**
- * Calibration step:
- * 1. Ask user to center the robot, then apply homing offsets
- * 2. Ask user to move all joints through range while showing live position table
- * 3. Finalize and write calibration to motor EEPROM
- */
-export const CalibrationStep = () => {
-    const { wsState, calibrationPhase: phase } = useSetupState();
-    const { goNext, goBack, markCompleted, commands, setCalibrationPhase } = useSetupActions();
+interface CalibrationJsonImportCardProps {
+    onApply: (payload: CalibrationUploadPayload) => void;
+}
 
-    // Tracks whether we've already auto-started recording after homing completes.
-    // Reset when going back to instructions for recalibration.
-    const [prevHomingDone, setPrevHomingDone] = useState(false);
-
-    // Tracks whether we've already sent the enter_calibration command.
-    // The backend streams raw positions in CALIBRATION_INSTRUCTIONS phase.
-    const [enteredCalibration, setEnteredCalibration] = useState(false);
+const CalibrationJsonImportCard = ({ onApply }: CalibrationJsonImportCardProps) => {
     const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
     const [uploadedPayload, setUploadedPayload] = useState<CalibrationUploadPayload | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
-
-    // Helper that updates phase in context.
-    // Replaces the old local state + onPhaseChange callback.
-    const changePhase = useCallback(
-        (newPhase: CalibrationPhase) => {
-            setCalibrationPhase(newPhase);
-            // Reset homing tracking when going back to instructions,
-            // so auto-start recording can fire again on recalibration.
-            if (newPhase === 'instructions') {
-                setPrevHomingDone(false);
-                setEnteredCalibration(false);
-            }
-        },
-        [setCalibrationPhase]
-    );
-
-    // Tell the backend to enter CALIBRATION_INSTRUCTIONS phase so it starts
-    // streaming raw positions.  Uses the "adjusting state during render" pattern.
-    if (phase === 'instructions' && !enteredCalibration) {
-        setEnteredCalibration(true);
-        commands.enterCalibration();
-    }
-
-    const { homingResult, positions, calibrationResult, error } = wsState;
-    const effectiveCalibration = calibrationResult;
-
-    const handleApplyHoming = () => {
-        changePhase('homing');
-        commands.startHoming();
-    };
 
     const handleUploadedFile = async (files: FileList | null) => {
         const file = files?.[0] ?? null;
@@ -137,13 +95,101 @@ export const CalibrationStep = () => {
         }
     };
 
-    const handleApplyUploadedCalibration = () => {
-        if (!uploadedPayload) {
-            return;
-        }
+    return (
+        <div className={classes.sectionCard}>
+            <Flex direction='column' gap='size-150'>
+                <Heading level={4}>Import Calibration JSON</Heading>
+                <Text>
+                    If you already have calibration values, upload them to apply directly to motors and skip manual
+                    homing and recording.
+                </Text>
+                <Flex gap='size-100' alignItems='center'>
+                    <FileTrigger acceptedFileTypes={['.json']} onSelect={handleUploadedFile}>
+                        <Button variant='secondary'>Upload JSON</Button>
+                    </FileTrigger>
+                    <Text>{uploadedFileName ?? 'No file selected'}</Text>
+                </Flex>
+                {uploadError && <InlineAlert variant='error'>{uploadError}</InlineAlert>}
 
+                {uploadedPayload && (
+                    <>
+                        <InlineAlert variant='success'>Calibration JSON parsed successfully.</InlineAlert>
+                        <table className={classes.rangeTable}>
+                            <thead>
+                                <tr>
+                                    <th>Joint</th>
+                                    <th>Homing Offset</th>
+                                    <th>Min</th>
+                                    <th>Max</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {Object.entries(uploadedPayload).map(([name, cal]) => (
+                                    <tr key={name}>
+                                        <td>{name}</td>
+                                        <td>{cal.homing_offset}</td>
+                                        <td>{cal.range_min}</td>
+                                        <td>{cal.range_max}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </>
+                )}
+
+                <Flex justifyContent='end'>
+                    <Button variant='secondary' onPress={() => uploadedPayload && onApply(uploadedPayload)} isDisabled={!uploadedPayload}>
+                        Apply Uploaded Calibration
+                    </Button>
+                </Flex>
+            </Flex>
+        </div>
+    );
+};
+
+/**
+ * Calibration step:
+ * 1. Ask user to center the robot, then apply homing offsets
+ * 2. Ask user to move all joints through range while showing live position table
+ * 3. Finalize and write calibration to motor EEPROM
+ */
+export const CalibrationStep = () => {
+    const { wsState, calibrationPhase: phase } = useSetupState();
+    const { goNext, goBack, markCompleted, commands, setCalibrationPhase } = useSetupActions();
+
+    const [recordingStarted, setRecordingStarted] = useState(false);
+
+    // Helper that updates phase in context.
+    // Replaces the old local state + onPhaseChange callback.
+    const changePhase = useCallback(
+        (newPhase: CalibrationPhase) => {
+            setCalibrationPhase(newPhase);
+            // Reset homing tracking when going back to instructions,
+            // so auto-start recording can fire again on recalibration.
+            if (newPhase === 'instructions') {
+                setRecordingStarted(false);
+            }
+        },
+        [setCalibrationPhase]
+    );
+
+    useEffect(() => {
+        if (phase === 'instructions') {
+            commands.enterCalibration();
+        }
+    }, [phase, commands]);
+
+    const { homingResult, positions, calibrationResult, error } = wsState;
+    const effectiveCalibration = calibrationResult;
+
+    const handleApplyHoming = () => {
+        changePhase('homing');
+        commands.startHoming();
+    };
+
+    const handleApplyUploadedCalibration = (payload: CalibrationUploadPayload) => {
         changePhase('done');
-        commands.applyCalibration(uploadedPayload);
+        commands.applyCalibration(payload);
     };
 
     // After homing result arrives, move to recording phase
@@ -151,14 +197,13 @@ export const CalibrationStep = () => {
     const isRecording = phase === 'recording';
     const calibrationDone = effectiveCalibration !== null;
 
-    // Auto-start recording as soon as homing offsets are applied.
-    // Uses the "adjusting state during render" pattern instead of useEffect.
-    // See https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-    if (phase === 'homing' && homingDone && !prevHomingDone) {
-        setPrevHomingDone(true);
-        changePhase('recording');
-        commands.startRecording();
-    }
+    useEffect(() => {
+        if (phase === 'homing' && homingDone && !recordingStarted) {
+            setRecordingStarted(true);
+            changePhase('recording');
+            commands.startRecording();
+        }
+    }, [phase, homingDone, recordingStarted, changePhase, commands]);
 
     const handleStopRecording = () => {
         commands.stopRecording();
@@ -221,61 +266,15 @@ export const CalibrationStep = () => {
                         should be able to move the joints freely by hand while the live positions update above.
                     </InlineAlert>
 
-                    <div className={classes.sectionCard}>
-                        <Flex direction='column' gap='size-150'>
-                            <Heading level={4}>Import Calibration JSON</Heading>
-                            <Text>
-                                If you already have calibration values, upload them to apply directly to motors and skip
-                                manual homing and recording.
-                            </Text>
-                            <Flex gap='size-100' alignItems='center'>
-                                <FileTrigger acceptedFileTypes={['.json']} onSelect={handleUploadedFile}>
-                                    <Button variant='secondary'>Upload JSON</Button>
-                                </FileTrigger>
-                                <Text>{uploadedFileName ?? 'No file selected'}</Text>
-                            </Flex>
-                            {uploadError && <InlineAlert variant='error'>{uploadError}</InlineAlert>}
-
-                            {uploadedPayload && (
-                                <>
-                                    <InlineAlert variant='success'>Calibration JSON parsed successfully.</InlineAlert>
-                                    <table className={classes.rangeTable}>
-                                        <thead>
-                                            <tr>
-                                                <th>Joint</th>
-                                                <th>Homing Offset</th>
-                                                <th>Min</th>
-                                                <th>Max</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {Object.entries(uploadedPayload).map(([name, cal]) => (
-                                                <tr key={name}>
-                                                    <td>{name}</td>
-                                                    <td>{cal.homing_offset}</td>
-                                                    <td>{cal.range_min}</td>
-                                                    <td>{cal.range_max}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </>
-                            )}
-                        </Flex>
-                    </div>
+                    <CalibrationJsonImportCard onApply={handleApplyUploadedCalibration} />
 
                     <Flex justifyContent='space-between'>
                         <Button variant='secondary' onPress={goBack}>
                             Back
                         </Button>
-                        <Flex gap='size-200'>
-                            <Button variant='secondary' onPress={handleApplyUploadedCalibration} isDisabled={!uploadedPayload}>
-                                Apply Uploaded Calibration
-                            </Button>
-                            <Button variant='accent' onPress={handleApplyHoming}>
-                                Apply Homing Offsets
-                            </Button>
-                        </Flex>
+                        <Button variant='accent' onPress={handleApplyHoming}>
+                            Apply Homing Offsets
+                        </Button>
                     </Flex>
                 </>
             )}
