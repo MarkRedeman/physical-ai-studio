@@ -21,7 +21,8 @@ def from_port(port: ListPortInfo) -> SerialPortInfo | None:
     serial_number = getattr(port, "serial_number", None)
 
     # Ignore internal hardware (e.g. /dev/ttyS0..ttyS31)
-    if port.device.startswith("/dev/ttyS") and port.device[9:10].isdigit():
+    ttys_suffix = port.device.removeprefix("/dev/ttyS")
+    if ttys_suffix[:1].isdigit():
         return None
 
     # The Feetech UART board CH340 has PID 29987

@@ -25,6 +25,8 @@ Run on the NUC (or other machine physically connected to the robot):
 socat TCP-LISTEN:7001,reuseaddr,fork FILE:/dev/ttyACM0,raw,echo=0,b1000000
 ```
 
+`TCP-LISTEN` is unencrypted and unauthenticated. Use only on a trusted network, or tunnel this traffic through SSH/VPN.
+
 | Flag                | Purpose                                                                            |
 |---------------------|------------------------------------------------------------------------------------|
 | `TCP-LISTEN:7001`   | Listen on TCP port 7001.                                                           |
@@ -42,7 +44,7 @@ Run on the workstation where Studio is running:
 
 ```bash
 sudo socat \
-  PTY,link=/dev/ttyVACM0,raw,echo=0,user=$(whoami),group=$(whoami),mode=660 \
+  PTY,link=/dev/ttyVACM0,raw,echo=0,user=$(id -un),group=$(id -gn),mode=660 \
   TCP:192.168.2.8:7001
 ```
 
@@ -109,7 +111,7 @@ docker compose up -d --force-recreate
 Recreate the local PTY with explicit ownership and mode:
 
 ```bash
-sudo socat PTY,link=/dev/ttyVACM0,raw,echo=0,user=$(whoami),group=$(whoami),mode=660 TCP:192.168.2.8:7001
+sudo socat PTY,link=/dev/ttyVACM0,raw,echo=0,user=$(id -un),group=$(id -gn),mode=660 TCP:192.168.2.8:7001
 ```
 
 ### TCP connection fails
