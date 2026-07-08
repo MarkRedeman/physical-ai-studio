@@ -87,6 +87,21 @@ for p in list_ports.comports():
 "
 ```
 
+If you run Studio with Docker Compose, also ensure the container can access the virtual device.
+Add these mounts to your service in `application/docker/docker-compose.yaml`:
+
+```yaml
+volumes:
+  - /dev/ttyVACM0:/dev/ttyVACM0
+  - /dev/pts:/dev/pts
+```
+
+Then restart the container:
+
+```bash
+docker compose up -d --force-recreate
+```
+
 ## Troubleshooting
 
 ### Permission denied on `/dev/ttyVACM0`
