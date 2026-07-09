@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { degToRad } from 'three/src/math/MathUtils.js';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 
-import { useRobotCatalogDefinitionQuery } from './robot-catalog';
+import { useRobotCatalogDefinitionQuery } from './robot-catalog.hooks';
 import { SchemaRobotType } from './robot-types';
 
 export const mapJointToURDFJoint = (
@@ -19,7 +19,12 @@ export const mapJointToURDFJoint = (
     const modelJoints = jointMap[joint.name] ?? [];
 
     modelJoints.forEach((modelJointName) => {
-        const isRevolute = model.joints[modelJointName].jointType === 'revolute';
+        const modelJoint = model.joints[modelJointName];
+        if (!modelJoint) {
+            return;
+        }
+
+        const isRevolute = modelJoint.jointType === 'revolute';
 
         model.setJointValue(modelJointName, isRevolute ? degToRad(joint.value) : joint.value);
     });

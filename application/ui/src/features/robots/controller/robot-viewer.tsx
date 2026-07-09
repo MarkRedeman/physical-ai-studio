@@ -9,7 +9,7 @@ import { degToRad } from 'three/src/math/MathUtils.js';
 import { URDFRobot } from 'urdf-loader';
 
 import { useContainerSize } from '../../../components/zoom/use-container-size';
-import { useRobotCatalogDefinitionQuery } from '../robot-catalog';
+import { useRobotCatalogDefinitionQuery } from '../robot-catalog.hooks';
 import { SchemaRobot } from '../robot-types';
 import { mapJointToURDFJoint, useLoadModelQuery } from './../robot-models-context';
 

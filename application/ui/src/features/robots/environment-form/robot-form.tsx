@@ -5,7 +5,7 @@ import { Add, Close } from '@geti-ui/ui/icons';
 
 import { $api } from '../../../api/client';
 import { useProjectId } from '../../../features/projects/use-project';
-import { useIsRobotRole } from '../robot-catalog';
+import { useIsRobotRole } from '../robot-catalog.hooks';
 import { RobotConfiguration, useEnvironmentForm, useSetEnvironmentForm } from './provider';
 
 import classes from './form.module.css';

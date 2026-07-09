@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import useWebSocket from 'react-use-websocket';
 
 import { fetchClient } from '../../api/client';
-import { useRobotCatalogDefinitionQuery } from './robot-catalog';
+import { useRobotCatalogDefinitionQuery } from './robot-catalog.hooks';
 import { mapJointToURDFJoint, useLoadModelQuery } from './robot-models-context';
 import { SchemaRobotType } from './robot-types';
 

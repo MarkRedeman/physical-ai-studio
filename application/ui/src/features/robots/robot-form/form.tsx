@@ -3,7 +3,7 @@ import { ChevronLeft } from '@geti-ui/ui/icons';
 
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
-import { useRobotCatalogQuery } from '../robot-catalog';
+import { useRobotCatalogQuery } from '../robot-catalog.hooks';
 import { SchemaRobotType } from '../robot-types';
 import { SO101FormFields } from './catalog/so101';
 import { WidowxAIFormFields } from './catalog/widowxai';
