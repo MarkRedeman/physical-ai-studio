@@ -15,6 +15,13 @@ export default defineConfig({
     ],
     test: {
         environment: 'jsdom',
+        environmentOptions: {
+            jsdom: {
+                // Match the base URL that MSW handlers are registered under so that
+                // relative fetch calls (baseUrl: '') resolve to the same origin.
+                url: 'http://localhost:7860/',
+            },
+        },
         // This is needed to use globals like describe or expect
         globals: true,
         include: ['./src/**/*.test.{ts,tsx}'],

@@ -1,14 +1,21 @@
 import '@testing-library/jest-dom';
 
-import fetchPolyfill, { Request as RequestPolyfill } from 'node-fetch';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
 import { server } from './msw-node-setup';
 
 process.env.PUBLIC_API_BASE_URL = 'http://localhost:7860';
 
+// Start MSW at module-evaluation time so that globalThis.fetch is patched before
+// any test-file import (e.g. src/api/client.ts) captures it via
+//   `fetch: baseFetch = globalThis.fetch`
+// in openapi-fetch.  If we defer to beforeAll, client.ts is imported first and
+// keeps a stale reference to the pre-patch fetch.
+server.listen({ onUnhandledRequest: 'bypass' });
+
 beforeAll(() => {
-    server.listen({ onUnhandledRequest: 'bypass' });
+    // server.listen() is already called above; this is a no-op guard in case
+    // vitest ever re-evaluates setup files between test files.
 });
 
 afterEach(() => {
@@ -17,17 +24,4 @@ afterEach(() => {
 
 afterAll(() => {
     server.close();
-});
-
-// Why we need these polyfills:
-// https://github.com/reduxjs/redux-toolkit/issues/4966#issuecomment-3115230061
-Object.defineProperty(global, 'fetch', {
-    // MSW will overwrite this to intercept requests
-    writable: true,
-    value: fetchPolyfill,
-});
-
-Object.defineProperty(global, 'Request', {
-    writable: false,
-    value: RequestPolyfill,
 });
