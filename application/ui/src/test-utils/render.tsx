@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from 'react';
+import { createContext, Suspense, useContext, type ReactNode } from 'react';
 
 import { ThemeProvider } from '@geti-ui/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -28,7 +28,11 @@ const TestProviders = ({ children, queryClient }: { children: ReactNode; queryCl
     </QueryClientProvider>
 );
 
-const createTestRouter = (children: ReactNode, options: RenderOptions, queryClient: QueryClient) => {
+const createTestRouter = (
+    children: ReactNode,
+    options: Pick<RenderOptions, 'route' | 'path'>,
+    queryClient: QueryClient
+) => {
     const route = options.route ?? '/';
     const path = options.path ?? '/';
 
@@ -44,20 +48,40 @@ const createTestRouter = (children: ReactNode, options: RenderOptions, queryClie
 };
 
 export const render = (ui: ReactNode, options: RenderOptions = {}) => {
-    const testQueryClient = options.queryClient ?? createQueryClient();
-    const router = createTestRouter(ui, options, testQueryClient);
+    const { route, path, queryClient: queryClientOption, wrapper: _wrapper, ...rtlOptions } = options;
+    const testQueryClient = queryClientOption ?? createQueryClient();
+    const router = createTestRouter(ui, { route, path }, testQueryClient);
 
-    return rtlRender(<RouterProvider router={router} />);
+    return rtlRender(<RouterProvider router={router} />, rtlOptions);
+};
+
+// Context used by renderHook to thread dynamic children through a stable router instance.
+// The router is created once per renderHook call; children update via this context on rerender.
+const HookChildrenContext = createContext<ReactNode>(null);
+
+const HookRouteElement = ({ queryClient }: { queryClient: QueryClient }) => {
+    const children = useContext(HookChildrenContext);
+    return <TestProviders queryClient={queryClient}>{children}</TestProviders>;
 };
 
 export const renderHook = <TProps, TResult>(callback: (props: TProps) => TResult, options: RenderOptions = {}) => {
-    const testQueryClient = options.queryClient ?? createQueryClient();
+    const { route, path, queryClient: queryClientOption } = options;
+    const testQueryClient = queryClientOption ?? createQueryClient();
+
+    // Create the router once so that rerenders don't reset router state or remount the hook.
+    const router = createMemoryRouter(
+        [{ path: path ?? '/', element: <HookRouteElement queryClient={testQueryClient} /> }],
+        { initialEntries: [route ?? '/'], initialIndex: 0 }
+    );
 
     const Wrapper = ({ children }: { children: ReactNode }) => {
         const wrappedChildren = options.wrapper ? <options.wrapper>{children}</options.wrapper> : children;
-        const router = createTestRouter(wrappedChildren, options, testQueryClient);
 
-        return <RouterProvider router={router} />;
+        return (
+            <HookChildrenContext.Provider value={wrappedChildren}>
+                <RouterProvider router={router} />
+            </HookChildrenContext.Provider>
+        );
     };
 
     return rtlRenderHook(callback, { wrapper: Wrapper });

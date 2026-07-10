@@ -14,6 +14,12 @@ export default defineConfig({
         }),
     ],
     test: {
+        // Set PUBLIC_API_BASE_URL before any module is evaluated so that
+        // api/utils.ts and api/client.ts read the correct base URL when they
+        // are first imported.
+        env: {
+            PUBLIC_API_BASE_URL: 'http://localhost:7860',
+        },
         environment: 'jsdom',
         environmentOptions: {
             jsdom: {
