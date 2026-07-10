@@ -34,11 +34,8 @@ def _to_so101_calibration(calibration: Calibration) -> SO101Calibration:
 async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: CatalogRobotFactory) -> SO101:
     if not isinstance(robot, SO101Robot):
         raise TypeError("Expected SO101Robot")
-    port = await factory.find_port_by_serial(robot.payload.serial_number)
+    port = await factory.find_so101_port(robot)
     calibration = await factory.get_calibration_by_id(robot.active_calibration_id)
-
-    if port is None:
-        raise ResourceNotFoundError(ResourceType.ROBOT, robot.payload.serial_number)
 
     if calibration is None:
         raise ResourceNotFoundError(ResourceType.ROBOT_CALIBRATION, robot.payload.serial_number)
