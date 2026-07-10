@@ -28,7 +28,7 @@ class PhysicalAIRobotAdapter(RobotClient):
         *,
         robot: Robot,
         robot_type: RobotType,
-        robot_role: Literal["follower", "leader"] | None = None,
+        robot_role: Literal["follower", "leader"],
         config: PhysicalAIRobotAdapterConfig | None = None,
     ) -> None:
         resolved_config = config or PhysicalAIRobotAdapterConfig()
