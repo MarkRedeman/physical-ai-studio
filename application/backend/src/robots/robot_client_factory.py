@@ -7,7 +7,7 @@ from robots.robot_client import RobotClient
 from schemas.calibration import Calibration
 from schemas.robot import Robot, SO101Robot
 from services.robot_calibration_service import RobotCalibrationService
-from utils.serial_robot_tools import RobotConnectionManager
+from utils.serial_robot_tools import RobotConnectionManager, find_so101_port, serial_port_from_so101
 
 
 class RobotClientFactory:
@@ -46,10 +46,11 @@ class RobotClientFactory:
             ),
         )
 
-    async def find_robot_port(self, robot: SO101Robot) -> str:
-        port = await self.find_port_by_serial(robot.payload.serial_number)
+    async def find_so101_port(self, robot: SO101Robot) -> str:
+        port = await find_so101_port(self.robot_manager, serial_port_from_so101(robot))
         if port is None:
-            raise ResourceNotFoundError(ResourceType.ROBOT, robot.payload.serial_number)
+            resource_key = robot.payload.serial_number or robot.payload.connection_string
+            raise ResourceNotFoundError(ResourceType.ROBOT, resource_key)
         return port
 
     # NOTE: this is a bit awkward due to how SO101 is implemented,

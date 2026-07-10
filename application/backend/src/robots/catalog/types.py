@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from schemas.calibration import Calibration
+    from schemas.robot import SO101Robot
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,8 @@ class RobotAdapterOptions:
 
 
 class CatalogRobotFactory(Protocol):
+    async def find_so101_port(self, robot: SO101Robot) -> str: ...
+
     async def find_port_by_serial(self, serial_number: str) -> str | None: ...
 
     async def get_calibration_by_id(self, calibration_id: UUID | None) -> Calibration | None: ...
