@@ -36,7 +36,14 @@ describe('SubmitNewEnvironmentButton', () => {
         it('when the project has robots but none were added to the environment', async () => {
             server.use(
                 http.get(ROBOTS_PATH, () =>
-                    HttpResponse.json([{ id: 'robot-1', type: 'SO101_Follower', name: 'Test Robot' }])
+                    HttpResponse.json([
+                        {
+                            id: 'robot-1',
+                            type: 'SO101_Follower',
+                            name: 'Test Robot',
+                            payload: { connection_string: '', serial_number: '' },
+                        },
+                    ])
                 )
             );
 
@@ -58,7 +65,14 @@ describe('SubmitNewEnvironmentButton', () => {
         it('when the name is set and at least one robot was added to the environment', async () => {
             server.use(
                 http.get(ROBOTS_PATH, () =>
-                    HttpResponse.json([{ id: 'robot-1', type: 'SO101_Follower', name: 'Test Robot' }])
+                    HttpResponse.json([
+                        {
+                            id: 'robot-1',
+                            type: 'SO101_Follower',
+                            name: 'Test Robot',
+                            payload: { connection_string: '', serial_number: '' },
+                        },
+                    ])
                 )
             );
 
