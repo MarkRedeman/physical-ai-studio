@@ -159,7 +159,6 @@ dev = [
 # ============================================================================ #
 [tool.uv]
 exclude-newer = "7 days"
-exclude-newer-package = { lerobot = false }
 index-strategy = "unsafe-best-match"
 override-dependencies = [
     # executorch>=1.1.0 requires pytest<9.0 (its own test-suite constraint),

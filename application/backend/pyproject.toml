@@ -147,7 +147,6 @@ all = [
 package = true
 default-groups = ["all"]
 exclude-newer = "7 days"
-exclude-newer-package = { lerobot = false }
 # The pytorch-xpu index is non-explicit (explicit = false) because
 # transitive deps like pytorch-triton-xpu only exist on the XPU index.
 # unsafe-best-match is required because PyTorch indexes can host stale
