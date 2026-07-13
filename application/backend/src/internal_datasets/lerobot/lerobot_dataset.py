@@ -86,6 +86,8 @@ class InternalLeRobotDataset(DatasetClient):
 
     def resume_dataset(self) -> None:
         """Load dataset in write mode for appending episodes."""
+        if self._access_mode is not DatasetAccessMode.RECORDING_MUTATION:
+            raise ValueError("Cannot resume dataset in write mode unless access_mode is RECORDING_MUTATION")
         self._resume_for_writing()
 
     def create(

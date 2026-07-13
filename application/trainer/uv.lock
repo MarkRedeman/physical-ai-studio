@@ -68,12 +68,8 @@ conflicts = [[
 ]]
 
 [options]
-exclude-newer = "2026-07-06T08:04:32.021475273Z"
+exclude-newer = "2026-07-06T10:46:25.279596955Z"
 exclude-newer-span = "P7D"
-
-[options.exclude-newer-package]
-lerobot = false
-physicalai = false
 
 [manifest]
 overrides = [
@@ -2334,6 +2330,7 @@ requires-dist = [
     { name = "decord", marker = "(platform_machine == 'AMD64' and extra == 'groot') or (platform_machine == 'x86_64' and extra == 'groot')", specifier = ">=0.6.0,<1.0.0" },
     { name = "diffusers", marker = "extra == 'diffusion'", specifier = ">=0.38.0" },
     { name = "diffusers", marker = "extra == 'groot'", specifier = ">=0.38.0" },
+    { name = "diffusers", marker = "extra == 'tests'", specifier = ">=0.38.0" },
     { name = "dm-tree", marker = "extra == 'groot'", specifier = ">=0.1.8,<1.0.0" },
     { name = "executorch", marker = "extra == 'executorch'", specifier = ">=1.1.0" },
     { name = "executorch", marker = "extra == 'executorch-openvino'", specifier = ">=1.1.0" },
@@ -2356,7 +2353,6 @@ requires-dist = [
     { name = "peft", marker = "extra == 'groot'", specifier = ">=0.13.0,<1.0.0" },
     { name = "peft", marker = "extra == 'pi0'", specifier = ">=0.13.0,<1.0.0" },
     { name = "physicalai", git = "https://github.com/openvinotoolkit/physicalai.git?rev=9881601325f724a0f00b1bf43f134d7f34fdef55" },
-    { name = "physicalai-train", extras = ["diffusion"], marker = "extra == 'tests'" },
     { name = "physicalai-train", extras = ["groot"], marker = "extra == 'all'" },
     { name = "physicalai-train", extras = ["libero"], marker = "extra == 'all'" },
     { name = "physicalai-train", extras = ["pi0"], marker = "extra == 'all'" },

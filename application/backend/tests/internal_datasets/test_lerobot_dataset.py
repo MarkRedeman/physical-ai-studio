@@ -96,7 +96,7 @@ def test_resume_dataset_uses_write_kwargs_and_not_vcodec(tmp_path: Path) -> None
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
     dataset._streaming_encoding_settings = settings
-    dataset._access_mode = DatasetAccessMode.READ_ONLY
+    dataset._access_mode = DatasetAccessMode.RECORDING_MUTATION
 
     with (
         patch.object(InternalLeRobotDataset, "_check_repository_exists", return_value=True),
@@ -115,3 +115,24 @@ def test_resume_dataset_uses_write_kwargs_and_not_vcodec(tmp_path: Path) -> None
     assert kwargs["encoder_threads"] == 2
     assert kwargs["encoder_queue_maxsize"] == 60
     assert "vcodec" not in kwargs
+
+
+def test_resume_dataset_raises_in_read_only_mode(tmp_path: Path) -> None:
+    settings = StreamingEncodingSettings(
+        streaming_encoding=True,
+        vcodec="h264",
+        encoder_threads=2,
+        encoder_queue_maxsize=60,
+    )
+    dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
+    dataset.path = tmp_path / "dataset"
+    dataset._streaming_encoding_settings = settings
+    dataset._access_mode = DatasetAccessMode.READ_ONLY
+
+    with patch.object(InternalLeRobotDataset, "_resume_for_writing") as resume_mock:
+        try:
+            dataset.resume_dataset()
+            assert False, "Expected ValueError"
+        except ValueError as exc:
+            assert "RECORDING_MUTATION" in str(exc)
+    resume_mock.assert_not_called()
