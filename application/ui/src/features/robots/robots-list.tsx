@@ -80,9 +80,9 @@ const MenuActions = ({ robot }: { robot: SchemaRobot }) => {
                         ? ['export-calibration']
                         : []
                 }
-                onAction={(action) => {
+                onAction={async (action) => {
                     if (action === 'delete') {
-                        deleteRobotMutation.mutate(
+                        await deleteRobotMutation.mutateAsync(
                             { params: { path: { project_id, robot_id: robot.id } } },
                             {
                                 onError: (error) => {
@@ -98,7 +98,11 @@ const MenuActions = ({ robot }: { robot: SchemaRobot }) => {
                         );
                     }
                     if (action === 'export-calibration') {
-                        exportCalibration(project_id, robot);
+                        try {
+                            await exportCalibration(project_id, robot);
+                        } catch {
+                            toast.negative('Failed to export calibration.');
+                        }
                     }
                 }}
             >

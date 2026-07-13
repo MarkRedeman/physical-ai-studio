@@ -39,7 +39,7 @@ describe('RobotsList', () => {
         vi.unstubAllGlobals();
     });
 
-    it('only shows Export calibration for SO101 robots', async () => {
+    it('shows Export calibration for SO101 robots', async () => {
         server.use(
             http.get(ROBOTS_PATH, () =>
                 HttpResponse.json([
