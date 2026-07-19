@@ -5,7 +5,7 @@ from .hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDevice,
 from .job import DatasetImportJob, Job, TrainJob
 from .model import BackendExportDetail, Model, ModelDetailResponse
 from .project import Project
-from .robot import Robot, SerialPortInfo
+from .robot_type import SerialPortInfo
 
 __all__ = [
     "BackendExportDetail",
@@ -28,7 +28,6 @@ __all__ = [
     "Model",
     "ModelDetailResponse",
     "Project",
-    "Robot",
     "SerialPortInfo",
     "Snapshot",
     "TrainJob",

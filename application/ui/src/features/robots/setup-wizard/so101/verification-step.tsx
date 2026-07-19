@@ -104,7 +104,7 @@ export const VerificationStep = () => {
     const { wsState } = useSetupState();
     const { activeType, robotForm } = useRobotForm();
 
-    const serialNumber = robotForm.serial_number ?? '';
+    const serialNumber = 'serial_number' in robotForm ? robotForm.serial_number : '';
     const connectionString = 'connection_string' in robotForm ? (robotForm.connection_string ?? '') : '';
     const robotType = activeType;
 

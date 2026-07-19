@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from physicalai.robot.so101.constants import SO101_JOINT_ORDER
 
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
-from schemas.robot import RobotType
+from schemas.robot_type import RobotType
 
 
 def _make_mock_robot() -> MagicMock:

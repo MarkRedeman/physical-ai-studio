@@ -158,7 +158,7 @@ export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
     // -----------------------------------------------------------------------
     // WebSocket hook
     // -----------------------------------------------------------------------
-    const serialNumber = robotForm.serial_number ?? '';
+    const serialNumber = 'serial_number' in robotForm ? robotForm.serial_number : '';
     const robotType = activeType;
     const connectionString = 'connection_string' in robotForm ? (robotForm.connection_string ?? '') : '';
 

@@ -10,7 +10,7 @@ import pytest
 from physicalai.robot.trossen.constants import WIDOWXAI_JOINT_ORDER
 
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
-from schemas.robot import RobotType
+from schemas.robot_type import RobotType
 
 NUM_JOINTS = len(WIDOWXAI_JOINT_ORDER)
 

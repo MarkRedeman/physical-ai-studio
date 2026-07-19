@@ -15,7 +15,7 @@ from db.schema import (
     RobotCalibrationDB,
     SnapshotDB,
 )
-from schemas.robot import RobotType
+from schemas.robot_type import RobotType
 from settings import Settings
 from storage_migration import StorageMigrationError, migrate_default_storage_dir
 

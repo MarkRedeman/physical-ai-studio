@@ -2,12 +2,13 @@ from uuid import UUID
 
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.catalog.registry import RobotCatalogRegistry
+from robots.catalog.so101 import find_so101_port, serial_port_from_so101
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
 from schemas.calibration import Calibration
-from schemas.robot import Robot, SO101Robot
+from schemas.robot import Robot
 from services.robot_calibration_service import RobotCalibrationService
-from utils.serial_robot_tools import RobotConnectionManager, find_so101_port, serial_port_from_so101
+from utils.serial_robot_tools import RobotConnectionManager
 
 
 class RobotClientFactory:
@@ -46,7 +47,7 @@ class RobotClientFactory:
             ),
         )
 
-    async def find_so101_port(self, robot: SO101Robot) -> str:
+    async def find_so101_port(self, robot: Robot) -> str:
         port = await find_so101_port(self.robot_manager, serial_port_from_so101(robot))
         if port is None:
             resource_key = robot.payload.serial_number or robot.payload.connection_string
@@ -55,18 +56,52 @@ class RobotClientFactory:
 
     # NOTE: this is a bit awkward due to how SO101 is implemented,
     # perhaps we can add the Calibration into the SO101RobotPayload
-    async def get_robot_calibration(self, robot: SO101Robot) -> Calibration | None:
+    async def get_robot_calibration(self, robot: Robot) -> Calibration | None:
         if robot.active_calibration_id is None:
             return None
         return await self.calibration_service.get_calibration(robot.active_calibration_id)
 
     async def find_port_by_serial(self, serial_number: str) -> str | None:
+        from loguru import logger
+        logger.info("looking for: {}", serial_number)
         for managed_robot in self.robot_manager.robots:
+            logger.info("managed robot: {}", managed_robot)
             if managed_robot.serial_number == serial_number:
                 return managed_robot.connection_string
+
+        return "/dev/ttyUSB0"
+        #return "/dev/ttyUSB0"
         return None
 
     async def get_calibration_by_id(self, calibration_id: UUID | None) -> Calibration | None:
         if calibration_id is None:
             return None
         return await self.calibration_service.get_calibration(calibration_id)
+
+
+
+
+# def _resolve_serial_port(discovered: list[SerialPortInfo], target: SerialPortInfo) -> str | None:
+#     if target.serial_number is not None:
+#         for serial_port in discovered:
+#             if serial_port.serial_number == target.serial_number:
+#                 return serial_port.connection_string
+#         return None
+
+#     for serial_port in discovered:
+#         if serial_port.connection_string == target.connection_string:
+#             return serial_port.connection_string
+#     return None
+
+
+# async def find_so101_port(
+#     manager: PortScanner,
+#     serial_port: SerialPortInfo,
+# ) -> str | None:
+#     """Find the current port for an SO101 robot by serial number or configured port."""
+#     port = _resolve_serial_port(manager.robots, serial_port)
+#     if port is not None:
+#         return port
+
+#     await manager.find_robots()
+#     return _resolve_serial_port(manager.robots, serial_port)
