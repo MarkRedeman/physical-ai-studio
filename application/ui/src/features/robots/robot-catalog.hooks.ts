@@ -28,6 +28,18 @@ export const useRobotCatalogDefinitionQuery = (robotType: SchemaRobotType) => {
     );
 };
 
+export const useDiscoverRobotsQuery = (robotType: SchemaRobotType) => {
+    return $api.useQuery('get', '/api/robots/catalog/{robot_type}/discover', {
+        params: { path: { robot_type: robotType } },
+    });
+};
+
+export const useCatalogIdentifyMutation = () => {
+    return $api.useMutation('post', '/api/robots/catalog/{robot_type}/identify', {
+        meta: { skipInvalidation: true },
+    });
+};
+
 const useRobotCatalogMap = () => {
     const query = useRobotCatalogQuery();
 

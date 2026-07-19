@@ -1,13 +1,15 @@
+import type { ReactNode } from 'react';
+
 import { ActionButton, Icon } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 
-import { $api } from '../../../../api/client';
-import type { SchemaRobotInput } from '../../robot-types';
+import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../robot-catalog.hooks';
+import type { SchemaRobotType } from '../../robot-types';
 
 import classes from '../form.module.css';
 
-export const RefreshRobotsButton = () => {
-    const { refetch, isFetching } = $api.useSuspenseQuery('get', '/api/hardware/serial_devices');
+export const RefreshRobotsButton = ({ robotType }: { robotType: SchemaRobotType }) => {
+    const { refetch, isFetching } = useDiscoverRobotsQuery(robotType);
 
     return (
         <ActionButton
@@ -24,32 +26,35 @@ export const RefreshRobotsButton = () => {
     );
 };
 
-export const useIdentifyMutation = () => {
-    return $api.useMutation('post', '/api/hardware/identify', {
-        meta: { skipInvalidation: true },
-    });
-};
-
 export const IdentifyRobot = ({
-    identifyMutation,
-    robot,
+    robotType,
+    payload,
+    errorElement,
 }: {
-    identifyMutation: ReturnType<typeof useIdentifyMutation>;
-    robot: SchemaRobotInput | null;
+    robotType: SchemaRobotType;
+    payload: Record<string, unknown> | null;
+    errorElement?: ReactNode;
 }) => {
-    const isDisabled = robot === null || identifyMutation.isPending;
+    const identifyMutation = useCatalogIdentifyMutation();
+    const isDisabled = payload === null || identifyMutation.isPending;
 
     const onIdentify = () => {
-        if (isDisabled || robot === null) {
+        if (isDisabled || payload === null) {
             return;
         }
 
-        identifyMutation.mutate({ body: robot });
+        identifyMutation.mutate({
+            params: { path: { robot_type: robotType } },
+            body: payload,
+        });
     };
 
     return (
-        <ActionButton isDisabled={isDisabled} UNSAFE_className={classes.actionButton} onPress={onIdentify}>
-            Identify
-        </ActionButton>
+        <>
+            <ActionButton isDisabled={isDisabled} UNSAFE_className={classes.actionButton} onPress={onIdentify}>
+                Identify
+            </ActionButton>
+            {identifyMutation.isError && errorElement}
+        </>
     );
 };

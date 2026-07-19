@@ -1,10 +1,8 @@
 import { Flex, TextField, View } from '@geti-ui/ui';
-import { v4 as uuidv4 } from 'uuid';
 
 import type { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../../robot-types';
 import { useRobotFormFields } from '../provider';
-import { IdentifyRobot, useIdentifyMutation } from './actions';
-import { buildWidowxBody } from './widowxai';
+import { IdentifyRobot } from './actions';
 
 export interface BimanualFormData {
     name: string;
@@ -19,7 +17,7 @@ export const getInitialBimanualFormData = (robot?: SchemaRobot): BimanualFormDat
         robot && 'connection_string_left' in robot.payload ? robot.payload.connection_string_left : '',
     connection_string_right:
         robot && 'connection_string_right' in robot.payload ? robot.payload.connection_string_right : '',
-    serial_number: robot?.payload?.serial_number ?? '',
+    serial_number: robot && 'serial_number' in robot.payload ? robot.payload.serial_number : '',
 });
 
 export const buildBimanualBody = (
@@ -43,20 +41,18 @@ export const buildBimanualBody = (
     } as SchemaRobotInput;
 };
 
+const LEFT_ARM_TYPE = 'Trossen_WidowXAI_Follower' as const;
+const RIGHT_ARM_TYPE = 'Trossen_WidowXAI_Follower' as const;
+
 export const BiManualWidowxAIFormFields = () => {
     const { formData, updateField } = useRobotFormFields<BimanualFormData>();
 
-    const identifyMutation = useIdentifyMutation();
-    const leftIdentifyRobot = buildWidowxBody(
-        { name: formData.name, connection_string: formData.connection_string_left, serial_number: '' },
-        'Trossen_WidowXAI_Follower',
-        uuidv4()
-    );
-    const rightIdentifyRobot = buildWidowxBody(
-        { name: formData.name, connection_string: formData.connection_string_right, serial_number: '' },
-        'Trossen_WidowXAI_Follower',
-        uuidv4()
-    );
+    const leftIdentifyPayload = formData.connection_string_left
+        ? { connection_string: formData.connection_string_left, serial_number: '' }
+        : null;
+    const rightIdentifyPayload = formData.connection_string_right
+        ? { connection_string: formData.connection_string_right, serial_number: '' }
+        : null;
 
     return (
         <>
@@ -74,7 +70,7 @@ export const BiManualWidowxAIFormFields = () => {
                         placeholder='192.168.1.2'
                     />
                     <View>
-                        <IdentifyRobot identifyMutation={identifyMutation} robot={leftIdentifyRobot} />
+                        <IdentifyRobot robotType={LEFT_ARM_TYPE} payload={leftIdentifyPayload} />
                     </View>
                 </Flex>
             </Flex>
@@ -92,7 +88,7 @@ export const BiManualWidowxAIFormFields = () => {
                     placeholder='192.168.1.3'
                 />
                 <View>
-                    <IdentifyRobot identifyMutation={identifyMutation} robot={rightIdentifyRobot} />
+                    <IdentifyRobot robotType={RIGHT_ARM_TYPE} payload={rightIdentifyPayload} />
                 </View>
             </Flex>
         </>

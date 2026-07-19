@@ -1,9 +1,8 @@
 import { Flex, TextField } from '@geti-ui/ui';
-import { v4 as uuidv4 } from 'uuid';
 
 import type { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../../robot-types';
 import { useRobotFormFields } from '../provider';
-import { IdentifyRobot, useIdentifyMutation } from './actions';
+import { IdentifyRobot } from './actions';
 
 export interface WidowxFormData {
     name: string;
@@ -14,7 +13,7 @@ export interface WidowxFormData {
 export const getInitialWidowxFormData = (robot?: SchemaRobot): WidowxFormData => ({
     name: robot?.name ?? '',
     connection_string: robot && 'connection_string' in robot.payload ? robot.payload.connection_string : '',
-    serial_number: robot?.payload?.serial_number ?? '',
+    serial_number: robot && 'serial_number' in robot.payload ? robot.payload.serial_number : '',
 });
 
 export const buildWidowxBody = (
@@ -40,8 +39,9 @@ export const buildWidowxBody = (
 export const WidowxAIFormFields = () => {
     const { formData, updateField, activeType } = useRobotFormFields<WidowxFormData>();
 
-    const identifyMutation = useIdentifyMutation();
-    const identifyRobot = buildWidowxBody(formData, activeType, uuidv4());
+    const identifyPayload = formData.connection_string
+        ? { connection_string: formData.connection_string, serial_number: formData.serial_number }
+        : null;
 
     return (
         <Flex gap='size-100' justifyContent={'space-between'} alignItems={'end'}>
@@ -57,7 +57,7 @@ export const WidowxAIFormFields = () => {
                 placeholder='192.168.1.2'
             />
             <Flex gap='size-100'>
-                <IdentifyRobot identifyMutation={identifyMutation} robot={identifyRobot} />
+                <IdentifyRobot robotType={activeType} payload={identifyPayload} />
             </Flex>
         </Flex>
     );
