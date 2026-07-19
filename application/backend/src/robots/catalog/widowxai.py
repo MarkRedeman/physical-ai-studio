@@ -1,8 +1,71 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
+from uuid import UUID
+
 from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
+from pydantic import BaseModel, ConfigDict, Field
 
-from schemas.robot import RobotType, TrossenBimanualPayload, TrossenSingleArmPayload
+from schemas.robot_type import BaseRobot
 
-from .types import CatalogRobot, CatalogRobotFactory, RobotAdapterOptions, RobotCatalogDefinition
+from .types import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
+
+TrossenTypes = Literal["Trossen_WidowXAI_Follower", "Trossen_WidowXAI_Leader"]
+TrossenBimanualTypes = Literal["Trossen_Bimanual_WidowXAI_Follower", "Trossen_Bimanual_WidowXAI_Leader"]
+
+if TYPE_CHECKING:
+    from schemas import SerialPortInfo
+
+    from .types import CatalogRobot, CatalogRobotFactory, PortScanner
+
+
+class TrossenSingleArmPayload(BaseModel):
+    """Connection configuration for Trossen single-arm robots."""
+
+    connection_string: str = Field(..., description="IP address of the robot")
+    serial_number: str = Field(default="", description="Serial number (unused for IP robots)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "connection_string": "192.168.1.100",
+                "serial_number": "",
+            },
+        },
+    )
+
+
+class TrossenBimanualPayload(BaseModel):
+    """Connection configuration for Trossen bimanual robots."""
+
+    connection_string_left: str = Field(..., description="IP address of the left arm")
+    connection_string_right: str = Field(..., description="IP address of the right arm")
+    serial_number: str = Field(default="", description="Serial number (unused for IP robots)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "connection_string_left": "192.168.1.100",
+                "connection_string_right": "192.168.1.101",
+                "serial_number": "",
+            },
+        },
+    )
+
+
+class TrossenSingleArmRobot(BaseRobot):
+    """Trossen WidowX AI follower or leader robot using an IP connection."""
+
+    type: TrossenTypes = Field(..., description="Type of robot configuration")
+    payload: TrossenSingleArmPayload = Field(..., description="Trossen single-arm connection configuration")
+
+class TrossenBimanualRobot(BaseRobot):
+    """Trossen Bimanual WidowX AI robot using two IP connections (left + right)."""
+
+    type: TrossenBimanualTypes = Field(..., description="Type of robot configuration")
+    payload: TrossenBimanualPayload = Field(..., description="Trossen bimanual connection configuration")
 
 _TROSSEN_TO_URDF = {
     "shoulder_pan.pos": ["joint_0"],
@@ -31,18 +94,30 @@ _BIMANUAL_TROSSEN_TO_URDF = {
     "right_gripper.pos": ["follower_right_left_carriage_joint", "follower_right_right_carriage_joint"],
 }
 
+_TROSSEN_SINGLE_ARM_ASSET = RobotAsset(
+    urdf_relative_path=Path("widowx/urdf/generated/wxai/wxai_follower.urdf"),
+    packages={"trossen_arm_description": Path("widowx")},
+    joint_map=_TROSSEN_TO_URDF,
+)
+
+_TROSSEN_BIMANUAL_ASSET = RobotAsset(
+    urdf_relative_path=Path("widowx/urdf/generated/stationary_ai.urdf"),
+    packages={"trossen_arm_description": Path("widowx")},
+    joint_map=_BIMANUAL_TROSSEN_TO_URDF,
+)
+
 
 async def _build_trossen_single_arm_driver(
     robot: CatalogRobot[TrossenSingleArmPayload], _factory: CatalogRobotFactory
 ) -> WidowXAI:
-    role = "follower" if robot.type == RobotType.TROSSEN_WIDOWXAI_FOLLOWER else "leader"
+    role = "follower" if robot.type == "Trossen_WidowXAI_Follower" else "leader"
     return WidowXAI(ip=robot.payload.connection_string, role=role)
 
 
 async def _build_trossen_bimanual_driver(
     robot: CatalogRobot[TrossenBimanualPayload], _factory: CatalogRobotFactory
 ) -> BimanualWidowXAI:
-    mode = "follower" if robot.type == RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER else "leader"
+    mode = "follower" if robot.type == "Trossen_Bimanual_WidowXAI_Follower" else "leader"
     left_driver = WidowXAI(ip=robot.payload.connection_string_left, role=mode)
     right_driver = WidowXAI(ip=robot.payload.connection_string_right, role=mode)
     return BimanualWidowXAI(left=left_driver, right=right_driver)
@@ -155,58 +230,42 @@ def get_definitions() -> list[RobotCatalogDefinition]:
     """Return built-in WidowX AI robot catalog definitions."""
     return [
         RobotCatalogDefinition(
-            type=RobotType.TROSSEN_WIDOWXAI_FOLLOWER,
+            type="Trossen_WidowXAI_Follower",
             display_name="Trossen WidowX AI Follower",
             role="follower",
-            urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_FOLLOWER}/urdf",
-            package_map={
-                "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_FOLLOWER}",
-            },
-            joint_map=_TROSSEN_TO_URDF,
-            urdf_relative_path="widowx/urdf/generated/wxai/wxai_follower.urdf",
             robot_builder=_build_trossen_single_arm_driver,
+            robot_payload=TrossenSingleArmPayload,
+            asset=_TROSSEN_SINGLE_ARM_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_SINGLE_ARM_PROBE,
         ),
         RobotCatalogDefinition(
-            type=RobotType.TROSSEN_WIDOWXAI_LEADER,
+            type="Trossen_WidowXAI_Leader",
             display_name="Trossen WidowX AI Leader",
             role="leader",
-            urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_LEADER}/urdf",
-            package_map={
-                "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_WIDOWXAI_LEADER}",
-            },
-            joint_map=_TROSSEN_TO_URDF,
-            urdf_relative_path="widowx/urdf/generated/wxai/wxai_follower.urdf",
             robot_builder=_build_trossen_single_arm_driver,
+            robot_payload=TrossenSingleArmPayload,
+            asset=_TROSSEN_SINGLE_ARM_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_SINGLE_ARM_PROBE,
         ),
         RobotCatalogDefinition(
-            type=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER,
+            type="Trossen_Bimanual_WidowXAI_Follower",
             display_name="Trossen Bimanual WidowX AI Follower",
             role="follower",
-            urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER}/urdf",
-            package_map={
-                "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_FOLLOWER}",
-            },
-            joint_map=_BIMANUAL_TROSSEN_TO_URDF,
-            urdf_relative_path="widowx/urdf/generated/stationary_ai.urdf",
             robot_builder=_build_trossen_bimanual_driver,
+            robot_payload=TrossenBimanualPayload,
+            asset=_TROSSEN_BIMANUAL_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_BIMANUAL_PROBE,
         ),
         RobotCatalogDefinition(
-            type=RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER,
+            type="Trossen_Bimanual_WidowXAI_Leader",
             display_name="Trossen Bimanual WidowX AI Leader",
             role="leader",
-            urdf_path=f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER}/urdf",
-            package_map={
-                "trossen_arm_description": f"/api/robots/catalog/{RobotType.TROSSEN_BIMANUAL_WIDOWXAI_LEADER}",
-            },
-            joint_map=_BIMANUAL_TROSSEN_TO_URDF,
-            urdf_relative_path="widowx/urdf/generated/stationary_ai.urdf",
             robot_builder=_build_trossen_bimanual_driver,
+            robot_payload=TrossenBimanualPayload,
+            asset=_TROSSEN_BIMANUAL_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_BIMANUAL_PROBE,
         ),

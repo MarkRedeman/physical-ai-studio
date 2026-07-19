@@ -1,10 +1,58 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
+from uuid import UUID
+
 from physicalai.robot.so101 import SO101, SO101Calibration
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from exceptions import ResourceNotFoundError, ResourceType
-from schemas.calibration import Calibration
-from schemas.robot import RobotType, SO101Robot, SO101RobotPayload
+from schemas import SerialPortInfo
+from schemas.robot_type import BaseRobot
 
-from .types import CatalogRobot, CatalogRobotFactory, RobotAdapterOptions, RobotCatalogDefinition
+from .types import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
+
+SO101Types = Literal["SO101_Follower", "SO101_Leader"]
+
+if TYPE_CHECKING:
+    from schemas.calibration import Calibration
+    from schemas.robot import Robot
+
+    from .types import CatalogRobot, CatalogRobotFactory, PortScanner
+
+
+class SO101RobotPayload(BaseModel):
+    """Connection configuration for SO-101 serial robots."""
+
+    connection_string: str = Field(
+        default="",
+        description="Serial port path; leave empty to auto-discover via serial_number",
+    )
+    serial_number: str = Field(default="", description="USB serial number of the robot (when available)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "connection_string": "",
+                "serial_number": "SO101-2024-001",
+            },
+        },
+    )
+
+    @model_validator(mode="after")
+    def validate_identifier(self) -> SO101RobotPayload:
+        if self.connection_string == "" and self.serial_number == "":
+            raise ValueError("Either serial_number or connection_string is required for SO101 robots")
+        return self
+
+
+class SO101Robot(BaseRobot):
+    """SO-101 follower or leader robot using a serial connection."""
+
+    type: SO101Types = Field(..., description="Type of robot configuration")
+    payload: SO101RobotPayload = Field(..., description="SO-101 connection configuration")
 
 _SO101_TO_URDF = {
     "shoulder_pan.pos": ["shoulder_pan"],
@@ -14,6 +62,12 @@ _SO101_TO_URDF = {
     "wrist_roll.pos": ["wrist_roll"],
     "gripper.pos": ["gripper"],
 }
+
+_SO101_ASSET = RobotAsset(
+    urdf_relative_path=Path("SO101/so101_new_calib.urdf"),
+    packages={"SO101": Path("SO101")},
+    joint_map=_SO101_TO_URDF,
+)
 
 
 def _to_so101_calibration(calibration: Calibration) -> SO101Calibration:
@@ -32,7 +86,7 @@ def _to_so101_calibration(calibration: Calibration) -> SO101Calibration:
 
 
 async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: CatalogRobotFactory) -> SO101:
-    if not isinstance(robot, SO101Robot):
+    if not isinstance(robot.payload, SO101RobotPayload):
         raise TypeError("Expected SO101Robot")
     port = await factory.find_so101_port(robot)
     calibration = await factory.get_calibration_by_id(robot.active_calibration_id)
@@ -40,7 +94,7 @@ async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: C
     if calibration is None:
         raise ResourceNotFoundError(ResourceType.ROBOT_CALIBRATION, robot.payload.serial_number)
 
-    role = "follower" if robot.type == RobotType.SO101_FOLLOWER else "leader"
+    role = "follower" if robot.type == "SO101_Follower" else "leader"
     return SO101(port=port, calibration=_to_so101_calibration(calibration), role=role, unit="normalized")
 
 
@@ -173,30 +227,24 @@ _SO101_PROBE = SO101Probe()
 
 def get_definitions() -> list[RobotCatalogDefinition]:
     """Return built-in SO101 robot catalog definitions."""
-    urdf_relative_path = "SO101/so101_new_calib.urdf"
-
     return [
         RobotCatalogDefinition(
-            type=RobotType.SO101_FOLLOWER,
+            type="SO101_Follower",
             display_name="SO101 Follower",
             role="follower",
-            urdf_path=f"/api/robots/catalog/{RobotType.SO101_FOLLOWER}/urdf",
-            package_map={"SO101": f"/api/robots/catalog/{RobotType.SO101_FOLLOWER}"},
-            joint_map=_SO101_TO_URDF,
-            urdf_relative_path=urdf_relative_path,
             robot_builder=_build_so101_driver,
+            robot_payload=SO101RobotPayload,
+            asset=_SO101_ASSET,
             adapter_options=RobotAdapterOptions(goal_time_scale=1.0, external_effort_gain=None),
             probe=_SO101_PROBE,
         ),
         RobotCatalogDefinition(
-            type=RobotType.SO101_LEADER,
+            type="SO101_Leader",
             display_name="SO101 Leader",
             role="leader",
-            urdf_path=f"/api/robots/catalog/{RobotType.SO101_LEADER}/urdf",
-            package_map={"SO101": f"/api/robots/catalog/{RobotType.SO101_LEADER}"},
-            joint_map=_SO101_TO_URDF,
-            urdf_relative_path=urdf_relative_path,
             robot_builder=_build_so101_driver,
+            robot_payload=SO101RobotPayload,
+            asset=_SO101_ASSET,
             adapter_options=RobotAdapterOptions(goal_time_scale=1.0, external_effort_gain=None),
             probe=_SO101_PROBE,
         ),

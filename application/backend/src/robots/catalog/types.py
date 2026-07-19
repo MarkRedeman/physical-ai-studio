@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, runtime_checkable
 
 from physicalai.robot.interface import Robot as PhysicalAIRobot
-from pydantic import BaseModel, Field
 
-from schemas.robot import RobotType
+from schemas import SerialPortInfo
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from uuid import UUID
 
+    from pydantic import BaseModel
+
     from schemas.calibration import Calibration
-    from schemas.robot import SO101Robot
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,16 @@ class RobotAdapterOptions:
     include_velocities: bool = False
     goal_time_scale: float = 1.0
     external_effort_gain: float | None = 0.1
+
+
+@dataclass(frozen=True)
+class RobotAsset:
+    """Filesystem configuration for a robot's visual model and ROS packages."""
+
+    urdf_relative_path: Path
+    packages: dict[str, Path]
+    joint_map: dict[str, list[str]]
+    root_resolver: Callable[[], Path] | None = None
 
 
 @runtime_checkable
@@ -59,7 +70,7 @@ class PortScanner(Protocol):
 
 
 class CatalogRobotFactory(Protocol):
-    async def find_so101_port(self, robot: SO101Robot) -> str: ...
+    async def find_so101_port(self, robot: Any) -> str: ...
 
     async def find_port_by_serial(self, serial_number: str) -> str | None: ...
 
@@ -74,7 +85,7 @@ class PayloadContainer(Protocol[_PayloadT]):
 
 
 class CatalogRobot(PayloadContainer[_PayloadT], Protocol[_PayloadT]):
-    type: RobotType
+    type: str
     active_calibration_id: UUID | None
 
 
@@ -85,22 +96,18 @@ _FactoryT = TypeVar("_FactoryT", bound="CatalogRobotFactory")
 BuildRobotCallable = Callable[[_RobotT, _FactoryT], Awaitable[PhysicalAIRobot]]
 
 
-class RobotCatalogDefinition(BaseModel):
-    type: RobotType = Field(..., description="Stable backend robot type identifier")
-    display_name: str = Field(..., description="Human-readable robot type label")
-    role: Literal["follower", "leader"] = Field(..., description="Default robot role")
-    urdf_path: str = Field(description="URDF URL used by the UI model loader")
-    package_map: dict[str, str] = Field(default_factory=dict, description="URDF package name to URL prefix map")
-    joint_map: dict[str, list[str]] = Field(
-        default_factory=dict,
-        description="Observation joint name to URDF joint(s) mapping",
-    )
-    urdf_relative_path: str = Field(..., description="Relative path to the robot URDF asset")
-
+@dataclass
+class RobotCatalogDefinition:
+    type: str
+    display_name: str
+    role: Literal["follower", "leader"]
     robot_builder: BuildRobotCallable
-    adapter_options: RobotAdapterOptions = RobotAdapterOptions()
+    robot_payload: type[BaseModel]
+    asset: RobotAsset | None
+
+    adapter_options: RobotAdapterOptions = field(default_factory=RobotAdapterOptions)
     probe: RobotProbe | None = None
 
     @property
-    def robot_type(self) -> RobotType:
+    def robot_type(self) -> str:
         return self.type

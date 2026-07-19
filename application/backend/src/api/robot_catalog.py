@@ -5,16 +5,15 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from robots.catalog.assets import resolve_robot_asset_path, resolve_robot_urdf_path
 from api.dependencies import RobotCatalogServiceDep, RobotConnectionManagerDep
 from exceptions import ResourceNotFoundError, ResourceType
+from robots.catalog.assets import resolve_robot_relative_asset_path, resolve_robot_urdf_path
 from robots.catalog.types import RobotCatalogDefinition
-from schemas.robot import RobotType
 from schemas import SerialPortInfo
 
 
 class RobotCatalogDefinitionResponse(BaseModel):
-    type: RobotType = Field(..., description="Stable backend robot type identifier")
+    type: str = Field(..., description="Stable backend robot type identifier")
     display_name: str = Field(..., description="Human-readable robot type label")
     role: Literal["follower", "leader"] = Field(..., description="Default robot role")
     urdf_path: str = Field(description="URDF URL used by the UI model loader")
@@ -25,13 +24,21 @@ class RobotCatalogDefinitionResponse(BaseModel):
 
 
 def _to_response(definition: RobotCatalogDefinition) -> RobotCatalogDefinitionResponse:
+    catalog_root = f"/api/robots/catalog/{definition.type}"
+
+    package_map = {}
+    joint_map = {}
+    if definition.asset is not None:
+        package_map={package: f"{catalog_root}" for package in definition.asset.packages}
+        joint_map=definition.asset.joint_map
+
     return RobotCatalogDefinitionResponse(
         type=definition.type,
         display_name=definition.display_name,
         role=definition.role,
-        urdf_path=definition.urdf_path,
-        package_map=definition.package_map,
-        joint_map=definition.joint_map,
+        urdf_path=f"{catalog_root}/urdf",
+        package_map=package_map,
+        joint_map=joint_map,
     )
 
 
@@ -94,7 +101,7 @@ async def check_robot_online(
 
 
 @router.get("/{robot_type}/urdf")
-async def get_robot_catalog_urdf(catalog_service: RobotCatalogServiceDep, robot_type: RobotType) -> FileResponse:
+async def get_robot_catalog_urdf(catalog_service: RobotCatalogServiceDep, robot_type: str) -> FileResponse:
     """Return the URDF file for a catalog robot type."""
     definition = catalog_service.get_definition(robot_type)
 
@@ -102,14 +109,24 @@ async def get_robot_catalog_urdf(catalog_service: RobotCatalogServiceDep, robot_
     return FileResponse(resolved_path)
 
 
+@router.get("/{robot_type}/schema")
+async def get_robot_catalog_schema(
+    catalog_service: RobotCatalogServiceDep,
+    robot_type: str,
+) -> dict[str, Any]:
+    """Return the Pydantic JSON Schema for a catalog robot payload."""
+    definition = catalog_service.get_definition(robot_type)
+    return definition.robot_payload.model_json_schema()
+
+
 @router.get("/{robot_type}/{asset_path:path}")
 async def get_robot_catalog_asset(
     catalog_service: RobotCatalogServiceDep,
-    robot_type: RobotType,
+    robot_type: str,
     asset_path: Path,
 ) -> FileResponse:
-    """Return an asset file referenced by a catalog robot URDF."""
+    """Return an asset referenced by a relative URDF URI."""
     definition = catalog_service.get_definition(robot_type)
 
-    resolved_path = resolve_robot_asset_path(definition, asset_path=asset_path)
+    resolved_path = resolve_robot_relative_asset_path(definition, asset_path=asset_path)
     return FileResponse(resolved_path)
