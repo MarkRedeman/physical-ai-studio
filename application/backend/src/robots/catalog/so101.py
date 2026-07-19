@@ -54,6 +54,7 @@ class SO101Robot(BaseRobot):
     type: SO101Types = Field(..., description="Type of robot configuration")
     payload: SO101RobotPayload = Field(..., description="SO-101 connection configuration")
 
+
 _SO101_TO_URDF = {
     "shoulder_pan.pos": ["shoulder_pan"],
     "shoulder_lift.pos": ["shoulder_lift"],

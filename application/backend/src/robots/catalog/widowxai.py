@@ -61,11 +61,13 @@ class TrossenSingleArmRobot(BaseRobot):
     type: TrossenTypes = Field(..., description="Type of robot configuration")
     payload: TrossenSingleArmPayload = Field(..., description="Trossen single-arm connection configuration")
 
+
 class TrossenBimanualRobot(BaseRobot):
     """Trossen Bimanual WidowX AI robot using two IP connections (left + right)."""
 
     type: TrossenBimanualTypes = Field(..., description="Type of robot configuration")
     payload: TrossenBimanualPayload = Field(..., description="Trossen bimanual connection configuration")
+
 
 _TROSSEN_TO_URDF = {
     "shoulder_pan.pos": ["joint_0"],

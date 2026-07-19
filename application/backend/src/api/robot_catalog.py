@@ -29,8 +29,8 @@ def _to_response(definition: RobotCatalogDefinition) -> RobotCatalogDefinitionRe
     package_map = {}
     joint_map = {}
     if definition.asset is not None:
-        package_map={package: f"{catalog_root}" for package in definition.asset.packages}
-        joint_map=definition.asset.joint_map
+        package_map = dict.fromkeys(definition.asset.packages, f"{catalog_root}")
+        joint_map = definition.asset.joint_map
 
     return RobotCatalogDefinitionResponse(
         type=definition.type,
@@ -59,8 +59,9 @@ async def discover_robots(
 ) -> list[SerialPortInfo]:
     """Discover connected devices for a robot type."""
     from loguru import logger
+
     definition = catalog_service.get_definition(robot_type)
-    
+
     logger.info("Discover from definition {} as {}", robot_type, definition)
     if definition.probe is None:
         return []
@@ -97,7 +98,6 @@ async def check_robot_online(
     if definition.probe is None:
         return False
     return await definition.probe.is_online(payload)
-
 
 
 @router.get("/{robot_type}/urdf")

@@ -18,7 +18,6 @@ def from_port(port: ListPortInfo) -> SerialPortInfo | None:
     # Also accept virtual/PTY ports (pid is None) like socat-created devices
     if port.pid is not None and port.pid not in {21971, 29987}:
         logger.debug("Found usb port with unexpected PID, {device}: {pid}", device=port.device, pid=port.pid)
-        #return None
 
     return SerialPortInfo(connection_string=port.device, serial_number=serial_number or None)
 

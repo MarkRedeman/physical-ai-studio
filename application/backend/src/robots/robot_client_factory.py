@@ -63,6 +63,7 @@ class RobotClientFactory:
 
     async def find_port_by_serial(self, serial_number: str) -> str | None:
         from loguru import logger
+
         logger.info("looking for: {}", serial_number)
         for managed_robot in self.robot_manager.robots:
             logger.info("managed robot: {}", managed_robot)
@@ -70,15 +71,13 @@ class RobotClientFactory:
                 return managed_robot.connection_string
 
         return "/dev/ttyUSB0"
-        #return "/dev/ttyUSB0"
+        # return "/dev/ttyUSB0"
         return None
 
     async def get_calibration_by_id(self, calibration_id: UUID | None) -> Calibration | None:
         if calibration_id is None:
             return None
         return await self.calibration_service.get_calibration(calibration_id)
-
-
 
 
 # def _resolve_serial_port(discovered: list[SerialPortInfo], target: SerialPortInfo) -> str | None:

@@ -27,9 +27,7 @@ def test_builtin_robot_assets_are_available_requires_all_urdfs(tmp_path, monkeyp
 
 def test_resolve_robot_urdf_path_uses_builtin_assets_root(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(assets, "BUILTIN_ROBOT_ASSETS_ROOT", tmp_path)
-    definition = next(
-        definition for definition in so101.get_definitions() if definition.type == "SO101_Follower"
-    )
+    definition = next(definition for definition in so101.get_definitions() if definition.type == "SO101_Follower")
 
     urdf_path = tmp_path / "SO101" / "so101_new_calib.urdf"
     urdf_path.parent.mkdir(parents=True)
@@ -41,20 +39,21 @@ def test_resolve_robot_urdf_path_uses_builtin_assets_root(tmp_path, monkeypatch)
 def test_resolve_robot_asset_path_uses_declared_package_root(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(assets, "BUILTIN_ROBOT_ASSETS_ROOT", tmp_path)
     definition = next(
-        definition
-        for definition in widowxai.get_definitions()
-        if definition.type == "Trossen_WidowXAI_Follower"
+        definition for definition in widowxai.get_definitions() if definition.type == "Trossen_WidowXAI_Follower"
     )
 
     asset_path = tmp_path / "widowx" / "meshes" / "base.stl"
     asset_path.parent.mkdir(parents=True)
     asset_path.write_text("mesh", encoding="utf-8")
 
-    assert assets.resolve_robot_asset_path(
-        definition,
-        package_name="trossen_arm_description",
-        asset_path=asset_path.relative_to(tmp_path / "widowx"),
-    ) == asset_path
+    assert (
+        assets.resolve_robot_asset_path(
+            definition,
+            package_name="trossen_arm_description",
+            asset_path=asset_path.relative_to(tmp_path / "widowx"),
+        )
+        == asset_path
+    )
 
 
 def test_resolve_robot_relative_asset_path_uses_model_asset_root(tmp_path, monkeypatch) -> None:
