@@ -23,6 +23,41 @@ class RobotAdapterOptions:
     external_effort_gain: float | None = 0.1
 
 
+@runtime_checkable
+class RobotProbe(Protocol):
+    """Hardware interaction interface for a robot type.
+
+    Each built-in or plugin-provided robot type implements this protocol
+    to encapsulate device discovery, visual identification, and online
+    status checking. External packages implement the protocol by defining
+    a class with these three methods.
+    """
+
+    async def discover(self, manager: PortScanner) -> list[SerialPortInfo]: ...
+
+    async def identify(
+        self,
+        payload: dict[str, Any],
+        manager: PortScanner | None,
+        joint: str | None = None,
+    ) -> None: ...
+
+    async def is_online(self, payload: dict[str, Any], manager: PortScanner | None = None) -> bool: ...
+
+
+class PortScanner(Protocol):
+    """Duck-type for serial port scanners (e.g. RobotConnectionManager).
+
+    Used by RobotProbe to accept scan results without importing
+    RobotConnectionManager directly (which would create circular deps).
+    """
+
+    async def find_robots(self) -> None: ...
+
+    @property
+    def robots(self) -> list[SerialPortInfo]: ...
+
+
 class CatalogRobotFactory(Protocol):
     async def find_so101_port(self, robot: SO101Robot) -> str: ...
 
@@ -64,6 +99,7 @@ class RobotCatalogDefinition(BaseModel):
 
     robot_builder: BuildRobotCallable
     adapter_options: RobotAdapterOptions = RobotAdapterOptions()
+    probe: RobotProbe | None = None
 
     @property
     def robot_type(self) -> RobotType:

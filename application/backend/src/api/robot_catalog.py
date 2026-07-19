@@ -1,14 +1,16 @@
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from api.dependencies import RobotCatalogServiceDep
 from robots.catalog.assets import resolve_robot_asset_path, resolve_robot_urdf_path
+from api.dependencies import RobotCatalogServiceDep, RobotConnectionManagerDep
+from exceptions import ResourceNotFoundError, ResourceType
 from robots.catalog.types import RobotCatalogDefinition
 from schemas.robot import RobotType
+from schemas import SerialPortInfo
 
 
 class RobotCatalogDefinitionResponse(BaseModel):
@@ -40,6 +42,55 @@ router = APIRouter(prefix="/api/robots/catalog", tags=["Robot Catalog"])
 async def list_robot_catalog(catalog_service: RobotCatalogServiceDep) -> list[RobotCatalogDefinitionResponse]:
     """List robot catalog definitions exposed to the UI."""
     return [_to_response(definition) for definition in catalog_service.list_entries()]
+
+
+@router.get("/{robot_type}/discover")
+async def discover_robots(
+    catalog_service: RobotCatalogServiceDep,
+    robot_manager: RobotConnectionManagerDep,
+    robot_type: str,
+) -> list[SerialPortInfo]:
+    """Discover connected devices for a robot type."""
+    from loguru import logger
+    definition = catalog_service.get_definition(robot_type)
+    
+    logger.info("Discover from definition {} as {}", robot_type, definition)
+    if definition.probe is None:
+        return []
+    return await definition.probe.discover(robot_manager)
+
+
+@router.post("/{robot_type}/identify")
+async def identify_robot(
+    catalog_service: RobotCatalogServiceDep,
+    robot_manager: RobotConnectionManagerDep,
+    robot_type: str,
+    payload: dict[str, Any],
+    joint: str | None = None,
+) -> None:
+    """Visually identify a robot by moving a joint or gripper."""
+    definition = catalog_service.get_definition(robot_type)
+    if definition.probe is None:
+        raise ResourceNotFoundError(
+            resource_type=ResourceType.ROBOT,
+            resource_id=robot_type,
+            message=f"Robot type {robot_type} does not support identification.",
+        )
+    await definition.probe.identify(payload, robot_manager, joint)
+
+
+@router.post("/{robot_type}/is-online")
+async def check_robot_online(
+    catalog_service: RobotCatalogServiceDep,
+    robot_type: str,
+    payload: dict[str, Any],
+) -> bool:
+    """Check if a robot is currently online/reachable."""
+    definition = catalog_service.get_definition(robot_type)
+    if definition.probe is None:
+        return False
+    return await definition.probe.is_online(payload)
+
 
 
 @router.get("/{robot_type}/urdf")
