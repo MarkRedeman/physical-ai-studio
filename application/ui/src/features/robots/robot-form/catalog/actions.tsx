@@ -9,7 +9,7 @@ import classes from '../form.module.css';
 
 export const RefreshRobotsButton = () => {
     const { activeType } = useRobotFormFields();
-    const { refetch, isFetching } = useDiscoverRobotsQuery(activeType);
+    const { refetch, isFetching } = useDiscoverRobotsQuery(activeType ?? '');
 
     return (
         <ActionButton
@@ -37,16 +37,17 @@ export const IdentifyRobot = ({
 }) => {
     const { formData, activeType } = useRobotFormFields();
     const payload = override ?? formData.payload;
-    const isDisabled = payload === null || identifyMutation.isPending;
+    const selectedRobotType = robotType ?? activeType;
+    const isDisabled = payload == null || selectedRobotType === undefined || identifyMutation.isPending;
 
     const onIdentify = () => {
-        if (isDisabled || payload === null) {
+        if (isDisabled || payload == null || selectedRobotType === undefined) {
             return;
         }
 
         identifyMutation.mutate({
-            params: { path: { robot_type: robotType ?? activeType } },
-            body: payload,
+            params: { path: { robot_type: selectedRobotType } },
+            body: payload as Exclude<SchemaRobot['payload'], undefined>,
         });
     };
 

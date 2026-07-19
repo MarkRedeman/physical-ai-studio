@@ -9,7 +9,8 @@
 }
 
 .loadingOverlay,
-.errorOverlay {
+.errorOverlay,
+.unavailableOverlay {
     position: absolute;
     inset: 0;
     display: grid;
@@ -38,6 +39,10 @@
 
 .errorOverlay {
     color: var(--spectrum-semantic-negative-color-default, #e34850);
+    text-align: center;
+}
+
+.unavailableOverlay {
     text-align: center;
 }
 

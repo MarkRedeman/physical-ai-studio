@@ -1,0 +1,209 @@
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { HttpResponse } from 'msw';
+import { describe, expect, it } from 'vitest';
+
+import { http } from '../../../api/utils';
+import { server } from '../../../msw-node-setup';
+import { render } from '../../../test-utils/render';
+import { RobotFormProvider, useRobotForm } from './provider';
+import { SchemaForm } from './schema-form';
+
+const bimanualRebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+    $defs: {
+        RebotB601FollowerConfigPayload: {
+            type: 'object',
+            properties: {
+                port: {
+                    type: 'string',
+                    title: 'Port',
+                    'x-physicalai-ui': { group: 'connection', widget: 'device-selector' as const },
+                },
+                can_adapter: { type: 'string', title: 'Can Adapter', default: 'damiao' },
+            },
+            required: ['port'],
+            'x-physicalai-ui': {
+                groups: {
+                    connection: { title: 'Select robot', device_discovery: true, connection_key: 'port' },
+                },
+            },
+        },
+    },
+    type: 'object',
+    properties: {
+        left_arm_config: { $ref: '#/$defs/RebotB601FollowerConfigPayload', title: 'Left Arm Config' },
+        right_arm_config: { $ref: '#/$defs/RebotB601FollowerConfigPayload', title: 'Right Arm Config' },
+    },
+    required: ['left_arm_config', 'right_arm_config'],
+};
+
+const lerobotSO101Schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+    $defs: {
+        CameraConfigPayload: {
+            type: 'object',
+            properties: {
+                fps: { type: 'integer', title: 'Fps' },
+            },
+        },
+    },
+    type: 'object',
+    properties: {
+        port: {
+            type: 'string',
+            title: 'Port',
+            'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
+        },
+        cameras: {
+            type: 'object',
+            title: 'Cameras',
+            default: {},
+            additionalProperties: { $ref: '#/$defs/CameraConfigPayload' },
+        },
+    },
+    required: ['port'],
+    'x-physicalai-ui': {
+        groups: {
+            connection: { title: 'Select robot', device_discovery: true, connection_key: 'port' },
+        },
+    },
+};
+
+const rebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+    type: 'object',
+    properties: {
+        connection_string: {
+            type: 'string',
+            'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
+        },
+        serial_number: {
+            type: 'string',
+            'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
+        },
+    },
+    'x-physicalai-ui': {
+        groups: {
+            connection: {
+                title: 'Select robot',
+                device_discovery: true,
+                connection_key: 'connection_string',
+                serial_number_key: 'serial_number',
+            },
+        },
+    },
+};
+
+const Payload = () => {
+    const { payload } = useRobotForm();
+    return <output>{JSON.stringify(payload)}</output>;
+};
+
+describe('SchemaForm', () => {
+    it('renders defaulted UI-required fields without showing default fields', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                id: {
+                    type: 'string',
+                    title: 'Robot ID',
+                    default: '',
+                    'x-physicalai-ui': { required: true },
+                },
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('textbox', { name: /Robot ID/ })).toBeRequired();
+    });
+
+    it('stores serial-capable device values in their respective payload fields', async () => {
+        server.use(
+            http.get('/api/robots/catalog/{robot_type}/discover', () =>
+                HttpResponse.json([{ serial_number: '00000000050C', connection_string: '/dev/ttyACM0' }])
+            )
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={rebotSchema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+
+        await user.click(await screen.findByRole('button', { name: 'Select robot' }));
+        await user.click(screen.getByRole('option', { name: '00000000050C' }));
+        await user.keyboard('{Escape}');
+
+        expect(screen.getByRole('status')).toHaveTextContent(
+            JSON.stringify({ connection_string: '/dev/ttyACM0', serial_number: '00000000050C' })
+        );
+    });
+
+    it('stores the raw connection string when selecting a device without a serial number', async () => {
+        server.use(
+            http.get('/api/robots/catalog/{robot_type}/discover', () =>
+                HttpResponse.json([{ serial_number: null, connection_string: '/dev/ttyUSB0' }])
+            )
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={lerobotSO101Schema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+
+        await user.click(await screen.findByRole('button', { name: 'Select robot' }));
+        await user.click(screen.getByRole('option', { name: 'No serial number' }));
+
+        expect(screen.getByRole('status')).toHaveTextContent(JSON.stringify({ cameras: {}, port: '/dev/ttyUSB0' }));
+    });
+
+    it('skips unsupported dictionary fields', async () => {
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={lerobotSO101Schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('button', { name: 'Select robot' })).toBeVisible();
+        expect(screen.queryByRole('heading', { name: 'Cameras' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Cameras' })).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('switch', { name: 'Show default fields' }));
+
+        expect(screen.queryByRole('heading', { name: 'Cameras' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Cameras' })).not.toBeInTheDocument();
+    });
+
+    it('renders connection pickers from referenced nested object schemas', async () => {
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={bimanualRebotSchema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('heading', { name: 'Left Arm Config' })).toBeVisible();
+        expect(screen.getByRole('heading', { name: 'Right Arm Config' })).toBeVisible();
+        expect(screen.queryAllByRole('textbox', { name: 'Can Adapter' })).toHaveLength(0);
+
+        await user.click(screen.getByRole('switch', { name: 'Show default fields' }));
+        const canAdapters = screen.getAllByRole('textbox', { name: 'Can Adapter' });
+        expect(canAdapters).toHaveLength(2);
+        expect(canAdapters[0]).toHaveValue('damiao');
+        expect(canAdapters[1]).toHaveValue('damiao');
+
+        expect(screen.getAllByRole('button', { name: 'Select robot' })).toHaveLength(2);
+    });
+});

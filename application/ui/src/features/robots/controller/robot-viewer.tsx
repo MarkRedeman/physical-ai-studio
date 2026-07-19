@@ -10,7 +10,6 @@ import { URDFRobot } from 'urdf-loader';
 
 import { useContainerSize } from '../../../components/zoom/use-container-size';
 import { useRobotCatalogDefinitionQuery } from '../robot-catalog.hooks';
-import { SchemaRobot } from '../robot-types';
 import { mapJointToURDFJoint, useLoadModelQuery } from './../robot-models-context';
 import { RobotViewerScene, SCENE_COLORS, useConfigureModelShadows } from './../robot-viewer-scene';
 
@@ -97,7 +96,7 @@ const ActualURDFModel = ({ model, isTrossen }: { model: URDFRobot; isTrossen: bo
 };
 
 interface RobotViewerProps {
-    robot: Pick<SchemaRobot, 'type'>;
+    robot: { type: string };
     featureValues?: number[];
     featureNames?: string[];
 }
@@ -142,7 +141,12 @@ export const RobotViewer = ({ robot = { type: 'SO101_Follower' }, featureValues,
                         </group>
                     )}
                 </Canvas>
-                {isPending && <div className={classes.loadingOverlay}>Loading robot model...</div>}
+                {definition.urdf_path == null && (
+                    <div className={classes.unavailableOverlay}>3D preview is unavailable for this robot.</div>
+                )}
+                {definition.urdf_path != null && isPending && (
+                    <div className={classes.loadingOverlay}>Loading robot model...</div>
+                )}
                 {error && (
                     <div className={classes.errorOverlay} role='alert'>
                         Failed to load robot model: {error instanceof Error ? error.message : String(error)}
