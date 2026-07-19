@@ -116,7 +116,12 @@ async def get_robot_catalog_schema(
 ) -> dict[str, Any]:
     """Return the Pydantic JSON Schema for a catalog robot payload."""
     definition = catalog_service.get_definition(robot_type)
-    return definition.robot_payload.model_json_schema()
+    payload = definition.robot_payload
+    if payload is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail=f"Robot type {robot_type} has no payload schema")
+    return payload.model_json_schema()
 
 
 @router.get("/{robot_type}/{asset_path:path}")

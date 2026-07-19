@@ -33,6 +33,8 @@ class RobotClientFactory:
             raise ValueError(f"Robot type is not part of the catalog: {robot.type}")
 
         builder = definition.robot_builder
+        if builder is None:
+            raise ValueError(f"Robot type {robot.type} has no robot builder")
 
         robot_driver = await builder(robot, self)
         adapter_options = definition.adapter_options

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, cast
 
 from pydantic import BaseModel, Field, TypeAdapter, create_model
 
@@ -15,6 +15,10 @@ from .types import RobotAsset, RobotCatalogDefinition
 CATALOG_PLUGIN_ENTRYPOINT_GROUP = "physicalai.studio.catalog_plugins"
 
 RegisterPluginCallable = Callable[["RobotCatalogRegistry"], None]
+
+
+def _literal_for(value: str) -> str:
+    return f"Literal[{value!r}]"
 
 
 def _build_union(types: list[type]) -> Any:
@@ -106,7 +110,7 @@ class RobotCatalogRegistry:
                 model = create_model(
                     f"{d.type}Robot",
                     __base__=BaseRobot,
-                    type=(Literal[d.type], d.type),
+                    type=(_literal_for(d.type), d.type),
                     payload=(d.robot_payload, ...),
                 )
                 self._robot_models[d.type] = model
@@ -128,7 +132,7 @@ class RobotCatalogRegistry:
                     "register_physicalai_studio_plugin(registry)"
                 )
 
-            plugin_callable: RegisterPluginCallable = register_plugin
+            plugin_callable: RegisterPluginCallable = cast("RegisterPluginCallable", register_plugin)
             plugin_callable(self)
 
     def get_robot_adapter(self) -> TypeAdapter:

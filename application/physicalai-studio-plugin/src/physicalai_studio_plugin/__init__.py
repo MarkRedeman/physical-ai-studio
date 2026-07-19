@@ -1,17 +1,14 @@
-from __future__ import annotations
-
-from physicalai_studio_plugin import (
+from .assets import RobotAsset
+from .catalog import (
     BuildRobotCallable,
     CatalogRobot,
-    CatalogRobotFactory,
     PayloadContainer,
-    PortScanner,
     RobotAdapterOptions,
-    RobotAsset,
     RobotCatalogDefinition,
-    RobotProbe,
-    SerialPortInfo,
 )
+from .factory import CatalogRobotFactory
+from .probe import PortScanner, RobotProbe
+from .schemas import SerialPortInfo
 
 __all__ = [
     "BuildRobotCallable",

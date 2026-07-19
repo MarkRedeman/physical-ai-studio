@@ -2,16 +2,11 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from schemas.base import BaseIDModel
 
 RobotType = str
-
-
-class SerialPortInfo(BaseModel):
-    connection_string: str | None
-    serial_number: str | None
 
 
 class BaseRobot(BaseIDModel):
