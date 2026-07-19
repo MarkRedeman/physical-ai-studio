@@ -46,11 +46,11 @@ class RobotCatalogRegistry:
 
     def register(self, definition: RobotCatalogDefinition | Any) -> None:
         definition = self._coerce_definition(definition)
-        if definition.robot_type in self._definitions:
-            raise ValueError(f"Duplicate robot catalog registration for type: {definition.robot_type}")
+        if definition.type in self._definitions:
+            raise ValueError(f"Duplicate robot catalog registration for type: {definition.type}")
 
-        self._definitions[definition.robot_type] = definition
-        self._robot_models.pop(definition.robot_type, None)
+        self._definitions[definition.type] = definition
+        self._robot_models.pop(definition.type, None)
         self._robot_adapter = None
 
     @staticmethod
