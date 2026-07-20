@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from api.dependencies import RobotCatalogServiceDep, RobotConnectionManagerDep
 from exceptions import ResourceNotFoundError, ResourceType
@@ -40,6 +40,24 @@ def _to_response(definition: RobotCatalogDefinition) -> RobotCatalogDefinitionRe
         package_map=package_map,
         joint_map=joint_map,
     )
+
+
+def _validate_probe_payload(
+    definition: RobotCatalogDefinition,
+    payload: dict[str, Any],
+) -> Any:
+    if definition.robot_payload is None:
+        return payload
+    try:
+        return definition.robot_payload.model_validate(payload)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "robot_type": definition.type,
+                "errors": e.errors(include_input=False, include_url=False),
+            },
+        ) from e
 
 
 router = APIRouter(prefix="/api/robots/catalog", tags=["Robot Catalog"])
@@ -84,7 +102,7 @@ async def identify_robot(
             resource_id=robot_type,
             message=f"Robot type {robot_type} does not support identification.",
         )
-    validated = definition.robot_payload.model_validate(payload) if definition.robot_payload else payload
+    validated = _validate_probe_payload(definition, payload)
     await definition.probe.identify(validated, robot_manager, joint)
 
 
@@ -98,7 +116,7 @@ async def check_robot_online(
     definition = catalog_service.get_definition(robot_type)
     if definition.probe is None:
         return False
-    validated = definition.robot_payload.model_validate(payload) if definition.robot_payload else payload
+    validated = _validate_probe_payload(definition, payload)
     return await definition.probe.is_online(validated)
 
 

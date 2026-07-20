@@ -57,17 +57,22 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from physicalai.robot.interface import Robot as PhysicalAIRobot
 from physicalai_studio_plugin import (
     CatalogRobotFactory,
+    PortScanner,
     RobotAdapterOptions,
     RobotAsset,
     RobotCatalogDefinition,
     RobotProbe,
+    SerialPortInfo,
 )
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from physicalai_studio_plugin import CatalogRobot
 
 
 class MyRobotPayload(BaseModel):
@@ -76,36 +81,37 @@ class MyRobotPayload(BaseModel):
 
 
 async def _build_my_robot(
-    robot: Any,
+    robot: CatalogRobot[MyRobotPayload],
     factory: CatalogRobotFactory,
 ) -> PhysicalAIRobot:
-    payload = MyRobotPayload.model_validate(robot.payload)
-    port = await factory.find_port_by_serial(payload.serial_number)
+    port = await factory.find_port_by_serial(robot.payload.serial_number)
     if port is None:
-        msg = f"Robot not found: {payload.serial_number}"
+        msg = f"Robot not found: {robot.payload.serial_number}"
         raise RuntimeError(msg)
     # ... create and return your PhysicalAIRobot implementation ...
 
 
-class MyRobotProbe(RobotProbe):
-    async def discover(self, manager: Any) -> list[Any]:
+class MyRobotProbe:
+    """Structurally implements RobotProbe[MyRobotPayload]."""
+
+    async def discover(self, manager: PortScanner) -> list[SerialPortInfo]:
         await manager.find_robots()
         return manager.robots
 
     async def identify(
-        self, payload: dict[str, Any], manager: Any | None, joint: str | None = None
+        self, payload: MyRobotPayload, manager: PortScanner | None, joint: str | None = None
     ) -> None:
         pass
 
     async def is_online(
-        self, payload: dict[str, Any], manager: Any | None = None
+        self, payload: MyRobotPayload, manager: PortScanner | None = None
     ) -> bool:
         return True
 
 
-def _definitions() -> list[RobotCatalogDefinition]:
+def _definitions() -> list[RobotCatalogDefinition[MyRobotPayload]]:
     return [
-        RobotCatalogDefinition(
+        RobotCatalogDefinition[MyRobotPayload](
             type="MyRobot_Follower",
             display_name="My Robot Follower",
             role="follower",
@@ -134,19 +140,19 @@ def register_physicalai_studio_plugin(registry: Any) -> None:
 
 ### `RobotCatalogDefinition`
 
-The primary data class that describes a robot type to Studio.
+The primary data class that describes a robot type to Studio. Generic over the payload model — use ``RobotCatalogDefinition[MyRobotPayload]`` to link the payload, probe, and robot builder types together.
 
 ```python
 @dataclass
-class RobotCatalogDefinition:
+class RobotCatalogDefinition(Generic[_PayloadT]):
     type: str                        # Unique identifier, e.g. "MyRobot_Follower"
     display_name: str                # Human-readable name
     role: Literal["follower", "leader"]
     robot_builder: BuildRobotCallable | None = None
-    robot_payload: Type[BaseModel] | None = None
+    robot_payload: type[_PayloadT] | None = None
     asset: RobotAsset | None = None
     adapter_options: RobotAdapterOptions = field(default_factory=RobotAdapterOptions)
-    probe: RobotProbe | None = None
+    probe: RobotProbe[_PayloadT] | None = None
 ```
 
 | Field | Description |
@@ -158,7 +164,7 @@ class RobotCatalogDefinition:
 | `robot_payload` | A Pydantic `BaseModel` subclass defining the configuration fields for this robot type (e.g. `serial_number`, `connection_string`). |
 | `asset` | URDF and package maps for 3D visualization. |
 | `adapter_options` | Controls velocity/effort forwarding behavior. |
-| `probe` | Optional [`RobotProbe`](#robotprobe) for device discovery, identification, and online checking. |
+| `probe` | Optional [`RobotProbe[_PayloadT]`](#robotprobe) typed to the same payload model. |
 
 ### `RobotAdapterOptions`
 
@@ -192,17 +198,17 @@ class RobotAsset:
 
 ```python
 @runtime_checkable
-class RobotProbe(Protocol):
+class RobotProbe(Protocol[_PayloadT]):
     async def discover(self, manager: PortScanner) -> list[SerialPortInfo]: ...
     async def identify(
-        self, payload: dict[str, Any], manager: PortScanner | None, joint: str | None = None
+        self, payload: _PayloadT, manager: PortScanner | None, joint: str | None = None
     ) -> None: ...
     async def is_online(
-        self, payload: dict[str, Any], manager: PortScanner | None = None
+        self, payload: _PayloadT, manager: PortScanner | None = None
     ) -> bool: ...
 ```
 
-Implement this protocol to encapsulate hardware discovery, visual identification (e.g. wiggling a joint), and online status checking for your robot type.
+Generic protocol over your robot's payload model. Implement it structurally — your class receives the typed payload directly instead of a raw dict. The ``_PayloadT`` type parameter is automatically inferred from ``identify`` / ``is_online`` signatures; you do not need to explicitly inherit from ``RobotProbe``.
 
 ### `PortScanner`
 
@@ -287,26 +293,20 @@ Studio calls all discovered entry points at startup. Duplicate `type` values rai
 The `robot_builder` is an async function that receives a robot descriptor and a factory, performs connection setup, and returns a `PhysicalAIRobot`:
 
 ```python
+from physicalai_studio_plugin import CatalogRobot
+
 async def _build_my_robot(
-    robot: Any,
+    robot: CatalogRobot[MyRobotPayload],
     factory: CatalogRobotFactory,
 ) -> PhysicalAIRobot:
-    # 1. Extract and validate the payload
-    raw = robot.payload
-    if isinstance(raw, MyRobotPayload):
-        validated = raw
-    elif isinstance(raw, dict):
-        validated = MyRobotPayload.model_validate(raw)
-    else:
-        validated = MyRobotPayload.model_validate(raw.model_dump(mode="json"))
-
-    # 2. Resolve the connection
-    port = await factory.find_port_by_serial(validated.serial_number)
+    # `robot.payload` is already a validated MyRobotPayload instance.
+    # 1. Resolve the connection
+    port = await factory.find_port_by_serial(robot.payload.serial_number)
     if port is None:
-        msg = f"Robot not found: {validated.serial_number}"
+        msg = f"Robot not found: {robot.payload.serial_number}"
         raise RuntimeError(msg)
 
-    # 3. Return the driver
+    # 2. Return the driver
     return MyRobotDriver(port=port, ...)
 ```
 

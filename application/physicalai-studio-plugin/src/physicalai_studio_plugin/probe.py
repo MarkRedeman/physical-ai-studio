@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
+from pydantic import BaseModel
+
 from .schemas import SerialPortInfo
 
-_PayloadT = TypeVar("_PayloadT")
+_PayloadT = TypeVar("_PayloadT", bound=BaseModel)
 
 
 class PortScanner(Protocol):
