@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from physicalai.robot.so101 import SO101, SO101Calibration
@@ -180,46 +180,43 @@ class SO101Probe:
 
     async def identify(
         self,
-        payload: dict[str, Any],
+        payload: SO101RobotPayload,
         manager: PortScanner | None,
         joint: str | None = None,
     ) -> None:
         if manager is None:
             raise ValueError("PortScanner required for SO101 identification")
 
-        robot_payload = SO101RobotPayload(**payload)
         now = datetime.now()
         robot = SO101Robot(
             id=UUID(int=0),
             name="",
             type="SO101_Follower",
-            payload=robot_payload,
+            payload=payload,
             active_calibration_id=None,
             created_at=now,
             updated_at=now,
         )
         await identify_so101_robot_visually(manager, robot, joint)
 
-    async def is_online(self, payload: dict[str, Any], manager: PortScanner | None = None) -> bool:
-        robot_payload = SO101RobotPayload(**payload)
-
+    async def is_online(self, payload: SO101RobotPayload, manager: PortScanner | None = None) -> bool:
         if manager is not None:
             ports_list = manager.robots
             ports = {p.connection_string for p in ports_list}
-            if robot_payload.connection_string in ports:
+            if payload.connection_string in ports:
                 return True
-            if robot_payload.serial_number:
-                return any(p.serial_number == robot_payload.serial_number for p in ports_list)
+            if payload.serial_number:
+                return any(p.serial_number == payload.serial_number for p in ports_list)
             return False
 
         from serial.tools import list_ports
 
         all_ports = list_ports.comports()
         ports = {p.device for p in all_ports}
-        if robot_payload.connection_string in ports:
+        if payload.connection_string in ports:
             return True
-        if robot_payload.serial_number:
-            return any(p.serial_number == robot_payload.serial_number for p in all_ports)
+        if payload.serial_number:
+            return any(p.serial_number == payload.serial_number for p in all_ports)
         return False
 
 

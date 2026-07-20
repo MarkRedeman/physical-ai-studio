@@ -52,7 +52,7 @@ class RobotCatalogDefinition:
     asset: RobotAsset | None = None
 
     adapter_options: RobotAdapterOptions = field(default_factory=RobotAdapterOptions)
-    probe: RobotProbe | None = None
+    probe: RobotProbe[Any] | None = None
 
     @property
     def robot_type(self) -> str:

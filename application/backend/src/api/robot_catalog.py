@@ -84,7 +84,8 @@ async def identify_robot(
             resource_id=robot_type,
             message=f"Robot type {robot_type} does not support identification.",
         )
-    await definition.probe.identify(payload, robot_manager, joint)
+    validated = definition.robot_payload.model_validate(payload) if definition.robot_payload else payload
+    await definition.probe.identify(validated, robot_manager, joint)
 
 
 @router.post("/{robot_type}/is-online")
@@ -97,7 +98,8 @@ async def check_robot_online(
     definition = catalog_service.get_definition(robot_type)
     if definition.probe is None:
         return False
-    return await definition.probe.is_online(payload)
+    validated = definition.robot_payload.model_validate(payload) if definition.robot_payload else payload
+    return await definition.probe.is_online(validated)
 
 
 @router.get("/{robot_type}/urdf")

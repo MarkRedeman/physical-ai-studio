@@ -34,7 +34,7 @@ class RobotService:
             definition = registry.get_definition(robot.type)
             is_online = False
             if definition is not None and definition.probe is not None:
-                is_online = await definition.probe.is_online(robot.payload.model_dump(), manager)
+                is_online = await definition.probe.is_online(robot.payload, manager)
 
             results.append(
                 RobotWithConnectionStateAdapter.validate_python(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
@@ -174,28 +174,26 @@ class TrossenSingleArmProbe:
 
     async def identify(
         self,
-        payload: dict[str, Any],
+        payload: TrossenSingleArmPayload,
         manager: PortScanner | None = None,  # noqa: ARG002
         joint: str | None = None,  # noqa: ARG002
     ) -> None:
-        robot_payload = TrossenSingleArmPayload(**payload)
         now = datetime.now()
         robot = TrossenSingleArmRobot(
             id=UUID(int=0),
             name="",
             type="Trossen_WidowXAI_Follower",
-            payload=robot_payload,
+            payload=payload,
             active_calibration_id=None,
             created_at=now,
             updated_at=now,
         )
         await identify_trossen_robot_visually(robot)
 
-    async def is_online(self, payload: dict[str, Any], manager: PortScanner | None = None) -> bool:  # noqa: ARG002
-        robot_payload = TrossenSingleArmPayload(**payload)
-        if not robot_payload.connection_string:
+    async def is_online(self, payload: TrossenSingleArmPayload, manager: PortScanner | None = None) -> bool:  # noqa: ARG002
+        if not payload.connection_string:
             return False
-        return await _ping(robot_payload.connection_string)
+        return await _ping(payload.connection_string)
 
 
 class TrossenBimanualProbe:
@@ -206,18 +204,40 @@ class TrossenBimanualProbe:
 
     async def identify(
         self,
-        payload: dict[str, Any],
+        payload: TrossenBimanualPayload,
         manager: PortScanner | None = None,  # noqa: ARG002
         joint: str | None = None,  # noqa: ARG002
     ) -> None:
-        await TrossenSingleArmProbe().identify(payload)
+        now = datetime.now()
+        left_payload = TrossenSingleArmPayload(connection_string=payload.connection_string_left)
+        left_robot = TrossenSingleArmRobot(
+            id=UUID(int=0),
+            name="",
+            type="Trossen_WidowXAI_Follower",
+            payload=left_payload,
+            active_calibration_id=None,
+            created_at=now,
+            updated_at=now,
+        )
+        await identify_trossen_robot_visually(left_robot)
 
-    async def is_online(self, payload: dict[str, Any], manager: PortScanner | None = None) -> bool:  # noqa: ARG002
+        right_payload = TrossenSingleArmPayload(connection_string=payload.connection_string_right)
+        right_robot = TrossenSingleArmRobot(
+            id=UUID(int=0),
+            name="",
+            type="Trossen_WidowXAI_Follower",
+            payload=right_payload,
+            active_calibration_id=None,
+            created_at=now,
+            updated_at=now,
+        )
+        await identify_trossen_robot_visually(right_robot)
+
+    async def is_online(self, payload: TrossenBimanualPayload, manager: PortScanner | None = None) -> bool:  # noqa: ARG002
         import asyncio
 
-        robot_payload = TrossenBimanualPayload(**payload)
-        left = robot_payload.connection_string_left
-        right = robot_payload.connection_string_right
+        left = payload.connection_string_left
+        right = payload.connection_string_right
         if not left or not right:
             return False
         left_ok, right_ok = await asyncio.gather(_ping(left), _ping(right))
