@@ -24,7 +24,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-_ROBOT_TYPES = ("SO101_Follower", "SO101_Leader")
+_ROBOT_TYPES = ("SO101_Follower", "SO101_Leader", "SO101_FOLLOWER", "SO101_LEADER")
 
 
 def upgrade() -> None:
