@@ -18,8 +18,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RobotAdapterOptions:
+    # Adapter tuning options used when wrapping catalog robots into the PhysicalAI robot interface.
+    # Defaults are conservative so existing robots keep current behavior unless overridden.
+    # Include joint velocity values in the adapted observation/state output.
     include_velocities: bool = False
+    # Multiplier applied to goal timing (1.0 keeps original goal timing).
     goal_time_scale: float = 1.0
+    # Optional gain for externally provided effort/torque signals; None disables it.
     external_effort_gain: float | None = 0.1
 
 
