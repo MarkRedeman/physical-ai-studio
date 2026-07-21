@@ -33,14 +33,3 @@ export const buildRobotBody = (
             return null;
     }
 };
-
-export const mergeRobotPayload = (body: SchemaRobotInput | null, originalPayload?: object): SchemaRobotInput | null => {
-    if (body === null || originalPayload === undefined) {
-        return body;
-    }
-
-    return {
-        ...body,
-        payload: { ...originalPayload, ...body.payload },
-    } as SchemaRobotInput;
-};

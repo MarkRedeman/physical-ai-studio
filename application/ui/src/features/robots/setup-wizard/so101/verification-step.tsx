@@ -71,8 +71,9 @@ export const VerificationStep = () => {
     const { wsState } = useSetupState();
     const { activeType, robotForm } = useRobotForm();
 
-    const serialNumber = robotForm.serial_number ?? '';
-    const connectionString = 'connection_string' in robotForm ? (robotForm.connection_string ?? '') : '';
+    const payload = 'connection_string' in robotForm.payload ? robotForm.payload : null;
+    const serialNumber = payload?.serial_number ?? '';
+    const connectionString = payload?.connection_string ?? '';
     const robotType = activeType;
 
     const [robotId] = useState(() => uuidv4());

@@ -4,11 +4,10 @@ import { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../robot-types';
 import { getInitialSO101FormData } from './catalog/so101';
 import { getInitialWidowxFormData } from './catalog/widowxai';
 import { getInitialBimanualFormData } from './catalog/widowxai-bimanual';
-import { buildRobotBody, mergeRobotPayload, type AnyRobotFormData, type FormDataForSchema } from './form-data';
+import { buildRobotBody, type AnyRobotFormData, type FormDataForSchema } from './form-data';
 
 type RobotFormState = {
     activeType: SchemaRobotType;
-    originalPayload?: SchemaRobot['payload'];
     SO101_Follower: FormDataForSchema['SO101_Follower'];
     SO101_Leader: FormDataForSchema['SO101_Leader'];
     Trossen_WidowXAI_Follower: FormDataForSchema['Trossen_WidowXAI_Follower'];
@@ -40,7 +39,6 @@ const FORM_DATA_FAMILY: Record<SchemaRobotType, string> = {
 
 const getInitialState = (robot?: SchemaRobot): RobotFormState => ({
     activeType: robot?.type ?? 'SO101_Follower',
-    originalPayload: robot?.payload,
     SO101_Follower: getInitialSO101FormData(robot?.type === 'SO101_Follower' ? robot : undefined),
     SO101_Leader: getInitialSO101FormData(robot?.type === 'SO101_Leader' ? robot : undefined),
     Trossen_WidowXAI_Follower: getInitialWidowxFormData(
@@ -152,5 +150,5 @@ export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
 
     const formData = state[state.activeType] as AnyRobotFormData;
 
-    return mergeRobotPayload(buildRobotBody(formData, state.activeType, robot_id), state.originalPayload);
+    return buildRobotBody(formData, state.activeType, robot_id);
 };
