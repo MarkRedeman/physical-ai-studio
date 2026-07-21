@@ -36,7 +36,7 @@ def upgrade() -> None:
             "SELECT id, payload, active_calibration_id "
             "FROM project_robots "
             "WHERE type IN :types AND active_calibration_id IS NOT NULL"
-        ),
+        ).bindparams(sa.bindparam("types", expanding=True)),
         {"types": _ROBOT_TYPES},
     ).fetchall()
 
@@ -78,7 +78,9 @@ def downgrade() -> None:
     conn = op.get_bind()
 
     robots = conn.execute(
-        sa.text("SELECT id, payload FROM project_robots WHERE type IN :types"),
+        sa.text("SELECT id, payload FROM project_robots WHERE type IN :types").bindparams(
+            sa.bindparam("types", expanding=True)
+        ),
         {"types": _ROBOT_TYPES},
     ).fetchall()
 
