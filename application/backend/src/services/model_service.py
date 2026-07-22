@@ -3,12 +3,21 @@ from pathlib import Path
 from uuid import UUID
 
 import yaml
+from loguru import logger
 
 from db import get_async_db_session_ctx
 from exceptions import ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
 from schemas.job import TrainJob
 from schemas.model import BackendExportDetail, Model, TrainingSummary
+
+
+class SafeLoaderIgnoreUnknown(yaml.SafeLoader):
+    def ignore_unknown(self, node):
+        return None
+
+
+SafeLoaderIgnoreUnknown.add_constructor(None, SafeLoaderIgnoreUnknown.ignore_unknown)
 
 
 class ModelService:
@@ -85,8 +94,12 @@ class ModelService:
         hparams_path = Path(model.path) / "version_0" / "hparams.yaml"
         if not hparams_path.is_file():
             return None
-        with hparams_path.open() as f:
-            return yaml.safe_load(f)
+        try:
+            with hparams_path.open(encoding="utf-8") as f:
+                return yaml.load(f, Loader=SafeLoaderIgnoreUnknown)
+        except yaml.YAMLError:
+            logger.warning("Could not parse model hparams YAML at {}", hparams_path)
+            return None
 
     @staticmethod
     def get_training_summary(training_job: TrainJob | None) -> TrainingSummary | None:

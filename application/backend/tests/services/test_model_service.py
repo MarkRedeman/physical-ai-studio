@@ -37,6 +37,32 @@ def test_get_backend_details_delegates_to_backend_export_detail(tmp_path) -> Non
     mock_from_backend_dir.assert_called_once_with(backend_dir)
 
 
+def test_get_hparams_handles_legacy_python_tuple_tag(tmp_path) -> None:
+    model = _make_model()
+    model.path = str(tmp_path)
+    version_dir = tmp_path / "version_0"
+    version_dir.mkdir(parents=True)
+    (version_dir / "hparams.yaml").write_text(
+        "image_size: !!python/tuple\n- 384\n- 384\n",
+        encoding="utf-8",
+    )
+
+    hparams = ModelService.get_hparams(model)
+
+    assert hparams is not None
+    assert hparams["image_size"] == [384, 384]
+
+
+def test_get_hparams_returns_none_when_yaml_invalid(tmp_path) -> None:
+    model = _make_model()
+    model.path = str(tmp_path)
+    version_dir = tmp_path / "version_0"
+    version_dir.mkdir(parents=True)
+    (version_dir / "hparams.yaml").write_text("image_size: [1, 2\n", encoding="utf-8")
+
+    assert ModelService.get_hparams(model) is None
+
+
 @pytest.mark.anyio
 async def test_delete_model_deletes_snapshot_when_snapshot_id_set() -> None:
     """When model.snapshot_id is set, delete_model should also delete the snapshot row."""
