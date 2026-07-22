@@ -21,9 +21,7 @@ async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: C
 
     calibration: SO101Calibration | None = None
     if robot.payload.calibration is not None:
-        calibration = SO101Calibration.from_dict(
-            {name: val.model_dump() for name, val in robot.payload.calibration.items()}
-        )
+        calibration = SO101Calibration(joints=robot.payload.calibration)
 
     role = "follower" if robot.type == RobotType.SO101_FOLLOWER else "leader"
     return SO101(port=port, calibration=calibration, role=role, unit="normalized")
