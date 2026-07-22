@@ -1,5 +1,6 @@
 import shutil
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import yaml
@@ -12,12 +13,27 @@ from schemas.job import TrainJob
 from schemas.model import BackendExportDetail, Model, TrainingSummary
 
 
-class SafeLoaderIgnoreUnknown(yaml.SafeLoader):
-    def ignore_unknown(self, node):
-        return None
+class SafeLoaderLegacyPythonTags(yaml.SafeLoader):
+    """Safe loader with support for legacy ``!!python/*`` YAML tags."""
 
 
-SafeLoaderIgnoreUnknown.add_constructor(None, SafeLoaderIgnoreUnknown.ignore_unknown)
+def _construct_legacy_python_tag(
+    loader: yaml.SafeLoader,
+    tag_suffix: str,
+    node: yaml.Node,
+) -> Any:
+    # pyrefly/mypy: tag_suffix is intentionally unused; constructor signature is fixed by PyYAML.
+    del tag_suffix
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    return None
+
+
+SafeLoaderLegacyPythonTags.add_multi_constructor("tag:yaml.org,2002:python/", _construct_legacy_python_tag)
 
 
 class ModelService:
@@ -96,10 +112,16 @@ class ModelService:
             return None
         try:
             with hparams_path.open(encoding="utf-8") as f:
-                return yaml.load(f, Loader=SafeLoaderIgnoreUnknown)
+                loader = SafeLoaderLegacyPythonTags(f)
+                try:
+                    data = loader.get_single_data()
+                finally:
+                    loader.dispose()
         except yaml.YAMLError:
             logger.warning("Could not parse model hparams YAML at {}", hparams_path)
             return None
+
+        return data if isinstance(data, dict) else None
 
     @staticmethod
     def get_training_summary(training_job: TrainJob | None) -> TrainingSummary | None:

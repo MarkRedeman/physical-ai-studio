@@ -53,6 +53,22 @@ def test_get_hparams_handles_legacy_python_tuple_tag(tmp_path) -> None:
     assert hparams["image_size"] == [384, 384]
 
 
+def test_get_hparams_handles_unknown_python_tag_suffix(tmp_path) -> None:
+    model = _make_model()
+    model.path = str(tmp_path)
+    version_dir = tmp_path / "version_0"
+    version_dir.mkdir(parents=True)
+    (version_dir / "hparams.yaml").write_text(
+        "future_value: !!python/some_future_tag [1, 2, 3]\n",
+        encoding="utf-8",
+    )
+
+    hparams = ModelService.get_hparams(model)
+
+    assert hparams is not None
+    assert hparams["future_value"] == [1, 2, 3]
+
+
 def test_get_hparams_returns_none_when_yaml_invalid(tmp_path) -> None:
     model = _make_model()
     model.path = str(tmp_path)
