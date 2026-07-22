@@ -3,6 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
+from physicalai.robot.so101 import SO101JointCalibration
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from schemas.base import BaseIDModel
@@ -27,14 +28,6 @@ class RobotType(StrEnum):
 # ============================================================================
 
 
-class SO101CalibrationValue(BaseModel):
-    id: int
-    drive_mode: int
-    homing_offset: int
-    range_min: int
-    range_max: int
-
-
 class SO101RobotPayload(BaseModel):
     """Connection configuration for SO-101 serial robots."""
 
@@ -43,7 +36,7 @@ class SO101RobotPayload(BaseModel):
         description="Serial port path; leave empty to auto-discover via serial_number",
     )
     serial_number: str = Field(default="", description="USB serial number of the robot (when available)")
-    calibration: dict[str, SO101CalibrationValue] | None = Field(
+    calibration: dict[str, SO101JointCalibration] | None = Field(
         default=None,
         description="Per-joint calibration values (id, drive_mode, homing_offset, range_min, range_max)",
     )
