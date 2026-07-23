@@ -36,7 +36,7 @@ def test_resolve_robot_urdf_path_uses_builtin_assets_root(tmp_path, monkeypatch)
     assert assets.resolve_robot_urdf_path(definition) == urdf_path
 
 
-def test_resolve_robot_asset_path_uses_declared_package_root(tmp_path, monkeypatch) -> None:
+def test_resolve_robot_relative_asset_path_uses_declared_package_root(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(assets, "BUILTIN_ROBOT_ASSETS_ROOT", tmp_path)
     definition = next(
         definition for definition in widowxai.get_definitions() if definition.type == "Trossen_WidowXAI_Follower"
@@ -47,9 +47,8 @@ def test_resolve_robot_asset_path_uses_declared_package_root(tmp_path, monkeypat
     asset_path.write_text("mesh", encoding="utf-8")
 
     assert (
-        assets.resolve_robot_asset_path(
+        assets.resolve_robot_relative_asset_path(
             definition,
-            package_name="trossen_arm_description",
             asset_path=asset_path.relative_to(tmp_path / "widowx"),
         )
         == asset_path
