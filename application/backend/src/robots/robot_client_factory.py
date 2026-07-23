@@ -1,9 +1,10 @@
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.catalog.registry import RobotCatalogRegistry
+from robots.catalog.so101 import find_so101_port, serial_port_from_so101
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
-from schemas.robot import Robot, SO101Robot
-from utils.serial_robot_tools import RobotConnectionManager, find_so101_port, serial_port_from_so101
+from schemas.robot import Robot
+from utils.serial_robot_tools import RobotConnectionManager
 
 
 class RobotClientFactory:
@@ -25,6 +26,8 @@ class RobotClientFactory:
             raise ValueError(f"Robot type is not part of the catalog: {robot.type}")
 
         builder = definition.robot_builder
+        if builder is None:
+            raise ValueError(f"Robot type {robot.type} has no robot builder")
 
         robot_driver = await builder(robot, self)
         adapter_options = definition.adapter_options
@@ -39,7 +42,7 @@ class RobotClientFactory:
             ),
         )
 
-    async def find_so101_port(self, robot: SO101Robot) -> str:
+    async def find_so101_port(self, robot: Robot) -> str:
         port = await find_so101_port(self.robot_manager, serial_port_from_so101(robot))
         if port is None:
             resource_key = robot.payload.serial_number or robot.payload.connection_string
@@ -47,7 +50,12 @@ class RobotClientFactory:
         return port
 
     async def find_port_by_serial(self, serial_number: str) -> str | None:
+        from loguru import logger
+
+        logger.info("looking for: {}", serial_number)
         for managed_robot in self.robot_manager.robots:
+            logger.info("managed robot: {}", managed_robot)
             if managed_robot.serial_number == serial_number:
                 return managed_robot.connection_string
+
         return None
