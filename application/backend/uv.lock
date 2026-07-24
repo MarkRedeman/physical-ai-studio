@@ -2878,8 +2878,27 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "physicalai" },
+    { name = "physicalai", git = "https://github.com/openvinotoolkit/physicalai.git?rev=08fcd96389fa9e326946df6affc5c19c4c731633" },
     { name = "pydantic", specifier = ">=2.12" },
+]
+
+[package.metadata.requires-dev]
+all = [
+    { name = "mypy", specifier = "~=1.17" },
+    { name = "pyrefly", specifier = ">=0.18.0" },
+    { name = "ruff", specifier = "~=0.11.2" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
+]
+dev = [
+    { name = "pyrefly", specifier = ">=0.18.0" },
+    { name = "ruff", specifier = "~=0.11.2" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
+]
+lint = [
+    { name = "mypy", specifier = "~=1.17" },
+    { name = "pyrefly", specifier = ">=0.18.0" },
+    { name = "ruff", specifier = "~=0.11.2" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
 ]
 
 [[package]]
