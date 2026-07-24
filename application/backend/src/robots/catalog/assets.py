@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
-from robots.catalog.types import RobotCatalogDefinition
-
 from . import so101, widowxai
+
+if TYPE_CHECKING:
+    from physicalai_studio_plugin import RobotCatalogDefinition
 
 BUILTIN_ROBOT_ASSETS_ROOT = Path(__file__).resolve().parents[2] / "static" / "robot-assets"
 

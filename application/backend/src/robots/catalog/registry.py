@@ -5,13 +5,13 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
+from physicalai_studio_plugin import RobotAsset, RobotCatalogDefinition
+from physicalai_studio_plugin import RobotCatalogRegistry as RobotCatalogRegistryProtocol
 from pydantic import BaseModel, Field, TypeAdapter, create_model
 
 from schemas.robot_type import BaseRobot
 
 from . import so101, widowxai
-from .types import RobotAsset, RobotCatalogDefinition
-from .types import RobotCatalogRegistry as RobotCatalogRegistryPlugin
 
 CATALOG_PLUGIN_ENTRYPOINT_GROUP = "physicalai.studio.catalog_plugins"
 
@@ -28,7 +28,7 @@ def _build_union(types: list[type]) -> Any:
     return result
 
 
-class RobotCatalogRegistry(RobotCatalogRegistryPlugin):
+class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
     def __init__(self) -> None:
         self._definitions: dict[str, RobotCatalogDefinition] = {}
         self._robot_models: dict[str, type[BaseRobot]] = {}

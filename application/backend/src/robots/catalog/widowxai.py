@@ -6,19 +6,18 @@ from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
+from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
 from pydantic import BaseModel, ConfigDict, Field
 
 from schemas.robot_type import BaseRobot
-
-from .types import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
 
 TrossenTypes = Literal["Trossen_WidowXAI_Follower", "Trossen_WidowXAI_Leader"]
 TrossenBimanualTypes = Literal["Trossen_Bimanual_WidowXAI_Follower", "Trossen_Bimanual_WidowXAI_Leader"]
 
 if TYPE_CHECKING:
-    from schemas import SerialPortInfo
+    from physicalai_studio_plugin import CatalogRobot, CatalogRobotFactory, PortScanner
 
-    from .types import CatalogRobot, CatalogRobotFactory, PortScanner
+    from schemas import SerialPortInfo
 
 
 class TrossenSingleArmPayload(BaseModel):

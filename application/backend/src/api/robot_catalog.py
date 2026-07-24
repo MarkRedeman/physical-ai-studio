@@ -3,12 +3,12 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import FileResponse
+from physicalai_studio_plugin import RobotCatalogDefinition
 from pydantic import BaseModel, Field
 
 from api.dependencies import RobotCatalogServiceDep, RobotConnectionManagerDep
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.catalog.assets import resolve_robot_relative_asset_path, resolve_robot_urdf_path
-from robots.catalog.types import RobotCatalogDefinition
 from schemas import SerialPortInfo
 
 

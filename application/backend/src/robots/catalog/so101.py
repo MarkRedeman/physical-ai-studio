@@ -6,19 +6,18 @@ from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from physicalai.robot.so101 import SO101, SO101Calibration, SO101JointCalibration
+from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from schemas import SerialPortInfo
 from schemas.robot_type import BaseRobot
 
-from .types import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
-
 SO101Types = Literal["SO101_Follower", "SO101_Leader"]
 
 if TYPE_CHECKING:
-    from schemas.robot import Robot
+    from physicalai_studio_plugin import CatalogRobot, CatalogRobotFactory, PortScanner
 
-    from .types import CatalogRobot, CatalogRobotFactory, PortScanner
+    from schemas.robot import Robot
 
 
 class SO101CalibrationValue(BaseModel):

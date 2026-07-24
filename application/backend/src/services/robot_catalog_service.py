@@ -1,6 +1,7 @@
+from physicalai_studio_plugin import RobotCatalogDefinition
+
 from exceptions import ResourceNotFoundError, ResourceType
 from robots.catalog.registry import RobotCatalogRegistry
-from robots.catalog.types import RobotCatalogDefinition
 
 
 class RobotCatalogService:
