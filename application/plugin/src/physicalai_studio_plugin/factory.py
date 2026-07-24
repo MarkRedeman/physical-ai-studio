@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from .schemas import SerialPortInfo
 
 
 class CatalogRobotFactory(Protocol):
@@ -12,8 +15,5 @@ class CatalogRobotFactory(Protocol):
     so they can resolve serial ports and load calibrations at build time.
     """
 
-    async def find_so101_port(self, robot: object) -> str:
-        """Return a resolved port for a SO101-style robot descriptor."""
-
-    async def find_port_by_serial(self, serial_number: str) -> str | None:
-        """Return the connection port for a serial number, if present."""
+    async def find_port(self, port_info: SerialPortInfo) -> str | None:
+        """Return the resolved connection port, if present."""

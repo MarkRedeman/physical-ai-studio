@@ -1,8 +1,7 @@
-from exceptions import ResourceNotFoundError, ResourceType
 from robots.catalog.registry import RobotCatalogRegistry
-from robots.catalog.so101 import find_so101_port, serial_port_from_so101
 from robots.physicalai_adapter import PhysicalAIRobotAdapter, PhysicalAIRobotAdapterConfig
 from robots.robot_client import RobotClient
+from schemas import SerialPortInfo
 from schemas.robot import Robot
 from utils.serial_robot_tools import RobotConnectionManager
 
@@ -42,20 +41,23 @@ class RobotClientFactory:
             ),
         )
 
-    async def find_so101_port(self, robot: Robot) -> str:
-        port = await find_so101_port(self.robot_manager, serial_port_from_so101(robot))
-        if port is None:
-            resource_key = robot.payload.serial_number or robot.payload.connection_string
-            raise ResourceNotFoundError(ResourceType.ROBOT, resource_key)
-        return port
+    async def find_port(self, port_info: SerialPortInfo) -> str | None:
+        port = self._resolve_port(self.robot_manager.robots, port_info)
+        if port is not None:
+            return port
 
-    async def find_port_by_serial(self, serial_number: str) -> str | None:
-        from loguru import logger
+        await self.robot_manager.find_robots()
+        return self._resolve_port(self.robot_manager.robots, port_info)
 
-        logger.info("looking for: {}", serial_number)
-        for managed_robot in self.robot_manager.robots:
-            logger.info("managed robot: {}", managed_robot)
-            if managed_robot.serial_number == serial_number:
-                return managed_robot.connection_string
+    @staticmethod
+    def _resolve_port(discovered: list[SerialPortInfo], target: SerialPortInfo) -> str | None:
+        if target.serial_number is not None:
+            for serial_port in discovered:
+                if serial_port.serial_number == target.serial_number:
+                    return serial_port.connection_string
+            return None
 
+        for serial_port in discovered:
+            if serial_port.connection_string == target.connection_string:
+                return serial_port.connection_string
         return None

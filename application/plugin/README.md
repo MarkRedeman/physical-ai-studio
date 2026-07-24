@@ -84,7 +84,12 @@ async def _build_my_robot(
     robot: CatalogRobot[MyRobotPayload],
     factory: CatalogRobotFactory,
 ) -> PhysicalAIRobot:
-    port = await factory.find_port_by_serial(robot.payload.serial_number)
+    port = await factory.find_port(
+        SerialPortInfo(
+            connection_string=robot.payload.connection_string or None,
+            serial_number=robot.payload.serial_number or None,
+        )
+    )
     if port is None:
         msg = f"Robot not found: {robot.payload.serial_number}"
         raise RuntimeError(msg)
@@ -225,11 +230,10 @@ Duck-type protocol for serial/network port scanners. Call `find_robots()` to ref
 
 ```python
 class CatalogRobotFactory(Protocol):
-    async def find_so101_port(self, robot: Any) -> str: ...
-    async def find_port_by_serial(self, serial_number: str) -> str | None: ...
+    async def find_port(self, port_info: SerialPortInfo) -> str | None: ...
 ```
 
-Factory protocol passed to your `robot_builder` callable. Use `find_port_by_serial(serial_number)` to resolve a USB serial number to a port path. Calibration data is now embedded in the robot payload model and does not require a factory method.
+Factory protocol passed to your `robot_builder` callable. Use `find_port(SerialPortInfo(...))` to resolve a connection by serial number and/or configured connection string. Calibration data is now embedded in the robot payload model and does not require a factory method.
 
 ### `SerialPortInfo`
 
@@ -299,7 +303,12 @@ async def _build_my_robot(
 ) -> PhysicalAIRobot:
     # `robot.payload` is already a validated MyRobotPayload instance.
     # 1. Resolve the connection
-    port = await factory.find_port_by_serial(robot.payload.serial_number)
+    port = await factory.find_port(
+        SerialPortInfo(
+            connection_string=robot.payload.connection_string or None,
+            serial_number=robot.payload.serial_number or None,
+        )
+    )
     if port is None:
         msg = f"Robot not found: {robot.payload.serial_number}"
         raise RuntimeError(msg)

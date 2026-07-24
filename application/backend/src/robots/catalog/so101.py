@@ -85,7 +85,14 @@ _SO101_ASSET = RobotAsset(
 async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: CatalogRobotFactory) -> SO101:
     if not isinstance(robot.payload, SO101RobotPayload):
         raise TypeError("Expected SO101Robot")
-    port = await factory.find_so101_port(robot)
+    port_info = SerialPortInfo(
+        connection_string=robot.payload.connection_string or None,
+        serial_number=robot.payload.serial_number or None,
+    )
+    port = await factory.find_port(port_info)
+    if port is None:
+        resource_key = robot.payload.serial_number or robot.payload.connection_string
+        raise ValueError(f"Could not resolve a serial port for {resource_key}")
 
     calibration: SO101Calibration | None = None
     if robot.payload.calibration is not None:
