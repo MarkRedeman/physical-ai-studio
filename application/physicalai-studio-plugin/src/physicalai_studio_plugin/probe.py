@@ -1,12 +1,15 @@
+"""Probe and scanner protocols used by plugin robot integrations."""
+
 from __future__ import annotations
 
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
-from .schemas import SerialPortInfo
+if TYPE_CHECKING:
+    from .schemas import SerialPortInfo
 
-_PayloadT = TypeVar("_PayloadT", bound=BaseModel)
+_PayloadT_contra = TypeVar("_PayloadT_contra", bound=BaseModel, contravariant=True)
 
 
 class PortScanner(Protocol):
@@ -16,14 +19,16 @@ class PortScanner(Protocol):
     manager implementation.
     """
 
-    async def find_robots(self) -> None: ...
+    async def find_robots(self) -> None:
+        """Refresh discovered robot connections."""
 
     @property
-    def robots(self) -> list[SerialPortInfo]: ...
+    def robots(self) -> list[SerialPortInfo]:
+        """Return currently discovered robot connections."""
 
 
 @runtime_checkable
-class RobotProbe(Protocol[_PayloadT]):
+class RobotProbe(Protocol[_PayloadT_contra]):
     """Hardware interaction interface for a robot type.
 
     Each built-in or plugin-provided robot type implements this protocol
@@ -32,17 +37,20 @@ class RobotProbe(Protocol[_PayloadT]):
     payload model (a pydantic ``BaseModel`` subclass).
     """
 
-    async def discover(self, manager: PortScanner) -> list[SerialPortInfo]: ...
+    async def discover(self, manager: PortScanner) -> list[SerialPortInfo]:
+        """Discover robots and return current connection metadata."""
 
     async def identify(
         self,
-        payload: _PayloadT,
+        payload: _PayloadT_contra,
         manager: PortScanner | None,
         joint: str | None = None,
-    ) -> None: ...
+    ) -> None:
+        """Trigger physical identification behavior for a robot."""
 
     async def is_online(
         self,
-        payload: _PayloadT,
+        payload: _PayloadT_contra,
         manager: PortScanner | None = None,
-    ) -> bool: ...
+    ) -> bool:
+        """Return whether the robot appears online."""

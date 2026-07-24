@@ -1,3 +1,5 @@
+"""Public API for the Physical AI Studio plugin."""
+
 from .assets import RobotAsset
 from .catalog import (
     BuildRobotCallable,

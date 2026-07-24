@@ -1,4 +1,4 @@
-# Physical AI Studio Plugin SDK
+# Physical AI Studio Plugin
 
 Types, protocols, and utilities for building robot catalog plugins for **Physical AI Studio**.
 

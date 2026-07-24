@@ -1,32 +1,43 @@
+"""Core plugin catalog protocol and definition types."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Generic, Literal, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, Protocol, TypeVar
 
 from physicalai.robot.interface import Robot as PhysicalAIRobot
 from pydantic import BaseModel
 
-from .assets import RobotAsset
 from .factory import CatalogRobotFactory
-from .probe import RobotProbe
+
+if TYPE_CHECKING:
+    from .assets import RobotAsset
+    from .probe import RobotProbe
 
 
 @dataclass(frozen=True)
 class RobotAdapterOptions:
+    """Controls adapter behavior for velocity, timing, and effort handling."""
+
     include_velocities: bool = False
     goal_time_scale: float = 1.0
     external_effort_gain: float | None = 0.1
 
 
 _PayloadT = TypeVar("_PayloadT", bound=BaseModel)
+_PayloadModelT = type[_PayloadT]
 
 
 class PayloadContainer(Protocol[_PayloadT]):
+    """Object with a typed ``payload`` attribute."""
+
     payload: _PayloadT
 
 
 class CatalogRobot(PayloadContainer[_PayloadT], Protocol[_PayloadT]):
+    """Typed robot descriptor passed to catalog robot builders."""
+
     type: str
 
 
@@ -39,16 +50,14 @@ BuildRobotCallable = Callable[[_RobotT, _FactoryT], Awaitable[PhysicalAIRobot]]
 
 @dataclass
 class RobotCatalogDefinition(Generic[_PayloadT]):
+    """Complete definition of a plugin robot type for Studio registration."""
+
     type: str
     display_name: str
     role: Literal["follower", "leader"]
     robot_builder: BuildRobotCallable | None = None
-    robot_payload: type[_PayloadT] | None = None
+    robot_payload: _PayloadModelT | None = None
     asset: RobotAsset | None = None
 
     adapter_options: RobotAdapterOptions = field(default_factory=RobotAdapterOptions)
     probe: RobotProbe[_PayloadT] | None = None
-
-    @property
-    def robot_type(self) -> str:
-        return self.type
