@@ -9,6 +9,7 @@ from physicalai_studio_plugin import (
     RobotAdapterOptions,
     RobotAsset,
     RobotCatalogDefinition,
+    RobotCatalogRegistry,
     RobotProbe,
     SerialPortInfo,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "RobotAdapterOptions",
     "RobotAsset",
     "RobotCatalogDefinition",
+    "RobotCatalogRegistry",
     "RobotProbe",
     "SerialPortInfo",
 ]

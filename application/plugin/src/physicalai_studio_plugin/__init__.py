@@ -7,6 +7,7 @@ from .catalog import (
     PayloadContainer,
     RobotAdapterOptions,
     RobotCatalogDefinition,
+    RobotCatalogRegistry,
 )
 from .factory import CatalogRobotFactory
 from .probe import PortScanner, RobotProbe
@@ -21,6 +22,7 @@ __all__ = [
     "RobotAdapterOptions",
     "RobotAsset",
     "RobotCatalogDefinition",
+    "RobotCatalogRegistry",
     "RobotProbe",
     "SerialPortInfo",
 ]

@@ -11,6 +11,7 @@ from schemas.robot_type import BaseRobot
 
 from . import so101, widowxai
 from .types import RobotAsset, RobotCatalogDefinition
+from .types import RobotCatalogRegistry as RobotCatalogRegistryPlugin
 
 CATALOG_PLUGIN_ENTRYPOINT_GROUP = "physicalai.studio.catalog_plugins"
 
@@ -27,14 +28,14 @@ def _build_union(types: list[type]) -> Any:
     return result
 
 
-class RobotCatalogRegistry:
+class RobotCatalogRegistry(RobotCatalogRegistryPlugin):
     def __init__(self) -> None:
         self._definitions: dict[str, RobotCatalogDefinition] = {}
         self._robot_models: dict[str, type[BaseRobot]] = {}
         self._robot_adapter: TypeAdapter | None = None
 
         for definition in so101.get_definitions() + widowxai.get_definitions():
-            self.register(definition)
+            self.register_robot(definition)
 
         self._load_external_plugins()
 
@@ -44,7 +45,7 @@ class RobotCatalogRegistry:
     def get_definition(self, robot_type: str) -> RobotCatalogDefinition | None:
         return self._definitions.get(robot_type)
 
-    def register(self, definition: RobotCatalogDefinition | Any) -> None:
+    def register_robot(self, definition: RobotCatalogDefinition | Any) -> None:
         definition = self._coerce_definition(definition)
         if definition.type in self._definitions:
             raise ValueError(f"Duplicate robot catalog registration for type: {definition.type}")

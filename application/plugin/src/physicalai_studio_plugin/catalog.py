@@ -61,3 +61,11 @@ class RobotCatalogDefinition(Generic[_PayloadT]):
 
     adapter_options: RobotAdapterOptions = field(default_factory=RobotAdapterOptions)
     probe: RobotProbe[_PayloadT] | None = None
+
+
+class RobotCatalogRegistry(Protocol):
+    """Registry interface used by plugin entry points to add robot definitions."""
+
+    def register_robot(self, definition: RobotCatalogDefinition) -> None:
+        """Register one robot catalog definition with Studio."""
+        ...
