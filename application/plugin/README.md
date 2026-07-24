@@ -9,7 +9,7 @@ External robot types register themselves with Studio through an [entry-point](#e
 ## Installation
 
 ```bash
-pip install physicalai-studio-plugin
+uv add physicalai-studio-plugin
 ```
 
 Requires Python 3.12+. Dependencies are `pydantic>=2.12` and `physicalai`.

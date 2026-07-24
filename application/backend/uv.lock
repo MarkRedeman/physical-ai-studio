@@ -2822,7 +2822,7 @@ requires-dist = [
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "opencv-python" },
     { name = "physicalai", extras = ["robots", "capture"], git = "https://github.com/openvinotoolkit/physicalai.git?rev=08fcd96389fa9e326946df6affc5c19c4c731633" },
-    { name = "physicalai-studio-plugin", editable = "../physicalai-studio-plugin" },
+    { name = "physicalai-studio-plugin", editable = "../plugin" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cpu'", editable = "../../library" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cuda'", editable = "../../library" },
     { name = "physicalai-train", extras = ["pi0", "smolvla"], editable = "../../library" },
@@ -2870,7 +2870,7 @@ lint = [
 [[package]]
 name = "physicalai-studio-plugin"
 version = "0.1.0"
-source = { editable = "../physicalai-studio-plugin" }
+source = { editable = "../plugin" }
 dependencies = [
     { name = "physicalai" },
     { name = "pydantic" },

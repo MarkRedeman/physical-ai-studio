@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Plugin SDK-specific pre-commit configuration for prek workspace mode
-# This config applies only to files in application/physicalai-studio-plugin/
+# This config applies only to files in application/plugin/
 #
 # Kept in sync with application/backend/.pre-commit-config.yaml and
 # application/trainer/.pre-commit-config.yaml (the canonical setup for
