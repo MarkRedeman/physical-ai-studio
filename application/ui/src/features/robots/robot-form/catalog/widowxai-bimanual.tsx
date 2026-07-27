@@ -78,7 +78,11 @@ export const BiManualWidowxAIFormFields = () => {
                         placeholder='192.168.1.2'
                     />
                     <View>
-                        <IdentifyRobot identifyMutation={identifyMutation} payload={leftIdentifyRobot?.payload} />
+                        <IdentifyRobot
+                            identifyMutation={identifyMutation}
+                            payload={leftIdentifyRobot?.payload}
+                            robotType={'Trossen_WidowXAI_Follower'}
+                        />
                     </View>
                 </Flex>
             </Flex>
@@ -99,7 +103,11 @@ export const BiManualWidowxAIFormFields = () => {
                     placeholder='192.168.1.3'
                 />
                 <View>
-                    <IdentifyRobot identifyMutation={identifyMutation} payload={rightIdentifyRobot?.payload} />
+                    <IdentifyRobot
+                        identifyMutation={identifyMutation}
+                        payload={rightIdentifyRobot?.payload}
+                        robotType={'Trossen_WidowXAI_Follower'}
+                    />
                 </View>
             </Flex>
         </>
