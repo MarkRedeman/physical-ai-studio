@@ -103,7 +103,7 @@ class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
             model = self._robot_models.get(d.type)
             if model is None:
                 payload_annotation = dict[str, Any] if d.robot_payload is None else d.robot_payload
-                payload_default = Field(default_factory=dict) if d.robot_payload is None else ...
+                payload_default: Any = Field(default_factory=dict) if d.robot_payload is None else ...
 
                 model = create_model(
                     f"{d.type}Robot",
