@@ -12,7 +12,7 @@ class CatalogRobotFactory(Protocol):
     """Factory protocol provided by Studio to robot builders.
 
     Plugin ``robot_builder`` callables receive an instance of this protocol
-    so they can resolve serial ports and load calibrations at build time.
+    so they can resolve serial ports at build time.
     """
 
     async def find_port(self, port_info: SerialPortInfo) -> str | None:

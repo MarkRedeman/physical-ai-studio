@@ -136,7 +136,7 @@ def _definitions() -> list[RobotCatalogDefinition[MyRobotPayload]]:
 
 def register_physicalai_studio_plugin(registry: Any) -> None:
     for definition in _definitions():
-        registry.register(definition)
+        registry.register_robot(definition)
 ```
 
 ---
@@ -278,12 +278,12 @@ In your `pyproject.toml`:
 my-robot = "physicalai_my_robot_plugin.studio_catalog:register_physicalai_studio_plugin"
 ```
 
-The callable must accept a single argument — the registry — and call `registry.register(definition)` for each robot type:
+The callable must accept a single argument — the registry — and call `registry.register_robot(definition)` for each robot type:
 
 ```python
 def register_physicalai_studio_plugin(registry: Any) -> None:
     for definition in _definitions():
-        registry.register(definition)
+        registry.register_robot(definition)
 ```
 
 Studio calls all discovered entry points at startup. Duplicate `type` values raise a `ValueError`.
@@ -334,7 +334,7 @@ def _fake_registry():
         def __init__(self):
             self.definitions: list[RobotCatalogDefinition] = []
 
-        def register(self, definition: RobotCatalogDefinition) -> None:
+        def register_robot(self, definition: RobotCatalogDefinition) -> None:
             self.definitions.append(definition)
 
     return _FakeRegistry()

@@ -2,6 +2,8 @@ from db.schema import ProjectRobotDB
 from repositories.mappers.base_mapper_interface import IBaseMapper
 from schemas.robot import Robot, RobotAdapter
 
+# Our database initially stored types using all uppercase due to them
+# being stored as StrEnum
 _TYPE_NORMALIZATION: dict[str, str] = {
     "SO101_FOLLOWER": "SO101_Follower",
     "SO101_LEADER": "SO101_Leader",
@@ -12,7 +14,7 @@ _TYPE_NORMALIZATION: dict[str, str] = {
 }
 
 
-def _normalize_type(raw: str) -> str:
+def _convert_databasee_type(raw: str) -> str:
     return _TYPE_NORMALIZATION.get(raw, raw)
 
 
@@ -25,7 +27,7 @@ class ProjectRobotMapper(IBaseMapper):
         return ProjectRobotDB(
             id=str(db_schema.id),
             name=db_schema.name,
-            type=_normalize_type(db_schema.type),
+            type=_convert_databasee_type(db_schema.type),
             payload=db_schema.payload.model_dump(),
         )
 
@@ -36,7 +38,7 @@ class ProjectRobotMapper(IBaseMapper):
             {
                 "id": model.id,
                 "name": model.name,
-                "type": _normalize_type(model.type),
+                "type": _convert_databasee_type(model.type),
                 "payload": model.payload,
                 "created_at": model.created_at,
                 "updated_at": model.updated_at,

@@ -51,7 +51,7 @@ class RobotClientFactory:
 
     @staticmethod
     def _resolve_port(discovered: list[SerialPortInfo], target: SerialPortInfo) -> str | None:
-        if target.serial_number is not None and target.serial_number != "":
+        if target.serial_number:
             for serial_port in discovered:
                 if serial_port.serial_number == target.serial_number:
                     return serial_port.connection_string

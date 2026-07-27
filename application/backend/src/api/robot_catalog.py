@@ -71,24 +71,19 @@ async def list_robot_catalog(catalog_service: RobotCatalogServiceDep) -> list[Ro
     return [_to_response(definition) for definition in catalog_service.list_entries()]
 
 
-@router.get("/{robot_type}/discover")
+@router.get("/{robot_type}/discover")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition
 async def discover_robots(
-    robot_type: str,  # noqa: ARG001 - consumed by RobotDefinitionDep via _get_robot_definition
     definition: RobotDefinitionDep,
     robot_manager: RobotConnectionManagerDep,
 ) -> list[SerialPortInfo]:
     """Discover connected devices for a robot type."""
-    from loguru import logger
-
-    logger.info("Discover from definition {} as {}", definition.type, definition)
     if definition.probe is None:
         return []
     return await definition.probe.discover(robot_manager)
 
 
-@router.post("/{robot_type}/identify")
+@router.post("/{robot_type}/identify")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition
 async def identify_robot(
-    robot_type: str,  # noqa: ARG001 - consumed by RobotDefinitionDep via _get_robot_definition
     definition: RobotDefinitionDep,
     robot_manager: RobotConnectionManagerDep,
     payload: ProbePayloadDep,
@@ -104,9 +99,8 @@ async def identify_robot(
     await definition.probe.identify(payload, robot_manager, joint)
 
 
-@router.post("/{robot_type}/is-online")
+@router.post("/{robot_type}/is-online")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition
 async def check_robot_online(
-    robot_type: str,  # noqa: ARG001 - consumed by RobotDefinitionDep via _get_robot_definition
     definition: RobotDefinitionDep,
     payload: ProbePayloadDep,
 ) -> bool:
@@ -116,9 +110,8 @@ async def check_robot_online(
     return await definition.probe.is_online(payload)
 
 
-@router.get("/{robot_type}/urdf")
+@router.get("/{robot_type}/urdf")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition
 async def get_robot_catalog_urdf(
-    robot_type: str,  # noqa: ARG001 - consumed by RobotDefinitionDep via _get_robot_definition
     definition: RobotDefinitionDep,
 ) -> FileResponse:
     """Return the URDF file for a catalog robot type."""
@@ -126,9 +119,8 @@ async def get_robot_catalog_urdf(
     return FileResponse(resolved_path)
 
 
-@router.get("/{robot_type}/schema")
+@router.get("/{robot_type}/schema")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition
 async def get_robot_catalog_schema(
-    robot_type: str,  # noqa: ARG001 - consumed by RobotDefinitionDep via _get_robot_definition
     definition: RobotDefinitionDep,
 ) -> dict[str, Any]:
     """Return the Pydantic JSON Schema for a catalog robot payload."""
@@ -140,9 +132,8 @@ async def get_robot_catalog_schema(
     return payload.model_json_schema()
 
 
-@router.get("/{robot_type}/{asset_path:path}")
+@router.get("/{robot_type}/{asset_path:path}")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition
 async def get_robot_catalog_asset(
-    robot_type: str,  # noqa: ARG001 - consumed by RobotDefinitionDep via _get_robot_definition
     definition: RobotDefinitionDep,
     asset_path: Path,
 ) -> FileResponse:

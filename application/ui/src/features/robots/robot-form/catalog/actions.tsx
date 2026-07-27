@@ -44,7 +44,7 @@ export const IdentifyRobot = ({
 
         identifyMutation.mutate({
             params: { path: { robot_type: robotType } },
-            body: formData.payload,
+            body: payload,
         });
     };
 

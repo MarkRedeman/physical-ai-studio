@@ -85,8 +85,6 @@ class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
             )
 
         robot_payload = getattr(definition, "robot_payload", None)
-        if robot_payload is None:
-            robot_payload = definition.robot_model.model_fields["payload"].annotation
 
         return RobotCatalogDefinition(
             type=definition.type,
@@ -104,11 +102,14 @@ class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
         for d in self._definitions.values():
             model = self._robot_models.get(d.type)
             if model is None:
+                payload_annotation = dict[str, Any] if d.robot_payload is None else d.robot_payload
+                payload_default = Field(default_factory=dict) if d.robot_payload is None else ...
+
                 model = create_model(
                     f"{d.type}Robot",
                     __base__=BaseRobot,
                     type=Literal[d.type],  # pyrefly: ignore[invalid-literal]
-                    payload=(d.robot_payload, ...),
+                    payload=(payload_annotation, payload_default),
                 )
                 self._robot_models[d.type] = model
             models.append(model)
