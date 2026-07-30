@@ -44,7 +44,7 @@ export const ProjectCard = ({ item, isActive }: ProjectCardProps) => {
     return (
         <NavLink to={paths.project.robots.index({ project_id: item.id! })}>
             <Flex UNSAFE_className={clsx({ [classes.card]: true, [classes.activeCard]: isActive })}>
-                <View aria-label={'project thumbnail'}>
+                <View aria-label={'project thumbnail'} UNSAFE_className={classes.imgWrapper}>
                     <img
                         src={hasThumbnailError ? thumbnailUrl : projectThumbnailUrl}
                         alt={item.name}
@@ -58,13 +58,15 @@ export const ProjectCard = ({ item, isActive }: ProjectCardProps) => {
                         <MenuActions onAction={onAction} />
                     </Flex>
 
-                    <Flex alignItems={'center'} gap={'size-100'} direction={'row'} wrap='wrap'>
+                    <Flex alignItems={'start'} gap={'size-100'} direction={'column'} wrap='wrap' marginTop='size-100'>
                         {item.updated_at !== undefined && (
                             <Text>• Edited: {new Date(item.updated_at!).toLocaleString()}</Text>
                         )}
-                        {item.datasets.length > 0 && (
-                            <Text>• Datasets: {item.datasets.map((d) => d.name).join(', ')}</Text>
-                        )}
+                        <Flex alignItems={'center'} gap={'size-100'} direction={'row'} wrap='wrap'>
+                            {item.datasets.length > 0 && (
+                                <Text>• Datasets: {item.datasets.map((d) => d.name).join(', ')}</Text>
+                            )}
+                        </Flex>
                     </Flex>
                 </View>
             </Flex>

@@ -1,12 +1,11 @@
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
-from api.dependencies import get_episode_thumbnail_service, get_project_service
+from api.dependencies import get_project_service, get_project_thumbnail_service
 from main import app
-from schemas import Dataset, EpisodeInfo, Project
+from schemas import Dataset, Project
 
 
 @dataclass
@@ -14,14 +13,6 @@ class _StubThumbnail:
     content: bytes
     etag: str
     last_modified: str
-
-
-class _StubDatasetClient:
-    def __init__(self, episodes: list[EpisodeInfo]) -> None:
-        self._episodes = episodes
-
-    def get_episode_infos(self) -> list[EpisodeInfo]:
-        return self._episodes
 
 
 class _StubProjectService:
@@ -32,26 +23,20 @@ class _StubProjectService:
         return self._project
 
 
-class _StubEpisodeThumbnailService:
+class _StubProjectThumbnailService:
     def __init__(self, thumbnail: _StubThumbnail | None) -> None:
         self._thumbnail = thumbnail
         self.calls: list[dict[str, object]] = []
 
     def get_thumbnail(
         self,
-        dataset_id: UUID,
-        dataset: _StubDatasetClient,
-        episode_index: int,
-        camera: str | None = None,
+        project: Project,
         width: int = 320,
         height: int = 240,
     ) -> _StubThumbnail | None:
         self.calls.append(
             {
-                "dataset_id": dataset_id,
-                "dataset": dataset,
-                "episode_index": episode_index,
-                "camera": camera,
+                "project": project,
                 "width": width,
                 "height": height,
             }
@@ -77,11 +62,10 @@ def _make_project(datasets: list[Dataset]) -> Project:
     )
 
 
-def test_project_thumbnail_returns_png(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_thumbnail_returns_png() -> None:
     dataset = _make_dataset()
     project = _make_project([dataset])
-    dataset_client = _StubDatasetClient(episodes=[EpisodeInfo(episode_index=7, tasks=["task"], length=20, fps=30)])
-    thumbnail_service = _StubEpisodeThumbnailService(
+    thumbnail_service = _StubProjectThumbnailService(
         thumbnail=_StubThumbnail(
             content=b"png-bytes",
             etag='"project-etag"',
@@ -90,8 +74,7 @@ def test_project_thumbnail_returns_png(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     app.dependency_overrides[get_project_service] = lambda: _StubProjectService(project)
-    app.dependency_overrides[get_episode_thumbnail_service] = lambda: thumbnail_service
-    monkeypatch.setattr("api.project.get_internal_read_dataset", lambda _dataset: dataset_client)
+    app.dependency_overrides[get_project_thumbnail_service] = lambda: thumbnail_service
 
     try:
         client = TestClient(app)
@@ -105,21 +88,17 @@ def test_project_thumbnail_returns_png(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.content == b"png-bytes"
     assert thumbnail_service.calls == [
         {
-            "dataset_id": dataset.id,
-            "dataset": dataset_client,
-            "episode_index": 7,
-            "camera": None,
+            "project": project,
             "width": 640,
             "height": 360,
         }
     ]
 
 
-def test_project_thumbnail_returns_304_for_matching_etag(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_thumbnail_returns_304_for_matching_etag() -> None:
     dataset = _make_dataset()
     project = _make_project([dataset])
-    dataset_client = _StubDatasetClient(episodes=[EpisodeInfo(episode_index=0, tasks=["task"], length=10, fps=30)])
-    thumbnail_service = _StubEpisodeThumbnailService(
+    thumbnail_service = _StubProjectThumbnailService(
         thumbnail=_StubThumbnail(
             content=b"png-bytes",
             etag='"project-etag"',
@@ -128,8 +107,7 @@ def test_project_thumbnail_returns_304_for_matching_etag(monkeypatch: pytest.Mon
     )
 
     app.dependency_overrides[get_project_service] = lambda: _StubProjectService(project)
-    app.dependency_overrides[get_episode_thumbnail_service] = lambda: thumbnail_service
-    monkeypatch.setattr("api.project.get_internal_read_dataset", lambda _dataset: dataset_client)
+    app.dependency_overrides[get_project_thumbnail_service] = lambda: thumbnail_service
 
     try:
         client = TestClient(app)
@@ -145,12 +123,10 @@ def test_project_thumbnail_returns_304_for_matching_etag(monkeypatch: pytest.Mon
 
 def test_project_thumbnail_returns_404_without_datasets() -> None:
     project = _make_project([])
-    thumbnail_service = _StubEpisodeThumbnailService(
-        thumbnail=_StubThumbnail(content=b"unused", etag='"unused"', last_modified="Wed, 06 Jan 2026 10:00:00 GMT")
-    )
+    thumbnail_service = _StubProjectThumbnailService(thumbnail=None)
 
     app.dependency_overrides[get_project_service] = lambda: _StubProjectService(project)
-    app.dependency_overrides[get_episode_thumbnail_service] = lambda: thumbnail_service
+    app.dependency_overrides[get_project_thumbnail_service] = lambda: thumbnail_service
 
     try:
         client = TestClient(app)
@@ -161,17 +137,13 @@ def test_project_thumbnail_returns_404_without_datasets() -> None:
     assert response.status_code == 404
 
 
-def test_project_thumbnail_returns_404_without_episodes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_thumbnail_returns_404_without_thumbnail() -> None:
     dataset = _make_dataset()
     project = _make_project([dataset])
-    dataset_client = _StubDatasetClient(episodes=[])
-    thumbnail_service = _StubEpisodeThumbnailService(
-        thumbnail=_StubThumbnail(content=b"unused", etag='"unused"', last_modified="Wed, 06 Jan 2026 10:00:00 GMT")
-    )
+    thumbnail_service = _StubProjectThumbnailService(thumbnail=None)
 
     app.dependency_overrides[get_project_service] = lambda: _StubProjectService(project)
-    app.dependency_overrides[get_episode_thumbnail_service] = lambda: thumbnail_service
-    monkeypatch.setattr("api.project.get_internal_read_dataset", lambda _dataset: dataset_client)
+    app.dependency_overrides[get_project_thumbnail_service] = lambda: thumbnail_service
 
     try:
         client = TestClient(app)
