@@ -1,8 +1,10 @@
+import { useState } from 'react';
+
 import { Flex, Heading, Key, Text, View } from '@geti-ui/ui';
 import { clsx } from 'clsx';
 import { NavLink } from 'react-router';
 
-import { $api } from '../../../api/client';
+import { $api, fetchClient } from '../../../api/client';
 import { SchemaProjectInput } from '../../../api/openapi-spec';
 import thumbnailUrl from '../../../assets/mocked-project-thumbnail.png';
 import { paths } from '../../../router';
@@ -16,10 +18,15 @@ type ProjectCardProps = {
 };
 
 export const ProjectCard = ({ item, isActive }: ProjectCardProps) => {
+    const [hasThumbnailError, setHasThumbnailError] = useState(false);
     const deleteMutation = $api.useMutation('delete', '/api/projects/{project_id}', {
         meta: {
             invalidates: [['get', '/api/projects']],
         },
+    });
+
+    const projectThumbnailUrl = fetchClient.PATH('/api/projects/{project_id}/thumbnail', {
+        params: { path: { project_id: item.id! }, query: { width: 156, height: 156 } },
     });
 
     const onAction = (key: Key) => {
@@ -38,7 +45,11 @@ export const ProjectCard = ({ item, isActive }: ProjectCardProps) => {
         <NavLink to={paths.project.robots.index({ project_id: item.id! })}>
             <Flex UNSAFE_className={clsx({ [classes.card]: true, [classes.activeCard]: isActive })}>
                 <View aria-label={'project thumbnail'}>
-                    <img src={thumbnailUrl} alt={item.name} />
+                    <img
+                        src={hasThumbnailError ? thumbnailUrl : projectThumbnailUrl}
+                        alt={item.name}
+                        onError={() => setHasThumbnailError(true)}
+                    />
                 </View>
 
                 <View width={'100%'} padding={'size-200'}>
