@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { ContactShadows, Grid } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { URDFRobot } from 'urdf-loader';
 
@@ -18,6 +19,9 @@ export const SCENE_COLORS = {
 
 const FLOOR_SIZE = 21;
 const CHECKERBOARD_TILE_SIZE = 0.5;
+const CAMERA_FOLLOW_TARGET_DISTANCE = 4;
+
+const CAMERA_FOLLOW_LIGHT_OFFSET = new THREE.Vector3(1.2, 1.1, 1.8);
 
 export const useConfigureModelShadows = (model: URDFRobot) => {
     useEffect(() => {
@@ -72,27 +76,61 @@ const CheckerboardFloor = () => {
     );
 };
 
+const CameraFollowFillLight = () => {
+    const lightRef = useRef<THREE.DirectionalLight>(null);
+    const target = useMemo(() => new THREE.Object3D(), []);
+    const worldOffset = useMemo(() => new THREE.Vector3(), []);
+    const forward = useMemo(() => new THREE.Vector3(), []);
+    const { camera, scene } = useThree();
+
+    useEffect(() => {
+        scene.add(target);
+
+        return () => {
+            scene.remove(target);
+        };
+    }, [scene, target]);
+
+    useFrame(() => {
+        if (!lightRef.current) {
+            return;
+        }
+
+        worldOffset.copy(CAMERA_FOLLOW_LIGHT_OFFSET).applyQuaternion(camera.quaternion);
+        lightRef.current.position.copy(camera.position).add(worldOffset);
+
+        forward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+        target.position.copy(camera.position).addScaledVector(forward, CAMERA_FOLLOW_TARGET_DISTANCE);
+        lightRef.current.target = target;
+        target.updateMatrixWorld();
+    });
+
+    return (
+        <directionalLight
+            ref={lightRef}
+            position={[1.5, 3.5, 2]}
+            intensity={1.5}
+            color={SCENE_COLORS.primaryLight}
+            castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-left={-6}
+            shadow-camera-right={6}
+            shadow-camera-top={6}
+            shadow-camera-bottom={-6}
+            shadow-camera-near={0.2}
+            shadow-camera-far={40}
+            shadow-bias={-0.0001}
+        />
+    );
+};
+
 export const RobotViewerScene = () => {
     return (
         <>
             <color attach='background' args={[SCENE_COLORS.background]} />
             <ambientLight intensity={0.7} color={SCENE_COLORS.ambientLight} />
-            <directionalLight
-                position={[1.5, 3.5, 2]}
-                intensity={1.5}
-                color={SCENE_COLORS.primaryLight}
-                castShadow
-                shadow-mapSize-width={2048}
-                shadow-mapSize-height={2048}
-                shadow-camera-left={-6}
-                shadow-camera-right={6}
-                shadow-camera-top={6}
-                shadow-camera-bottom={-6}
-                shadow-camera-near={0.2}
-                shadow-camera-far={40}
-                shadow-bias={-0.0001}
-            />
-            <directionalLight position={[2, 2, -3]} intensity={0.4} color={SCENE_COLORS.fillLight} />
+            <CameraFollowFillLight />
             <CheckerboardFloor />
             <Grid
                 infiniteGrid
