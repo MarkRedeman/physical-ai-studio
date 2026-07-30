@@ -175,7 +175,7 @@ def test_dataset_upload_train_export_infer_e2e(
             "dataset_id": dataset_id,
             "policy": "act",
             "model_name": "E2E ACT Model",
-            "max_steps": 100,  # TrainJobPayload.max_steps has a ge=100 floor
+            "max_epochs": 1,
             "batch_size": 2,
             "num_workers": 0,
             "val_split": 0.5,
@@ -211,7 +211,7 @@ def test_dataset_upload_train_export_infer_e2e(
     assert response.status_code == 200, response.text
     detail = response.json()
     assert any(export["type"] == _ONNX_BACKEND for export in detail["exports"])
-    assert detail["training_summary"]["max_steps"] == 100
+    assert detail["training_summary"]["max_epochs"] == 1
 
     # --- 5. Download the onnx export and confirm it is a valid archive -------------
     response = client.get(f"/api/models/{model_id}/exports/{_ONNX_BACKEND}/download")
