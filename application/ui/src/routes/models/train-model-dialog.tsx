@@ -317,7 +317,7 @@ const TrainingParameters = ({
                         <Content>
                             <Text>
                                 Total number of training epochs. Training will stop after this many full passes through
-                                the dataset.
+                                the dataset. We recommend training for 5 to 10 epochs
                             </Text>
                         </Content>
                     </ContextualHelp>
@@ -399,7 +399,7 @@ const TrainingParameters = ({
     </Flex>
 );
 
-export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 10 }: TrainModelDialogProps) => {
+export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: TrainModelDialogProps) => {
     const bestDevice = useBestTrainingDevice();
     const { data: remoteTrainers = [] } = $api.useQuery('get', '/api/remote-trainers');
     // Continuing an existing model needs its checkpoint, which only this machine

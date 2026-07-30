@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from training import TrainingJobSpec
 
 
-_DEFAULT_MAX_EPOCHS = 10
+_DEFAULT_MAX_EPOCHS = 5
 
 
 class LocalTrainingBackend:
