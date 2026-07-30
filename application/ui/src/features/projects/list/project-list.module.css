@@ -76,7 +76,7 @@
 .card:hover .imgWrapper::after {
     opacity: 0;
 }
-.card:hover img {
+.card:hover .imgWrapper img {
     filter: brightness(100%) saturate(100%);
 }
 

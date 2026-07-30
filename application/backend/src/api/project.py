@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from api.dependencies import get_model_service, get_project_id, get_project_service, get_project_thumbnail_service
 from internal_datasets.utils import get_internal_read_dataset
@@ -75,7 +75,6 @@ async def get_project_thumbnail(
     project_id: Annotated[UUID, Depends(get_project_id)],
     project_service: Annotated[ProjectService, Depends(get_project_service)],
     project_thumbnail_service: Annotated[ProjectThumbnailService, Depends(get_project_thumbnail_service)],
-    request: Request,
     width: Annotated[int, Query(ge=32, le=1920)] = 156,
     height: Annotated[int, Query(ge=32, le=1080)] = 156,
 ) -> Response:
@@ -88,14 +87,7 @@ async def get_project_thumbnail(
 
     cache_headers = {
         "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-        "ETag": thumbnail.etag,
         "Last-Modified": thumbnail.last_modified,
-        "Vary": "Accept",
     }
-
-    request_etag = request.headers.get("if-none-match")
-    request_last_modified = request.headers.get("if-modified-since")
-    if request_etag == thumbnail.etag or request_last_modified == thumbnail.last_modified:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=cache_headers)
 
     return Response(content=thumbnail.content, media_type="image/png", headers=cache_headers)

@@ -84,7 +84,6 @@ def test_project_thumbnail_returns_png() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
-    assert response.headers["etag"] == '"project-etag"'
     assert response.content == b"png-bytes"
     assert thumbnail_service.calls == [
         {
@@ -95,7 +94,7 @@ def test_project_thumbnail_returns_png() -> None:
     ]
 
 
-def test_project_thumbnail_returns_304_for_matching_etag() -> None:
+def test_project_thumbnail_ignores_conditional_headers() -> None:
     dataset = _make_dataset()
     project = _make_project([dataset])
     thumbnail_service = _StubProjectThumbnailService(
@@ -113,12 +112,15 @@ def test_project_thumbnail_returns_304_for_matching_etag() -> None:
         client = TestClient(app)
         response = client.get(
             f"/api/projects/{project.id}/thumbnail",
-            headers={"If-None-Match": '"project-etag"'},
+            headers={
+                "If-None-Match": '"project-etag"',
+                "If-Modified-Since": "Wed, 06 Jan 2026 10:00:00 GMT",
+            },
         )
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 304
+    assert response.status_code == 200
 
 
 def test_project_thumbnail_returns_404_without_datasets() -> None:
