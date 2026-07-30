@@ -78,7 +78,7 @@ export const RobotViewerScene = () => {
             <color attach='background' args={[SCENE_COLORS.background]} />
             <ambientLight intensity={0.7} color={SCENE_COLORS.ambientLight} />
             <directionalLight
-                position={[-1.5, 3.5, 2]}
+                position={[1.5, 3.5, 2]}
                 intensity={1.5}
                 color={SCENE_COLORS.primaryLight}
                 castShadow
