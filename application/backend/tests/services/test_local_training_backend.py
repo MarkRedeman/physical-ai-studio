@@ -93,7 +93,7 @@ class TestBuildSpec:
 
         assert spec == TrainingJobSpec(
             policy="act",
-            max_steps=500,
+            max_epochs=10,
             batch_size=16,
             num_workers="auto",
             val_split=0.2,

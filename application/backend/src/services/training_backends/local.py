@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from training import TrainingJobSpec
 
 
+_DEFAULT_MAX_EPOCHS = 10
+
+
 class LocalTrainingBackend:
     """Train in the worker process with Lightning."""
 
@@ -88,7 +91,7 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
     return TrainingJobSpec(
         # A resumed run's architecture is dictated by the base model's checkpoint.
         policy=(context.base_model or context.model).policy,
-        max_steps=payload.max_steps,
+        max_epochs=payload.max_epochs,
         batch_size=payload.batch_size,
         num_workers=payload.num_workers,
         val_split=payload.val_split,
