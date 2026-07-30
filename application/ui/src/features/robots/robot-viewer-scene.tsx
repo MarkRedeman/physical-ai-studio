@@ -1,5 +1,3 @@
-/* eslint-disable react/no-unknown-property */
-
 import { useEffect, useMemo } from 'react';
 
 import { ContactShadows, Grid } from '@react-three/drei';
@@ -26,11 +24,13 @@ export const useConfigureModelShadows = (model: URDFRobot) => {
         model.traverse((node) => {
             if ((node as THREE.Mesh).isMesh) {
                 (node as THREE.Mesh).castShadow = true;
+                (node as THREE.Mesh).receiveShadow = true;
             }
         });
     }, [model]);
 };
 
+/* eslint-disable react/no-unknown-property */
 const CheckerboardFloor = () => {
     const texture = useMemo(() => {
         const canvas = document.createElement('canvas');
@@ -106,3 +106,4 @@ export const RobotViewerScene = () => {
         </>
     );
 };
+/* eslint-enable react/no-unknown-property */

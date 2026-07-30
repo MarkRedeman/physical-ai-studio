@@ -130,7 +130,7 @@ export const RobotViewer = ({ robot = { type: 'SO101_Follower' }, featureValues,
     return (
         <div ref={ref} className={classes.viewer}>
             <div className={classes.canvas} style={{ height: `${size.height}px`, width: `${size.width}px` }}>
-                <Canvas>
+                <Canvas shadows>
                     <RobotViewerScene />
                     <PerspectiveCamera makeDefault position={[2.0, 1, 1]} />
                     <OrbitControls enableDamping={false} />

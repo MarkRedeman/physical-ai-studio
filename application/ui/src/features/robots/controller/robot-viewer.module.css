@@ -15,6 +15,7 @@
     display: grid;
     place-items: center;
     padding: 16px;
+    background-color: rgb(36 37 40 / 65%);
     background-color: color-mix(in srgb, var(--spectrum-global-color-gray-100, #242528), transparent 35%);
     font-size: 13px;
 }

@@ -151,7 +151,7 @@ export const SetupRobotViewer = ({ robotType, highlights = [] }: SetupRobotViewe
     return (
         <div ref={ref} style={{ width: '100%', height: '100%' }}>
             <div className='canvas-container' style={{ height: `${size.height}px`, width: `${size.width}px` }}>
-                <Canvas>
+                <Canvas shadows>
                     <RobotViewerScene />
                     <PerspectiveCamera makeDefault position={[2.0, 1, 1]} />
                     <OrbitControls ref={controlsRef} enableDamping={false} />
