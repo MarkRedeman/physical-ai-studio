@@ -102,7 +102,7 @@ const Footer = () => {
             paddingY='size-25'
         >
             <Flex alignItems={'center'} height='100%' gap='size-100'>
-                <View>
+                <View overflow={'hidden'}>
                     <DialogTrigger type='fullscreen'>
                         <ActionButton
                             isQuiet
