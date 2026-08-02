@@ -11,8 +11,8 @@ export const SCENE_COLORS = {
     fillLight: '#88aadd',
     gridCell: '#3a3d4f',
     gridSection: '#545870',
-    checkerboardEven: '#282a30',
-    checkerboardOdd: '#2c2e34',
+    checkerboardEven: '#2d2f35',
+    checkerboardOdd: '#313339',
     trossenReplacement: new THREE.Color('#585858'),
 };
 
