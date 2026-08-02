@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 
-import { Content, Grid, Heading, IllustratedMessage, Loading, View } from '@geti-ui/ui';
+import { Content, Grid, Heading, IllustratedMessage, Loading, minmax, View } from '@geti-ui/ui';
 import { createBrowserRouter, Outlet, redirect } from 'react-router';
 import { path } from 'static-path';
 
@@ -193,7 +193,7 @@ export const router = createBrowserRouter([
                             <Grid
                                 areas={['header', 'content']}
                                 UNSAFE_style={{
-                                    gridTemplateRows: 'min-content auto',
+                                    gridTemplateRows: `min-content ${minmax(0, '1fr')}`,
                                 }}
                                 minHeight={0}
                                 height={'100%'}
