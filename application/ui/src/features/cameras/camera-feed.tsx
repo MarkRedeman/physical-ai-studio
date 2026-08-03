@@ -23,14 +23,7 @@ const CameraWell = ({
             height='100%'
             minHeight={0}
         >
-            <View
-                maxHeight='100%'
-                padding='size-400'
-                //padding='size-100'
-                backgroundColor='gray-100'
-                height='100%'
-                position='relative'
-            >
+            <View maxHeight='100%' height='100%' position='relative'>
                 {children}
             </View>
         </View>
