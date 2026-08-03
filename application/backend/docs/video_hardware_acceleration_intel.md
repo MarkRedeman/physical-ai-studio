@@ -129,3 +129,65 @@ Inside your uv environment:
 uv pip uninstall av
 uv pip install --no-binary av av
 ```
+
+## Configuring the streaming video encoder
+
+The backend selects the encoder used when recording episodes through
+`StreamingEncodingSettings`. The encoder is auto-detected at process start: `vcodec` defaults to
+`auto`, which probes the candidate encoders and picks the first one that can **actually encode a
+test frame**. The probe mirrors lerobot's own streaming-encode path (open a container, add a stream,
+encode and mux one frame), so hardware device initialization is exercised end to end. A codec that
+is registered in the pyAV build but has no usable device (for example `h264_nvenc` in a container
+without GPU passthrough) is skipped instead of failing mid-recording.
+
+Encoder preference order for `auto` (hardware before software, AV1 first within each family):
+
+1. `av1_qsv`, `hevc_qsv`, `h264_qsv` — Intel QSV (AV1 preferred on Panther Lake, H.264 for maximum compatibility)
+2. `av1_nvenc`, `hevc_nvenc`, `h264_nvenc` — NVIDIA
+3. `av1_vaapi`, `hevc_vaapi`, `h264_vaapi` — VA-API (Linux Intel/AMD)
+4. `h264_videotoolbox`, `hevc_videotoolbox` — macOS hardware
+5. `libsvtav1`, `libaom-av1` — software AV1 (open source, LGPL)
+6. `libx265`, `libx264` — software, offline compression (GPL)
+
+Native `h264`/`hevc` encoders are excluded from auto-selection because they are testing-focused and
+generally inferior to the alternatives. They can still be selected explicitly with `STREAMING_VCODEC`
+if required. The codec surface is not limited by lerobot's `VALID_VIDEO_CODECS` whitelist, so
+`av1_qsv` and `libx264`/`libx265` work as long as the local FFmpeg build provides them.
+
+### Environment variables
+
+All settings can be overridden through environment variables on the backend service:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `STREAMING_VCODEC` | `auto` | Encoder name. Valid values: `av1_qsv`, `hevc_qsv`, `h264_qsv`, `av1_nvenc`, `hevc_nvenc`, `h264_nvenc`, `av1_vaapi`, `hevc_vaapi`, `h264_vaapi`, `libsvtav1`, `libaom-av1`, `libx265`, `libx264`, `h264_videotoolbox`, `hevc_videotoolbox`, `h264`, `hevc`, `auto`. |
+| `STREAMING_PIX_FMT` | unset | Pixel format passed to the encoder. For hardware encoders this defaults to `nv12`; otherwise `yuv420p`. |
+| `STREAMING_CRF` | unset | Constant rate factor (quality) for codecs that support it (e.g. `libsvtav1` defaults to 30). |
+| `STREAMING_PRESET` | unset | Codec preset (e.g. `12` for `libsvtav1`, `medium` for `h264`). |
+| `STREAMING_EXTRA_OPTIONS` | unset | JSON object of extra codec options merged into the encoder config. |
+| `STREAMING_ENCODER_THREADS` | unset | Number of encoder worker threads. |
+| `STREAMING_ENCODER_QUEUE_MAXSIZE` | `60` | Max frames queued for encoding before frames are dropped. |
+
+Example, force SVT-AV1 with a quality preset:
+
+```bash
+STREAMING_VCODEC=libsvtav1 STREAMING_PRESET=8 STREAMING_CRF=25 docker compose up -d
+```
+
+Or select the Intel QSV encoder explicitly:
+
+```bash
+STREAMING_VCODEC=h264_qsv docker compose up -d
+```
+
+### Known limitations
+
+- `av1_qsv` requires an Intel GPU with AV1 encode support (Xe and later) and a oneVPL-based FFmpeg
+  build. It is auto-detected and skipped when not usable.
+- On macOS, `h264_videotoolbox`/`hevc_videotoolbox` are the first usable hardware encoders, so they
+  are preferred over the software fallbacks automatically. Set `STREAMING_VCODEC=hevc_videotoolbox`
+  to force HEVC instead of H.264.
+- `libx264`/`libx265` are GPL-licensed. For an open-source distribution that bundles FFmpeg binaries,
+  prefer AV1-only codecs (`av1_qsv`, `libsvtav1`, `libaom-av1`) and detect H.264/HEVC support at
+  runtime rather than redistributing it. Physical AI Studio only uses the codecs the local FFmpeg
+  build provides and does not bundle FFmpeg itself.
