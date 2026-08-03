@@ -17,11 +17,13 @@ from exceptions import BaseException as AppBaseException
 from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.dataset_client import DatasetClient
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
+from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings
 from internal_datasets.mutations.recording_mutation import RecordingMutation
 from robots.robot_client_factory import RobotClientFactory
 from schemas import InferenceDevice, Model
 from schemas.dataset import Dataset, Episode
 from schemas.environment import EnvironmentWithRelations
+from settings import get_settings
 
 from .base import BaseThreadWorker
 from .model_worker_registry import ModelWorkerRegistry
@@ -94,7 +96,20 @@ class RobotControlWorker(BaseThreadWorker):
         self._report_state()
 
     def load_dataset(self, dataset: Dataset) -> None:
-        self.dataset = InternalLeRobotDataset(Path(dataset.path), access_mode=DatasetAccessMode.RECORDING_MUTATION)
+        settings = get_settings()
+        self.dataset = InternalLeRobotDataset(
+            Path(dataset.path),
+            access_mode=DatasetAccessMode.RECORDING_MUTATION,
+            streaming_encoding_settings=StreamingEncodingSettings(
+                vcodec=settings.streaming_vcodec,
+                pix_fmt=settings.streaming_pix_fmt,
+                crf=settings.streaming_crf,
+                preset=settings.streaming_preset,
+                extra_options=settings.streaming_extra_options or {},
+                encoder_threads=settings.streaming_encoder_threads,
+                encoder_queue_maxsize=settings.streaming_encoder_queue_maxsize,
+            ),
+        )
         self.events.start_recording_mutation.set()
 
     def start_recording(self, task: str) -> None:
