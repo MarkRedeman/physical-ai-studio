@@ -1,5 +1,4 @@
 import asyncio
-import base64
 from typing import Any
 
 import numpy as np
@@ -133,7 +132,7 @@ class EnvironmentIntegration:
 
     def format_observation_for_reporting(self, observation: dict, timestamp: float) -> dict:
         camera_keys = [str(camera.id) for camera in self.environment.cameras]
-        camera_images = {camera: self._base_64_encode_observation(observation[camera]) for camera in camera_keys}
+        camera_images = {camera: self._encode_observation(observation[camera]) for camera in camera_keys}
 
         return {
             "state": {key: observation[key] for key in self.action_keys},
@@ -163,10 +162,10 @@ class EnvironmentIntegration:
         """Format observation for dataset frame input."""
         return self._remap_camera_observations(raw_observation)
 
-    def _base_64_encode_observation(self, observation: np.ndarray | None) -> str:
+    def _encode_observation(self, observation: np.ndarray | None) -> bytes:
         if observation is None:
-            return ""
-        return base64.b64encode(encode_jpeg_rgb(observation)).decode()
+            return b""
+        return encode_jpeg_rgb(observation)
 
     def _remap_camera_observations(self, observations: dict) -> dict:
         """Remap camera observations from camera ID keys to lowercase camera name keys."""

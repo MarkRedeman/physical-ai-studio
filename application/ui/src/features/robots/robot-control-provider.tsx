@@ -1,4 +1,4 @@
-import { createContext, ReactNode, RefObject, useContext, useRef, useState } from 'react';
+import { createContext, ReactNode, RefObject, useCallback, useContext, useRef, useState } from 'react';
 
 import { useMutation, UseMutationResult, useQueryClient } from '@tanstack/react-query';
 
@@ -48,9 +48,21 @@ interface RobotControlApiJsonResponse<T> {
 export interface Observation {
     timestamp: number;
     state: { [joint: string]: number }; // robot joint state before inference
-    actions: { [joint: string]: number } | null; // joint actions suggested by inference
-    cameras: { [key: string]: string };
+    actions: { [joint: string]: number } | null; // joint actions suggested by model inference
 }
+
+/** Unpack a multiplexed binary camera frame into its camera id and JPEG blob.
+
+Payload layout matches the backend's `camera_frame_payload`:
+``[1-byte id length][UTF-8 camera id][JPEG bytes]``.
+ */
+export const unpackCameraFrame = (payload: ArrayBuffer): { cameraId: string; jpeg: Blob } => {
+    const bytes = new Uint8Array(payload);
+    const idLength = bytes[0];
+    const cameraId = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
+    const jpeg = new Blob([bytes.subarray(1 + idLength)], { type: 'image/jpeg' });
+    return { cameraId, jpeg };
+};
 
 interface useRobotControlProps {
     children: ReactNode;
@@ -79,6 +91,7 @@ type RobotControlContextValue = null | {
     inferenceDevice: InferenceDevice | undefined;
     dataset: SchemaDatasetOutput | undefined;
     state: RobotControlState;
+    subscribeCamera: (cameraId: string, onFrame: (jpeg: Blob) => void) => () => void;
     loadEnvironment: MutationResult<SchemaEnvironmentWithRelations>;
     loadModel: MutationResult<LoadModelPayload>;
     loadDataset: MutationResult<SchemaDatasetOutput>;
@@ -117,6 +130,16 @@ const useRefreshEpisodes = (dataset_id?: string) => {
 export const RobotControlProvider = (props: useRobotControlProps) => {
     const [state, setState] = useState<RobotControlState>(createRobotControlState());
     const observation = useRef<Observation | undefined>(undefined);
+    const cameraFrameSubscribers = useRef<Map<string, (jpeg: Blob) => void>>(new Map());
+
+    const subscribeCamera = useCallback((cameraId: string, onFrame: (jpeg: Blob) => void) => {
+        cameraFrameSubscribers.current.set(cameraId, onFrame);
+        return () => {
+            if (cameraFrameSubscribers.current.get(cameraId) === onFrame) {
+                cameraFrameSubscribers.current.delete(cameraId);
+            }
+        };
+    }, []);
 
     const [model, setModel] = useState<SchemaModel | undefined>(props.model);
     const [inferenceDevice, setInferenceDevice] = useState<InferenceDevice | undefined>(props.inferenceDevice);
@@ -151,6 +174,14 @@ export const RobotControlProvider = (props: useRobotControlProps) => {
     );
 
     const onMessage = ({ data }: WebSocketEventMap['message']) => {
+        if (data instanceof Blob) {
+            // Binary camera frame (JSON.parse must never see a Blob).
+            void data.arrayBuffer().then((payload) => {
+                const { cameraId, jpeg } = unpackCameraFrame(payload);
+                cameraFrameSubscribers.current.get(cameraId)?.(jpeg);
+            });
+            return;
+        }
         const message = JSON.parse(data) as RobotControlApiJsonResponse<unknown>;
         if (message['event'] === 'observations') {
             observation.current = message['data'] as Observation;
@@ -282,6 +313,7 @@ export const RobotControlProvider = (props: useRobotControlProps) => {
                 model,
                 inferenceDevice,
                 state,
+                subscribeCamera,
                 loadEnvironment,
                 loadModel,
                 loadDataset,

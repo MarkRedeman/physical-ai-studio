@@ -35,6 +35,11 @@ export default function useWebSocketWithResponse(
 
         return new Promise((resolve, reject) => {
             messagePromises.current.set(requestId, (message) => {
+                // Binary camera frames carry no JSON payload; skip them for
+                // request/response matching so JSON.parse is never fed a Blob.
+                if (typeof message.data !== 'string') {
+                    return;
+                }
                 const messageData = JSON.parse(message.data) as MessageType;
                 if (matcher(messageData)) {
                     messagePromises.current.delete(requestId);

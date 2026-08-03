@@ -96,6 +96,11 @@ class TestInferenceEnvironmentIntegration:
         assert "shoulder_pan.pos" in report_obs["state"]
         assert "3ed60255-04ae-407b-8e2c-c3281847a4e0" in report_obs["cameras"]  # camera id 1
         assert "4629e172-2aa7-4fde-86b1-e19eb1d210ff" in report_obs["cameras"]  # camera id 2
+        # Cameras travel as raw JPEG bytes, not base64 strings, so they can be
+        # sent as binary WebSocket frames.
+        for jpeg in report_obs["cameras"].values():
+            assert isinstance(jpeg, bytes)
+            assert jpeg.startswith(b"\xff\xd8")  # JPEG SOI marker
 
     def test_teardown_disconnects_robot_and_stops_cameras(
         self,

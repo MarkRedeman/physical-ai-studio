@@ -63,6 +63,17 @@ async def handle_incoming(
         logger.info("Except: disconnected!")
 
 
+def camera_frame_payload(camera_id: str, jpeg: bytes) -> bytes:
+    """Encode a camera frame as a multiplexed binary WebSocket payload.
+
+    Payload layout: ``[1-byte camera id length][UTF-8 camera id][JPEG bytes]``.
+    The leading length byte lets a client slice the camera identifier off a
+    shared binary stream shared by several cameras before decoding the JPEG.
+    """
+    cam_id = camera_id.encode()
+    return bytes([len(cam_id)]) + cam_id + jpeg
+
+
 async def handle_outgoing(websocket: WebSocket, queue: mp.Queue) -> None:
     """Handle outgoing messages for robot control."""
     try:
@@ -71,11 +82,21 @@ async def handle_outgoing(websocket: WebSocket, queue: mp.Queue) -> None:
                 loop = asyncio.get_running_loop()
 
                 message = await loop.run_in_executor(None, queue.get)
+                # Camera frames travel as binary WebSocket frames rather than
+                # base64 embedded in JSON. Separate them out if present.
+                cameras = None
+                if isinstance(message.get("data"), dict):
+                    cameras = message["data"].pop("cameras", None)
+                # Send control data (state/actions/timestamp) as JSON.
                 await websocket.send_json(message)
+                # WebSocket binary frames (multiplexed by a per-camera header).
+                if cameras:
+                    for camera_id, jpeg in cameras.items():
+                        await websocket.send_bytes(camera_frame_payload(camera_id, jpeg))
             except Empty:
                 await asyncio.sleep(0.05)
     except Exception as e:
-        logger.error(f"Outgoing task stopped: {e}")
+        logger.error(f"Outgoing camera task stopped: {e}")
 
 
 @router.websocket("/robot_control/ws")
