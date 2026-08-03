@@ -12,6 +12,8 @@ import { MenuActions } from './menu-actions.component';
 
 import classes from './project-list.module.css';
 
+const IMAGE_SIZE = 132;
+
 type ProjectCardProps = {
     item: SchemaProjectInput;
     isActive: boolean;
@@ -26,7 +28,7 @@ export const ProjectCard = ({ item, isActive }: ProjectCardProps) => {
     });
 
     const projectThumbnailUrl = fetchClient.PATH('/api/projects/{project_id}/thumbnail', {
-        params: { path: { project_id: item.id! }, query: { width: 156, height: 156 } },
+        params: { path: { project_id: item.id! }, query: { width: IMAGE_SIZE, height: IMAGE_SIZE } },
     });
 
     const onAction = (key: Key) => {
@@ -46,13 +48,18 @@ export const ProjectCard = ({ item, isActive }: ProjectCardProps) => {
             <Flex UNSAFE_className={clsx({ [classes.card]: true, [classes.activeCard]: isActive })}>
                 <View aria-label={'project thumbnail'} UNSAFE_className={classes.imgWrapper}>
                     {hasThumbnailError ? (
-                        <View width={156} height={156} backgroundColor={'gray-75'}>
+                        <View width={IMAGE_SIZE} height={IMAGE_SIZE} backgroundColor={'gray-75'}>
                             <Flex justifyContent={'center'} alignItems={'center'} width={'100%'} height={'100%'}>
                                 <PhysicalAIStudioLogo width={80} height={80} style={{ filter: 'grayscale(100)' }} />
                             </Flex>
                         </View>
                     ) : (
-                        <img src={projectThumbnailUrl} alt={item.name} onError={() => setHasThumbnailError(true)} />
+                        <img
+                            style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }}
+                            src={projectThumbnailUrl}
+                            alt={item.name}
+                            onError={() => setHasThumbnailError(true)}
+                        />
                     )}
                 </View>
 
