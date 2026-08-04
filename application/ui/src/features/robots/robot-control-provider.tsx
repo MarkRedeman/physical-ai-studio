@@ -53,14 +53,16 @@ export interface Observation {
 
 /** Unpack a multiplexed binary camera frame into its camera id and JPEG blob.
 
-Payload layout matches the backend's `camera_frame_payload`:
-``[1-byte id length][UTF-8 camera id][JPEG bytes]``.
+Camera ids are always dashed UUIDs, so the header is a fixed width and carries
+no length prefix: ``[36-byte camera id][JPEG bytes]``. This matches the
+backend's `camera_frame_payload`.
  */
+const CAMERA_ID_FRAME_LENGTH = 36;
+
 export const unpackCameraFrame = (payload: ArrayBuffer): { cameraId: string; jpeg: Blob } => {
     const bytes = new Uint8Array(payload);
-    const idLength = bytes[0];
-    const cameraId = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
-    const jpeg = new Blob([bytes.subarray(1 + idLength)], { type: 'image/jpeg' });
+    const cameraId = new TextDecoder().decode(bytes.subarray(0, CAMERA_ID_FRAME_LENGTH));
+    const jpeg = new Blob([bytes.subarray(CAMERA_ID_FRAME_LENGTH)], { type: 'image/jpeg' });
     return { cameraId, jpeg };
 };
 

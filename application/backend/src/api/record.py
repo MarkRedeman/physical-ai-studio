@@ -63,15 +63,23 @@ async def handle_incoming(
         logger.info("Except: disconnected!")
 
 
+CAMERA_ID_FRAME_LENGTH = 36  # fixed width of a dashed UUID string
+
+
 def camera_frame_payload(camera_id: str, jpeg: bytes) -> bytes:
     """Encode a camera frame as a multiplexed binary WebSocket payload.
 
-    Payload layout: ``[1-byte camera id length][UTF-8 camera id][JPEG bytes]``.
-    The leading length byte lets a client slice the camera identifier off a
-    shared binary stream shared by several cameras before decoding the JPEG.
+    Payload layout: ``[36-byte camera id][JPEG bytes]``.
+
+    Camera ids are always dashed UUIDs, so the header is a fixed width and
+    carries no length prefix. A client slices the first ``CAMERA_ID_FRAME_LENGTH``
+    bytes off the shared binary stream before decoding the JPEG.
     """
     cam_id = camera_id.encode()
-    return bytes([len(cam_id)]) + cam_id + jpeg
+    if len(cam_id) != CAMERA_ID_FRAME_LENGTH:
+        msg = f"Camera id must be a fixed {CAMERA_ID_FRAME_LENGTH}-char UUID, got {len(cam_id)}-char {camera_id!r}"
+        raise ValueError(msg)
+    return cam_id + jpeg
 
 
 async def handle_outgoing(websocket: WebSocket, queue: mp.Queue) -> None:

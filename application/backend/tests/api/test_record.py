@@ -2,6 +2,8 @@ import asyncio
 import queue
 from unittest.mock import MagicMock
 
+import pytest
+
 from api.record import camera_frame_payload, handle_incoming, handle_outgoing
 from schemas import InferenceBackend, InferenceDevice, Model
 
@@ -53,20 +55,19 @@ def test_handle_incoming_load_model_requires_inference_device(test_model) -> Non
 
 
 def test_camera_frame_payload_layout() -> None:
-    payload = camera_frame_payload("0823b0fd-5c9f-4c1a-9dd1-5f4e105aebe9", b"\xff\xd8JPEGDATA")
-    assert payload[0] == 36  # UUID length
-    assert payload[1 : 1 + 36].decode() == "0823b0fd-5c9f-4c1a-9dd1-5f4e105aebe9"
-    assert payload[1 + 36 :] == b"\xff\xd8JPEGDATA"
+    cam_id = "0823b0fd-5c9f-4c1a-9dd1-5f4e105aebe9"
+    payload = camera_frame_payload(cam_id, b"\xff\xd8JPEGDATA")
+    assert payload == cam_id.encode() + b"\xff\xd8JPEGDATA"
 
 
-def test_camera_frame_payload_non_ascii_camera_id() -> None:
-    good = "Bob's view"
-    payload = camera_frame_payload(good, b"\xff\xd8")
-    assert payload[0] == len(good.encode())
-    assert payload[1 : 1 + len(good)] == good.encode()
+def test_camera_frame_payload_rejects_non_uuid_camera_id() -> None:
+    with pytest.raises(ValueError):
+        camera_frame_payload("not-a-uuid", b"\xff\xd8")
 
 
 def test_handle_outgoing_splits_cameras_into_binary_frames() -> None:
+    cam_id = "0823b0fd-5c9f-4c1a-9dd1-5f4e105aebe9"
+
     class NonBlockingGetQueue:
         """Queue whose get() never blocks, so the executor thread can free
         during asyncio teardown instead of hanging on an empty queue."""
@@ -89,7 +90,7 @@ def test_handle_outgoing_splits_cameras_into_binary_frames() -> None:
         q.put(
             {
                 "event": "observations",
-                "data": {"state": {"a": 0.5}, "timestamp": 1, "cameras": {"cam1": b"\xff\xd8AAA"}},
+                "data": {"state": {"a": 0.5}, "timestamp": 1, "cameras": {cam_id: b"\xff\xd8AAA"}},
             }
         )
         q.put({"event": "state", "data": {"model_loaded": True}})
@@ -104,4 +105,4 @@ def test_handle_outgoing_splits_cameras_into_binary_frames() -> None:
         {"event": "observations", "data": {"state": {"a": 0.5}, "timestamp": 1}},
         {"event": "state", "data": {"model_loaded": True}},
     ]
-    assert websocket.binary_messages == [camera_frame_payload("cam1", b"\xff\xd8AAA")]
+    assert websocket.binary_messages == [camera_frame_payload(cam_id, b"\xff\xd8AAA")]
