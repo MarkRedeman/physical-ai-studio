@@ -2,7 +2,7 @@
 
 ## Quick start
 
-- Node `>=24.2.0`, npm `>=11.14.0` (enforced by `engines` in `package.json`).
+- Node `>=26.6.0`, npm `>=12.0.2` (enforced by `engines` in `package.json`).
 - Work from `application/ui/`.
 - Install or refresh dependencies with `npm install`.
 - Start the dev server with `npm run start` (proxies `/api` to `http://localhost:7860`).

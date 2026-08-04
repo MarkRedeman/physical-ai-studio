@@ -43,8 +43,8 @@ jobs:
           package-manager-cache: false
           node-version-file: application/ui/.nvmrc
 
-      - name: Ensure npm supports min-release-age
-        run: npm i -g npm@11.14.0
+      - name: Set up npm
+        run: npm i -g npm@12.0.2
 
       - name: Set dev version for TestPyPI
         run: |
