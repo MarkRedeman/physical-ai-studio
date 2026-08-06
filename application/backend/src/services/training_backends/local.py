@@ -91,7 +91,7 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
     return TrainingJobSpec(
         # A resumed run's architecture is dictated by the base model's checkpoint.
         policy=(context.base_model or context.model).policy,
-        max_epochs=payload.max_epochs,
+        max_epochs=payload.max_epochs if payload.max_epochs is not None else 5,
         batch_size=payload.batch_size,
         num_workers=payload.num_workers,
         val_split=payload.val_split,

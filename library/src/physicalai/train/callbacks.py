@@ -101,7 +101,7 @@ class ProgressReportingCallback(Callback):
         if trainer.max_steps > 0:
             return trainer.max_steps
         estimated_steps = trainer.estimated_stepping_batches
-        return estimated_steps if estimated_steps > 0 else None
+        return int(estimated_steps) if estimated_steps > 0 else None
 
     @staticmethod
     def _extract_loss(outputs: object) -> float | None:
