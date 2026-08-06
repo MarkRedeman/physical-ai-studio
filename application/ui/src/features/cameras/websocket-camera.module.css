@@ -1,0 +1,18 @@
+.camera {
+    height: 100%;
+    position: relative;
+    width: 100%;
+}
+
+.diagnostics {
+    background: rgb(0 0 0 / 75%);
+    color: white;
+    font-family: monospace;
+    font-size: 12px;
+    left: 8px;
+    line-height: 1.35;
+    padding: 4px 6px;
+    pointer-events: none;
+    position: absolute;
+    top: 8px;
+}

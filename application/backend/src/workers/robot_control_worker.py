@@ -209,6 +209,14 @@ class RobotControlWorker(BaseThreadWorker):
                             self.recording_mutation.add_frame(dataset_observation, actions, self.state.task)
                         self._report_observation(report_observation)
                 dt_s = time.perf_counter() - start_loop_t
+                if self.environment_integration:
+                    summary = self.environment_integration.camera_transport_metrics.summary()
+                    if summary is not None:
+                        logger.info(
+                            "camera JPEG: {fps:.1f} fps, {jpeg_kib_per_frame:.1f} KiB/frame, "
+                            "encode {encode_ms_per_frame:.1f} ms/frame",
+                            **summary,
+                        )
                 wait_time = goal_time - dt_s
 
                 if wait_time > 0:
@@ -346,6 +354,7 @@ class RobotControlWorker(BaseThreadWorker):
             {
                 "event": "observations",
                 "data": data,
+                "camera_transport_enqueued_at": time.perf_counter(),
             }
         )
 

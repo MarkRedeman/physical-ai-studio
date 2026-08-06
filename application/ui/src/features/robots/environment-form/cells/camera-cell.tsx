@@ -8,5 +8,7 @@ export const CameraCell = ({ camera_id }: { camera_id: string }) => {
         params: { path: { project_id, camera_id } },
     });
 
-    return <WebsocketCamera camera={cameraQuery.data} />;
+    const diagnosticsEnabled = new URLSearchParams(window.location.search).has('cameraDiagnostics');
+
+    return <WebsocketCamera camera={cameraQuery.data} diagnosticsEnabled={diagnosticsEnabled} />;
 };

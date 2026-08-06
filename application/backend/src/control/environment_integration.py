@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any
 
 import numpy as np
@@ -15,6 +16,7 @@ from robots.robot_client_factory import RobotClientFactory
 from schemas.environment import EnvironmentWithRelations, TeleoperatorRobotWithRobot
 from schemas.project_camera import Camera
 from utils.camera_factory import build_shared_camera
+from utils.camera_transport_metrics import CameraTransportMetrics
 from utils.jpeg import encode_jpeg_rgb
 
 
@@ -32,6 +34,7 @@ class EnvironmentIntegration:
         self.environment = environment
         self.robot_client_factory = robot_client_factory
         self.frame_captures = {}
+        self.camera_transport_metrics = CameraTransportMetrics()
 
     async def setup(self) -> None:
         try:
@@ -165,7 +168,10 @@ class EnvironmentIntegration:
     def _encode_observation(self, observation: np.ndarray | None) -> bytes:
         if observation is None:
             return b""
-        return encode_jpeg_rgb(observation)
+        started_at = time.perf_counter()
+        jpeg = encode_jpeg_rgb(observation)
+        self.camera_transport_metrics.add_encode(time.perf_counter() - started_at, len(jpeg))
+        return jpeg
 
     def _remap_camera_observations(self, observations: dict) -> dict:
         """Remap camera observations from camera ID keys to lowercase camera name keys."""
