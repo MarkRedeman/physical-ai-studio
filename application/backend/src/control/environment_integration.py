@@ -181,7 +181,7 @@ class EnvironmentIntegration:
         return base64.b64encode(encode_jpeg_rgb(observation)).decode()
 
     def _remap_camera_observations(self, observations: dict) -> dict:
-        """Remap camera observations from camera ID keys to lowercase camera name keys."""
+        """Remap camera observations from camera ID keys to sanitized camera name keys."""
         lerobot_observations = dict(observations)
         for camera in self.environment.cameras:
             lerobot_observations[sanitize_camera_name(camera.name)] = lerobot_observations.pop(str(camera.id))

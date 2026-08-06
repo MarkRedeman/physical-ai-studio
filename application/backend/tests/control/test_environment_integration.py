@@ -116,7 +116,7 @@ class TestInferenceEnvironmentIntegration:
 
         features = inference_environment_integration.build_lerobot_dataset_features()
 
-        assert "observation.images.bob_s view" in features
+        assert f"observation.images.{sanitize_camera_name(camera.name)}" in features
         assert "observation.images.bob's view" not in features
 
     def test_model_input_sanitizes_camera_names(self, inference_environment_integration, event_loop) -> None:
@@ -126,7 +126,7 @@ class TestInferenceEnvironmentIntegration:
         observation = event_loop.run_until_complete(inference_environment_integration.get_observation())
         phy_ai_obs = inference_environment_integration.format_model_input_observation(observation)
 
-        assert "bob_s view" in phy_ai_obs.images
+        assert sanitize_camera_name(camera.name) in phy_ai_obs.images
         assert "bob's view" not in phy_ai_obs.images
 
     def test_remap_camera_observations_sanitizes_camera_names(self, inference_environment_integration) -> None:
@@ -141,7 +141,7 @@ class TestInferenceEnvironmentIntegration:
 
         remapped = inference_environment_integration._remap_camera_observations(observation)
 
-        assert "bob_s view" in remapped
+        assert sanitize_camera_name(camera.name) in remapped
         assert camera_id not in remapped
         assert other_id not in remapped
 
