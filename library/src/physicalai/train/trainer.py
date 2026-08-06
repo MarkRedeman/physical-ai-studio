@@ -14,8 +14,8 @@ import torch
 from lightning.pytorch.callbacks import BatchSizeFinder, LearningRateMonitor
 from lightning.pytorch.strategies import DDPStrategy
 
+from physicalai.config import instantiate_obj
 from physicalai.train.callbacks import PolicyDatasetInteraction
-from physicalai.training_config.instantiate import instantiate_obj_from_dict
 
 
 class Trainer(lightning.Trainer):
@@ -177,7 +177,7 @@ class Trainer(lightning.Trainer):
         normalized_callbacks: list[Any] = []
         for callback in user_callbacks:
             if isinstance(callback, dict) and "class_path" in callback:
-                normalized_callbacks.append(instantiate_obj_from_dict(callback))
+                normalized_callbacks.append(instantiate_obj(callback))
             else:
                 normalized_callbacks.append(callback)
 
