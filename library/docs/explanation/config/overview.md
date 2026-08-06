@@ -1,6 +1,6 @@
 # Configuration System
 
-`physicalai.training_config` provides a small set of generic building blocks for turning config-like inputs into Python objects.
+Runtime's `physicalai.config` provides a small set of generic building blocks for turning config-like inputs into Python objects.
 
 ## Supported Inputs
 

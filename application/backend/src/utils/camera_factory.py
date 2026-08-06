@@ -1,6 +1,6 @@
 """Factory for building camera instances from backend camera configs.
 
-Maps backend driver names to physicalai.capture ComponentConfig recipes and
+Maps backend driver names to physicalai.capture construction recipes and
 filters per-driver kwargs so that only constructor-safe parameters reach the camera.
 """
 
