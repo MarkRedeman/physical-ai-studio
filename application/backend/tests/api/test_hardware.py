@@ -9,6 +9,8 @@ from api.dependencies import get_robot_manager_service
 from api.hardware import _fingerprint_from_device_info, get_cameras
 from main import app
 from schemas import SerialPortInfo
+from schemas.project_camera import CameraAdapter
+from utils.camera_factory import _camera_component_config
 
 
 def _make_device(
@@ -35,21 +37,33 @@ def event_loop():
 
 
 class TestFingerprintFromDeviceInfo:
-    def test_stable_prefers_hardware_id(self):
-        info = _make_device(device_id="/dev/video0", hardware_id="/dev/v4l/by-id/usb-cam", id_stable=True)
-        assert _fingerprint_from_device_info(info) == "/dev/v4l/by-id/usb-cam"
+    def test_preserves_unique_serial_selector(self):
+        selector = "/dev/v4l/by-id/usb-Logitech_C920_ABC123-video-index0"
+        info = _make_device(device_id=selector, hardware_id="ABC123", id_stable=True)
+        assert _fingerprint_from_device_info(info) == selector
 
     def test_unstable_falls_back_to_device_id(self):
         info = _make_device(device_id="/dev/video0", hardware_id=None, id_stable=False)
         assert _fingerprint_from_device_info(info) == "/dev/video0"
 
-    def test_stable_but_no_hardware_id_falls_back(self):
-        info = _make_device(device_id="/dev/video0", hardware_id=None, id_stable=True)
-        assert _fingerprint_from_device_info(info) == "/dev/video0"
+    def test_duplicate_serial_preserves_by_path_selector(self):
+        selector = "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:2.1:1.0-video-index0"
+        info = _make_device(device_id=selector, hardware_id="0:2.1", id_stable=True)
+        assert _fingerprint_from_device_info(info) == selector
 
-    def test_unstable_ignores_hardware_id(self):
-        info = _make_device(device_id="/dev/video0", hardware_id="/dev/v4l/by-id/usb-cam", id_stable=False)
-        assert _fingerprint_from_device_info(info) == "/dev/video0"
+    def test_factory_preserves_by_path_selector(self):
+        selector = "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:2.1:1.0-video-index0"
+        config = CameraAdapter.validate_python(
+            {
+                "driver": "usb_camera",
+                "name": "left",
+                "fingerprint": selector,
+                "hardware_name": "UVC Camera",
+                "payload": {"width": 640, "height": 480, "fps": 30},
+            }
+        )
+
+        assert _camera_component_config(config)["init_args"]["device"] == selector
 
 
 class TestGetCameras:

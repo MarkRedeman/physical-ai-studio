@@ -15,7 +15,7 @@ class CameraProfile(BaseModel):
 
 class Camera(BaseModel):
     name: str = Field(description="Camera name")
-    fingerprint: str = Field(description="Either serial id for  RealSense or port for OpenCV")
+    fingerprint: str = Field(description="Persistent capture selector returned by hardware discovery")
     driver: str = Field(description="Driver used for Camera access")
     default_stream_profile: CameraProfile
 

@@ -22,7 +22,7 @@ class BaseCamera(BaseIDModel, ABC):
     updated_at: datetime | None = Field(None)
 
     name: str = Field(..., description="Human-readable camera name")
-    fingerprint: str = Field(..., description="Camera fingerprint/source identifier")
+    fingerprint: str = Field(..., description="Persistent capture selector returned by hardware discovery")
     hardware_name: str | None = Field(..., description="Camera hardware name from discovery")
 
 
