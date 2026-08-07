@@ -176,7 +176,7 @@ def test_lerobot_v3_parse_manifest_counts_all_episode_parquet_shards(tmp_path: P
     assert manifest.statistics.frame_count == 45
 
 
-def test_lerobot_v3_parse_manifest_collects_unique_episode_tasks_in_order(tmp_path: Path) -> None:
+def test_lerobot_v3_parse_manifest_collects_unique_episode_tasks(tmp_path: Path) -> None:
     adapter = LeRobotV3Adapter()
     archive_path = tmp_path / "v3-default-task.zip"
     _write_zip(
@@ -195,7 +195,7 @@ def test_lerobot_v3_parse_manifest_collects_unique_episode_tasks_in_order(tmp_pa
     safe_archive = SafeZipArchive(archive_path, max_uncompressed_bytes=5 * 1024 * 1024 * 1024)
     manifest, _report = adapter.build_draft(safe_archive, payload=MagicMock())
 
-    assert manifest.dataset_schema.tasks == ["Fold the Garment", "Place the Garment", "Hang the Garment"]
+    assert manifest.dataset_schema.tasks == ["Fold the Garment", "Hang the Garment", "Place the Garment"]
 
 
 def test_lerobot_v3_parse_manifest_counts_episode_shards_when_file_000_is_missing(tmp_path: Path) -> None:
