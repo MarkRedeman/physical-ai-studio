@@ -113,12 +113,17 @@ export const DatasetViewer = () => {
                                 <Delete fill='white' />
                             </ActionButton>
                             <AlertDialog
-                                onPrimaryAction={() => deleteEpisodes(selectedEpisodes)}
+                                onPrimaryAction={() => {
+                                    setSelectedEpisodes([]);
+                                    deleteEpisodes(selectedEpisodes);
+                                }}
                                 title='Delete episodes'
                                 variant='warning'
                                 primaryActionLabel='Delete'
+                                isPrimaryActionDisabled={isPending}
                             >
-                                Are you sure you want to delete the selected episodes?
+                                Are you sure you want to delete {selectedEpisodes.length} selected{' '}
+                                {selectedEpisodes.length === 1 ? 'episode' : 'episodes'}?
                             </AlertDialog>
                         </DialogTrigger>
                     </Flex>
