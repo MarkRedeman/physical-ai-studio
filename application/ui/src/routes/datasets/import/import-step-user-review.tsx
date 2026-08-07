@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
+
 import {
     Button,
     ButtonGroup,
+    ComboBox,
     Content,
     Flex,
     Heading,
@@ -8,7 +11,6 @@ import {
     Item,
     Picker,
     Text,
-    TextField,
     View,
 } from '@geti-ui/ui';
 import { isNumber } from 'lodash-es';
@@ -63,6 +65,7 @@ const DatasetManifestSummary = ({ importJob }: { importJob: SchemaDatasetImportJ
 
     const cameras = draft.dataset_schema?.cameras ?? [];
     const robots = draft.dataset_schema?.robots ?? [];
+    const tasks = draft.dataset_schema?.tasks ?? [];
 
     const fps = draft.dataset_schema?.cameras?.at(0)?.fps;
     const episodeCount = draft.statistics?.episode_count;
@@ -81,6 +84,11 @@ const DatasetManifestSummary = ({ importJob }: { importJob: SchemaDatasetImportJ
                 {robots.length > 0 && <RobotsSummary robots={robots} />}
 
                 {cameras.length > 0 && <CamerasSummary cameras={cameras} />}
+                {tasks.length > 0 && (
+                    <Text>
+                        <strong>Tasks</strong>: {tasks.join(', ')}
+                    </Text>
+                )}
             </Flex>
         </Flex>
     );
@@ -101,9 +109,16 @@ export const ImportStepUserReview = ({
     fields,
     onFieldsChange,
 }: ImportStepUserReviewProps) => {
+    const tasks = importJob.payload?.dataset_manifest_draft?.dataset_schema?.tasks ?? [];
     const { data: environments } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/environments', {
         params: { path: { project_id } },
     });
+
+    useEffect(() => {
+        if (environments.length === 1 && fields.environmentId === undefined) {
+            onFieldsChange({ ...fields, environmentId: environments[0].id });
+        }
+    }, [environments, fields, onFieldsChange]);
 
     const finalizeMutation = $api.useMutation('post', '/api/projects/{project_id}/imports/datasets/{job_id}:finalize', {
         meta: {
@@ -170,12 +185,17 @@ export const ImportStepUserReview = ({
                         {(item) => <Item key={item.id}>{item.name}</Item>}
                     </Picker>
 
-                    <TextField
+                    <ComboBox
                         width='100%'
                         label='Task'
-                        value={fields.defaultTask}
-                        onChange={(value) => onFieldsChange({ ...fields, defaultTask: value })}
-                    />
+                        allowsCustomValue
+                        inputValue={fields.defaultTask}
+                        onInputChange={(defaultTask) => onFieldsChange({ ...fields, defaultTask })}
+                    >
+                        {tasks.map((task) => (
+                            <Item key={task}>{task}</Item>
+                        ))}
+                    </ComboBox>
                 </Flex>
             </Content>
 

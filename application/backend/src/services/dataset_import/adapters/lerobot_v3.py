@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Iterable
 from io import BytesIO
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -143,6 +144,39 @@ class LeRobotV3Adapter(DatasetImportAdapter):
 
         return episode_count, frame_count
 
+    def _load_tasks(self, archive: SafeZipArchive, report: ImportValidationReport) -> list[str]:
+        episode_shards: list[tuple[int, int, str]] = []
+        for name in archive.iter_normalized_names():
+            if match := self._EPISODE_PARQUET_PATTERN.search(name):
+                episode_shards.append((int(match.group(1)), int(match.group(2)), name))
+
+        tasks: list[str] = []
+        for _chunk_index, _file_index, shard_name in sorted(episode_shards):
+            shard_bytes = archive.read_bytes(shard_name)
+            if shard_bytes is None:
+                continue
+
+            try:
+                episodes_df = pd.read_parquet(BytesIO(shard_bytes), columns=["tasks"])
+            except Exception as error:
+                logger.debug("Could not parse task metadata from '{}': {}", shard_name, type(error).__name__)
+                continue
+
+            if episodes_df.empty:
+                continue
+
+            for episode_tasks in episodes_df["tasks"]:
+                if isinstance(episode_tasks, str) or not isinstance(episode_tasks, Iterable):
+                    continue
+                for task in episode_tasks:
+                    if isinstance(task, str) and task not in tasks:
+                        tasks.append(task)
+
+        if not tasks:
+            report.add_warning("Could not infer tasks from episode metadata.")
+
+        return tasks
+
     def detect(self, archive: SafeZipArchive) -> tuple[bool, ImportValidationReport]:
         """Return (matched, report) for LeRobot v3 archives.
 
@@ -215,10 +249,12 @@ class LeRobotV3Adapter(DatasetImportAdapter):
         info: dict = {}
         episode_count = 0
         frame_count = 0
+        tasks: list[str] = []
 
         try:
             info = self._load_info(archive=archive, report=report)
             episode_count, frame_count = self._load_episode_counts(archive=archive, report=report, info=info)
+            tasks = self._load_tasks(archive=archive, report=report)
 
             if archive.read_json("meta/stats.json") is None:
                 report.add_warning("No global stats metadata found in 'meta/stats.json'.")
@@ -252,7 +288,7 @@ class LeRobotV3Adapter(DatasetImportAdapter):
                 episode_count=episode_count,
                 frame_count=frame_count,
             ),
-            dataset_schema=recording_schema,
+            dataset_schema=recording_schema.model_copy(update={"tasks": tasks}),
         )
 
         return manifest, report
