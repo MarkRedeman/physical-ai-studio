@@ -67,7 +67,7 @@ class TrainingDevice(BaseModel):
         return self
 
 
-_DEFAULT_MAX_EPOCHS = 10
+_DEFAULT_MAX_EPOCHS = 5
 
 
 class TrainJobPayload(BaseModel):

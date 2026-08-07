@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from schemas.job import _DEFAULT_MAX_EPOCHS
 from services.training_backends._log_format import render_progress_log
 
 if TYPE_CHECKING:
@@ -27,9 +28,6 @@ if TYPE_CHECKING:
 
     from services.training_backends.base import TrainingContext
     from training import TrainingJobSpec
-
-
-_DEFAULT_MAX_EPOCHS = 5
 
 
 class LocalTrainingBackend:
@@ -91,7 +89,7 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
     return TrainingJobSpec(
         # A resumed run's architecture is dictated by the base model's checkpoint.
         policy=(context.base_model or context.model).policy,
-        max_epochs=payload.max_epochs if payload.max_epochs is not None else 5,
+        max_epochs=payload.max_epochs if payload.max_epochs is not None else _DEFAULT_MAX_EPOCHS,
         batch_size=payload.batch_size,
         num_workers=payload.num_workers,
         val_split=payload.val_split,
