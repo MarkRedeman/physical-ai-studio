@@ -20,6 +20,7 @@ import { useQuery } from '@tanstack/react-query';
 import { SchemaEpisode } from '../../api/openapi-spec';
 import { useDeleteEpisodeQuery } from '../../features/datasets/episodes/use-episodes';
 import { paths } from '../../router';
+import { pluralize } from '../../utils';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
 import { useDataset } from './dataset-provider';
 import { EpisodeList } from './episode-list';
@@ -125,7 +126,7 @@ export const DatasetViewer = () => {
                                 isPrimaryActionDisabled={isPending}
                             >
                                 Are you sure you want to delete {selectedEpisodes.length} selected{' '}
-                                {selectedEpisodes.length === 1 ? 'episode' : 'episodes'}?
+                                {pluralize(selectedEpisodes.length, 'episode', 'episodes')}?
                             </AlertDialog>
                         </DialogTrigger>
                     </Flex>
