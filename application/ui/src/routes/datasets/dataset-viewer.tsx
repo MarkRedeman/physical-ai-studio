@@ -68,7 +68,7 @@ export const DatasetViewer = () => {
             <Flex margin={'size-200'} direction={'column'} flex>
                 <IllustratedMessage>
                     <EmptyIllustration />
-                    <Content> Currently there are episodes. </Content>
+                    <Content>Currently there are no episodes.</Content>
                     <Text>It&apos;s time to begin recording a dataset. </Text>
                     <Heading>No episodes yet</Heading>
                     <View margin={'size-100'}>
