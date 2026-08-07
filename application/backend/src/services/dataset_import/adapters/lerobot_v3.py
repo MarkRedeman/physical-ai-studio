@@ -228,7 +228,7 @@ class LeRobotV3Adapter(DatasetImportAdapter):
         info: dict = {}
         episode_count = 0
         frame_count = 0
-        tasks: list[str] = []
+        tasks: set[str] = set()
 
         try:
             info = self._load_info(archive=archive, report=report)
