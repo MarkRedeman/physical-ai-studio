@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-
 import {
     Button,
     ButtonGroup,
@@ -113,22 +111,18 @@ export const ImportStepUserReview = ({
     const { data: environments } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/environments', {
         params: { path: { project_id } },
     });
-
-    useEffect(() => {
-        if (environments.length === 1 && fields.environmentId === undefined) {
-            onFieldsChange({ ...fields, environmentId: environments[0].id });
-        }
-    }, [environments, fields, onFieldsChange]);
+    const defaultTask = fields.defaultTask ?? tasks.at(0) ?? '';
+    const environmentId = fields.environmentId ?? (environments.length === 1 ? environments[0].id : undefined);
 
     const finalizeMutation = $api.useMutation('post', '/api/projects/{project_id}/imports/datasets/{job_id}:finalize', {
         meta: {
             invalidates: [['get', '/api/jobs/{job_id}', { params: { path: { job_id: importJob.id! } } }]],
         },
     });
-    const canFinalize = fields.environmentId !== undefined;
+    const canFinalize = environmentId !== undefined;
 
     const onFinalize = () => {
-        if (!canFinalize || fields.environmentId === undefined) {
+        if (!canFinalize || environmentId === undefined) {
             return;
         }
 
@@ -137,8 +131,8 @@ export const ImportStepUserReview = ({
                 path: { project_id, job_id: importJob.id! },
             },
             body: {
-                environment_id: fields.environmentId,
-                default_task: fields.defaultTask,
+                environment_id: environmentId,
+                default_task: defaultTask,
             },
         });
     };
@@ -174,7 +168,7 @@ export const ImportStepUserReview = ({
                         label='Recording environment'
                         width='100%'
                         items={environments}
-                        selectedKey={fields.environmentId}
+                        selectedKey={environmentId}
                         onSelectionChange={(value) =>
                             onFieldsChange({
                                 ...fields,
@@ -189,8 +183,8 @@ export const ImportStepUserReview = ({
                         width='100%'
                         label='Task'
                         allowsCustomValue
-                        inputValue={fields.defaultTask}
-                        onInputChange={(defaultTask) => onFieldsChange({ ...fields, defaultTask })}
+                        inputValue={defaultTask}
+                        onInputChange={(task) => onFieldsChange({ ...fields, defaultTask: task })}
                     >
                         {tasks.map((task) => (
                             <Item key={task}>{task}</Item>

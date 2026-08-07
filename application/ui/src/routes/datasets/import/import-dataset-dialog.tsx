@@ -111,20 +111,13 @@ const InternalImportDatasetDialog = ({
     const queryClient = useQueryClient();
     const [datasetName, setDatasetName] = useState('');
     const [finalizeFields, setFinalizeFields] = useState<FinalizeFields>({
-        defaultTask: '',
+        defaultTask: undefined,
         environmentId: undefined,
     });
     const [importJobId, setImportJobId] = useState<string | undefined>(initialJobId);
 
     const importJobQuery = useDatasetImportJobQuery(importJobId);
     const importJob = importJobQuery.data as SchemaDatasetImportJob | undefined;
-    const inferredDefaultTask = importJob?.payload?.dataset_manifest_draft?.dataset_schema?.tasks?.at(0);
-
-    useEffect(() => {
-        if (inferredDefaultTask && finalizeFields.defaultTask === '') {
-            setFinalizeFields((fields) => ({ ...fields, defaultTask: inferredDefaultTask }));
-        }
-    }, [finalizeFields.defaultTask, inferredDefaultTask]);
 
     const status = getDialogViewStatus(importJob);
 
