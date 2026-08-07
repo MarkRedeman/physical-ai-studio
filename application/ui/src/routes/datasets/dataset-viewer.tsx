@@ -113,9 +113,11 @@ export const DatasetViewer = () => {
                                 <Delete fill='white' />
                             </ActionButton>
                             <AlertDialog
-                                onPrimaryAction={() => {
+                                onPrimaryAction={async () => {
+                                    const deletePromise = deleteEpisodes(selectedEpisodes);
                                     setSelectedEpisodes([]);
-                                    deleteEpisodes(selectedEpisodes);
+
+                                    await deletePromise;
                                 }}
                                 title='Delete episodes'
                                 variant='warning'
