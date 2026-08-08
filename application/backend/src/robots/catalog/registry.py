@@ -67,6 +67,11 @@ class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
                 urdf_relative_path=Path(plugin_asset.urdf_relative_path),
                 packages={package: Path(path) for package, path in plugin_asset.packages.items()},
                 joint_map=plugin_asset.joint_map,
+                preview_thumbnail=(
+                    Path(plugin_asset.preview_thumbnail)
+                    if getattr(plugin_asset, "preview_thumbnail", None) is not None
+                    else None
+                ),
                 root_resolver=plugin_asset.root_resolver,
             )
         else:
@@ -90,6 +95,8 @@ class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
         return RobotCatalogDefinition(
             type=definition.type,
             display_name=definition.display_name,
+            category=getattr(definition, "category", "Other"),
+            source=getattr(definition, "source", "external"),
             role=definition.role,
             robot_builder=definition.robot_builder,
             robot_payload=robot_payload,

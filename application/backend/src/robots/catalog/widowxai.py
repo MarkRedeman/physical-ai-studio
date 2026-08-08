@@ -6,7 +6,14 @@ from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from physicalai.robot import BimanualWidowXAI, WidowXAI
-from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
+from physicalai.robot.trossen import BimanualWidowXAI, WidowXAI
+from physicalai_studio_plugin import (
+    RobotAdapterOptions,
+    RobotAsset,
+    RobotCatalogDefinition,
+    robot_field_ui,
+    robot_payload_ui,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from schemas.robot_type import BaseRobot
@@ -23,13 +30,16 @@ if TYPE_CHECKING:
 class TrossenSingleArmPayload(BaseModel):
     """Connection configuration for Trossen single-arm robots."""
 
-    connection_string: str = Field(..., description="IP address of the robot")
+    connection_string: str = Field(
+        ..., description="IP address of the robot", json_schema_extra=robot_field_ui({"group": "connection"})
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "connection_string": "192.168.1.100",
             },
+            **robot_payload_ui({"groups": {"connection": {"title": "Connection", "identify": True}}}),
         },
     )
 
@@ -37,8 +47,12 @@ class TrossenSingleArmPayload(BaseModel):
 class TrossenBimanualPayload(BaseModel):
     """Connection configuration for Trossen bimanual robots."""
 
-    connection_string_left: str = Field(..., description="IP address of the left arm")
-    connection_string_right: str = Field(..., description="IP address of the right arm")
+    connection_string_left: str = Field(
+        ..., description="IP address of the left arm", json_schema_extra=robot_field_ui({"group": "connection"})
+    )
+    connection_string_right: str = Field(
+        ..., description="IP address of the right arm", json_schema_extra=robot_field_ui({"group": "connection"})
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -46,6 +60,7 @@ class TrossenBimanualPayload(BaseModel):
                 "connection_string_left": "192.168.1.100",
                 "connection_string_right": "192.168.1.101",
             },
+            **robot_payload_ui({"groups": {"connection": {"title": "Connection", "identify": True}}}),
         },
     )
 
@@ -255,6 +270,8 @@ def get_definitions() -> list[RobotCatalogDefinition]:
         RobotCatalogDefinition(
             type="Trossen_WidowXAI_Follower",
             display_name="Trossen WidowX AI Follower",
+            category="Trossen",
+            source="internal",
             role="follower",
             robot_builder=_build_trossen_single_arm_driver,
             robot_payload=TrossenSingleArmPayload,
@@ -265,6 +282,8 @@ def get_definitions() -> list[RobotCatalogDefinition]:
         RobotCatalogDefinition(
             type="Trossen_WidowXAI_Leader",
             display_name="Trossen WidowX AI Leader",
+            category="Trossen",
+            source="internal",
             role="leader",
             robot_builder=_build_trossen_single_arm_driver,
             robot_payload=TrossenSingleArmPayload,
@@ -275,6 +294,8 @@ def get_definitions() -> list[RobotCatalogDefinition]:
         RobotCatalogDefinition(
             type="Trossen_Bimanual_WidowXAI_Follower",
             display_name="Trossen Bimanual WidowX AI Follower",
+            category="Trossen",
+            source="internal",
             role="follower",
             robot_builder=_build_trossen_bimanual_driver,
             robot_payload=TrossenBimanualPayload,
@@ -285,6 +306,8 @@ def get_definitions() -> list[RobotCatalogDefinition]:
         RobotCatalogDefinition(
             type="Trossen_Bimanual_WidowXAI_Leader",
             display_name="Trossen Bimanual WidowX AI Leader",
+            category="Trossen",
+            source="internal",
             role="leader",
             robot_builder=_build_trossen_bimanual_driver,
             robot_payload=TrossenBimanualPayload,

@@ -38,7 +38,9 @@ class RobotClientFactory:
         # the hardware. The driver itself is discarded — only its recipe is sent,
         # and the owner rebuilds it. The name keys the owner's Zenoh topics, so
         # it must come from the id, never the free-form display name.
+        #logger.info("Creating shared robot")
         shared_robot = SharedRobot.from_config(to_config(robot_driver), name=shared_robot_name(robot.id))
+        #shared_robot = robot_driver
         adapter_options = definition.adapter_options
         return PhysicalAIRobotAdapter(
             robot=shared_robot,
