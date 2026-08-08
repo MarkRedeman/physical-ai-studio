@@ -57,20 +57,6 @@ export const useRobotForm = () => {
     return { ...context, robotForm: { name: context.name, payload: context.payload } as RobotFormData };
 };
 
-/** @deprecated Catalog-specific forms are retained only for the SO101 setup workflow. */
-export const useRobotFormFields = <T extends object = Record<string, unknown>>() => {
-    const { activeType, name, payload, setName, updatePayloadField } = useRobotForm();
-    const formData = { name, ...payload } as unknown as T;
-    return {
-        activeType,
-        formData,
-        updateField: <K extends keyof T>(field: K, value: T[K]) => {
-            if (field === 'name') setName(String(value));
-            else updatePayloadField(String(field), value);
-        },
-    };
-};
-
 export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
     const { activeType, name, payload } = useRobotForm();
     if (activeType === undefined || name.trim() === '') return null;
