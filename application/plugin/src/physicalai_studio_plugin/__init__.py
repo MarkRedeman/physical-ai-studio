@@ -13,6 +13,7 @@ from .factory import CatalogRobotFactory
 from .probe import PortScanner, RobotProbe
 from .schemas import SerialPortInfo
 from .transport import shared_robot_name
+from .ui_schema import RobotFieldUiOptions, RobotPayloadUiOptions, RobotUiGroupOptions, robot_field_ui, robot_payload_ui
 
 __all__ = [
     "BuildRobotCallable",
@@ -24,7 +25,12 @@ __all__ = [
     "RobotAsset",
     "RobotCatalogDefinition",
     "RobotCatalogRegistry",
+    "RobotFieldUiOptions",
+    "RobotPayloadUiOptions",
     "RobotProbe",
+    "RobotUiGroupOptions",
     "SerialPortInfo",
     "shared_robot_name",
+    "robot_field_ui",
+    "robot_payload_ui",
 ]

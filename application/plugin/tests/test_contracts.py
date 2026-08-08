@@ -13,6 +13,7 @@ from physicalai_studio_plugin import (
     RobotCatalogDefinition,
     RobotProbe,
     SerialPortInfo,
+    robot_field_ui,
 )
 
 
@@ -186,3 +187,7 @@ def test_no_payload_model_returns_raw_dict() -> None:
     raw = {"some": "data"}
     result = raw if definition.robot_payload is None else definition.robot_payload.model_validate(raw)
     assert result == raw
+
+
+def test_robot_field_ui_supports_required_option() -> None:
+    assert robot_field_ui({"required": True}) == {"x-physicalai-ui": {"required": True}}
