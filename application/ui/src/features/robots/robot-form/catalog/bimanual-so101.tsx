@@ -1,7 +1,6 @@
 import { Flex, Item, Picker, Text } from '@geti-ui/ui';
 
 import { $api } from '../../../../api/client';
-import type { SchemaBimanualSo101Payload } from '../../../../api/openapi-spec';
 import { useProjectId } from '../../../projects/use-project';
 import type { SchemaRobot } from '../../robot-types';
 import { useRobotForm } from '../provider';
