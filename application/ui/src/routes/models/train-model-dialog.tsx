@@ -300,8 +300,8 @@ const TrainingParameters = ({
         <Flex direction='column' gap='size-150' width='100%'>
             {isLerobot && (
                 <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
-                    LeRobot derives the step budget from the dataset size (5 epochs) and manages batch size, precision,
-                    and compilation automatically.
+                    LeRobot uses the step budget and batch size set above, and manages precision and compilation
+                    automatically.
                 </Text>
             )}
             <Flex direction='row' gap='size-150' width='100%'>
@@ -314,7 +314,7 @@ const TrainingParameters = ({
                         maxValue={256}
                         step={1}
                         width='100%'
-                        isDisabled={autoScaleBatchSize || isLerobot}
+                        isDisabled={autoScaleBatchSize}
                         flex
                     />
                     <Flex direction='row' gap='size-100' alignItems='center'>
@@ -618,15 +618,6 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                         <Item key='physicalai'>PhysicalAI (Lightning)</Item>
                         <Item key='lerobot'>LeRobot</Item>
                     </Picker>
-
-                    {trainingEngine === 'lerobot' && activeDevice?.type === 'xpu' && (
-                        <View>
-                            <InlineAlert variant='warning'>
-                                LeRobot training doesn&apos;t support XPU; the job will fall back to CPU unless a CUDA
-                                GPU is available.
-                            </InlineAlert>
-                        </View>
-                    )}
 
                     <PolicySelection
                         selectedPolicy={selectedPolicy}
