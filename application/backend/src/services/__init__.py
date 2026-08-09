@@ -6,6 +6,8 @@ from .dataset_service import DatasetService
 from .episode_thumbnail_service import EpisodeThumbnailService
 from .job_service import JobService
 from .model_download_service import ModelDownloadService
+from .model_compression_service import ModelCompressionService
+from .model_export_service import ModelExportService
 from .model_import_service import ModelImportService
 from .model_metrics_service import ModelMetricsService
 from .model_service import ModelService
@@ -23,6 +25,8 @@ __all__ = [
     "EpisodeThumbnailService",
     "JobService",
     "ModelDownloadService",
+    "ModelCompressionService",
+    "ModelExportService",
     "ModelImportService",
     "ModelMetricsService",
     "ModelService",
