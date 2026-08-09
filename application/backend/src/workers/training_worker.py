@@ -128,7 +128,7 @@ class TrainingWorker(BaseProcessWorker):
                 name=payload.model_name,
                 snapshot_id=snapshot_id,
                 policy=payload.policy,
-                properties={},
+                properties={"training_engine": payload.training_engine},
                 train_job_id=job.id,
                 parent_model_id=payload.base_model_id,
                 version=base_model.version + 1 if base_model else 1,

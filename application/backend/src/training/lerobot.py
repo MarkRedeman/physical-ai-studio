@@ -1,0 +1,576 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+"""LeRobot training engine.
+
+Trains a policy with LeRobot's own stack (``lerobot.scripts.lerobot_train``
+semantics) when the user picks LeRobot as the training engine, instead of the
+physicalai-train Lightning stack. The user only chooses the policy; batch size,
+step budget, optimizer, and LR schedule are derived from LeRobot's best
+practices (see the upstream ``AGENT_GUIDE.md``, section "Train a policy").
+
+This is a lean vendored loop, not a subprocess around the LeRobot CLI: it must
+stay cooperative with the job's ``report``/``should_stop`` callbacks and emit
+the same progress telemetry contract as the physicalai path. The loop mirrors
+``lerobot.scripts.lerobot_train.train`` for a single process: same dataset
+factory, sampler, optimizer/scheduler construction, checkpoint layout, and
+step-by-step update order, minus accelerate and its distributed sharding.
+
+After training, the final checkpoint is published like a physicalai model:
+
+- ``model.ckpt`` — the checkpoint converted to Lightning format
+  (``lerobot_to_lightning``), the shared load contract with the Runtime.
+- ``lerobot/`` — the raw LeRobot checkpoint (``pretrained_model/`` +
+  ``training_state/``), so later runs can resume natively with LeRobot.
+- ``exports/torch/`` — the torch export, via the LeRobotPolicy wrapper (the
+  only export backend it supports).
+
+LeRobot has no XPU support, so the engine is gated to CUDA/CPU.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import logging
+import math
+import os
+import shutil
+import time
+from contextlib import nullcontext
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import torch
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from physicalai.train.callbacks import ReportFn, StopFn
+
+    from training.job import TrainingJobSpec
+
+logger = logging.getLogger(__name__)
+
+EPOCHS = 5
+"""Training epochs per job (LeRobot AGENT_GUIDE default)."""
+
+BATCH_SIZES: dict[str, int] = {
+    "act": 8,
+    "diffusion": 8,
+    "smolvla": 4,
+    "pi05": 4,
+}
+"""Per-policy batch sizes from the LeRobot AGENT_GUIDE (RTX 4090-class GPUs)."""
+
+_LR: dict[str, float] = {"act": 1e-4, "diffusion": 1e-4, "smolvla": 2e-5, "pi05": 1e-4}
+_WEIGHT_DECAY: dict[str, float] = {"act": 1e-4, "diffusion": 1e-2, "smolvla": 1e-2, "pi05": 1e-2}
+_GRAD_CLIP: dict[str, float] = {"act": 10.0, "diffusion": 10.0, "smolvla": 1.0, "pi05": 1.0}
+"""Optimizer defaults per policy from the LeRobot AGENT_GUIDE."""
+
+_DATASET_REPO_ID = "snapshot"
+"""Placeholder repo id: datasets are always loaded from a local root here."""
+
+_MAX_EVAL_SAMPLES = 500
+"""Cap on held-out samples used per eval-loss check (split uniformly per task)."""
+
+
+def run_lerobot_training_job(
+    spec: TrainingJobSpec,
+    *,
+    dataset_root: Path | str,
+    output_dir: Path | str,
+    cache_dir: Path | str,
+    report: ReportFn,
+    should_stop: StopFn,
+    resume_from: Path | str | None = None,
+) -> None:
+    """Train one policy end to end with LeRobot's stack.
+
+    On success ``output_dir`` holds ``model.ckpt``, the raw ``lerobot/``
+    checkpoint, ``exports/torch/``, and the ``version_0/metrics.csv`` log.
+    Cancellation is cooperative: ``should_stop`` is polled every step, and a
+    canceled run returns without writing any artifact (the final checkpoint is
+    only written at the end of a completed run).
+    """
+    device = _resolve_device(spec)
+    output_dir, cache_dir = Path(output_dir), Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    resume_checkpoint = _resolve_resume_checkpoint(resume_from)
+    cfg = _build_config(spec, dataset_root=Path(dataset_root), device=device, cache_dir=cache_dir, resume_checkpoint=resume_checkpoint)
+
+    _train(spec, cfg, device=device, report=report, should_stop=should_stop)
+    if should_stop():
+        logger.info("LeRobot training canceled; skipping publish")
+        return
+
+    _publish(cfg, cache_dir=cache_dir, output_dir=output_dir, report=report)
+
+
+def _resolve_device(spec: TrainingJobSpec) -> torch.device:
+    """Return the device to train on.
+
+    LeRobot has no XPU support, so the engine only runs on CUDA (preferred) or
+    CPU, matching what the UI exposes for LeRobot jobs. ``device_type`` is None
+    when the UI lets the machine decide.
+    """
+    requested = spec.device_type
+    if requested == "xpu":
+        raise ValueError("LeRobot training does not support the XPU accelerator. Use CUDA or CPU instead.")
+    if requested in (None, "cpu"):
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+    if requested == "cuda":
+        if not torch.cuda.is_available():
+            raise ValueError("CUDA was requested for LeRobot training but is not available.")
+        return torch.device(f"cuda:{spec.device_index or 0}")
+    msg = f"Unsupported device for LeRobot training: {requested!r}"
+    raise ValueError(msg)
+
+
+def _resolve_num_workers(spec: TrainingJobSpec) -> int:
+    """Resolve the dataloader worker count, capping ``auto`` like the UI."""
+    if spec.num_workers == "auto":
+        return min(8, os.cpu_count() or 1)
+    return spec.num_workers
+
+
+def _total_frames(dataset_root: Path | str) -> int:
+    """Return ``total_frames`` from a LeRobot snapshot's ``meta/info.json``."""
+    with (Path(dataset_root) / "meta" / "info.json").open() as f:
+        return int(json.load(f)["total_frames"])
+
+
+def _build_config(
+    spec: TrainingJobSpec,
+    *,
+    dataset_root: Path,
+    device: torch.device,
+    cache_dir: Path,
+    resume_checkpoint: Path | None,
+) -> TrainPipelineConfig:
+    """Build the LeRobot ``TrainPipelineConfig``.
+
+    Fresh runs derive batch size, steps, optimizer, and LR schedule from the
+    policy name and dataset size (see module constants). Resumed runs load the
+    checkpoint's own ``train_config.json`` so optimizer, scheduler, and sampler
+    semantics come from the original run; only the dataset root, output dir,
+    and device are overridden.
+    """
+    from lerobot.configs.train import TrainPipelineConfig  # noqa: PLC0415
+
+    if resume_checkpoint is not None:
+        return _resume_config(resume_checkpoint, dataset_root=dataset_root, device=device, cache_dir=cache_dir)
+
+    from lerobot.configs.default import DatasetConfig, WandBConfig  # noqa: PLC0415
+    from lerobot.optim.optimizers import AdamWConfig  # noqa: PLC0415
+    from lerobot.optim.schedulers import CosineDecayWithWarmupSchedulerConfig  # noqa: PLC0415
+    from lerobot.policies.factory import make_policy_config  # noqa: PLC0415
+
+    batch_size = BATCH_SIZES.get(spec.policy, spec.batch_size)
+    total_frames = _total_frames(dataset_root)
+    steps = EPOCHS * math.ceil(total_frames / batch_size)
+    lr = _LR.get(spec.policy, 1e-4)
+    weight_decay = _WEIGHT_DECAY.get(spec.policy, 1e-2)
+    grad_clip_norm = _GRAD_CLIP.get(spec.policy, 1.0)
+    num_warmup_steps = max(50, steps // 50)
+
+    log_freq = max(1, steps // 100)
+    eval_steps = max(1, steps // 10) if spec.val_split > 0 else 0
+
+    return TrainPipelineConfig(
+        dataset=DatasetConfig(
+            repo_id=_DATASET_REPO_ID,
+            root=str(dataset_root),
+            eval_split=spec.val_split,
+        ),
+        policy=make_policy_config(spec.policy, device=device.type),
+        output_dir=cache_dir,
+        job_name=f"lerobot-{spec.policy}",
+        resume=False,
+        seed=1000,
+        num_workers=_resolve_num_workers(spec),
+        batch_size=batch_size,
+        steps=steps,
+        env_eval_freq=0,
+        log_freq=log_freq,
+        eval_steps=eval_steps,
+        max_eval_samples=_MAX_EVAL_SAMPLES,
+        save_checkpoint=True,
+        save_freq=steps,
+        use_policy_training_preset=False,
+        optimizer=AdamWConfig(lr=lr, weight_decay=weight_decay, grad_clip_norm=grad_clip_norm),
+        scheduler=CosineDecayWithWarmupSchedulerConfig(
+            num_warmup_steps=num_warmup_steps,
+            num_decay_steps=steps,
+            peak_lr=lr,
+            decay_lr=lr * 0.1,
+        ),
+        wandb=WandBConfig(enable=False),
+    )
+
+
+def _resume_config(
+    resume_checkpoint: Path,
+    *,
+    dataset_root: Path,
+    device: torch.device,
+    cache_dir: Path,
+) -> TrainPipelineConfig:
+    """Load the checkpoint's config and point it at the current job."""
+    from lerobot.constants import PRETRAINED_MODEL_DIR  # noqa: PLC0415
+    from lerobot.configs.train import TrainPipelineConfig  # noqa: PLC0415
+
+    cfg = TrainPipelineConfig.from_pretrained(str(resume_checkpoint / PRETRAINED_MODEL_DIR))
+    cfg.resume = True
+    cfg.checkpoint_path = resume_checkpoint
+    cfg.policy.pretrained_path = resume_checkpoint / PRETRAINED_MODEL_DIR
+    cfg.dataset.root = str(dataset_root)
+    cfg.output_dir = cache_dir
+    cfg.wandb.enable = False
+    cfg.policy.device = device.type
+    return cfg
+
+
+def _resolve_resume_checkpoint(resume_from: Path | str | None) -> Path | None:
+    """Return the base model's raw LeRobot checkpoint directory, if any.
+
+    Lerobot-trained models keep their raw checkpoint under ``lerobot/`` in the
+    model directory, which is exactly the layout ``load_training_state``
+    expects.
+    """
+    if resume_from is None:
+        return None
+    checkpoint = Path(resume_from) / "lerobot"
+    if not (checkpoint / "pretrained_model").is_dir():
+        logger.warning("Base model %s has no LeRobot checkpoint to resume from", resume_from)
+        return None
+    return checkpoint
+
+
+def _train(
+    spec: TrainingJobSpec,
+    cfg: TrainPipelineConfig,
+    *,
+    device: torch.device,
+    report: ReportFn,
+    should_stop: StopFn,
+) -> None:
+    """Run the vendored single-process training loop."""
+    from lerobot.common.train_utils import (  # noqa: PLC0415
+        get_step_checkpoint_dir,
+        load_training_batch_size,
+        load_training_state,
+        save_checkpoint,
+        update_last_checkpoint,
+    )
+    from lerobot.datasets import EpisodeAwareSampler, compute_sampler_state  # noqa: PLC0415
+    from lerobot.datasets.factory import make_train_eval_datasets  # noqa: PLC0415
+    from lerobot.optim.factory import make_optimizer_and_scheduler  # noqa: PLC0415
+    from lerobot.policies import make_policy, make_pre_post_processors  # noqa: PLC0415
+    from lerobot.utils.collate import lerobot_collate_fn  # noqa: PLC0415
+    from lerobot.utils.utils import cycle  # noqa: PLC0415
+
+    report(0, "Preparing LeRobot dataset", {})
+    dataset, eval_dataset = make_train_eval_datasets(cfg)
+
+    report(0, "Creating LeRobot policy", {})
+    policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map=cfg.rename_map)
+    policy = policy.to(device)
+
+    processor_kwargs: dict[str, object] = {}
+    if (cfg.policy.pretrained_path and not cfg.resume) or not cfg.policy.pretrained_path:
+        processor_kwargs["dataset_stats"] = dataset.meta.stats
+    preprocessor, postprocessor = make_pre_post_processors(
+        policy_cfg=cfg.policy,
+        pretrained_path=cfg.policy.pretrained_path,
+        pretrained_revision=getattr(cfg.policy, "pretrained_revision", None),
+        **processor_kwargs,
+    )
+
+    report(0, "Creating optimizer and scheduler", {})
+    optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, policy)
+
+    step = 0
+    if cfg.resume:
+        step, optimizer, lr_scheduler = load_training_state(cfg.checkpoint_path, optimizer, lr_scheduler)
+        # Extend the run by EPOCHS more, same basis as a fresh job.
+        steps_per_epoch = math.ceil(_total_frames(cfg.dataset.root) / cfg.batch_size)
+        cfg.steps = step + EPOCHS * steps_per_epoch
+        logger.info("Resuming LeRobot training at step %d (total %d)", step, cfg.steps)
+
+    # Data order is a pure function of (seed, epoch); resume is sample-exact.
+    sampler = EpisodeAwareSampler(
+        dataset.meta.episodes["dataset_from_index"],
+        dataset.meta.episodes["dataset_to_index"],
+        episode_indices_to_use=dataset.episodes,
+        drop_n_last_frames=getattr(cfg.policy, "drop_n_last_frames", 0),
+        shuffle=True,
+        seed=cfg.seed if cfg.seed is not None else 0,
+        absolute_to_relative_idx=dataset.absolute_to_relative_idx,
+    )
+    if cfg.resume and step > 0:
+        saved_batch_size = load_training_batch_size(cfg.checkpoint_path) or cfg.batch_size
+        sampler_state = compute_sampler_state(step, len(sampler), saved_batch_size, 1)
+        sampler.load_state_dict(sampler_state)
+
+    collate_fn = lerobot_collate_fn if dataset.meta.has_language_columns else None
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        num_workers=cfg.num_workers,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        sampler=sampler,
+        pin_memory=device.type == "cuda",
+        drop_last=False,
+        collate_fn=collate_fn,
+        prefetch_factor=cfg.prefetch_factor if cfg.num_workers > 0 else None,
+        persistent_workers=cfg.persistent_workers and cfg.num_workers > 0,
+    )
+
+    eval_dataloader = None
+    if eval_dataset is not None:
+        eval_ds: object = eval_dataset
+        if cfg.max_eval_samples > 0 and hasattr(eval_dataset, "hf_dataset"):
+            task_arr = eval_dataset.hf_dataset.data.column("task_index").to_numpy()
+            unique_tasks = sorted(set(task_arr.tolist()))
+            per_task = max(1, cfg.max_eval_samples // len(unique_tasks))
+            selected: list[int] = []
+            for t in unique_tasks:
+                frames = (task_arr == t).nonzero()[0][:per_task]
+                selected.extend(frames.tolist())
+            eval_ds = torch.utils.data.Subset(eval_dataset, selected)
+        eval_collate_fn = lerobot_collate_fn if dataset.meta.has_language_columns else None
+        eval_dataloader = torch.utils.data.DataLoader(
+            eval_ds,  # type: ignore[arg-type]
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=device.type == "cuda",
+            drop_last=False,
+            collate_fn=eval_collate_fn,
+            prefetch_factor=cfg.prefetch_factor if cfg.num_workers > 0 else None,
+            persistent_workers=cfg.persistent_workers and cfg.num_workers > 0,
+        )
+
+    steps_per_epoch = max(1, math.ceil(_total_frames(cfg.dataset.root) / cfg.batch_size))
+    metrics = _MetricsWriter(
+        report=report,
+        cache_dir=cfg.output_dir,
+        max_steps=cfg.steps,
+        steps_per_epoch=steps_per_epoch,
+    )
+    autocast_ctx = _autocast_context(cfg, device)
+
+    dl_iter = cycle(dataloader)
+    policy.train()
+    report(0, "Training model", {})
+    for current in range(step, cfg.steps):
+        if should_stop():
+            logger.info("LeRobot training canceled at step %d", current)
+            return
+
+        batch = next(dl_iter)
+        for cam_key in dataset.meta.camera_keys:
+            if cam_key in batch and batch[cam_key].dtype == torch.uint8:
+                batch[cam_key] = batch[cam_key].to(dtype=torch.float32) / 255.0
+        batch = preprocessor(batch)
+
+        with autocast_ctx or nullcontext():
+            loss, _output_dict = policy.forward(batch)
+
+        loss.backward()
+        grad_clip_norm = cfg.optimizer.grad_clip_norm
+        if grad_clip_norm > 0:
+            torch.nn.utils.clip_grad_norm_(policy.parameters(), grad_clip_norm)
+        optimizer.step()
+        optimizer.zero_grad()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
+        update = getattr(policy, "update", None)
+        if callable(update):
+            update()
+
+        step_done = current + 1
+        if cfg.log_freq > 0 and step_done % cfg.log_freq == 0:
+            metrics.on_log_step(step_done, loss.item())
+        if cfg.eval_steps > 0 and eval_dataloader is not None and step_done % cfg.eval_steps == 0:
+            eval_loss = _evaluate(
+                policy, preprocessor, eval_dataloader, dataset.meta.camera_keys, autocast_ctx, device
+            )
+            metrics.on_eval(step_done, eval_loss)
+        if cfg.save_checkpoint and (step_done % cfg.save_freq == 0 or step_done == cfg.steps):
+            checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step_done)
+            save_checkpoint(
+                checkpoint_dir=checkpoint_dir,
+                step=step_done,
+                cfg=cfg,
+                policy=policy,
+                optimizer=optimizer,
+                scheduler=lr_scheduler,
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                num_processes=1,
+                batch_size=cfg.batch_size,
+            )
+            update_last_checkpoint(checkpoint_dir)
+            logger.info("Saved checkpoint at step %d", step_done)
+    metrics.close()
+
+
+def _evaluate(
+    policy: object,
+    preprocessor: object,
+    eval_dataloader: object,
+    camera_keys: list[str],
+    autocast_ctx: object,
+    device: torch.device,
+) -> float:
+    """Compute mean eval loss over the held-out dataloader."""
+    policy.eval()
+    eval_loss_sum = 0.0
+    n_batches = 0
+    with torch.no_grad(), autocast_ctx or nullcontext():
+        for eval_batch in eval_dataloader:
+            for cam_key in camera_keys:
+                if cam_key in eval_batch and eval_batch[cam_key].dtype == torch.uint8:
+                    eval_batch[cam_key] = eval_batch[cam_key].to(dtype=torch.float32) / 255.0
+            eval_batch = preprocessor(eval_batch)
+            loss, _ = policy.forward(eval_batch)
+            eval_loss_sum += loss.item()
+            n_batches += 1
+    policy.train()
+    return eval_loss_sum / max(n_batches, 1)
+
+
+def _autocast_context(cfg: TrainPipelineConfig, device: torch.device) -> object:
+    """Return the mixed-precision context the policy's dtype calls for, if any.
+
+    Mirrors accelerate's autocast activation in ``lerobot_train.py``: bf16/fp16
+    policy dtypes enable autocast, float32 (or unset) does not.
+    """
+    policy_dtype = getattr(cfg.policy, "dtype", None)
+    if policy_dtype == "bfloat16":
+        return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+    if policy_dtype == "float16":
+        return torch.autocast(device_type=device.type, dtype=torch.float16)
+    return None
+
+
+class _MetricsWriter:
+    """Write progress telemetry and a Lightning-style ``metrics.csv``.
+
+    Consumes the same ``report`` contract as the physicalai path
+    (``(progress, message, extra_info)`` with the fields
+    :func:`services.training_backends._log_format.render_progress_log`
+    understands), so LeRobot job logs and metrics graphs look identical.
+    """
+
+    def __init__(
+        self, *, report: Callable[..., None], cache_dir: Path, max_steps: int, steps_per_epoch: int
+    ) -> None:
+        self.report = report
+        self.max_steps = max_steps
+        self.steps_per_epoch = max(1, steps_per_epoch)
+        self.csv_path = Path(cache_dir) / "version_0" / "metrics.csv"
+        self.csv_path.parent.mkdir(parents=True, exist_ok=True)
+        self._csv = self.csv_path.open("w", newline="")
+        self._writer = csv.writer(self._csv)
+        self._writer.writerow(["epoch", "step", "train/loss_step", "val/loss"])
+        self._csv.flush()
+        self._epoch = 0
+
+    def on_log_step(self, step: int, loss: float) -> None:
+        self._epoch = step // self.steps_per_epoch
+        self._writer.writerow([self._epoch, step, f"{loss:.6f}", ""])
+        self._csv.flush()
+        self.report(
+            min(99, int(step / self.max_steps * 100)),
+            None,
+            {
+                "global_step": step,
+                "max_steps": self.max_steps,
+                "epoch": self._epoch,
+                "train/loss_step": loss,
+            },
+        )
+
+    def on_eval(self, step: int, val_loss: float, elapsed_s: float | None = None) -> None:
+        self._writer.writerow([self._epoch, step, "", f"{val_loss:.6f}"])
+        self._csv.flush()
+        elapsed_s = elapsed_s if elapsed_s is not None else 0.0
+        self.report(
+            min(99, int(step / self.max_steps * 100)),
+            None,
+            {
+                "val_event": "end",
+                "global_step": step,
+                "max_steps": self.max_steps,
+                "val/loss": val_loss,
+                "val_elapsed_s": elapsed_s,
+            },
+        )
+
+    def close(self) -> None:
+        self._csv.close()
+
+
+def _publish(cfg: TrainPipelineConfig, *, cache_dir: Path, output_dir: Path, report: ReportFn) -> None:
+    """Move the finished run into its final location and export it."""
+    from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME  # noqa: PLC0415
+
+    from physicalai.policies.lerobot.utils.checkpoint_converter import lerobot_to_lightning  # noqa: PLC0415
+
+    checkpoints_dir = cache_dir / "checkpoints"
+    final = _latest_checkpoint(checkpoints_dir)
+    if final is None:
+        msg = "No checkpoint was produced by LeRobot training"
+        raise RuntimeError(msg)
+    if (checkpoints_dir / "last").is_symlink():
+        (checkpoints_dir / "last").unlink()
+
+    report(99, "Converting checkpoint", {})
+    lerobot_dir = cache_dir / "lerobot"
+    shutil.move(str(final), str(lerobot_dir))
+    from lerobot.constants import PRETRAINED_MODEL_DIR  # noqa: PLC0415
+
+    lerobot_to_lightning(lerobot_dir / PRETRAINED_MODEL_DIR, cache_dir / CHECKPOINT_NAME, policy_name=cfg.policy.type)
+
+    report(99, "Publishing model", {})
+    _move_to_output(cache_dir, output_dir)
+
+    report(100, "Exporting model to torch format", {})
+    _export_torch(output_dir, EXPORTS_DIRNAME)
+    report(100, "Model saved", {})
+
+
+def _latest_checkpoint(checkpoints_dir: Path) -> Path | None:
+    """Return the highest ``step_*`` checkpoint directory, if any."""
+    candidates = sorted(checkpoints_dir.glob("step_*")) if checkpoints_dir.is_dir() else []
+    return candidates[-1] if candidates else None
+
+
+def _move_to_output(cache_dir: Path, output_dir: Path) -> None:
+    """Move the finished training cache into its final location."""
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    shutil.move(str(cache_dir), str(output_dir))
+
+
+def _export_torch(output_dir: Path, exports_dirname: str) -> None:
+    """Export the trained policy to the torch backend via LeRobotPolicy.
+
+    Best-effort like the physicalai path: a failed export must not abort the
+    job, since ``model.ckpt`` is already the primary loadable artifact.
+    """
+    try:
+        from physicalai.policies.lerobot import LeRobotPolicy  # noqa: PLC0415
+        from training.job import CHECKPOINT_NAME  # noqa: PLC0415
+
+        policy = LeRobotPolicy.load_from_checkpoint(output_dir / CHECKPOINT_NAME)
+        policy.export(output_dir / exports_dirname / "torch", backend="torch")
+    except Exception:
+        logger.exception("Failed exporting model to torch format")

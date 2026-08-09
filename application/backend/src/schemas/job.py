@@ -75,6 +75,10 @@ class TrainJobPayload(BaseModel):
     dataset_id: UUID
     policy: str
     model_name: str
+    training_engine: Literal["physicalai", "lerobot"] = Field(
+        default="physicalai",
+        description="Training stack to use ('physicalai-train' Lightning or LeRobot's own training loop)",
+    )
     max_epochs: int | None = Field(
         default=None,
         ge=1,

@@ -89,7 +89,9 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
     return TrainingJobSpec(
         # A resumed run's architecture is dictated by the base model's checkpoint.
         policy=(context.base_model or context.model).policy,
+        training_engine=payload.training_engine,
         max_epochs=payload.max_epochs if payload.max_epochs is not None else _DEFAULT_MAX_EPOCHS,
+        max_steps=payload.max_steps,
         batch_size=payload.batch_size,
         num_workers=payload.num_workers,
         val_split=payload.val_split,
@@ -102,9 +104,16 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
 
 
 def _resume_checkpoint(context: TrainingContext) -> Path | None:
-    """Return the base model's checkpoint to resume from, if the job has one."""
+    """Return the base model's checkpoint to resume from, if the job has one.
+
+    Physicalai models resume from their Lightning ``model.ckpt``; LeRobot
+    models resume from their raw LeRobot checkpoint directory, which the
+    LeRobot engine resolves from the model directory itself.
+    """
     from training.job import CHECKPOINT_NAME
 
     if context.base_model is None:
         return None
+    if context.payload.training_engine == "lerobot":
+        return Path(context.base_model.path)
     return Path(context.base_model.path) / CHECKPOINT_NAME

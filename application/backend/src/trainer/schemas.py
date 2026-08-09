@@ -16,6 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from training import TrainingJobSpec
 
 _SUPPORTED_POLICIES = frozenset({"act", "pi0", "pi05", "smolvla"})
+_SUPPORTED_LEROBOT_POLICIES = frozenset({"act", "diffusion", "pi05", "smolvla"})
 _DEFAULT_PROTOCOL_VERSION = 1
 
 
@@ -141,8 +142,9 @@ class SubmitJobRequest(BaseModel):
         policy into a 422 on POST /jobs rather than a job that fails minutes
         later when the policy class is constructed.
         """
-        if value.policy not in _SUPPORTED_POLICIES:
-            msg = f"Unsupported policy {value.policy!r}"
+        supported = _SUPPORTED_LEROBOT_POLICIES if value.training_engine == "lerobot" else _SUPPORTED_POLICIES
+        if value.policy not in supported:
+            msg = f"Unsupported policy {value.policy!r} for training engine {value.training_engine!r}"
             raise ValueError(msg)
         return value
 

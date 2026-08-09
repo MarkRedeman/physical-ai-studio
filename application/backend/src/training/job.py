@@ -87,7 +87,15 @@ class TrainingJobSpec(BaseModel):
         default="physicalai",
         description="Which implementation of the policy to train.",
     )
+    training_engine: Literal["physicalai", "lerobot"] = Field(
+        default="physicalai",
+        description=(
+            "Which training stack to run: the physicalai-train Lightning stack or LeRobot's own "
+            "training loop (batch size, steps, and precision are automated for LeRobot)."
+        ),
+    )
     max_epochs: int = Field(default=5, ge=1, description="Training epoch budget.")
+    max_steps: int = Field(default=100, ge=1, description="Optimizer step budget.")
     batch_size: int = Field(default=8, ge=1, description="Training batch size.")
     num_workers: int | Literal["auto"] = Field(default="auto", description="Dataloader worker count.")
     val_split: float = Field(default=0.1, ge=0.0, lt=1.0, description="Fraction of episodes held out for validation.")
@@ -178,6 +186,20 @@ def run_training_job(
     from physicalai.train.trainer import Trainer
 
     from training.device import resolve_accelerator, resolve_devices, resolve_strategy
+
+    if spec.training_engine == "lerobot":
+        from training.lerobot import run_lerobot_training_job
+
+        run_lerobot_training_job(
+            spec,
+            dataset_root=dataset_root,
+            output_dir=output_dir,
+            cache_dir=cache_dir,
+            report=report,
+            should_stop=should_stop,
+            resume_from=resume_from,
+        )
+        return
 
     accelerator = resolve_accelerator(spec.device_type)
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
