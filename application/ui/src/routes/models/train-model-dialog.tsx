@@ -42,6 +42,35 @@ export type SchemaTrainJob = Omit<SchemaJob, 'payload'> & {
 
 export type TrainingEngine = SchemaJob['payload']['training_engine'];
 
+type ExportBackend = 'torch' | 'openvino' | 'onnx' | 'executorch';
+
+/**
+ * Camera slots each multi-camera policy expects, in order. These are the
+ * feature names baked into the pretrained policy configs (SmolVLA:
+ * `camera1/2/3`; Pi0.5: `base_0_rgb` + left/right wrist). The dialog lets the
+ * user map each slot to a dataset camera, or leave it empty.
+ */
+const CAMERA_SLOTS: Record<string, ReadonlyArray<{ label: string; name: string }>> = {
+    smolvla: [
+        { label: 'Camera 1', name: 'camera1' },
+        { label: 'Camera 2', name: 'camera2' },
+        { label: 'Camera 3', name: 'camera3' },
+    ],
+    pi05: [
+        { label: 'Base', name: 'base_0_rgb' },
+        { label: 'Left wrist', name: 'left_wrist_0_rgb' },
+        { label: 'Right wrist', name: 'right_wrist_0_rgb' },
+    ],
+};
+
+/** Formats a training job can export after training. */
+const EXPORT_FORMATS: ReadonlyArray<{ id: ExportBackend; label: string }> = [
+    { id: 'torch', label: 'PyTorch' },
+    { id: 'openvino', label: 'OpenVINO' },
+    { id: 'onnx', label: 'ONNX' },
+    { id: 'executorch', label: 'ExecuTorch' },
+];
+
 const GB = 1024 ** 3;
 
 /** Format bytes as a human-readable GB string. */
@@ -467,6 +496,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
     const [autoScaleBatchSize, setAutoScaleBatchSize] = useState<boolean>(bestDevice?.type === 'cuda');
     const [precision, setPrecision] = useState<Key | null>(bestDevice?.type === 'cuda' ? 'bf16-mixed' : '32-true');
     const [compileModel, setCompileModel] = useState<boolean>(false);
+    const [renameMap, setRenameMap] = useState<Record<string, string | null>>({});
+    const [exportBackends, setExportBackends] = useState<ExportBackend[]>(['torch', 'openvino']);
     const [remoteTrainerId, setRemoteTrainerId] = useState<Key | null>('local');
     const isRemoteTarget = remoteTrainerId !== null && remoteTrainerId !== 'local';
     const {
@@ -492,6 +523,26 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
             setAutoScaleBatchSize(false);
         }
     }, [activeDevice]);
+
+    const datasetId = selectedDataset?.toString();
+    const { data: datasetCameras = [] } = $api.useQuery(
+        'get',
+        '/api/dataset/{dataset_id}/cameras',
+        {
+            params: { path: { dataset_id: datasetId! } },
+        },
+        {
+            enabled: datasetId !== undefined,
+        }
+    );
+
+    // A new dataset or policy invalidates earlier camera selections.
+    useEffect(() => {
+        setRenameMap({});
+    }, [selectedDataset, selectedPolicy]);
+
+    const cameraSlots = CAMERA_SLOTS[selectedPolicy] ?? [];
+    const cameraOptions = datasetCameras.map((cameraKey) => cameraKey.replace(/^observation\.images\./, ''));
 
     const trainMutation = $api.useMutation('post', '/api/jobs:train', {
         meta: {
@@ -545,6 +596,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
             compile_model: compileModel,
             val_split: 0.1,
             training_target: isRemoteTarget ? 'remote' : 'local',
+            ...(Object.keys(renameMap).length > 0 ? { rename_map: renameMap } : {}),
+            export_backends: exportBackends,
             ...(isRemoteTarget ? { remote_trainer_id: remoteTrainerId?.toString() } : {}),
             ...extraPayload,
         };
@@ -627,6 +680,40 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                         engine={trainingEngine}
                     />
 
+                    {cameraSlots.length > 0 && (
+                        <Flex direction='column' gap='size-150'>
+                            <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>Camera mapping</Text>
+                            <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
+                                Map each {MODELS.find((m) => m.id === selectedPolicy)?.name ?? 'model'} camera to a
+                                camera recorded in your dataset, or leave it empty.
+                            </Text>
+                            {cameraSlots.map((slot) => {
+                                const options = [
+                                    { id: 'empty', label: 'Empty' },
+                                    ...cameraOptions.map((camera) => ({ id: camera, label: camera })),
+                                ];
+                                return (
+                                    <Picker
+                                        key={slot.name}
+                                        label={slot.label}
+                                        selectedKey={renameMap[slot.name] ?? 'empty'}
+                                        onSelectionChange={(key) =>
+                                            setRenameMap((prev) => ({
+                                                ...prev,
+                                                [slot.name]: key === 'empty' ? null : String(key),
+                                            }))
+                                        }
+                                        isDisabled={baseModel !== undefined}
+                                        width='100%'
+                                        items={options}
+                                    >
+                                        {(option) => <Item key={option.id}>{option.label}</Item>}
+                                    </Picker>
+                                );
+                            })}
+                        </Flex>
+                    )}
+
                     <Disclosure
                         isQuiet
                         UNSAFE_style={{ padding: 0 }}
@@ -637,6 +724,27 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                             Advanced settings
                         </DisclosureTitle>
                         <DisclosurePanel UNSAFE_style={{ padding: 0 }}>
+                            <Flex direction='column' gap='size-150' marginBottom='size-150'>
+                                <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>Export formats</Text>
+                                <Flex direction='row' gap='size-200' wrap>
+                                    {EXPORT_FORMATS.map((format) => (
+                                        <Checkbox
+                                            key={format.id}
+                                            isSelected={exportBackends.includes(format.id)}
+                                            onChange={(checked) =>
+                                                setExportBackends((prev) =>
+                                                    checked
+                                                        ? [...prev, format.id]
+                                                        : prev.filter((backend) => backend !== format.id)
+                                                )
+                                            }
+                                            isDisabled={baseModel !== undefined}
+                                        >
+                                            {format.label}
+                                        </Checkbox>
+                                    ))}
+                                </Flex>
+                            </Flex>
                             <TrainingParameters
                                 maxEpochs={maxEpochs}
                                 onMaxEpochsChange={setMaxEpochs}

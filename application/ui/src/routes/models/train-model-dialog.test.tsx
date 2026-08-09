@@ -175,7 +175,6 @@ describe('TrainModelDialog', () => {
         expect(submittedPayload?.training_engine).toBe('lerobot');
         expect(submittedPayload?.policy).toBe('diffusion');
     });
-
     it('preselects the LeRobot engine when continuing a LeRobot model', async () => {
         mockProjectWithRemoteTrainer();
         const lerobotBaseModel = {
@@ -187,8 +186,41 @@ describe('TrainModelDialog', () => {
         renderDialog({ baseModel: lerobotBaseModel });
 
         expect(await screen.findByRole('button', { name: /lerobot/i })).toBeInTheDocument();
+
         expect(await screen.findByRole('button', { name: /select diffusion policy/i })).toBeInTheDocument();
         // The engine picker is locked when continuing a model.
         expect(screen.getByRole('button', { name: /lerobot/i })).toBeDisabled();
+    });
+
+    it('maps model cameras to dataset cameras and sends export formats', async () => {
+        const user = userEvent.setup();
+        const payloads: Array<Record<string, unknown>> = [];
+        mockProjectWithRemoteTrainer();
+        server.use(
+            http.get('/api/dataset/{dataset_id}/cameras', () =>
+                HttpResponse.json(['observation.images.front', 'observation.images.left'])
+            ),
+            http.post('/api/jobs:train', async ({ request }) => {
+                payloads.push((await request.json()) as Record<string, unknown>);
+                return HttpResponse.json({}, { status: 201 });
+            })
+        );
+
+        renderDialog();
+
+        await user.click(await screen.findByRole('button', { name: /select…/i }));
+        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        await user.click(await screen.findByRole('button', { name: /select smolvla policy/i }));
+
+        // The three SmolVLA camera slots are offered, each listing the dataset cameras.
+        await user.click(await screen.findByRole('button', { name: /camera 1/i }));
+        await user.click(await screen.findByRole('option', { name: 'front' }));
+
+        await user.click(screen.getByRole('button', { name: 'Train' }));
+
+        await waitFor(() => expect(payloads).toHaveLength(1));
+        const submittedPayload = payloads[0];
+        expect(submittedPayload?.rename_map).toEqual({ camera1: 'front' });
+        expect(submittedPayload?.export_backends).toEqual(['torch', 'openvino']);
     });
 });
