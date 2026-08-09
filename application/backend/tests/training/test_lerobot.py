@@ -22,7 +22,6 @@ from services.training_backends._log_format import render_progress_log
 from training import TrainingJobSpec
 from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, run_training_job
 from training.lerobot import (
-    EPOCHS,
     _build_config,
     _latest_checkpoint,
     _MetricsWriter,
@@ -94,21 +93,27 @@ class TestDispatch:
 
 
 class TestDeviceResolution:
-    def test_xpu_is_rejected(self) -> None:
-        with pytest.raises(ValueError, match="XPU"):
-            _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot", device_type="xpu"))
-
     def test_unknown_device_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="Unsupported device"):
             _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot", device_type="npu"))
 
-    def test_cpu_when_no_cuda_available(self) -> None:
-        with patch("torch.cuda.is_available", return_value=False):
+    def test_cpu_when_no_accelerator_available(self) -> None:
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.xpu.is_available", return_value=False),
+        ):
             assert _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot")) == _cpu()
 
     def test_cuda_when_available(self) -> None:
         with patch("torch.cuda.is_available", return_value=True):
             assert _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot")) == _cuda()
+
+    def test_xpu_when_cuda_unavailable(self) -> None:
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.xpu.is_available", return_value=True),
+        ):
+            assert _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot")) == _xpu()
 
     def test_explicit_cuda_device_index(self) -> None:
         with patch("torch.cuda.is_available", return_value=True):
@@ -120,6 +125,17 @@ class TestDeviceResolution:
     def test_cuda_requested_but_unavailable(self) -> None:
         with patch("torch.cuda.is_available", return_value=False), pytest.raises(ValueError, match="not available"):
             _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot", device_type="cuda"))
+
+    def test_explicit_xpu_device_index(self) -> None:
+        with patch("torch.xpu.is_available", return_value=True):
+            device = _resolve_device(
+                TrainingJobSpec(policy="act", training_engine="lerobot", device_type="xpu", device_index=1)
+            )
+        assert str(device) == "xpu:1"
+
+    def test_xpu_requested_but_unavailable(self) -> None:
+        with patch("torch.xpu.is_available", return_value=False), pytest.raises(ValueError, match="not available"):
+            _resolve_device(TrainingJobSpec(policy="act", training_engine="lerobot", device_type="xpu"))
 
 
 def _cpu() -> object:
@@ -134,36 +150,42 @@ def _cuda() -> object:
     return torch.device("cuda")
 
 
+def _xpu() -> object:
+    import torch
+
+    return torch.device("xpu")
+
+
 class TestTotalFrames:
     def test_reads_total_frames_from_info_json(self, tmp_path: Path) -> None:
         assert _total_frames(_snapshot(tmp_path, total_frames=42)) == 42
 
 
 class TestConfigDerivation:
-    def test_steps_are_epochs_of_the_dataset(self, tmp_path: Path) -> None:
+    def test_steps_use_the_job_max_steps(self, tmp_path: Path) -> None:
         snapshot = _snapshot(tmp_path, total_frames=600)
         cfg = _build_config(
-            TrainingJobSpec(policy="act", training_engine="lerobot"),
+            TrainingJobSpec(policy="act", training_engine="lerobot", max_steps=1234),
             dataset_root=snapshot,
             device=_cpu(),
             cache_dir=tmp_path / "cache",
             resume_checkpoint=None,
         )
 
-        assert cfg.steps == EPOCHS * ((600 + 7) // 8)
+        assert cfg.steps == 1234
         assert cfg.batch_size == 8
 
     @pytest.mark.parametrize(
-        ("policy", "batch_size", "lr", "weight_decay", "grad_clip"),
+        ("policy", "lr", "weight_decay", "grad_clip"),
         [
-            ("act", 8, 1e-4, 1e-4, 10.0),
-            ("diffusion", 8, 1e-4, 1e-2, 10.0),
-            ("smolvla", 4, 2e-5, 1e-2, 1.0),
-            ("pi05", 4, 1e-4, 1e-2, 1.0),
+            ("act", 1e-4, 1e-4, 10.0),
+            ("diffusion", 1e-4, 1e-2, 10.0),
+            ("smolvla", 2e-5, 1e-2, 1.0),
+            ("pi05", 1e-4, 1e-2, 1.0),
         ],
     )
     def test_policy_defaults(
-        self, tmp_path: Path, policy: str, batch_size: int, lr: float, weight_decay: float, grad_clip: float
+        self, tmp_path: Path, policy: str, lr: float, weight_decay: float, grad_clip: float
     ) -> None:
         cfg = _build_config(
             TrainingJobSpec(policy=policy, training_engine="lerobot"),
@@ -173,7 +195,7 @@ class TestConfigDerivation:
             resume_checkpoint=None,
         )
 
-        assert cfg.batch_size == batch_size
+        assert cfg.batch_size == 8
         assert cfg.optimizer.lr == lr
         assert cfg.optimizer.weight_decay == weight_decay
         assert cfg.optimizer.grad_clip_norm == grad_clip
@@ -408,16 +430,16 @@ class TestJobLifecycle:
         train.assert_called_once()
         publish.assert_not_called()
 
-    def test_device_rejection_fails_before_training(self, tmp_path: Path) -> None:
+    def test_unknown_device_fails_before_training(self, tmp_path: Path) -> None:
         from training.lerobot import run_lerobot_training_job
 
         with (
             patch("training.lerobot._train") as train,
             patch("training.lerobot._publish") as publish,
-            pytest.raises(ValueError, match="XPU"),
+            pytest.raises(ValueError, match="Unsupported device"),
         ):
             run_lerobot_training_job(
-                TrainingJobSpec(policy="act", training_engine="lerobot", device_type="xpu"),
+                TrainingJobSpec(policy="act", training_engine="lerobot", device_type="npu"),
                 dataset_root=tmp_path / "snapshot",
                 output_dir=tmp_path / "model",
                 cache_dir=tmp_path / "cache" / "job",

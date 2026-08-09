@@ -25,7 +25,9 @@ After training, the final checkpoint is published like a physicalai model:
 - ``exports/torch/`` — the torch export, via the LeRobotPolicy wrapper (the
   only export backend it supports).
 
-LeRobot has no XPU support, so the engine is gated to CUDA/CPU.
+The engine runs on CUDA, XPU, or CPU, using the job's step budget
+(``max_steps``) and batch size. The step budget is not derived from the
+dataset size: what the job requests is what trains.
 """
 
 from __future__ import annotations
@@ -71,17 +73,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-EPOCHS = 5
-"""Training epochs per job (LeRobot AGENT_GUIDE default)."""
-
-BATCH_SIZES: dict[str, int] = {
-    "act": 8,
-    "diffusion": 8,
-    "smolvla": 4,
-    "pi05": 4,
-}
-"""Per-policy batch sizes from the LeRobot AGENT_GUIDE (RTX 4090-class GPUs)."""
-
 _LR: dict[str, float] = {"act": 1e-4, "diffusion": 1e-4, "smolvla": 2e-5, "pi05": 1e-4}
 _WEIGHT_DECAY: dict[str, float] = {"act": 1e-4, "diffusion": 1e-2, "smolvla": 1e-2, "pi05": 1e-2}
 _GRAD_CLIP: dict[str, float] = {"act": 10.0, "diffusion": 10.0, "smolvla": 1.0, "pi05": 1.0}
@@ -121,7 +112,7 @@ def run_lerobot_training_job(
         spec, dataset_root=Path(dataset_root), device=device, cache_dir=cache_dir, resume_checkpoint=resume_checkpoint
     )
 
-    _train(cfg, device=device, report=report, should_stop=should_stop)
+    _train(cfg, device=device, report=report, should_stop=should_stop, max_steps=spec.max_steps)
     if should_stop():
         logger.info("LeRobot training canceled; skipping publish")
         return
@@ -132,21 +123,26 @@ def run_lerobot_training_job(
 def _resolve_device(spec: TrainingJobSpec) -> torch.device:
     """Return the device to train on.
 
-    LeRobot has no XPU support, so the engine only runs on CUDA (preferred) or
-    CPU, matching what the UI exposes for LeRobot jobs. ``device_type`` is None
-    when the UI lets the machine decide.
+    LeRobot runs on CUDA (preferred), XPU, or CPU. ``device_type`` is None when
+    the UI lets the machine decide (prefer CUDA, then XPU, then CPU).
     """
     requested = spec.device_type
-    if requested == "xpu":
-        raise ValueError("LeRobot training does not support the XPU accelerator. Use CUDA or CPU instead.")
-    if requested in (None, "cpu"):
+    if requested is None:
         if torch.cuda.is_available():
             return torch.device("cuda")
+        if torch.xpu.is_available():
+            return torch.device("xpu")
+        return torch.device("cpu")
+    if requested == "cpu":
         return torch.device("cpu")
     if requested == "cuda":
         if not torch.cuda.is_available():
             raise ValueError("CUDA was requested for LeRobot training but is not available.")
         return torch.device(f"cuda:{spec.device_index or 0}")
+    if requested == "xpu":
+        if not torch.xpu.is_available():
+            raise ValueError("XPU was requested for LeRobot training but is not available.")
+        return torch.device(f"xpu:{spec.device_index or 0}")
     msg = f"Unsupported device for LeRobot training: {requested!r}"
     raise ValueError(msg)
 
@@ -174,18 +170,16 @@ def _build_config(
 ) -> TrainPipelineConfig:
     """Build the LeRobot ``TrainPipelineConfig``.
 
-    Fresh runs derive batch size, steps, optimizer, and LR schedule from the
-    policy name and dataset size (see module constants). Resumed runs load the
-    checkpoint's own ``train_config.json`` so optimizer, scheduler, and sampler
+    Fresh runs use the job's own step budget and batch size. Resumed runs load
+    the checkpoint's ``train_config.json`` so optimizer, scheduler, and sampler
     semantics come from the original run; only the dataset root, output dir,
     and device are overridden.
     """
     if resume_checkpoint is not None:
         return _resume_config(resume_checkpoint, dataset_root=dataset_root, device=device, cache_dir=cache_dir)
 
-    batch_size = BATCH_SIZES.get(spec.policy, spec.batch_size)
-    total_frames = _total_frames(dataset_root)
-    steps = EPOCHS * math.ceil(total_frames / batch_size)
+    batch_size = spec.batch_size
+    steps = max(1, spec.max_steps)
     lr = _LR.get(spec.policy, 1e-4)
     weight_decay = _WEIGHT_DECAY.get(spec.policy, 1e-2)
     grad_clip_norm = _GRAD_CLIP.get(spec.policy, 1.0)
@@ -268,6 +262,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     device: torch.device,
     report: ReportFn,
     should_stop: StopFn,
+    max_steps: int,
 ) -> None:
     """Run the vendored single-process training loop."""
     assert cfg.policy is not None  # noqa: S101
@@ -301,9 +296,8 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         assert cfg.checkpoint_path is not None  # noqa: S101
         checkpoint_path = cfg.checkpoint_path
         step, optimizer, lr_scheduler = load_training_state(checkpoint_path, optimizer, lr_scheduler)
-        # Extend the run by EPOCHS more, same basis as a fresh job.
-        steps_per_epoch = math.ceil(_total_frames(cfg.dataset.root) / cfg.batch_size)
-        cfg.steps = step + EPOCHS * steps_per_epoch
+        # A resumed run continues for the job's step budget, same basis as a fresh run.
+        cfg.steps = step + max(1, max_steps)
         logger.info("Resuming LeRobot training at step %d (total %d)", step, cfg.steps)
 
     # Data order is a pure function of (seed, epoch); resume is sample-exact.
@@ -335,7 +329,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         persistent_workers=cfg.persistent_workers and cfg.num_workers > 0,
     )
 
-    eval_dataloader = None
+    eval_dataloader: torch.utils.data.DataLoader[Any] | None = None
     if eval_dataset is not None:
         eval_ds: object = eval_dataset
         if cfg.max_eval_samples > 0 and hasattr(eval_dataset, "hf_dataset"):
@@ -382,6 +376,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
             if cam_key in batch and batch[cam_key].dtype == torch.uint8:
                 batch[cam_key] = batch[cam_key].to(dtype=torch.float32) / 255.0
         batch = preprocessor(batch)
+        batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
 
         with autocast_ctx or nullcontext():
             loss, _output_dict = policy.forward(batch)
@@ -402,7 +397,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         if cfg.log_freq > 0 and step_done % cfg.log_freq == 0:
             metrics.on_log_step(step_done, loss.item())
         if cfg.eval_steps > 0 and eval_dataloader is not None and step_done % cfg.eval_steps == 0:
-            eval_loss = _evaluate(policy, preprocessor, eval_dataloader, dataset.meta.camera_keys, autocast_ctx)
+            eval_loss = _evaluate(policy, preprocessor, eval_dataloader, dataset.meta.camera_keys, autocast_ctx, device)
             metrics.on_eval(step_done, eval_loss)
         if cfg.save_checkpoint and (step_done % cfg.save_freq == 0 or step_done == cfg.steps):
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step_done)
@@ -429,6 +424,7 @@ def _evaluate(
     eval_dataloader: Any,
     camera_keys: list[str],
     autocast_ctx: Any,
+    device: torch.device,
 ) -> float:
     """Compute mean eval loss over the held-out dataloader."""
     policy.eval()
@@ -440,6 +436,9 @@ def _evaluate(
                 if cam_key in eval_batch and eval_batch[cam_key].dtype == torch.uint8:
                     eval_batch[cam_key] = eval_batch[cam_key].to(dtype=torch.float32) / 255.0
             preprocessed_batch = preprocessor(eval_batch)
+            preprocessed_batch = {
+                k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in preprocessed_batch.items()
+            }
             loss, _ = policy.forward(preprocessed_batch)
             eval_loss_sum += loss.item()
             n_batches += 1
