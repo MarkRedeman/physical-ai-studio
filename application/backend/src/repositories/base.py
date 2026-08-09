@@ -3,6 +3,7 @@ from collections.abc import Callable
 from typing import Any, Generic, TypeVar, cast
 from uuid import UUID
 
+from loguru import logger
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.selectable import Select, and_
@@ -84,7 +85,18 @@ class BaseRepository(Generic[ModelType, SchemaType], metaclass=abc.ABCMeta):
             query = query.order_by(order_by.asc() if ascending else order_by.desc())
         results = await self.db.execute(query)
         scalars = results.scalars().all()
-        return [self.from_schema(result) for result in scalars]
+        items: list[ModelType] = []
+        for result in scalars:
+            try:
+                items.append(self.from_schema(result))
+            except Exception as exc:
+                logger.warning(
+                    "Skipping {} row with id={} because from_schema failed: {}",
+                    self.schema.__name__,
+                    getattr(result, "id", None),
+                    exc,
+                )
+        return items
 
     async def save(self, item: ModelType) -> ModelType:
         schema_item: SchemaType = self.to_schema(item)
