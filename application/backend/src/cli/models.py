@@ -90,7 +90,7 @@ def import_dir(
     "--backend",
     "backends",
     multiple=True,
-    type=click.Choice(["torch", "openvino"]),
+    type=click.Choice(["torch", "openvino", "onnx", "executorch"]),
     help="Backend(s) to export to (repeatable). Defaults to torch and openvino.",
 )
 @click.option(

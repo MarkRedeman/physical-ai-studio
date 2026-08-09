@@ -1,12 +1,13 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-"""Re-export trained models to torch and OpenVINO.
+"""Re-export trained models to their supported backends.
 
 Creates a new, complete model record (checkpoint + ``version_0/`` logs +
-fresh ``exports/{torch,openvino}``) from an existing model, for both the
-physicalai-train engine and the LeRobot engine. Optionally applies NNCF INT8
-weight compression to the OpenVINO export.
+fresh ``exports/{backend}``) from an existing model, for both the
+physicalai-train engine and the LeRobot engine. The requested backends are
+validated against the loaded policy's own supported backends. Optionally
+applies NNCF INT8 weight compression to an OpenVINO export.
 
 Self-contained: the heavy lifting is delegated to the policy export machinery
 (:mod:`physicalai.export`) and :class:`ModelCompressionService`. Removing this
@@ -36,7 +37,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_EXPORT_BACKENDS = {ExportBackend.TORCH, ExportBackend.OPENVINO}
 _WEIGHTS_ONLY_POLICIES = frozenset({"pi0"})
 _LEROBOT_ENGINE = "lerobot"
 
@@ -95,7 +95,7 @@ class ModelExportService:
         backends: list[str | ExportBackend] | None = None,
         compress: bool = True,
     ) -> Model:
-        """Re-export a model from its checkpoint to torch and/or OpenVINO.
+        """Re-export a model from its checkpoint to its supported backends.
 
         Creates a new, complete model record: the checkpoint and training logs
         are copied over, and fresh exports are produced under ``exports/``. When
@@ -115,7 +115,8 @@ class ModelExportService:
 
         Raises:
             ModelExportError: If the model has no PyTorch checkpoint, a
-                requested backend is unsupported, or export fails.
+                requested backend is not supported by the policy, or export
+                fails.
         """
         settings = get_settings()
 
@@ -128,10 +129,6 @@ class ModelExportService:
             raise ModelExportError(msg)
 
         selected = [ExportBackend(b) for b in (backends or [ExportBackend.TORCH, ExportBackend.OPENVINO])]
-        unsupported = set(selected) - _SUPPORTED_EXPORT_BACKENDS
-        if unsupported:
-            msg = f"Re-export does not support backend(s): {sorted(b.value for b in unsupported)}"
-            raise ModelExportError(msg)
 
         new_model_id = uuid4()
         new_model_dir = settings.models_dir / str(new_model_id)
@@ -141,6 +138,12 @@ class ModelExportService:
         logger.info("Re-exporting model %s to %s", model_id, [b.value for b in selected])
         try:
             policy = cls._load_policy(original, checkpoint)
+            exportable = cast("ExportablePolicyMixin", policy)
+            supported = {ExportBackend(b) for b in exportable.get_supported_export_backends()}
+            unsupported = set(selected) - supported
+            if unsupported:
+                msg = f"Model does not support backend(s): {sorted(b.value for b in unsupported)}"
+                raise ModelExportError(msg)
             cls._export_policy(policy, original, exports_dir, selected)
 
             if compress and ExportBackend.OPENVINO in selected:

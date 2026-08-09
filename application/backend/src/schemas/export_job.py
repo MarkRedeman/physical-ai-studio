@@ -14,7 +14,7 @@ class ModelExportJobPayload(BaseModel):
     """What a model re-export job should produce."""
 
     model_id: UUID = Field(..., description="Source model to re-export")
-    backends: list[Literal["torch", "openvino"]] = Field(
+    backends: list[Literal["torch", "openvino", "onnx", "executorch"]] = Field(
         default=["torch", "openvino"],
         description="Backends to export to",
     )

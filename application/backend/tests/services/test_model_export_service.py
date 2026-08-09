@@ -42,6 +42,13 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def _mock_policy(backends: list[str]) -> MagicMock:
+    """Return a fake loaded policy advertising the given export backends."""
+    policy = MagicMock()
+    policy.get_supported_export_backends.return_value = backends
+    return policy
+
+
 def _patch_db(model: Model):
     """Patch get_async_db_session_ctx + ModelService to serve a fake model."""
     session = MagicMock()
@@ -78,7 +85,10 @@ class TestModelExportService:
             ctx_patch,
             svc_patch,
             patch("services.model_export_service.get_settings", return_value=settings),
-            patch("services.model_export_service.ModelExportService._load_policy") as load_policy,
+            patch(
+                "services.model_export_service.ModelExportService._load_policy",
+                return_value=_mock_policy(["torch", "openvino"]),
+            ) as load_policy,
             patch(
                 "services.model_export_service.ModelExportService._export_policy",
                 side_effect=lambda _policy, _model, exports_dir, backends: (exports_dir / "openvino").mkdir(
@@ -113,7 +123,10 @@ class TestModelExportService:
             ctx_patch,
             svc_patch,
             patch("services.model_export_service.get_settings", return_value=settings),
-            patch("services.model_export_service.ModelExportService._load_policy"),
+            patch(
+                "services.model_export_service.ModelExportService._load_policy",
+                return_value=_mock_policy(["torch", "openvino"]),
+            ),
             patch("services.model_export_service.ModelExportService._export_policy"),
             patch("services.model_export_service.ModelCompressionService._compress_openvino_dir"),
         ):
@@ -135,7 +148,7 @@ class TestModelExportService:
         ):
             run(ModelExportService.export_model(model.id))
 
-    def test_export_rejects_unsupported_backend(self, tmp_path: Path, settings) -> None:
+    def test_export_rejects_backend_not_supported_by_policy(self, tmp_path: Path, settings) -> None:
         src = tmp_path / "source"
         src.mkdir(parents=True)
         (src / "model.ckpt").write_bytes(b"ckpt")
@@ -146,9 +159,13 @@ class TestModelExportService:
             ctx_patch,
             svc_patch,
             patch("services.model_export_service.get_settings", return_value=settings),
-            pytest.raises(ModelExportError, match="onnx"),
+            patch(
+                "services.model_export_service.ModelExportService._load_policy",
+                return_value=_mock_policy(["torch"]),
+            ),
+            pytest.raises(ModelExportError, match="openvino"),
         ):
-            run(ModelExportService.export_model(model.id, backends=["onnx"]))
+            run(ModelExportService.export_model(model.id, backends=["openvino"]))
 
     def test_export_cleans_up_on_failure(self, tmp_path: Path, settings) -> None:
         src = tmp_path / "source"
