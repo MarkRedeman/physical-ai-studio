@@ -119,9 +119,9 @@ class TestCompressModel:
             ctx_patch,
             svc_patch,
             patch("services.model_compression_service.get_settings", return_value=settings),
+            pytest.raises(ModelCompressionError, match="no OpenVINO export"),
         ):
-            with pytest.raises(ModelCompressionError, match="no OpenVINO export"):
-                run(ModelCompressionService.compress_model(model.id))
+            run(ModelCompressionService.compress_model(model.id))
 
     def test_compress_requires_nncf(self, tmp_path: Path, settings) -> None:
         src = tmp_path / "source"
@@ -137,6 +137,6 @@ class TestCompressModel:
             svc_patch,
             patch("services.model_compression_service.get_settings", return_value=settings),
             patch("builtins.__import__", side_effect=ImportError("nncf")),
+            pytest.raises(ModelCompressionError, match="nncf"),
         ):
-            with pytest.raises(ModelCompressionError, match="nncf"):
-                run(ModelCompressionService.compress_model(model.id))
+            run(ModelCompressionService.compress_model(model.id))
