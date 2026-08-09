@@ -66,8 +66,8 @@ const Unavailable = ({ backend }: { backend: InferenceBackendConfig }) => {
                 <Heading>Export missing</Heading>
                 <Content>
                     <Text>
-                        This model does not include an exported model for {backend.label}. Try retraining the model to
-                        restart the model export.
+                        This model does not include an exported model for {backend.label}. If it&apos;s a supported
+                        backend, you can try exporting it below.
                     </Text>
                 </Content>
             </ContextualHelp>
@@ -124,9 +124,11 @@ interface BackendCardProps {
     modelDetail: ModelDetailResponse;
     backendType: ExportBackend;
     model: SchemaModel;
+    isExporting: boolean;
+    onExport: (backends: ExportBackend[]) => void;
 }
 
-const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
+const BackendCard = ({ modelDetail, backendType, model, isExporting, onExport }: BackendCardProps) => {
     const exportDetail = modelDetail.exports.find(({ type }) => type === backendType);
     const isAvailable = exportDetail !== undefined;
     const backend = INFERENCE_BACKENDS[backendType];
@@ -159,7 +161,7 @@ const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
                     <Flex gap='size-400' marginTop='size-100' width='100%'>
                         <ModelFormatSize exportDetail={exportDetail} />
                         <ModelPrecision exportDetail={exportDetail} />
-                        {isAvailable && (
+                        {isAvailable ? (
                             <View marginStart='auto' alignSelf={'center'}>
                                 <Button
                                     href={downloadUrl}
@@ -179,6 +181,16 @@ const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
                                         <DownloadIcon />
                                     </Icon>
                                     <span>Download</span>
+                                </Button>
+                            </View>
+                        ) : (
+                            <View marginStart='auto' alignSelf={'center'}>
+                                <Button
+                                    variant='secondary'
+                                    isDisabled={isExporting}
+                                    onPress={() => onExport([backendType])}
+                                >
+                                    <span>{isExporting ? 'Exporting…' : 'Try to export'}</span>
                                 </Button>
                             </View>
                         )}
@@ -256,6 +268,17 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                             backendType={backendType}
                             model={model}
                             modelDetail={modelDetail}
+                            isExporting={exportMutation.isPending}
+                            onExport={(selectedBackends) =>
+                                exportMutation.mutate({
+                                    params: { path: { model_id: model.id! } },
+                                    body: {
+                                        model_id: model.id!,
+                                        backends: selectedBackends,
+                                        compress: true,
+                                    },
+                                })
+                            }
                         />
                     );
                 })}
