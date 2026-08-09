@@ -29,6 +29,18 @@ def test_unsupported_policy_rejected(policy: str) -> None:
         SubmitJobRequest(spec=TrainingJobSpec(policy=policy))
 
 
+def test_lerobot_engine_allows_its_own_policy_set() -> None:
+    """LeRobot jobs accept policies physicalai doesn't support (e.g. diffusion)."""
+    request = SubmitJobRequest(spec=TrainingJobSpec(policy="diffusion", training_engine="lerobot"))
+    assert request.spec.policy == "diffusion"
+
+
+def test_lerobot_engine_rejects_policies_lerobot_does_not_support() -> None:
+    """pi0 has no LeRobot implementation; it must fail at submission time."""
+    with pytest.raises(ValidationError):
+        SubmitJobRequest(spec=TrainingJobSpec(policy="pi0", training_engine="lerobot"))
+
+
 def test_unknown_spec_field_rejected() -> None:
     """A stray field is a client/server mismatch, not something to ignore."""
     with pytest.raises(ValidationError):
