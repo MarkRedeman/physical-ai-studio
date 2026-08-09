@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from schemas.base_job import BaseJob, JobType
 from schemas.dataset_import_job import DatasetImportJobPayload
+from schemas.export_job import ModelExportJob, ModelExportJobPayload
 from schemas.hardware import DeviceType
 
 
@@ -222,10 +223,10 @@ class DatasetImportJob(BaseJob):
     payload: DatasetImportJobPayload
 
 
-JobPayload = TrainJobPayload | DatasetImportJobPayload
+JobPayload = TrainJobPayload | DatasetImportJobPayload | ModelExportJobPayload
 
 Job = Annotated[
-    TrainJob | DatasetImportJob,
+    TrainJob | DatasetImportJob | ModelExportJob,
     Field(discriminator="type"),
 ]
 

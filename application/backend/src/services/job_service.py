@@ -16,7 +16,9 @@ from exceptions import (
 from repositories import JobRepository
 from schemas import Job
 from schemas.base_job import JobStatus, JobType
+from schemas.export_job import ModelExportJob, ModelExportJobPayload
 from schemas.job import JobPayload, TrainingTarget, TrainJob, TrainJobPayload
+from services.model_service import ModelService
 from services.remote_trainer_service import RemoteTrainerService
 from services.system_service import SystemService
 
@@ -88,8 +90,20 @@ class JobService:
         return await self.repo.get_pending_job_by_type(JobType.TRAINING)
 
     async def get_pending_train_jobs(self) -> list[Job]:
-        """Return pending training jobs in submission order."""
         return await self.repo.get_pending_jobs_by_type(JobType.TRAINING)
+
+    async def submit_model_export_job(self, payload: ModelExportJobPayload) -> Job:
+        """Validate and persist a model re-export job."""
+        model = await ModelService(self.session).get_model_by_id(payload.model_id)
+        job = ModelExportJob(
+            project_id=model.project_id,
+            payload=payload,
+            message="Model export job submitted",
+        )
+        return await self.repo.save(job)
+
+    async def get_pending_model_export_jobs(self) -> list[Job]:
+        return await self.repo.get_pending_jobs_by_type(JobType.MODEL_EXPORT)
 
     async def update_job_payload(
         self,
