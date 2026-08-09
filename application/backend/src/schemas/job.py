@@ -29,6 +29,14 @@ class TrainingTarget(StrEnum):
     REMOTE = "remote"
 
 
+# Policies each training engine can run. The LeRobot engine trains with
+# LeRobot's own loop and policy implementations; the physicalai engine uses the
+# physicalai-train Lightning stack. Kept in sync with the remote trainer's
+# validator (trainer/schemas.py) so local and remote jobs reject the same input.
+_SUPPORTED_POLICIES = frozenset({"act", "pi0", "pi05", "smolvla"})
+_SUPPORTED_LEROBOT_POLICIES = frozenset({"act", "diffusion", "pi05", "smolvla"})
+
+
 class JobList(BaseModel):
     jobs: list["Job"]
 
@@ -153,6 +161,20 @@ class TrainJobPayload(BaseModel):
     snapshot_id: UUID | None = Field(
         default=None, description="Dataset snapshot id retained while a remote run is in flight (for model provenance)"
     )
+
+    @model_validator(mode="after")
+    def validate_policy_for_engine(self) -> "TrainJobPayload":
+        """Reject a policy the chosen training engine cannot run.
+
+        Catches engine/policy mismatches (e.g. ``diffusion`` on the physicalai
+        engine, ``pi0`` on LeRobot) at submission time with a 422 instead of a
+        job that fails minutes later when the policy is constructed.
+        """
+        supported = _SUPPORTED_LEROBOT_POLICIES if self.training_engine == "lerobot" else _SUPPORTED_POLICIES
+        if self.policy not in supported:
+            msg = f"Unsupported policy {self.policy!r} for training engine {self.training_engine!r}"
+            raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def validate_training_target(self) -> "TrainJobPayload":

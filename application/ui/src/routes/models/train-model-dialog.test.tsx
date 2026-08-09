@@ -123,4 +123,72 @@ describe('TrainModelDialog', () => {
         expect(await screen.findByRole('option', { name: /this machine \(local\)/i })).toBeInTheDocument();
         expect(screen.queryByRole('option', { name: remoteTrainer.name })).not.toBeInTheDocument();
     });
+
+    it('sends the default physicalai engine when training a new model', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        const payloads: Record<string, unknown>[] = [];
+        server.use(
+            http.post('/api/jobs:train', async ({ request }) => {
+                payloads.push((await request.json()) as Record<string, unknown>);
+                return HttpResponse.json({}, { status: 201 });
+            })
+        );
+
+        renderDialog();
+
+        await user.click(await screen.findByRole('button', { name: /select…/i }));
+        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        await user.click(screen.getByRole('button', { name: 'Train' }));
+
+        await waitFor(() => expect(payloads).toHaveLength(1));
+        const submittedPayload = payloads[0];
+        expect(submittedPayload?.training_engine).toBe('physicalai');
+        expect(submittedPayload?.policy).toBe('act');
+    });
+
+    it('switching to LeRobot gates the policy list and sends the engine', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        const payloads: Record<string, unknown>[] = [];
+        server.use(
+            http.post('/api/jobs:train', async ({ request }) => {
+                payloads.push((await request.json()) as Record<string, unknown>);
+                return HttpResponse.json({}, { status: 201 });
+            })
+        );
+
+        renderDialog();
+
+        await user.click(await screen.findByRole('button', { name: /select…/i }));
+        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        // Only LeRobot offers the Diffusion Policy.
+        expect(screen.queryByRole('button', { name: /select diffusion policy/i })).not.toBeInTheDocument();
+        await user.click(await screen.findByRole('button', { name: /physicalai \(lightning\)/i }));
+        await user.click(await screen.findByRole('option', { name: /lerobot/i }));
+        const diffusionCard = await screen.findByRole('button', { name: /select diffusion policy/i });
+        await user.click(diffusionCard);
+        await user.click(screen.getByRole('button', { name: 'Train' }));
+
+        await waitFor(() => expect(payloads).toHaveLength(1));
+        const submittedPayload = payloads[0];
+        expect(submittedPayload?.training_engine).toBe('lerobot');
+        expect(submittedPayload?.policy).toBe('diffusion');
+    });
+
+    it('preselects the LeRobot engine when continuing a LeRobot model', async () => {
+        mockProjectWithRemoteTrainer();
+        const lerobotBaseModel = {
+            ...baseModel,
+            policy: 'diffusion',
+            properties: { training_engine: 'lerobot' },
+        } as SchemaModel;
+
+        renderDialog({ baseModel: lerobotBaseModel });
+
+        expect(await screen.findByRole('button', { name: /lerobot/i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /select diffusion policy/i })).toBeInTheDocument();
+        // The engine picker is locked when continuing a model.
+        expect(screen.getByRole('button', { name: /lerobot/i })).toBeDisabled();
+    });
 });

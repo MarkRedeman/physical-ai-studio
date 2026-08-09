@@ -40,6 +40,8 @@ export type SchemaTrainJob = Omit<SchemaJob, 'payload'> & {
     payload: SchemaJob['payload'];
 };
 
+export type TrainingEngine = SchemaJob['payload']['training_engine'];
+
 const GB = 1024 ** 3;
 
 /** Format bytes as a human-readable GB string. */
@@ -52,30 +54,42 @@ const formatBytes = (bytes: number): string => {
  * Available training policies with hardware requirements.
  *
  * `minVRAM` is the estimated minimum VRAM (in bytes) required to train with batch_size=1.
+ * `engines` lists the training engines that can run the policy.
  */
 export const MODELS: ReadonlyArray<{
     id: string;
     name: string;
     description: string;
     minVRAM: number;
+    engines: ReadonlyArray<TrainingEngine>;
 }> = [
     {
         id: 'act',
         name: 'ACT',
         description: 'Action Chunking with Transformers, lightweight and fast to train',
         minVRAM: 2 * GB,
+        engines: ['physicalai', 'lerobot'],
+    },
+    {
+        id: 'diffusion',
+        name: 'Diffusion Policy',
+        description: 'Diffusion-based action generation, trained with the LeRobot engine',
+        minVRAM: 8 * GB,
+        engines: ['lerobot'],
     },
     {
         id: 'smolvla',
         name: 'SmolVLA',
         description: 'Small Vision-Language-Action model based on SmolVLM2-500M',
         minVRAM: 8 * GB,
+        engines: ['physicalai', 'lerobot'],
     },
     {
         id: 'pi05',
         name: 'Pi0.5',
         description: 'Enhanced Pi0 with discrete state encoding and longer context',
         minVRAM: 16 * GB,
+        engines: ['physicalai', 'lerobot'],
     },
 ];
 
@@ -95,19 +109,27 @@ interface PolicySelectionProps {
     onSelectionChange: (policy: string) => void;
     isDisabled?: boolean;
     trainingDevice: SchemaDeviceInfo | null;
+    engine: TrainingEngine;
 }
 
-const PolicySelection = ({ selectedPolicy, onSelectionChange, isDisabled, trainingDevice }: PolicySelectionProps) => {
+const PolicySelection = ({
+    selectedPolicy,
+    onSelectionChange,
+    isDisabled,
+    trainingDevice,
+    engine,
+}: PolicySelectionProps) => {
     const availableVram = trainingDevice?.memory ?? 0;
 
-    const selectedModel = MODELS.find((m) => m.id === selectedPolicy) ?? null;
+    const engineModels = MODELS.filter((model) => model.engines.includes(engine));
+    const selectedModel = engineModels.find((m) => m.id === selectedPolicy) ?? null;
     const hasInsufficientVram = selectedModel !== null && availableVram > 0 && selectedModel.minVRAM > availableVram;
 
     return (
         <Flex direction='column' gap='size-100'>
             <Text UNSAFE_style={{ fontSize: 12 }}>Policy</Text>
             <div className={classes.policyGrid}>
-                {MODELS.map((model) => {
+                {engineModels.map((model) => {
                     const isSelected = selectedPolicy === model.id;
                     if (isDisabled && !isSelected) {
                         return null;
@@ -252,6 +274,7 @@ interface TrainingParametersProps {
     onCompileModelChange: (value: boolean) => void;
     isAutoScaleBatchDisabled: boolean;
     deviceType: string | undefined;
+    engine: TrainingEngine;
 }
 
 const TrainingParameters = ({
@@ -269,135 +292,147 @@ const TrainingParameters = ({
     onCompileModelChange,
     isAutoScaleBatchDisabled,
     deviceType,
-}: TrainingParametersProps) => (
-    <Flex direction='column' gap='size-150' width='100%'>
-        <Flex direction='row' gap='size-150' width='100%'>
-            <Flex direction='column' gap='size-150' width='100%'>
+    engine,
+}: TrainingParametersProps) => {
+    const isLerobot = engine === 'lerobot';
+
+    return (
+        <Flex direction='column' gap='size-150' width='100%'>
+            {isLerobot && (
+                <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
+                    LeRobot derives the step budget from the dataset size (5 epochs) and manages batch size, precision,
+                    and compilation automatically.
+                </Text>
+            )}
+            <Flex direction='row' gap='size-150' width='100%'>
+                <Flex direction='column' gap='size-150' width='100%'>
+                    <NumberField
+                        label='Batch Size'
+                        value={batchSize}
+                        onChange={onBatchSizeChange}
+                        minValue={1}
+                        maxValue={256}
+                        step={1}
+                        width='100%'
+                        isDisabled={autoScaleBatchSize || isLerobot}
+                        flex
+                    />
+                    <Flex direction='row' gap='size-100' alignItems='center'>
+                        <Checkbox
+                            isSelected={autoScaleBatchSize}
+                            onChange={onAutoScaleBatchSizeChange}
+                            isDisabled={isAutoScaleBatchDisabled || isLerobot}
+                        >
+                            Auto scale batch size
+                        </Checkbox>
+                        <ContextualHelp variant='info'>
+                            <Heading>Auto scale batch size</Heading>
+                            <Content>
+                                <Text>
+                                    Automatically finds the largest batch size that fits in GPU memory before training
+                                    starts. On XPU auto batch size is disabled.
+                                </Text>
+                            </Content>
+                        </ContextualHelp>
+                    </Flex>
+                </Flex>
                 <NumberField
-                    label='Batch Size'
-                    value={batchSize}
-                    onChange={onBatchSizeChange}
+                    label='Max Epochs'
+                    value={maxEpochs}
+                    onChange={onMaxEpochsChange}
                     minValue={1}
-                    maxValue={256}
+                    maxValue={1000}
                     step={1}
                     width='100%'
-                    isDisabled={autoScaleBatchSize}
-                    flex
+                    contextualHelp={
+                        <ContextualHelp variant='info'>
+                            <Heading>Max epochs</Heading>
+                            <Content>
+                                <Text>
+                                    Total number of training epochs. Training will stop after this many full passes
+                                    through the dataset. We recommend training for 5 to 10 epochs
+                                </Text>
+                            </Content>
+                        </ContextualHelp>
+                    }
                 />
-                <Flex direction='row' gap='size-100' alignItems='center'>
-                    <Checkbox
-                        isSelected={autoScaleBatchSize}
-                        onChange={onAutoScaleBatchSizeChange}
-                        isDisabled={isAutoScaleBatchDisabled}
-                    >
-                        Auto scale batch size
-                    </Checkbox>
-                    <ContextualHelp variant='info'>
-                        <Heading>Auto scale batch size</Heading>
-                        <Content>
-                            <Text>
-                                Automatically finds the largest batch size that fits in GPU memory before training
-                                starts. On XPU auto batch size is disabled.
-                            </Text>
-                        </Content>
-                    </ContextualHelp>
-                </Flex>
+                <Picker
+                    width='100%'
+                    label='Data Workers'
+                    selectedKey={numWorkers}
+                    onSelectionChange={onNumWorkersChange}
+                    contextualHelp={
+                        <ContextualHelp variant='info'>
+                            <Heading>Data workers</Heading>
+                            <Content>
+                                <Text>
+                                    Number of parallel processes for loading training data. Auto selects a value based
+                                    on available CPU cores. More workers can speed up training but use more memory.
+                                </Text>
+                            </Content>
+                        </ContextualHelp>
+                    }
+                >
+                    <Item key='auto'>Auto</Item>
+                    <Item key='0'>0 (main process)</Item>
+                    <Item key='1'>1</Item>
+                    <Item key='2'>2</Item>
+                    <Item key='4'>4</Item>
+                    <Item key='8'>8</Item>
+                    <Item key='16'>16</Item>
+                </Picker>
             </Flex>
-            <NumberField
-                label='Max Epochs'
-                value={maxEpochs}
-                onChange={onMaxEpochsChange}
-                minValue={1}
-                maxValue={1000}
-                step={1}
-                width='100%'
-                contextualHelp={
-                    <ContextualHelp variant='info'>
-                        <Heading>Max epochs</Heading>
-                        <Content>
-                            <Text>
-                                Total number of training epochs. Training will stop after this many full passes through
-                                the dataset. We recommend training for 5 to 10 epochs
-                            </Text>
-                        </Content>
-                    </ContextualHelp>
-                }
-            />
-            <Picker
-                width='100%'
-                label='Data Workers'
-                selectedKey={numWorkers}
-                onSelectionChange={onNumWorkersChange}
-                contextualHelp={
-                    <ContextualHelp variant='info'>
-                        <Heading>Data workers</Heading>
-                        <Content>
-                            <Text>
-                                Number of parallel processes for loading training data. Auto selects a value based on
-                                available CPU cores. More workers can speed up training but use more memory.
-                            </Text>
-                        </Content>
-                    </ContextualHelp>
-                }
-            >
-                <Item key='auto'>Auto</Item>
-                <Item key='0'>0 (main process)</Item>
-                <Item key='1'>1</Item>
-                <Item key='2'>2</Item>
-                <Item key='4'>4</Item>
-                <Item key='8'>8</Item>
-                <Item key='16'>16</Item>
-            </Picker>
-        </Flex>
-        <Flex direction='row' gap='size-150' width='100%'>
-            <Picker
-                width='100%'
-                label='Precision'
-                description={
-                    deviceType
-                        ? `${
-                              PRECISION_LABELS[RECOMMENDED_PRECISION[deviceType] ?? '32-true']
-                          } recommended for ${deviceType.toUpperCase()}`
-                        : undefined
-                }
-                selectedKey={precision}
-                onSelectionChange={onPrecisionChange}
-                contextualHelp={
-                    <ContextualHelp variant='info'>
-                        <Heading>Training precision</Heading>
-                        <Content>
-                            <Text>
-                                Controls numerical precision during training. BF16 Mixed uses half-precision where safe
-                                for faster training and lower memory usage. BF16 True runs entirely in BF16 for maximum
-                                speed. 32-bit uses full precision for maximum numerical stability.
-                            </Text>
-                        </Content>
-                    </ContextualHelp>
-                }
-            >
-                <Item key='bf16-mixed'>BF16 Mixed</Item>
-                <Item key='bf16-true'>BF16 True</Item>
-                <Item key='32-true'>32-bit</Item>
-            </Picker>
-            <Flex direction='column' gap='size-150' width='100%' justifyContent='center'>
-                <Flex direction='row' gap='size-100' alignItems='center'>
-                    <Checkbox isSelected={compileModel} onChange={onCompileModelChange}>
-                        Compile model
-                    </Checkbox>
-                    <ContextualHelp variant='info'>
-                        <Heading>Compile model</Heading>
-                        <Content>
-                            <Text>
-                                Enables torch.compile for all policies. Can significantly speed up training after an
-                                initial compilation warmup, but increases startup time.
-                            </Text>
-                        </Content>
-                    </ContextualHelp>
+            <Flex direction='row' gap='size-150' width='100%'>
+                <Picker
+                    width='100%'
+                    label='Precision'
+                    isDisabled={isLerobot}
+                    description={
+                        deviceType
+                            ? `${
+                                  PRECISION_LABELS[RECOMMENDED_PRECISION[deviceType] ?? '32-true']
+                              } recommended for ${deviceType.toUpperCase()}`
+                            : undefined
+                    }
+                    selectedKey={precision}
+                    onSelectionChange={onPrecisionChange}
+                    contextualHelp={
+                        <ContextualHelp variant='info'>
+                            <Heading>Training precision</Heading>
+                            <Content>
+                                <Text>
+                                    Controls numerical precision during training. BF16 Mixed uses half-precision where
+                                    safe for faster training and lower memory usage. BF16 True runs entirely in BF16 for
+                                    maximum speed. 32-bit uses full precision for maximum numerical stability.
+                                </Text>
+                            </Content>
+                        </ContextualHelp>
+                    }
+                >
+                    <Item key='bf16-mixed'>BF16 Mixed</Item>
+                    <Item key='bf16-true'>BF16 True</Item>
+                    <Item key='32-true'>32-bit</Item>
+                </Picker>
+                <Flex direction='column' gap='size-150' width='100%' justifyContent='center'>
+                    <Flex direction='row' gap='size-100' alignItems='center'>
+                        <Checkbox isSelected={compileModel} onChange={onCompileModelChange} isDisabled={isLerobot}>
+                            Compile model
+                        </Checkbox>
+                        <ContextualHelp variant='info'>
+                            <Heading>Compile model</Heading>
+                            <Content>
+                                <Text>
+                                    Enables torch.compile for all policies. Can significantly speed up training after an
+                                    initial compilation warmup, but increases startup time.
+                                </Text>
+                            </Content>
+                        </ContextualHelp>
+                    </Flex>
                 </Flex>
             </Flex>
         </Flex>
-    </Flex>
-);
+    );
+};
 
 export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: TrainModelDialogProps) => {
     const bestDevice = useBestTrainingDevice();
@@ -420,6 +455,9 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
     const extraPayload = baseModel ? { base_model_id: baseModel.id! } : undefined;
 
     const [selectedPolicy, setSelectedPolicy] = useState<string>(baseModel?.policy ?? 'act');
+    const [trainingEngine, setTrainingEngine] = useState<TrainingEngine>(
+        baseModel?.properties?.training_engine === 'lerobot' ? 'lerobot' : 'physicalai'
+    );
     const { datasets, id: projectId } = useProject();
 
     const [selectedDataset, setSelectedDataset] = useState<Key | null>(defaultDatasetId);
@@ -461,6 +499,20 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
         },
     });
 
+    const handleTrainingEngineChange = (engine: Key | null) => {
+        if (engine === null) {
+            return;
+        }
+        const next = engine as TrainingEngine;
+        setTrainingEngine(next);
+        if (!MODELS.some((model) => model.engines.includes(next) && model.id === selectedPolicy)) {
+            const fallback = MODELS.find((model) => model.engines.includes(next));
+            if (fallback) {
+                setSelectedPolicy(fallback.id);
+            }
+        }
+    };
+
     const save = async () => {
         const dataset_id = selectedDataset?.toString();
 
@@ -485,6 +537,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
             model_name: name,
             policy: selectedPolicy,
             max_epochs: maxEpochs,
+            training_engine: trainingEngine,
             batch_size: batchSize,
             num_workers: numWorkers === 'auto' ? 'auto' : Number(numWorkers),
             auto_scale_batch_size: autoScaleBatchSize,
@@ -544,11 +597,43 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                         {(trainingTarget) => <Item key={trainingTarget.id}>{trainingTarget.label}</Item>}
                     </Picker>
 
+                    <Picker
+                        label='Training engine'
+                        selectedKey={trainingEngine}
+                        onSelectionChange={handleTrainingEngineChange}
+                        isDisabled={baseModel !== undefined}
+                        width='100%'
+                        contextualHelp={
+                            <ContextualHelp variant='info'>
+                                <Heading>Training engine</Heading>
+                                <Content>
+                                    <Text>
+                                        Which training stack to run. PhysicalAI uses the Lightning-based
+                                        physicalai-train stack; LeRobot uses LeRobot&apos;s own training loop.
+                                    </Text>
+                                </Content>
+                            </ContextualHelp>
+                        }
+                    >
+                        <Item key='physicalai'>PhysicalAI (Lightning)</Item>
+                        <Item key='lerobot'>LeRobot</Item>
+                    </Picker>
+
+                    {trainingEngine === 'lerobot' && activeDevice?.type === 'xpu' && (
+                        <View>
+                            <InlineAlert variant='warning'>
+                                LeRobot training doesn&apos;t support XPU; the job will fall back to CPU unless a CUDA
+                                GPU is available.
+                            </InlineAlert>
+                        </View>
+                    )}
+
                     <PolicySelection
                         selectedPolicy={selectedPolicy}
                         onSelectionChange={setSelectedPolicy}
                         isDisabled={baseModel !== undefined}
                         trainingDevice={activeDevice}
+                        engine={trainingEngine}
                     />
 
                     <Disclosure
@@ -576,6 +661,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                                 onCompileModelChange={setCompileModel}
                                 isAutoScaleBatchDisabled={activeDevice?.type !== 'cuda'}
                                 deviceType={activeDevice?.type}
+                                engine={trainingEngine}
                             />
                         </DisclosurePanel>
                     </Disclosure>

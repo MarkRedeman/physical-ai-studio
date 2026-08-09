@@ -274,9 +274,9 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     assert cfg.dataset.root is not None  # noqa: S101
     assert cfg.output_dir is not None  # noqa: S101
     report(0, "Preparing LeRobot dataset", {})
-    train_dataset, eval_ds = make_train_eval_datasets(cfg)
-    dataset: Any = train_dataset
-    eval_dataset: Any = eval_ds
+    raw_train, raw_eval = make_train_eval_datasets(cfg)
+    dataset: Any = raw_train
+    eval_dataset: Any = raw_eval
 
     report(0, "Creating LeRobot policy", {})
     policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map=cfg.rename_map)
