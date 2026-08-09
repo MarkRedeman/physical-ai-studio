@@ -76,3 +76,86 @@ def import_dir(
     except Exception as e:
         click.echo(f"Model import failed: {e}")
         sys.exit(1)
+
+
+@models.command("export")
+@click.argument("model_id", type=click.UUID)
+@click.option(
+    "--name",
+    default=None,
+    type=str,
+    help="Name for the re-exported model (default: '<original> (re-exported)')",
+)
+@click.option(
+    "--backend",
+    "backends",
+    multiple=True,
+    type=click.Choice(["torch", "openvino"]),
+    help="Backend(s) to export to (repeatable). Defaults to torch and openvino.",
+)
+@click.option(
+    "--compress/--no-compress",
+    default=True,
+    help="Apply NNCF INT8 weight compression to the OpenVINO export (default: compress)",
+)
+def export_model(model_id: UUID, name: str | None, backends: tuple[str, ...], compress: bool) -> None:
+    """Re-export a trained model from its checkpoint to torch and/or OpenVINO.
+
+    Creates a new model record with fresh exports, linked to the original via
+    parent_model_id. The OpenVINO export is compressed to INT8 by default.
+    """
+    from services.model_export_service import ModelExportError, ModelExportService
+
+    selected = list(backends) or ["torch", "openvino"]
+    click.echo(f"Re-exporting model {model_id} to: {', '.join(selected)}")
+    if compress and "openvino" in selected:
+        click.echo("  NNCF INT8 weight compression enabled")
+
+    async def _run_export() -> None:
+        exported = await ModelExportService.export_model(
+            model_id=model_id,
+            name=name,
+            backends=selected,
+            compress=compress,
+        )
+        click.echo("Model exported successfully!")
+        click.echo(f"Exported model ID: {exported.id}")
+        click.echo(f"Exported model path: {exported.path}")
+
+    try:
+        asyncio.run(_run_export())
+    except ModelExportError as e:
+        click.echo(f"Export failed: {e}")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}")
+        sys.exit(1)
+
+
+@models.command("compress")
+@click.argument("model_id", type=click.UUID)
+@click.option("--name", default=None, type=str, help="Name for the compressed model (default: '<original> (INT8)')")
+def compress_weights(model_id: UUID, name: str | None) -> None:
+    """Compress an exported OpenVINO model's weights to INT8 using NNCF.
+
+    Creates a new model record with compressed weights, linked to the original
+    via parent_model_id. Only the OpenVINO export directory is included.
+    """
+    from services.model_compression_service import ModelCompressionError, ModelCompressionService
+
+    click.echo(f"Compressing model {model_id} with NNCF INT8_SYM...")
+
+    async def _run_compression() -> None:
+        compressed = await ModelCompressionService.compress_model(model_id=model_id, name=name)
+        click.echo("Model compressed successfully!")
+        click.echo(f"Compressed model ID: {compressed.id}")
+        click.echo(f"Compressed model path: {compressed.path}")
+
+    try:
+        asyncio.run(_run_compression())
+    except ModelCompressionError as e:
+        click.echo(f"Compression failed: {e}")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}")
+        sys.exit(1)
