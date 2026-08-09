@@ -14,7 +14,7 @@ import {
     Text,
     View,
 } from '@geti-ui/ui';
-import { DownloadIcon } from '@geti-ui/ui/icons';
+import { DownloadIcon, MagicWandIcon } from '@geti-ui/ui/icons';
 
 import { $api, fetchClient } from '../../../api/client';
 import type { components, SchemaModel } from '../../../api/openapi-spec';
@@ -195,22 +195,72 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
     });
     const { data: policyBackends } = $api.useSuspenseQuery('get', '/api/policies/backends');
 
+    const exportMutation = $api.useMutation('post', '/api/models/{model_id}:export', {
+        meta: {
+            invalidates: [
+                ['get', '/api/models/{model_id}', { params: { path: { model_id: model.id! } } }],
+                ['get', '/api/projects/{project_id}/models', { params: { path: { project_id: model.project_id } } }],
+                ['get', '/api/jobs'],
+            ],
+        },
+    });
+
     const backends = (policyBackends[model.policy] ?? []).filter(isExportBackend);
 
     return (
-        <Grid
-            gap='size-200'
-            marginTop='size-400'
-            UNSAFE_style={{
-                gridTemplateColumns: cardGridColumns,
-            }}
-        >
-            {backends.map((backendType) => {
-                return (
-                    <BackendCard key={backendType} backendType={backendType} model={model} modelDetail={modelDetail} />
-                );
-            })}
-        </Grid>
+        <Flex direction='column' gap='size-200'>
+            <Flex
+                direction='row'
+                gap='size-200'
+                justifyContent='space-between'
+                alignItems='center'
+                width='100%'
+                marginTop='size-200'
+            >
+                <Flex direction='column' gap='size-50'>
+                    <Text UNSAFE_style={{ fontWeight: 600 }}>Deployment exports</Text>
+                    <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
+                        Re-export this model to Torch and OpenVINO (NNCF INT8) as a new model.
+                    </Text>
+                </Flex>
+                <Button
+                    variant='secondary'
+                    isDisabled={exportMutation.isPending}
+                    onPress={() =>
+                        exportMutation.mutate({
+                            params: { path: { model_id: model.id! } },
+                            body: {
+                                model_id: model.id!,
+                                backends: ['torch', 'openvino'],
+                                compress: true,
+                            },
+                        })
+                    }
+                >
+                    <Icon marginEnd='size-100'>
+                        <MagicWandIcon />
+                    </Icon>
+                    <span>{exportMutation.isPending ? 'Optimizing…' : 'Optimize'}</span>
+                </Button>
+            </Flex>
+            <Grid
+                gap='size-200'
+                UNSAFE_style={{
+                    gridTemplateColumns: cardGridColumns,
+                }}
+            >
+                {backends.map((backendType) => {
+                    return (
+                        <BackendCard
+                            key={backendType}
+                            backendType={backendType}
+                            model={model}
+                            modelDetail={modelDetail}
+                        />
+                    );
+                })}
+            </Grid>
+        </Flex>
     );
 };
 
