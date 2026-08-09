@@ -22,7 +22,8 @@ from api.dependencies import (
 from api.utils import safe_archive_name
 from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_read_dataset
-from schemas import ModelDetailResponse
+from schemas import Job, ModelDetailResponse
+from schemas.export_job import ModelExportJobPayload
 from schemas.job import TrainJob
 from services import DatasetService, JobService, ModelDownloadService, ModelMetricsService, ModelService
 
@@ -67,6 +68,22 @@ async def get_tasks_of_model(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model has no dataset associated.")
     dataset = await dataset_service.get_dataset_by_id(model.dataset_id)
     return get_internal_read_dataset(dataset).get_tasks()
+
+
+@router.post("/{model_id}:export")
+async def export_model_job(
+    model_id: Annotated[UUID, Depends(get_model_id)],
+    job_service: Annotated[JobService, Depends(get_job_service)],
+    body: ModelExportJobPayload | None = None,
+) -> Job:
+    """Queue a re-export job for the given model (torch and/or OpenVINO).
+
+    The re-export runs in the background worker and creates a new model record
+    linked to this one via ``parent_model_id``.
+    """
+    payload = body or ModelExportJobPayload(model_id=model_id)
+    payload.model_id = model_id
+    return await job_service.submit_model_export_job(payload)
 
 
 @router.get("/{model_id}/download")
