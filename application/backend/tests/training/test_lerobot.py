@@ -24,6 +24,7 @@ from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, run_training_job
 from training.lerobot import (
     _build_config,
     _latest_checkpoint,
+    _lerobot_rename_map,
     _MetricsWriter,
     _resolve_device,
     _resolve_resume_checkpoint,
@@ -159,6 +160,22 @@ def _xpu() -> object:
 class TestTotalFrames:
     def test_reads_total_frames_from_info_json(self, tmp_path: Path) -> None:
         assert _total_frames(_snapshot(tmp_path, total_frames=42)) == 42
+
+
+class TestRenameMap:
+    def test_converts_short_camera_names_to_full_lerobot_keys(self) -> None:
+        assert _lerobot_rename_map({"camera1": "front", "camera2": "left"}) == {
+            "observation.images.front": "observation.images.camera1",
+            "observation.images.left": "observation.images.camera2",
+        }
+
+    def test_omits_empty_camera_slots(self) -> None:
+        assert _lerobot_rename_map({"camera1": "front", "camera2": None}) == {
+            "observation.images.front": "observation.images.camera1",
+        }
+
+    def test_empty_map_stays_empty(self) -> None:
+        assert _lerobot_rename_map({}) == {}
 
 
 class TestConfigDerivation:
@@ -379,7 +396,7 @@ class TestPublish:
 
         with (
             patch("physicalai.policies.lerobot.utils.checkpoint_converter.lerobot_to_lightning") as convert,
-            patch("training.lerobot._export_torch") as export_torch,
+            patch("training.lerobot._export_backends") as export_backends,
         ):
             _publish(cfg, cache_dir=cache, output_dir=output_dir, report=MagicMock())
 
@@ -394,7 +411,7 @@ class TestPublish:
         assert convert.call_args.args[0] == cache / "lerobot" / "pretrained_model"
         assert convert.call_args.args[1] == cache / CHECKPOINT_NAME
         # Torch export runs from the published model dir.
-        export_torch.assert_called_once_with(output_dir, EXPORTS_DIRNAME)
+        export_backends.assert_called_once_with(output_dir, EXPORTS_DIRNAME, None)
         # The cache moved; nothing is left behind.
         assert not cache.exists()
 

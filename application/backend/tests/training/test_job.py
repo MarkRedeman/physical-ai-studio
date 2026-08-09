@@ -84,6 +84,25 @@ class TestBuildPolicy:
 
         assert get_policy.call_args.kwargs["pretrained_name_or_path"] == PRETRAINED_BASE_CHECKPOINTS[policy_name]
 
+    def test_smolvla_camera_map_becomes_reorder_map_and_num_cameras(self) -> None:
+        with patch("physicalai.policies.get_policy") as get_policy:
+            build_policy(
+                TrainingJobSpec(
+                    policy="smolvla",
+                    rename_map={"camera1": "front", "camera2": "left", "camera3": None},
+                )
+            )
+
+        assert get_policy.call_args.kwargs["image_key_reorder_map"] == {"front": 0, "left": 1}
+        assert get_policy.call_args.kwargs["num_cameras"] == 3
+
+    def test_smolvla_camera_map_is_omitted_when_empty(self) -> None:
+        with patch("physicalai.policies.get_policy") as get_policy:
+            build_policy(TrainingJobSpec(policy="smolvla"))
+
+        assert get_policy.call_args.kwargs["image_key_reorder_map"] == {}
+        assert get_policy.call_args.kwargs["num_cameras"] == 0
+
     def test_lerobot_policies_are_left_to_lerobots_own_defaults(self) -> None:
         with patch("physicalai.policies.get_policy") as get_policy:
             build_policy(TrainingJobSpec(policy="smolvla", policy_source="lerobot"))
