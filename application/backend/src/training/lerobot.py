@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     from lerobot.policies.pretrained import PreTrainedPolicy
     from physicalai.train.callbacks import ReportFn, StopFn
 
-    from training.job import TrainingJobSpec
+    from training.job import ExportBackends, TrainingJobSpec
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,9 @@ _GRAD_CLIP: dict[str, float] = {"act": 10.0, "diffusion": 10.0, "smolvla": 1.0, 
 
 _DATASET_REPO_ID = "snapshot"
 """Placeholder repo id: datasets are always loaded from a local root here."""
+
+_OBS_IMAGES = "observation.images"
+"""LeRobot observation prefix for image features."""
 
 _MAX_EVAL_SAMPLES = 500
 """Cap on held-out samples used per eval-loss check (split uniformly per task)."""
@@ -117,7 +120,7 @@ def run_lerobot_training_job(
         logger.info("LeRobot training canceled; skipping publish")
         return
 
-    _publish(cfg, cache_dir=cache_dir, output_dir=output_dir, report=report)
+    _publish(cfg, cache_dir=cache_dir, output_dir=output_dir, report=report, export_backends=spec.export_backends)
 
 
 def _resolve_device(spec: TrainingJobSpec) -> torch.device:
@@ -208,6 +211,7 @@ def _build_config(
         max_eval_samples=_MAX_EVAL_SAMPLES,
         save_checkpoint=True,
         save_freq=steps,
+        rename_map=_lerobot_rename_map(spec.rename_map),
         use_policy_training_preset=False,
         optimizer=AdamWConfig(lr=lr, weight_decay=weight_decay, grad_clip_norm=grad_clip_norm),
         scheduler=CosineDecayWithWarmupSchedulerConfig(
@@ -256,6 +260,58 @@ def _resolve_resume_checkpoint(resume_from: Path | str | None) -> Path | None:
     return checkpoint
 
 
+def _lerobot_rename_map(rename_map: dict[str, str | None]) -> dict[str, str]:
+    """Convert the job's short-name camera map to lerobot's full-key rename map.
+
+    The job carries ``{model_camera: dataset_camera | None}`` with short camera
+    names; lerobot's ``rename_observations_processor`` renames full observation
+    keys from dataset names to policy names. Entries with a ``None`` dataset
+    camera (empty slots) are omitted — full empty-camera support is a follow-up.
+    """
+    full: dict[str, str] = {}
+    for model_camera, dataset_camera in rename_map.items():
+        if dataset_camera is not None:
+            full[f"{_OBS_IMAGES}.{dataset_camera}"] = f"{_OBS_IMAGES}.{model_camera}"
+    return full
+
+
+def _apply_rename_map_to_config(cfg: TrainPipelineConfig, dataset_meta: Any) -> None:
+    """Point the policy config's input features at the rename_map's policy names.
+
+    Lerobot's ``make_policy`` only *suppresses* the visual-feature consistency
+    check when a rename map is given; the model still expects the names baked
+    into ``cfg.input_features``. The rename processor rewrites observations from
+    dataset keys to policy keys, so the config must advertise the policy keys.
+    For a fresh policy (the studio trains from scratch) that means deriving the
+    input features from the dataset and renaming their keys via ``rename_map``.
+    """
+    from lerobot.configs.types import FeatureType
+    from lerobot.utils.feature_utils import dataset_to_policy_features
+
+    assert cfg.policy is not None  # noqa: S101
+    features = dataset_to_policy_features(dataset_meta.features)
+    renamed: dict[str, Any] = {}
+    for key, feature in features.items():
+        renamed[cfg.rename_map.get(key, key)] = feature
+    cfg.policy.input_features = {k: v for k, v in renamed.items() if v.type is not FeatureType.ACTION}
+
+
+def _set_preprocessor_rename_map(preprocessor: Any, rename_map: dict[str, str]) -> None:
+    """Set the rename map on the preprocessor's rename step.
+
+    The fresh processor factory builds a ``RenameObservationsProcessorStep`` with
+    an empty map and ignores ``preprocessor_overrides``, so the map is applied
+    directly on the built pipeline.
+    """
+    from lerobot.processor.rename_processor import RenameObservationsProcessorStep
+
+    for step in preprocessor.steps:
+        if isinstance(step, RenameObservationsProcessorStep):
+            step.rename_map = rename_map
+            return
+    logger.warning("LeRobot preprocessor has no rename step; camera rename_map was not applied")
+
+
 def _train(  # noqa: C901, PLR0912, PLR0915
     cfg: TrainPipelineConfig,
     *,
@@ -274,6 +330,8 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     eval_dataset: Any = raw_eval
 
     report(0, "Creating LeRobot policy", {})
+    if cfg.rename_map:
+        _apply_rename_map_to_config(cfg, dataset.meta)
     policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map=cfg.rename_map)
     policy = policy.to(device)
 
@@ -286,6 +344,8 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         pretrained_revision=getattr(cfg.policy, "pretrained_revision", None),
         **processor_kwargs,
     )
+    if cfg.rename_map:
+        _set_preprocessor_rename_map(preprocessor, cfg.rename_map)
 
     report(0, "Creating optimizer and scheduler", {})
     optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, policy)
@@ -517,7 +577,14 @@ class _MetricsWriter:
         self._csv.close()
 
 
-def _publish(cfg: TrainPipelineConfig, *, cache_dir: Path, output_dir: Path, report: ReportFn) -> None:
+def _publish(
+    cfg: TrainPipelineConfig,
+    *,
+    cache_dir: Path,
+    output_dir: Path,
+    report: ReportFn,
+    export_backends: ExportBackends | None = None,
+) -> None:
     """Move the finished run into its final location and export it."""
     from physicalai.policies.lerobot.utils.checkpoint_converter import lerobot_to_lightning
 
@@ -546,8 +613,8 @@ def _publish(cfg: TrainPipelineConfig, *, cache_dir: Path, output_dir: Path, rep
     report(99, "Publishing model", {})
     _move_to_output(cache_dir, output_dir)
 
-    report(100, "Exporting model to torch format", {})
-    _export_torch(output_dir, EXPORTS_DIRNAME)
+    report(100, "Exporting model", {})
+    _export_backends(output_dir, EXPORTS_DIRNAME, export_backends)
     report(100, "Model saved", {})
 
 
@@ -574,18 +641,31 @@ def _move_to_output(cache_dir: Path, output_dir: Path) -> None:
     shutil.move(str(cache_dir), str(output_dir))
 
 
-def _export_torch(output_dir: Path, exports_dirname: str) -> None:
-    """Export the trained policy to the torch backend via LeRobotPolicy.
+def _export_backends(output_dir: Path, exports_dirname: str, export_backends: ExportBackends | None) -> None:
+    """Export the trained policy to the requested backends, best-effort.
 
-    Best-effort like the physicalai path: a failed export must not abort the
-    job, since ``model.ckpt`` is already the primary loadable artifact.
+    Uses :class:`ExportableLeRobotPolicy` so torch/onnx/openvino can be
+    produced. A failed export must not abort the job, since ``model.ckpt`` is
+    already the primary loadable artifact.
     """
+    from physicalai.export.backends import ExportBackend
+    from physicalai.policies.lerobot.export import ExportableLeRobotPolicy
+
+    from training.job import CHECKPOINT_NAME
+
     try:
-        from physicalai.policies.lerobot import LeRobotPolicy
-
-        from training.job import CHECKPOINT_NAME
-
-        policy = LeRobotPolicy.load_from_checkpoint(output_dir / CHECKPOINT_NAME)
-        policy.export(output_dir / exports_dirname / "torch", backend="torch")
+        policy = ExportableLeRobotPolicy.load_from_checkpoint(output_dir / CHECKPOINT_NAME)
+        supported = [ExportBackend(b) for b in policy.get_supported_export_backends()]
     except Exception:
-        logger.exception("Failed exporting model to torch format")
+        logger.exception("Failed to load LeRobot policy for export")
+        return
+
+    selected = [ExportBackend(b) for b in export_backends] if export_backends else supported
+    for backend in selected:
+        if backend not in supported:
+            logger.warning("Skipping %s export: policy does not support it", backend.value)
+            continue
+        try:
+            policy.export(output_dir / exports_dirname / backend.value, backend=backend)
+        except Exception:
+            logger.exception("Failed exporting model to %s format", backend.value)

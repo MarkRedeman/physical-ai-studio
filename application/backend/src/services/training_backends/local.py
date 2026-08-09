@@ -100,6 +100,8 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
         auto_scale_batch_size=payload.auto_scale_batch_size,
         device_type=str(device.type) if device else None,
         device_index=device.index if device else None,
+        rename_map=payload.rename_map,
+        export_backends=payload.export_backends,
     )
 
 

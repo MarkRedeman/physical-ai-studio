@@ -162,6 +162,18 @@ class TrainJobPayload(BaseModel):
     snapshot_id: UUID | None = Field(
         default=None, description="Dataset snapshot id retained while a remote run is in flight (for model provenance)"
     )
+    rename_map: dict[str, str | None] = Field(
+        default_factory=dict,
+        description=(
+            "Map the policy's camera feature names to dataset camera names; a null value marks an "
+            "empty camera slot. Both engines (LeRobot rename_map and physicalai SmolVLA "
+            "reorder/empty cameras) are driven by it."
+        ),
+    )
+    export_backends: list[Literal["torch", "openvino", "onnx", "executorch"]] | None = Field(
+        default=None,
+        description="Export backends to produce after training. None exports every backend the policy supports.",
+    )
 
     @model_validator(mode="after")
     def validate_policy_for_engine(self) -> "TrainJobPayload":

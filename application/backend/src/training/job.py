@@ -49,6 +49,9 @@ CHECKPOINT_NAME = "model.ckpt"
 EXPORTS_DIRNAME = "exports"
 """Subdirectory of ``output_dir`` holding one directory per export backend."""
 
+ExportBackends = list[Literal["torch", "openvino", "onnx", "executorch"]]
+"""Export backends a training job can produce."""
+
 _DATASET_REPO_ID = "snapshot"
 """Placeholder repo id: datasets are always loaded from a local root here."""
 
@@ -111,6 +114,18 @@ class TrainingJobSpec(BaseModel):
         ge=0,
         description="Zero-based index of the accelerator to train on. None lets Lightning pick one.",
     )
+    rename_map: dict[str, str | None] = Field(
+        default_factory=dict,
+        description=(
+            "Map the policy's camera feature names to dataset camera names; a null value marks an "
+            "empty camera slot. e.g. {'overview': 'front', 'wrist_1': 'gripper', 'wrist_2': None}. "
+            "Both engines (LeRobot rename_map and physicalai SmolVLA reorder/empty cameras) are driven by it."
+        ),
+    )
+    export_backends: ExportBackends | None = Field(
+        default=None,
+        description="Export backends to produce after training. None exports every backend the policy supports.",
+    )
 
 
 def build_policy(spec: TrainingJobSpec, *, resume_from: Path | str | None = None) -> Policy:
@@ -135,6 +150,15 @@ def build_policy(spec: TrainingJobSpec, *, resume_from: Path | str | None = None
         pretrained = PRETRAINED_BASE_CHECKPOINTS.get(spec.policy.lower())
         if pretrained is not None:
             kwargs["pretrained_name_or_path"] = pretrained
+        if spec.policy.lower() == "smolvla":
+            image_key_reorder_map: dict[str, int] = {}
+            for index, (model_camera, dataset_camera) in enumerate(spec.rename_map.items()):
+                if dataset_camera is not None:
+                    image_key_reorder_map[dataset_camera] = index
+            kwargs["image_key_reorder_map"] = image_key_reorder_map
+            kwargs["num_cameras"] = len(spec.rename_map)
+        elif spec.policy.lower() == "pi05":
+            kwargs["empty_cameras"] = sum(1 for camera in spec.rename_map.values() if camera is None)
     return get_policy(spec.policy, source=spec.policy_source, **kwargs)
 
 
@@ -242,7 +266,7 @@ def run_training_job(
     _detach_trainer(export_policy, trainer)
     del trainer, datamodule, policy
     _release_memory()
-    _export(export_policy, output_dir, report)
+    _export(export_policy, output_dir, report, spec.export_backends)
 
 
 def _load_policy_from_checkpoint(spec: TrainingJobSpec, checkpoint: Path) -> Policy:
@@ -354,16 +378,21 @@ def _release_memory() -> None:
         logger.warning("Could not release device cache: %s", exc)
 
 
-def _export(policy: Policy, output_dir: Path, report: ReportFn) -> None:
-    """Export the policy to every backend it declares support for."""
-    from physicalai.export import ExportablePolicyMixin
+def _export(policy: Policy, output_dir: Path, report: ReportFn, export_backends: ExportBackends | None) -> None:
+    """Export the policy to the requested backends (all supported by default)."""
+    from physicalai.export import ExportablePolicyMixin, ExportBackend
 
     if not isinstance(policy, ExportablePolicyMixin):
         logger.info("Skipping export: policy does not support export backends")
         return
 
-    for backend in policy.get_supported_export_backends():
-        name = backend.value if hasattr(backend, "value") else str(backend)
+    backends = [ExportBackend(b) for b in policy.get_supported_export_backends()]
+    if export_backends is not None:
+        wanted = {ExportBackend(b) for b in export_backends}
+        backends = [b for b in backends if b in wanted]
+
+    for backend in backends:
+        name = backend.value
         try:
             logger.info("Exporting model to %s format", name)
             report(99, f"Exporting to {name} format", {})
