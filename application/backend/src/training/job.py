@@ -98,7 +98,6 @@ class TrainingJobSpec(BaseModel):
         ),
     )
     max_epochs: int = Field(default=5, ge=1, description="Training epoch budget.")
-    max_steps: int = Field(default=100, ge=1, description="Optimizer step budget.")
     batch_size: int = Field(default=8, ge=1, description="Training batch size.")
     num_workers: int | Literal["auto"] = Field(default="auto", description="Dataloader worker count.")
     val_split: float = Field(default=0.1, ge=0.0, lt=1.0, description="Fraction of episodes held out for validation.")

@@ -179,17 +179,17 @@ class TestRenameMap:
 
 
 class TestConfigDerivation:
-    def test_steps_use_the_job_max_steps(self, tmp_path: Path) -> None:
+    def test_steps_are_derived_from_epochs_and_dataset(self, tmp_path: Path) -> None:
         snapshot = _snapshot(tmp_path, total_frames=600)
         cfg = _build_config(
-            TrainingJobSpec(policy="act", training_engine="lerobot", max_steps=1234),
+            TrainingJobSpec(policy="act", training_engine="lerobot", max_epochs=3),
             dataset_root=snapshot,
             device=_cpu(),
             cache_dir=tmp_path / "cache",
             resume_checkpoint=None,
         )
 
-        assert cfg.steps == 1234
+        assert cfg.steps == 3 * ((600 + 7) // 8)
         assert cfg.batch_size == 8
 
     @pytest.mark.parametrize(

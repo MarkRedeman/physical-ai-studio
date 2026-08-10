@@ -132,7 +132,7 @@ class ModelImportService:
                 dataset_id=dataset_id,
                 policy=policy,
                 model_name=model_name,
-                max_steps=100,
+                max_epochs=5,
                 batch_size=1,
                 auto_scale_batch_size=False,
                 base_model_id=base_model_id,

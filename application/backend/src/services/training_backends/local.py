@@ -91,7 +91,6 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
         policy=(context.base_model or context.model).policy,
         training_engine=payload.training_engine,
         max_epochs=payload.max_epochs if payload.max_epochs is not None else _DEFAULT_MAX_EPOCHS,
-        max_steps=payload.max_steps,
         batch_size=payload.batch_size,
         num_workers=payload.num_workers,
         val_split=payload.val_split,

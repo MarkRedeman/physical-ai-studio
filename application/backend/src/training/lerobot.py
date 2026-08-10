@@ -25,9 +25,9 @@ After training, the final checkpoint is published like a physicalai model:
 - ``exports/torch/`` — the torch export, via the LeRobotPolicy wrapper (the
   only export backend it supports).
 
-The engine runs on CUDA, XPU, or CPU, using the job's step budget
-(``max_steps``) and batch size. The step budget is not derived from the
-dataset size: what the job requests is what trains.
+The engine runs on CUDA, XPU, or CPU, using the job's epoch budget
+(``max_epochs``) and batch size. It derives the corresponding step budget
+from the dataset size.
 """
 
 from __future__ import annotations
@@ -115,7 +115,7 @@ def run_lerobot_training_job(
         spec, dataset_root=Path(dataset_root), device=device, cache_dir=cache_dir, resume_checkpoint=resume_checkpoint
     )
 
-    _train(cfg, device=device, report=report, should_stop=should_stop, max_steps=spec.max_steps)
+    _train(cfg, device=device, report=report, should_stop=should_stop, max_epochs=spec.max_epochs)
     if should_stop():
         logger.info("LeRobot training canceled; skipping publish")
         return
@@ -173,7 +173,7 @@ def _build_config(
 ) -> TrainPipelineConfig:
     """Build the LeRobot ``TrainPipelineConfig``.
 
-    Fresh runs use the job's own step budget and batch size. Resumed runs load
+    Fresh runs derive a step budget from the job's epoch budget and batch size. Resumed runs load
     the checkpoint's ``train_config.json`` so optimizer, scheduler, and sampler
     semantics come from the original run; only the dataset root, output dir,
     and device are overridden.
@@ -182,7 +182,8 @@ def _build_config(
         return _resume_config(resume_checkpoint, dataset_root=dataset_root, device=device, cache_dir=cache_dir)
 
     batch_size = spec.batch_size
-    steps = max(1, spec.max_steps)
+    steps_per_epoch = max(1, math.ceil(_total_frames(dataset_root) / batch_size))
+    steps = max(1, spec.max_epochs * steps_per_epoch)
     lr = _LR.get(spec.policy, 1e-4)
     weight_decay = _WEIGHT_DECAY.get(spec.policy, 1e-2)
     grad_clip_norm = _GRAD_CLIP.get(spec.policy, 1.0)
@@ -318,7 +319,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     device: torch.device,
     report: ReportFn,
     should_stop: StopFn,
-    max_steps: int,
+    max_epochs: int,
 ) -> None:
     """Run the vendored single-process training loop."""
     assert cfg.policy is not None  # noqa: S101
@@ -356,8 +357,9 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         assert cfg.checkpoint_path is not None  # noqa: S101
         checkpoint_path = cfg.checkpoint_path
         step, optimizer, lr_scheduler = load_training_state(checkpoint_path, optimizer, lr_scheduler)
-        # A resumed run continues for the job's step budget, same basis as a fresh run.
-        cfg.steps = step + max(1, max_steps)
+        # A resumed run continues for the job's epoch budget, same basis as a fresh run.
+        steps_per_epoch = max(1, math.ceil(_total_frames(cfg.dataset.root) / cfg.batch_size))
+        cfg.steps = step + max_epochs * steps_per_epoch
         logger.info("Resuming LeRobot training at step %d (total %d)", step, cfg.steps)
 
     # Data order is a pure function of (seed, epoch); resume is sample-exact.
