@@ -5,7 +5,7 @@
 
 import time
 from collections.abc import Callable, Mapping
-from typing import cast
+from typing import Any, cast
 
 import lightning as L  # noqa: N812
 from lightning.pytorch.callbacks import Callback
@@ -17,6 +17,12 @@ ReportFn = Callable[[int, str | None, dict[str, object]], None]
 
 StopFn = Callable[[], bool]
 """Cooperative cancellation probe: returns True when training should stop."""
+
+#: Steps during which the CSV/metric logging cadence is fixed at
+#: :data:`_METRIC_LOG_EARLY_CADENCE` so the job metrics graph fills in quickly.
+_METRIC_LOG_EARLY_STEPS = 10_000
+#: CSV/metric logging cadence (in steps) used during the early phase of training.
+_METRIC_LOG_EARLY_CADENCE = 10
 
 
 class ProgressReportingCallback(Callback):
@@ -33,6 +39,9 @@ class ProgressReportingCallback(Callback):
 
     - train batch: ``{"train/loss_step": float | None}``, plus
       ``{"global_step", "max_steps", "epoch"}`` on the logging cadence.
+    - training plan: ``{"train_event": "plan", "batch_size", "steps_per_epoch",
+      "train_frames", "val_frames", "epochs", "total_steps", "num_workers"}``,
+      emitted once on the first real training batch (after auto batch scaling).
     - validation start: ``{"val_event": "start", "global_step", "max_steps"}``.
     - validation batch: ``{"val_event": "batch", "val_batch", "val/loss_step"}``
       (throttled to the logging cadence).
@@ -57,6 +66,8 @@ class ProgressReportingCallback(Callback):
         # Logging cadence in steps; resolved once Lightning knows the dataloader size.
         self._every_n_steps = 1
         self._val_start_t: float | None = None
+        # Whether the training-plan telemetry has been emitted for this run.
+        self._plan_reported = False
 
     @staticmethod
     def _auto_every_n_steps(total_steps: int) -> int:
@@ -120,6 +131,95 @@ class ProgressReportingCallback(Callback):
             return None
 
     @staticmethod
+    def _as_int(value: object) -> int | None:
+        """Coerce a value to an int, or None when it cannot be parsed.
+
+        Returns:
+            The parsed integer, or None when the value is None or not
+            representable as an int.
+        """
+        if value is None:
+            return None
+        try:
+            return int(cast("Any", value))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _dataset_len(datamodule: object, attr: str) -> int | None:
+        """Return ``len(datamodule.<attr>)`` when the dataset supports it, else None."""
+        if datamodule is None:
+            return None
+        try:
+            dataset = getattr(datamodule, attr, None)
+        except AttributeError:
+            return None
+        if dataset is None:
+            return None
+        try:
+            return len(dataset)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _resolve_batch_size(trainer: L.Trainer, datamodule: object) -> int | None:
+        """Return the effective (possibly auto-scaled) training batch size."""
+        candidates: list[tuple[object, str]] = []
+        if datamodule is not None:
+            candidates.extend(((datamodule, "batch_size"), (datamodule, "train_batch_size")))
+        module = getattr(trainer, "lightning_module", None)
+        if module is not None:
+            candidates.append((module, "batch_size"))
+        for holder, attr in candidates:
+            try:
+                value = getattr(holder, attr, None)
+            except AttributeError:
+                continue
+            parsed = ProgressReportingCallback._as_int(value)
+            if parsed is not None:
+                return parsed
+        return None
+
+    def _report_training_plan(self, trainer: L.Trainer) -> None:
+        """Emit the resolved training plan once, after batch scaling settles.
+
+        Lightning's batch-size finder empties the trainer's callbacks for its
+        search runs, so the first ``on_train_batch_end`` always happens on the
+        real run with the final batch size already applied.
+        """
+        if self._plan_reported:
+            return
+        self._plan_reported = True
+        datamodule = getattr(trainer, "datamodule", None)
+        plan: dict[str, object] = {
+            "train_event": "plan",
+            "batch_size": self._resolve_batch_size(trainer, datamodule),
+            "steps_per_epoch": self._as_int(getattr(trainer, "num_training_batches", None)),
+            "train_frames": self._dataset_len(datamodule, "train_dataset"),
+            "val_frames": self._dataset_len(datamodule, "val_eval_dataset"),
+            "epochs": self._as_int(getattr(trainer, "max_epochs", None)),
+            "total_steps": self._total_steps(trainer),
+            "num_workers": self._as_int(getattr(datamodule, "num_workers", None)) if datamodule is not None else None,
+        }
+        self._report(self._progress(trainer), None, plan)
+
+    def _apply_metric_log_cadence(self, trainer: L.Trainer) -> None:
+        """Keep CSV metric writes readable early in training.
+
+        Lightning records step metrics every ``trainer.log_every_n_steps`` and
+        flushes them to the CSV logger on that same cadence. Use a fixed
+        cadence for the first :data:`_METRIC_LOG_EARLY_STEPS` steps so the job
+        metrics graph fills in quickly, then fall back to the adaptive telemetry
+        cadence so long runs do not produce unbounded CSV files.
+        """
+        if not hasattr(trainer, "log_every_n_steps"):
+            return
+        cadence = _METRIC_LOG_EARLY_CADENCE if trainer.global_step <= _METRIC_LOG_EARLY_STEPS else self._every_n_steps
+        # `log_every_n_steps` is set on the trainer instance at runtime by the
+        # logger connector, so it is not part of the Trainer class contract.
+        setattr(trainer, "log_every_n_steps", cadence)  # noqa: B010
+
+    @staticmethod
     def _progress(trainer: L.Trainer) -> int:
         """Compute completion from the effective step budget.
 
@@ -146,6 +246,7 @@ class ProgressReportingCallback(Callback):
     def on_fit_start(self, trainer: L.Trainer, _pl_module: L.LightningModule) -> None:
         """Resolve the logging cadence and honor a cancel requested before training."""
         self._every_n_steps = self._auto_every_n_steps(self._total_steps(trainer) or 0)
+        self._apply_metric_log_cadence(trainer)
         self._check_stop(trainer)
 
     def on_train_batch_end(
@@ -158,6 +259,8 @@ class ProgressReportingCallback(Callback):
     ) -> None:
         """Report step progress and loss; honor cancellation."""
         global_step = trainer.global_step
+        self._apply_metric_log_cadence(trainer)
+        self._report_training_plan(trainer)
         extra: dict[str, object] = {"train/loss_step": self._extract_loss(outputs)}
         # Attach the detailed cadence fields so consumers can throttle logs.
         if global_step <= 1 or global_step % self._every_n_steps == 0:

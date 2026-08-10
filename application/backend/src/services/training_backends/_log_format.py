@@ -9,7 +9,7 @@ stream reads the same regardless of where training ran.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -30,6 +30,42 @@ def format_training_progress(*, global_step: int, max_steps: int, loss: float | 
     max_steps = max(1, max_steps)
     progress = min(100, round(global_step / max_steps * 100))
     return f"Training progress: step={global_step}/{max_steps} ({progress}%), train/loss_step={loss}"
+
+
+def format_training_plan(
+    *,
+    batch_size: int | None,
+    steps_per_epoch: int | None,
+    train_frames: int | None,
+    val_frames: int | None,
+    epochs: int | None,
+    total_steps: int | None,
+    num_workers: int | None,
+) -> str:
+    """Build the job-log line describing the resolved training plan.
+
+    Args:
+        batch_size: Effective batch size (after auto scaling, when enabled).
+        steps_per_epoch: DataLoader batches (training steps) per epoch.
+        train_frames: Training samples (dataset timesteps/frames).
+        val_frames: Validation samples, or None when there is no eval-loss split.
+        epochs: Configured epoch budget.
+        total_steps: Effective total step budget.
+        num_workers: DataLoader worker count.
+
+    Returns:
+        A single log line, identical across local and remote backends.
+    """
+    values = [
+        f"batch_size={batch_size}",
+        f"steps_per_epoch={steps_per_epoch}",
+        f"train_frames={train_frames}",
+        f"val_frames={val_frames}",
+        f"epochs={epochs}",
+        f"total_steps={total_steps}",
+        f"num_workers={num_workers}",
+    ]
+    return "Training plan: " + ", ".join(values)
 
 
 def format_validation_start(*, global_step: int, max_steps: int) -> str:
@@ -90,7 +126,35 @@ def render_progress_log(extra_info: Mapping[str, Any]) -> str | None:
     event = extra_info.get("val_event")
     if event is not None:
         return _render_validation_log(str(event), extra_info)
+    if extra_info.get("train_event") == "plan":
+        return _render_training_plan(extra_info)
     return _render_training_log(extra_info)
+
+
+def _render_training_plan(extra_info: Mapping[str, Any]) -> str | None:
+    """Render the training-plan line from the plan telemetry, or None."""
+    try:
+        return format_training_plan(
+            batch_size=_optional_int(extra_info.get("batch_size")),
+            steps_per_epoch=_optional_int(extra_info.get("steps_per_epoch")),
+            train_frames=_optional_int(extra_info.get("train_frames")),
+            val_frames=_optional_int(extra_info.get("val_frames")),
+            epochs=_optional_int(extra_info.get("epochs")),
+            total_steps=_optional_int(extra_info.get("total_steps")),
+            num_workers=_optional_int(extra_info.get("num_workers")),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: object) -> int | None:
+    """Coerce a telemetry value to an int, or None when it cannot be parsed."""
+    if value is None:
+        return None
+    try:
+        return int(cast("Any", value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _render_training_log(extra_info: Mapping[str, Any]) -> str | None:

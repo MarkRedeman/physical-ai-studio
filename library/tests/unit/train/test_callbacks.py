@@ -30,6 +30,36 @@ def _trainer(
     return trainer
 
 
+def _plan_trainer(
+    *,
+    global_step: int = 1,
+    batch_size: int = 180,
+    num_training_batches: int = 901,
+    train_frames: int = 162000,
+    val_frames: int = 18000,
+    epochs: int = 5,
+    max_steps: int = 4505,
+) -> MagicMock:
+    """Build a trainer mock with the attributes the training-plan telemetry reads."""
+    trainer = MagicMock()
+    trainer.global_step = global_step
+    trainer.max_steps = max_steps
+    trainer.estimated_stepping_batches = max_steps
+    trainer.max_epochs = epochs
+    trainer.current_epoch = 0
+    trainer.num_training_batches = num_training_batches
+    trainer.should_stop = False
+    trainer.callback_metrics = {}
+    trainer.callbacks = []
+    datamodule = MagicMock()
+    datamodule.batch_size = batch_size
+    datamodule.num_workers = 8
+    datamodule.train_dataset = range(train_frames)
+    datamodule.val_eval_dataset = range(val_frames)
+    trainer.datamodule = datamodule
+    return trainer
+
+
 class TestProgressReportingCallback:
     """Tests for the shared progress/telemetry callback."""
 
@@ -171,6 +201,66 @@ class TestProgressReportingCallback:
         cb.on_fit_start(trainer, MagicMock())
 
         assert trainer.should_stop is True
+
+    def test_reports_training_plan_on_first_batch(self) -> None:
+        cb, report = self._callback()
+        trainer = _plan_trainer()
+
+        cb.on_fit_start(trainer, MagicMock())
+        cb.on_train_batch_end(trainer, MagicMock(), {"loss": _loss(0.5)}, None, 0)
+
+        assert report.call_count == 2  # plan, then loss
+        plan = report.call_args_list[0].args[2]
+        assert plan["train_event"] == "plan"
+        assert plan["batch_size"] == 180
+        assert plan["steps_per_epoch"] == 901
+        assert plan["train_frames"] == 162000
+        assert plan["val_frames"] == 18000
+        assert plan["epochs"] == 5
+        assert plan["total_steps"] == 4505
+        assert plan["num_workers"] == 8
+
+    def test_training_plan_emitted_only_once(self) -> None:
+        cb, report = self._callback()
+        trainer = _plan_trainer()
+        cb.on_fit_start(trainer, MagicMock())
+
+        cb.on_train_batch_end(trainer, MagicMock(), {"loss": _loss(0.5)}, None, 0)
+        cb.on_train_batch_end(trainer, MagicMock(), {"loss": _loss(0.5)}, None, 1)
+
+        plans = [args.args[2] for args in report.call_args_list if args.args[2].get("train_event") == "plan"]
+        assert len(plans) == 1
+
+    def test_metric_log_cadence_is_every_10_steps_early(self) -> None:
+        cb, _ = self._callback()
+        trainer = MagicMock()
+        trainer.global_step = 1
+        trainer.max_steps = 50000
+        trainer.estimated_stepping_batches = 50000
+        trainer.current_epoch = 0
+        trainer.should_stop = False
+        trainer.callbacks = []
+        trainer.log_every_n_steps = 50  # Lightning default
+
+        cb.on_fit_start(trainer, MagicMock())
+        cb.on_train_batch_end(trainer, MagicMock(), {"loss": _loss(0.5)}, None, 0)
+        assert trainer.log_every_n_steps == 10
+
+    def test_metric_log_cadence_falls_back_after_early_phase(self) -> None:
+        cb, _ = self._callback()
+        trainer = MagicMock()
+        trainer.global_step = 10001
+        trainer.max_steps = 50000
+        trainer.estimated_stepping_batches = 50000
+        trainer.current_epoch = 0
+        trainer.should_stop = False
+        trainer.callbacks = []
+
+        cb.on_fit_start(trainer, MagicMock())
+        cb.on_train_batch_end(trainer, MagicMock(), {"loss": _loss(0.5)}, None, 0)
+
+        # _auto_every_n_steps(50000) == 50, which is reused past the early phase.
+        assert trainer.log_every_n_steps == 50
 
 
 class TestIterationTimer:

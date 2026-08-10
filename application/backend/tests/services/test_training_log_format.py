@@ -8,6 +8,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from services.training_backends._log_format import (
+    format_training_plan,
     format_training_progress,
     format_validation_progress,
     format_validation_start,
@@ -37,6 +38,66 @@ class TestFormatTrainingProgress:
         # Avoids divide-by-zero; progress clamps to 100.
         line = format_training_progress(global_step=5, max_steps=0, loss=0.5)
         assert line == "Training progress: step=5/1 (100%), train/loss_step=0.5"
+
+
+class TestFormatTrainingPlan:
+    def test_renders_full_plan_line(self) -> None:
+        line = format_training_plan(
+            batch_size=180,
+            steps_per_epoch=901,
+            train_frames=162000,
+            val_frames=18000,
+            epochs=5,
+            total_steps=4505,
+            num_workers=8,
+        )
+        assert line == (
+            "Training plan: batch_size=180, steps_per_epoch=901, train_frames=162000, "
+            "val_frames=18000, epochs=5, total_steps=4505, num_workers=8"
+        )
+
+    def test_renders_partial_plan_literally(self) -> None:
+        line = format_training_plan(
+            batch_size=None,
+            steps_per_epoch=901,
+            train_frames=None,
+            val_frames=None,
+            epochs=5,
+            total_steps=None,
+            num_workers=None,
+        )
+        assert (
+            line == "Training plan: batch_size=None, steps_per_epoch=901, train_frames=None, "
+            "val_frames=None, epochs=5, total_steps=None, num_workers=None"
+        )
+
+
+class TestRenderTrainingPlan:
+    def test_renders_plan_from_telemetry(self) -> None:
+        extra_info = {
+            "train_event": "plan",
+            "batch_size": 180,
+            "steps_per_epoch": 901,
+            "train_frames": 162000,
+            "val_frames": 18000,
+            "epochs": 5,
+            "total_steps": 4505,
+            "num_workers": 8,
+        }
+        assert render_progress_log(extra_info) == (
+            "Training plan: batch_size=180, steps_per_epoch=901, train_frames=162000, "
+            "val_frames=18000, epochs=5, total_steps=4505, num_workers=8"
+        )
+
+    def test_renders_plan_with_missing_fields(self) -> None:
+        extra_info = {"train_event": "plan", "batch_size": 32, "steps_per_epoch": 2500}
+        assert render_progress_log(extra_info) == (
+            "Training plan: batch_size=32, steps_per_epoch=2500, train_frames=None, "
+            "val_frames=None, epochs=None, total_steps=None, num_workers=None"
+        )
+
+    def test_skips_non_plan_train_event(self) -> None:
+        assert render_progress_log({"train_event": "other"}) is None
 
 
 class TestFormatValidation:
