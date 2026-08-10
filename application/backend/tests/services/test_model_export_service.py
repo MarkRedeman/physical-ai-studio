@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from pathlib import Path
-from types import SimpleNamespace
+from pathlib import Path  # noqa: TC003
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -33,11 +32,6 @@ def _make_model(*, path: str, properties: dict | None = None) -> Model:
     )
 
 
-@pytest.fixture
-def settings(tmp_path: Path) -> SimpleNamespace:
-    return SimpleNamespace(models_dir=tmp_path / "models")
-
-
 def run(coro):
     return asyncio.run(coro)
 
@@ -57,84 +51,78 @@ def _patch_db(model: Model):
     async def fake_session_ctx():
         yield session
 
-    created: list[Model] = []
-
-    def _create(model: Model) -> Model:
-        created.append(model)
-        return model
-
     service = MagicMock()
     service.get_model_by_id = AsyncMock(return_value=model)
-    service.create_model = AsyncMock(side_effect=_create)
+    service.create_model = AsyncMock()
 
     ctx_patch = patch("services.model_export_service.get_async_db_session_ctx", fake_session_ctx)
     svc_patch = patch("services.model_export_service.ModelService", return_value=service)
-    return ctx_patch, svc_patch, created
+    return ctx_patch, svc_patch, service
 
 
 class TestModelExportService:
-    def test_export_creates_complete_model(self, tmp_path: Path, settings) -> None:
+    def test_export_adds_backend_to_existing_model(self, tmp_path: Path) -> None:
         src = tmp_path / "source"
-        (src / "version_0").mkdir(parents=True)
+        (src / "exports" / "torch").mkdir(parents=True)
         (src / "model.ckpt").write_bytes(b"ckpt")
-        (src / "version_0" / "metrics.csv").write_text("epoch,step\n")
+        (src / "exports" / "torch" / "existing.pt").write_bytes(b"torch")
         model = _make_model(path=str(src))
 
-        ctx_patch, svc_patch, created = _patch_db(model)
+        def write_backend(_policy, _model, exports_dir: Path, backend) -> None:
+            backend_dir = exports_dir / backend.value
+            backend_dir.mkdir(parents=True)
+            (backend_dir / f"{backend.value}.artifact").write_bytes(b"export")
+
+        ctx_patch, svc_patch, service = _patch_db(model)
         with (
             ctx_patch,
             svc_patch,
-            patch("services.model_export_service.get_settings", return_value=settings),
             patch(
                 "services.model_export_service.ModelExportService._load_policy",
                 return_value=_mock_policy(["torch", "openvino"]),
             ) as load_policy,
             patch(
                 "services.model_export_service.ModelExportService._export_policy",
-                side_effect=lambda _policy, _model, exports_dir, backends: (exports_dir / "openvino").mkdir(
-                    parents=True, exist_ok=True
-                ),
+                side_effect=write_backend,
             ) as export_policy,
             patch("services.model_export_service.ModelCompressionService._compress_openvino_dir") as compress,
         ):
-            result = run(ModelExportService.export_model(model.id))
+            result = run(ModelExportService.export_model(model.id, backends=["openvino"]))
 
         load_policy.assert_called_once()
         export_policy.assert_called_once()
         compress.assert_called_once()
+        service.create_model.assert_not_awaited()
 
-        assert created and created[0].id == result.id
-        new_dir = Path(result.path)
-        assert (new_dir / "model.ckpt").is_file()
-        assert (new_dir / "version_0" / "metrics.csv").is_file()
-        assert result.parent_model_id == model.id
-        assert result.version == model.version + 1
-        assert result.properties["source_model_id"] == str(model.id)
-        assert "training_engine" not in result.properties
+        assert result is model
+        assert (src / "model.ckpt").is_file()
+        assert (src / "exports" / "torch" / "existing.pt").is_file()
+        assert (src / "exports" / "openvino" / "openvino.artifact").is_file()
 
-    def test_export_preserves_training_engine_for_lerobot(self, tmp_path: Path, settings) -> None:
+    def test_export_preserves_existing_backend_when_export_fails(self, tmp_path: Path) -> None:
         src = tmp_path / "source"
-        src.mkdir(parents=True)
+        (src / "exports" / "openvino").mkdir(parents=True)
         (src / "model.ckpt").write_bytes(b"ckpt")
-        model = _make_model(path=str(src), properties={"training_engine": "lerobot"})
+        (src / "exports" / "openvino" / "existing.xml").write_text("old export")
+        model = _make_model(path=str(src))
 
-        ctx_patch, svc_patch, created = _patch_db(model)
+        ctx_patch, svc_patch, _ = _patch_db(model)
         with (
             ctx_patch,
             svc_patch,
-            patch("services.model_export_service.get_settings", return_value=settings),
             patch(
                 "services.model_export_service.ModelExportService._load_policy",
                 return_value=_mock_policy(["torch", "openvino"]),
             ),
-            patch("services.model_export_service.ModelExportService._export_policy"),
-            patch("services.model_export_service.ModelCompressionService._compress_openvino_dir"),
+            patch("services.model_export_service.ModelExportService._export_policy", side_effect=RuntimeError("boom")),
+            pytest.raises(ModelExportError, match="boom"),
         ):
-            result = run(ModelExportService.export_model(model.id))
+            run(ModelExportService.export_model(model.id, backends=["openvino"]))
 
-        assert result.properties["training_engine"] == "lerobot"
+        assert (src / "exports" / "openvino" / "existing.xml").read_text() == "old export"
+        assert not list(src.glob(".tmp-export-*"))
 
-    def test_export_requires_checkpoint(self, tmp_path: Path, settings) -> None:
+    def test_export_requires_checkpoint(self, tmp_path: Path) -> None:
         src = tmp_path / "source"
         src.mkdir(parents=True)
         model = _make_model(path=str(src))
@@ -143,12 +131,11 @@ class TestModelExportService:
         with (
             ctx_patch,
             svc_patch,
-            patch("services.model_export_service.get_settings", return_value=settings),
             pytest.raises(ModelExportError, match="no checkpoint"),
         ):
             run(ModelExportService.export_model(model.id))
 
-    def test_export_rejects_backend_not_supported_by_policy(self, tmp_path: Path, settings) -> None:
+    def test_export_rejects_backend_not_supported_by_policy(self, tmp_path: Path) -> None:
         src = tmp_path / "source"
         src.mkdir(parents=True)
         (src / "model.ckpt").write_bytes(b"ckpt")
@@ -158,7 +145,6 @@ class TestModelExportService:
         with (
             ctx_patch,
             svc_patch,
-            patch("services.model_export_service.get_settings", return_value=settings),
             patch(
                 "services.model_export_service.ModelExportService._load_policy",
                 return_value=_mock_policy(["torch"]),
@@ -166,25 +152,6 @@ class TestModelExportService:
             pytest.raises(ModelExportError, match="openvino"),
         ):
             run(ModelExportService.export_model(model.id, backends=["openvino"]))
-
-    def test_export_cleans_up_on_failure(self, tmp_path: Path, settings) -> None:
-        src = tmp_path / "source"
-        src.mkdir(parents=True)
-        (src / "model.ckpt").write_bytes(b"ckpt")
-        model = _make_model(path=str(src))
-
-        ctx_patch, svc_patch, _ = _patch_db(model)
-        with (
-            ctx_patch,
-            svc_patch,
-            patch("services.model_export_service.get_settings", return_value=settings),
-            patch("services.model_export_service.ModelExportService._load_policy", side_effect=RuntimeError("boom")),
-            pytest.raises(ModelExportError, match="boom"),
-        ):
-            run(ModelExportService.export_model(model.id))
-
-        leftovers = list((settings.models_dir).iterdir()) if settings.models_dir.exists() else []
-        assert leftovers == []
 
     def test_is_lerobot_model(self) -> None:
         assert ModelExportService._is_lerobot_model(_make_model(path="/tmp", properties={"training_engine": "lerobot"}))

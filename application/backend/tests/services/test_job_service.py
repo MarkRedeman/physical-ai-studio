@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions import ResourceInUseError, ResourceNotFoundError
 from schemas.base_job import JobStatus
+from schemas.export_job import ModelExportJob
 from schemas.job import TrainJob
 from services.job_service import JobService
 
@@ -25,6 +26,22 @@ def _job(*, status: JobStatus = JobStatus.PENDING) -> TrainJob:
             "max_steps": 100,
             "batch_size": 8,
             "base_model_id": None,
+        },
+    )
+
+
+def _export_job(*, status: JobStatus = JobStatus.COMPLETED) -> ModelExportJob:
+    project_id = uuid4()
+    return ModelExportJob(
+        id=uuid4(),
+        project_id=project_id,
+        status=status,
+        payload={
+            "type": "model_export",
+            "project_id": str(project_id),
+            "model_id": str(uuid4()),
+            "backends": ["torch", "openvino"],
+            "compress": True,
         },
     )
 
@@ -81,3 +98,46 @@ async def test_delete_job_rejects_active_job() -> None:
             await service.delete_job(job.id)
 
     repository_type.return_value.delete_by_id.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_delete_job_rejects_completed_training_job() -> None:
+    session = MagicMock(spec=AsyncSession)
+    job = _job(status=JobStatus.COMPLETED)
+
+    with patch("services.job_service.JobRepository") as repository_type:
+        repository_type.return_value.get_by_id = AsyncMock(return_value=job)
+        repository_type.return_value.delete_by_id = AsyncMock()
+        service = JobService(session)
+        with pytest.raises(ResourceInUseError):
+            await service.delete_job(job.id)
+
+    repository_type.return_value.delete_by_id.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_delete_job_allows_completed_export_job() -> None:
+    session = MagicMock(spec=AsyncSession)
+    job = _export_job(status=JobStatus.COMPLETED)
+
+    with patch("services.job_service.JobRepository") as repository_type:
+        repository_type.return_value.get_by_id = AsyncMock(return_value=job)
+        repository_type.return_value.delete_by_id = AsyncMock()
+        service = JobService(session)
+        await service.delete_job(job.id)
+
+    repository_type.return_value.delete_by_id.assert_awaited_once_with(job.id)
+
+
+@pytest.mark.anyio
+async def test_delete_job_allows_failed_export_job() -> None:
+    session = MagicMock(spec=AsyncSession)
+    job = _export_job(status=JobStatus.FAILED)
+
+    with patch("services.job_service.JobRepository") as repository_type:
+        repository_type.return_value.get_by_id = AsyncMock(return_value=job)
+        repository_type.return_value.delete_by_id = AsyncMock()
+        service = JobService(session)
+        await service.delete_job(job.id)
+
+    repository_type.return_value.delete_by_id.assert_awaited_once_with(job.id)

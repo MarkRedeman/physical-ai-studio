@@ -164,7 +164,8 @@ class JobService:
         if job is None:
             raise ResourceNotFoundError(ResourceType.JOB, str(job_id))
 
-        if job.status not in {JobStatus.FAILED, JobStatus.CANCELED}:
+        can_delete_completed_export = job.type is JobType.MODEL_EXPORT and job.status is JobStatus.COMPLETED
+        if job.status not in {JobStatus.FAILED, JobStatus.CANCELED} and not can_delete_completed_export:
             raise ResourceInUseError(ResourceType.JOB, str(job_id))
 
         await self.repo.delete_by_id(job_id)

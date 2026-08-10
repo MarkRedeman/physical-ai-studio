@@ -68,7 +68,6 @@ class ModelExportWorker(BaseProcessWorker):
                 backends: list[str | ExportBackend] = list(payload.backends)
                 exported = await ModelExportService.export_model(
                     payload.model_id,
-                    name=payload.name,
                     backends=backends,
                     compress=payload.compress,
                 )
@@ -77,9 +76,9 @@ class ModelExportWorker(BaseProcessWorker):
                     status=JobStatus.COMPLETED,
                     message="Model exported",
                     progress=100,
-                    extra_info={"exported_model_id": str(exported.id)},
+                    extra_info={"model_id": str(exported.id), "backends": list(payload.backends)},
                 )
-                logger.info("Model export job completed: job_id='{}', exported_model_id='{}'", job.id, exported.id)
+                logger.info("Model export job completed: job_id='{}', model_id='{}'", job.id, exported.id)
                 self.queue.put((EventType.JOB_UPDATE, completed))
             except Exception as exc:
                 logger.exception("Model export failed for job {}: {}", job.id, exc)

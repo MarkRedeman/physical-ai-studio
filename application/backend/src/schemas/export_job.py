@@ -19,7 +19,6 @@ class ModelExportJobPayload(BaseModel):
         description="Backends to export to",
     )
     compress: bool = Field(default=True, description="Apply NNCF INT8 compression to the OpenVINO export")
-    name: str | None = Field(default=None, description="Optional display name for the exported model")
 
 
 class ModelExportJob(BaseJob):

@@ -81,12 +81,6 @@ def import_dir(
 @models.command("export")
 @click.argument("model_id", type=click.UUID)
 @click.option(
-    "--name",
-    default=None,
-    type=str,
-    help="Name for the re-exported model (default: '<original> (re-exported)')",
-)
-@click.option(
     "--backend",
     "backends",
     multiple=True,
@@ -98,12 +92,8 @@ def import_dir(
     default=True,
     help="Apply NNCF INT8 weight compression to the OpenVINO export (default: compress)",
 )
-def export_model(model_id: UUID, name: str | None, backends: tuple[str, ...], compress: bool) -> None:
-    """Re-export a trained model from its checkpoint to torch and/or OpenVINO.
-
-    Creates a new model record with fresh exports, linked to the original via
-    parent_model_id. The OpenVINO export is compressed to INT8 by default.
-    """
+def export_model(model_id: UUID, backends: tuple[str, ...], compress: bool) -> None:
+    """Add requested backend exports to an existing trained model."""
     from services.model_export_service import ModelExportError, ModelExportService
 
     selected = list(backends) or ["torch", "openvino"]
@@ -114,13 +104,12 @@ def export_model(model_id: UUID, name: str | None, backends: tuple[str, ...], co
     async def _run_export() -> None:
         exported = await ModelExportService.export_model(
             model_id=model_id,
-            name=name,
             backends=selected,
             compress=compress,
         )
-        click.echo("Model exported successfully!")
-        click.echo(f"Exported model ID: {exported.id}")
-        click.echo(f"Exported model path: {exported.path}")
+        click.echo("Model exports added successfully!")
+        click.echo(f"Model ID: {exported.id}")
+        click.echo(f"Model path: {exported.path}")
 
     try:
         asyncio.run(_run_export())

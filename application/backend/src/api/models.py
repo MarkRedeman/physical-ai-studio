@@ -78,8 +78,8 @@ async def export_model_job(
 ) -> Job:
     """Queue a re-export job for the given model (torch and/or OpenVINO).
 
-    The re-export runs in the background worker and creates a new model record
-    linked to this one via ``parent_model_id``.
+    The re-export runs in the background worker and adds the requested backend
+    directories to this model's existing ``exports/`` directory.
     """
     payload = body or ModelExportJobPayload(model_id=model_id)
     payload.model_id = model_id

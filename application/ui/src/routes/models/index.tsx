@@ -15,11 +15,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import useWebSocket from 'react-use-websocket';
 
 import { $api, fetchClient } from '../../api/client';
-import { SchemaTrainJob as SchemaJob, SchemaModel } from '../../api/openapi-spec';
+import {
+    SchemaDatasetImportJob,
+    SchemaTrainJob as SchemaJob,
+    SchemaModel,
+    SchemaModelExportJob,
+} from '../../api/openapi-spec';
 import { notify } from '../../components/notification/notification.component';
 import { LogsDialog } from '../../features/logs/logs-dialog';
 import { useProjectId } from '../../features/projects/use-project';
 import { ReactComponent as EmptyIllustration } from './../../assets/illustration.svg';
+import { ExportHeader, ExportRow } from './export-job-table.component';
 import { TrainingHeader, TrainingRow } from './job-table.component';
 import { ModelHeader, ModelRow } from './model-table.component';
 import { SchemaTrainJob, TrainModelDialog } from './train-model-dialog';
@@ -124,12 +130,54 @@ const JobList = ({ jobs, onViewLogs }: { jobs: SchemaTrainJob[]; onViewLogs: (jo
     );
 };
 
+const ExportList = ({
+    jobs,
+    models,
+    onViewLogs,
+}: {
+    jobs: SchemaModelExportJob[];
+    models: SchemaModel[];
+    onViewLogs: (job: SchemaModelExportJob) => void;
+}) => {
+    const sortedJobs = jobs.toSorted((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime());
+    const modelNames = new Map(models.map((model) => [model.id, model.name]));
+
+    if (sortedJobs.length === 0) {
+        return <></>;
+    }
+
+    return (
+        <View marginBottom='size-600'>
+            <Heading level={4} marginBottom='size-100'>
+                Current Exports
+            </Heading>
+            <ExportHeader />
+            {sortedJobs.map((job) => (
+                <ExportRow
+                    key={job.id}
+                    job={job}
+                    modelName={modelNames.get(job.payload.model_id) ?? 'Model'}
+                    onViewLogs={() => onViewLogs(job)}
+                />
+            ))}
+        </View>
+    );
+};
+
 const useProjectTrainingJobs = (project_id: string): SchemaTrainJob[] => {
     const { data: allJobs = [] } = $api.useQuery('get', '/api/jobs');
 
     return allJobs
         .filter((job) => job.project_id === project_id)
         .filter((job): job is SchemaTrainJob => job.type === 'training');
+};
+
+const useProjectModelExportJobs = (project_id: string): SchemaModelExportJob[] => {
+    const { data: allJobs = [] } = $api.useQuery('get', '/api/jobs');
+
+    return allJobs
+        .filter((job) => job.project_id === project_id)
+        .filter((job): job is SchemaModelExportJob => job.type === 'model_export');
 };
 
 export const Index = () => {
@@ -139,6 +187,7 @@ export const Index = () => {
     });
 
     const jobs = useProjectTrainingJobs(project_id);
+    const exportJobs = useProjectModelExportJobs(project_id);
     const [retrainModel, setRetrainModel] = useState<SchemaModel | null>(null);
     const [logsSourceId, setLogsSourceId] = useState<string | undefined>();
 
@@ -156,14 +205,16 @@ export const Index = () => {
     });
     const client = useQueryClient();
 
-    const updateJob = (job: SchemaJob) => {
-        client.setQueryData<SchemaJob[]>(['get', '/api/jobs'], (old = []) => {
+    type SchemaJobUnion = SchemaJob | SchemaModelExportJob | SchemaDatasetImportJob;
+
+    const updateJob = (job: SchemaJobUnion) => {
+        client.setQueryData<SchemaJobUnion[]>(['get', '/api/jobs'], (old = []) => {
             return old.map((m) => (m.id === job.id ? job : m));
         });
     };
 
     const addJob = (job: SchemaJob) => {
-        client.setQueryData<SchemaJob[]>(['get', '/api/jobs'], (old = []) => {
+        client.setQueryData<SchemaJobUnion[]>(['get', '/api/jobs'], (old = []) => {
             return [...old, job];
         });
     };
@@ -171,12 +222,12 @@ export const Index = () => {
     const onMessage = ({ data }: WebSocketEventMap['message']) => {
         const message_data = JSON.parse(data);
         if (message_data.event === 'JOB_UPDATE') {
-            const message = message_data as { event: string; data: SchemaJob };
+            const message = message_data as { event: string; data: SchemaJobUnion };
             if (message.data.project_id !== project_id) {
                 return;
             }
 
-            updateJob(message.data as SchemaTrainJob);
+            updateJob(message.data);
 
             if (message.data.message && message.data.status === 'running') {
                 notify('info', message.data.message);
@@ -189,7 +240,7 @@ export const Index = () => {
     };
 
     const hasModels = models.length > 0;
-    const hasJobs = jobs.length > 0;
+    const hasJobs = jobs.length > 0 || exportJobs.length > 0;
     const showIllustratedMessage = !hasModels && !hasJobs;
 
     return (
@@ -227,6 +278,13 @@ export const Index = () => {
                         </Flex>
                         <JobList
                             jobs={jobs}
+                            onViewLogs={(job) => {
+                                setLogsSourceId(job.id);
+                            }}
+                        />
+                        <ExportList
+                            jobs={exportJobs}
+                            models={models}
                             onViewLogs={(job) => {
                                 setLogsSourceId(job.id);
                             }}

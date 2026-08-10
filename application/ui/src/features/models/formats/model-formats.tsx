@@ -17,7 +17,7 @@ import {
 import { DownloadIcon, MagicWandIcon } from '@geti-ui/ui/icons';
 
 import { $api, fetchClient } from '../../../api/client';
-import type { components, SchemaModel } from '../../../api/openapi-spec';
+import type { components, SchemaModel, SchemaModelExportJob } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS, type InferenceBackendConfig } from '../inference-backends';
 
 interface ModelExportsProps {
@@ -125,10 +125,20 @@ interface BackendCardProps {
     backendType: ExportBackend;
     model: SchemaModel;
     isExporting: boolean;
+    isExportingBackend: boolean;
+    exportProgress: number | undefined;
     onExport: (backends: ExportBackend[]) => void;
 }
 
-const BackendCard = ({ modelDetail, backendType, model, isExporting, onExport }: BackendCardProps) => {
+const BackendCard = ({
+    modelDetail,
+    backendType,
+    model,
+    isExporting,
+    isExportingBackend,
+    exportProgress,
+    onExport,
+}: BackendCardProps) => {
     const exportDetail = modelDetail.exports.find(({ type }) => type === backendType);
     const isAvailable = exportDetail !== undefined;
     const backend = INFERENCE_BACKENDS[backendType];
@@ -190,7 +200,9 @@ const BackendCard = ({ modelDetail, backendType, model, isExporting, onExport }:
                                     isDisabled={isExporting}
                                     onPress={() => onExport([backendType])}
                                 >
-                                    <span>{isExporting ? 'Exporting…' : 'Try to export'}</span>
+                                    <span>
+                                        {isExportingBackend ? `Exporting… ${exportProgress ?? 0}%` : 'Try to export'}
+                                    </span>
                                 </Button>
                             </View>
                         )}
@@ -206,6 +218,7 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
         params: { path: { model_id: model.id! } },
     });
     const { data: policyBackends } = $api.useSuspenseQuery('get', '/api/policies/backends');
+    const { data: jobs = [] } = $api.useQuery('get', '/api/jobs');
 
     const exportMutation = $api.useMutation('post', '/api/models/{model_id}:export', {
         meta: {
@@ -218,6 +231,13 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
     });
 
     const backends = (policyBackends[model.policy] ?? []).filter(isExportBackend);
+    const activeExportJob = jobs.find(
+        (job): job is SchemaModelExportJob =>
+            job.type === 'model_export' &&
+            job.payload.model_id === model.id &&
+            (job.status === 'pending' || job.status === 'running')
+    );
+    const isExporting = exportMutation.isPending || activeExportJob !== undefined;
 
     return (
         <Flex direction='column' gap='size-200'>
@@ -232,12 +252,12 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                 <Flex direction='column' gap='size-50'>
                     <Text UNSAFE_style={{ fontWeight: 600 }}>Deployment exports</Text>
                     <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
-                        Re-export this model to Torch and OpenVINO (NNCF INT8) as a new model.
+                        Add or refresh this model&apos;s Torch and OpenVINO exports (NNCF INT8).
                     </Text>
                 </Flex>
                 <Button
                     variant='secondary'
-                    isDisabled={exportMutation.isPending}
+                    isDisabled={isExporting}
                     onPress={() =>
                         exportMutation.mutate({
                             params: { path: { model_id: model.id! } },
@@ -252,9 +272,15 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                     <Icon marginEnd='size-100'>
                         <MagicWandIcon />
                     </Icon>
-                    <span>{exportMutation.isPending ? 'Optimizing…' : 'Optimize'}</span>
+                    <span>{activeExportJob ? `Exporting… ${activeExportJob.progress}%` : 'Optimize'}</span>
                 </Button>
             </Flex>
+            {activeExportJob && (
+                <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
+                    Exporting {activeExportJob.payload.backends.map((backend) => backend.toUpperCase()).join(', ')}:{' '}
+                    {activeExportJob.progress}%
+                </Text>
+            )}
             <Grid
                 gap='size-200'
                 UNSAFE_style={{
@@ -268,7 +294,9 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                             backendType={backendType}
                             model={model}
                             modelDetail={modelDetail}
-                            isExporting={exportMutation.isPending}
+                            isExporting={isExporting}
+                            isExportingBackend={activeExportJob?.payload.backends.includes(backendType) ?? false}
+                            exportProgress={activeExportJob?.progress}
                             onExport={(selectedBackends) =>
                                 exportMutation.mutate({
                                     params: { path: { model_id: model.id! } },
