@@ -37,6 +37,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from training.base_checkpoints import PRETRAINED_BASE_CHECKPOINTS
+
 if TYPE_CHECKING:
     from physicalai.policies.base import Policy
     from physicalai.train.callbacks import ReportFn, StopFn
@@ -54,12 +56,6 @@ ExportBackends = list[Literal["torch", "openvino", "onnx", "executorch"]]
 
 _DATASET_REPO_ID = "snapshot"
 """Placeholder repo id: datasets are always loaded from a local root here."""
-
-PRETRAINED_BASE_CHECKPOINTS: dict[str, str] = {
-    "pi05": "lerobot/pi05_base",
-    "smolvla": "lerobot/smolvla_base",
-}
-"""Hub checkpoints used to initialize policies that only fine-tune from pretrained weights."""
 
 _WEIGHTS_ONLY_RESUME_POLICIES = frozenset({"pi0"})
 """Policies whose checkpoints must be reloaded with ``weights_only=True``."""

@@ -57,8 +57,10 @@ from lerobot.optim.factory import make_optimizer_and_scheduler
 from lerobot.policies import make_policy, make_pre_post_processors
 from lerobot.policies.factory import make_policy_config
 from lerobot.utils.collate import lerobot_collate_fn
-from lerobot.utils.constants import PRETRAINED_MODEL_DIR
+from lerobot.utils.constants import OBS_IMAGES, PRETRAINED_MODEL_DIR
 from lerobot.utils.utils import cycle
+
+from training.base_checkpoints import PRETRAINED_BASE_CHECKPOINTS
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -104,11 +106,6 @@ def run_lerobot_training_job(
     device = _resolve_device(spec)
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
-
-    if spec.rename_map:
-        logger.warning(
-            "Camera rename_map is not supported by the LeRobot engine; training on the dataset's cameras as-is"
-        )
 
     resume_checkpoint = _resolve_resume_checkpoint(resume_from)
     cfg = _build_config(
@@ -306,12 +303,16 @@ def _build_config(
     """Build the LeRobot ``TrainPipelineConfig``.
 
     Only the job's explicit choices override lerobot defaults: the dataset
-    (with its eval split), the policy, the batch size, and the dataloader
-    workers. Optimizer, scheduler, learning rate, seed, and cadence all follow
-    lerobot's own defaults; the physicalai-synced step/cadence budget is
-    applied in ``_train`` once the train-split size is known. Resumed runs load
-    the checkpoint's ``train_config.json`` so optimizer, scheduler, and sampler
-    semantics come from the original run.
+    (with its eval split), the policy, the batch size, the dataloader workers,
+    and the camera ``rename_map``. VLA policies (pi05, smolvla) start from the
+    same pretrained base checkpoint the physicalai engine uses, which is what
+    makes the camera rename map applicable: the pretrained policy's fixed
+    camera schema is what the dataset's cameras are renamed into. Optimizer,
+    scheduler, learning rate, seed, and cadence all follow lerobot's own
+    defaults; the physicalai-synced step/cadence budget is applied in ``_train``
+    once the train-split size is known. Resumed runs load the checkpoint's
+    ``train_config.json`` so optimizer, scheduler, and sampler semantics come
+    from the original run.
     """
     if resume_checkpoint is not None:
         return _resume_config(resume_checkpoint, dataset_root=dataset_root, device=device, cache_dir=cache_dir)
@@ -332,8 +333,69 @@ def _build_config(
         use_policy_training_preset=True,
         wandb=WandBConfig(enable=False),
     )
+
+    # VLA policies only fine-tune: initialize from the same Hub base the
+    # physicalai engine uses so both engines train the same weights.
+    base_checkpoint = PRETRAINED_BASE_CHECKPOINTS.get(spec.policy.lower())
+    if base_checkpoint is not None:
+        assert cfg.policy is not None  # noqa: S101
+        cfg.policy.pretrained_path = Path(base_checkpoint)
+
+    _apply_rename_map(cfg, spec.rename_map)
     _resolve_optimizer_and_scheduler(cfg)
     return cfg
+
+
+def _apply_rename_map(cfg: TrainPipelineConfig, rename_map: dict[str, str | None]) -> None:
+    """Translate the job's camera map into LeRobot's ``rename_map`` + ``empty_cameras``.
+
+    Studio's ``TrainingJobSpec.rename_map`` maps *policy camera names* to *dataset
+    camera names* (``{"policy_cam": "dataset_cam"}``), with a ``None`` value marking
+    an empty camera slot. LeRobot expresses the same intent differently:
+
+    - ``cfg.rename_map`` renames observation keys on the way in, mapping
+      *dataset* keys to the pretrained policy's *expected* keys
+      (``{"observation.images.<dataset_cam>": "observation.images.<policy_cam>"}``).
+    - Empty slots are handled by the policy config's ``empty_cameras`` field
+      (SmolVLA/pi05 pad missing cameras with zeros).
+
+    LeRobot only applies ``rename_map`` when training a pretrained policy, so a
+    camera map on a from-scratch policy (no pretrained base) is ignored with a
+    warning.
+    """
+    if not rename_map:
+        return
+
+    policy = cfg.policy
+    if policy is None:
+        logger.warning("Cannot apply camera rename_map: no policy config is available")
+        return
+
+    if policy.pretrained_path is None:
+        logger.warning(
+            "Camera rename_map is only supported when training a pretrained policy; "
+            "training on the dataset's cameras as-is"
+        )
+        return
+
+    translated: dict[str, str] = {}
+    empty_cameras = 0
+    for policy_cam, dataset_cam in rename_map.items():
+        if dataset_cam is None:
+            empty_cameras += 1
+            continue
+        translated[f"{OBS_IMAGES}.{dataset_cam}"] = f"{OBS_IMAGES}.{policy_cam}"
+    cfg.rename_map = translated
+
+    if empty_cameras:
+        if hasattr(policy, "empty_cameras"):
+            setattr(policy, "empty_cameras", empty_cameras)
+        else:
+            logger.warning(
+                "rename_map marks %d empty camera slot(s), but %s has no empty_cameras field; ignoring them",
+                empty_cameras,
+                type(policy).__name__,
+            )
 
 
 def _resume_config(
@@ -479,12 +541,19 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     eval_dataset: Any = raw_eval
 
     report(0, "Creating LeRobot policy", {})
-    policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map={})
+    policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map=cfg.rename_map)
     policy = policy.to(device)
 
     processor_kwargs: dict[str, Any] = {}
     if (cfg.policy.pretrained_path and not cfg.resume) or not cfg.policy.pretrained_path:
         processor_kwargs["dataset_stats"] = dataset.meta.stats
+    if cfg.rename_map:
+        # Rename the dataset's observation keys into the pretrained policy's
+        # expected keys inside the pretrained preprocessor, mirroring
+        # ``lerobot_train``.
+        processor_kwargs["preprocessor_overrides"] = {
+            "rename_observations_processor": {"rename_map": cfg.rename_map},
+        }
     preprocessor, postprocessor = make_pre_post_processors(
         policy_cfg=cfg.policy,
         pretrained_path=str(cfg.policy.pretrained_path) if cfg.policy.pretrained_path is not None else None,

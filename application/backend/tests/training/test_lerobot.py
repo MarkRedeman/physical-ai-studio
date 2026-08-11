@@ -20,7 +20,7 @@ import pytest
 
 from services.training_backends._log_format import render_progress_log
 from training import TrainingJobSpec
-from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, run_training_job
+from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, PRETRAINED_BASE_CHECKPOINTS, run_training_job
 from training.lerobot import (
     _auto_scale_batch_size,
     _build_config,
@@ -161,8 +161,8 @@ def _xpu() -> object:
     return torch.device("xpu")
 
 
-class TestRenameMapIgnored:
-    def test_build_config_never_sets_a_rename_map(self, tmp_path: Path) -> None:
+class TestRenameMap:
+    def test_from_scratch_policy_ignores_rename_map(self, tmp_path: Path) -> None:
         spec = TrainingJobSpec(
             policy="act", training_engine="lerobot", rename_map={"camera1": "overview", "camera2": None}
         )
@@ -173,7 +173,52 @@ class TestRenameMapIgnored:
             cache_dir=tmp_path / "cache",
             resume_checkpoint=None,
         )
+        # ACT has no pretrained base, so there is nothing to rename the dataset
+        # cameras into; the policy trains on the dataset's cameras as-is.
         assert cfg.rename_map == {}
+
+    @pytest.mark.parametrize("policy_name", sorted(PRETRAINED_BASE_CHECKPOINTS))
+    def test_vla_policies_start_from_the_pretrained_base(self, tmp_path: Path, policy_name: str) -> None:
+        """VLA policies fine-tune from the same Hub base the physicalai engine uses."""
+        cfg = _build_config(
+            TrainingJobSpec(policy=policy_name, training_engine="lerobot"),
+            dataset_root=_snapshot(tmp_path),
+            device=_cpu(),
+            cache_dir=tmp_path / "cache",
+            resume_checkpoint=None,
+        )
+        assert str(cfg.policy.pretrained_path) == PRETRAINED_BASE_CHECKPOINTS[policy_name]
+
+    def test_from_scratch_policy_has_no_pretrained_base(self, tmp_path: Path) -> None:
+        cfg = _build_config(
+            TrainingJobSpec(policy="act", training_engine="lerobot"),
+            dataset_root=_snapshot(tmp_path),
+            device=_cpu(),
+            cache_dir=tmp_path / "cache",
+            resume_checkpoint=None,
+        )
+        assert cfg.policy.pretrained_path is None
+
+    def test_pretrained_policy_translates_rename_map(self, tmp_path: Path) -> None:
+        """Studio's {policy_cam: dataset_cam} map becomes LeRobot's {dataset_key: policy_key}."""
+        cfg = _build_config(
+            TrainingJobSpec(
+                policy="smolvla",
+                training_engine="lerobot",
+                rename_map={"camera1": "front", "camera2": "left", "camera3": None},
+            ),
+            dataset_root=_snapshot(tmp_path),
+            device=_cpu(),
+            cache_dir=tmp_path / "cache",
+            resume_checkpoint=None,
+        )
+
+        assert cfg.rename_map == {
+            "observation.images.front": "observation.images.camera1",
+            "observation.images.left": "observation.images.camera2",
+        }
+        # The policy's unused camera slot is padded by the empty_cameras field.
+        assert cfg.policy.empty_cameras == 1
 
 
 class TestTrainingBudget:
