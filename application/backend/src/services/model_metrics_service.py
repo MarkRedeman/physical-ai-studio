@@ -29,22 +29,52 @@ class ModelMetricsService:
 
     @classmethod
     async def tail_csv_file(cls, path: Path) -> AsyncGenerator[ServerSentEvent]:
-        """Async generator that live-tails a log file and yields SSE events."""
-        try:
-            async with await anyio.open_file(path, encoding="utf-8") as f:
-                header_line = await f.readline()
-                headers = next(csv.reader([header_line]))
-                headers = [header.replace("/", "_") for header in headers]
+        """Async generator that live-tails a metrics CSV and yields SSE events.
 
-                while True:
-                    line = await f.readline()
-                    if not line:
+        Rows already present when the stream opens are emitted first, then new
+        rows are streamed as they are appended. Lightning's ``CSVLogger``
+        truncates and rewrites ``metrics.csv`` when a new metric column first
+        appears mid-training (e.g. ``val/loss``); the on-disk header is
+        re-checked on each EOF so the file is re-opened from the top after such
+        a rewrite, with already-emitted rows deduplicated.
+        """
+        emitted: set[tuple] = set()
+        try:
+            while True:
+                async with await anyio.open_file(path, encoding="utf-8") as f:
+                    header_line = await f.readline()
+                    if not header_line or not header_line.strip():
+                        # File not written yet (or mid-rewrite); wait and retry.
                         await asyncio.sleep(0.5)
                         continue
+                    headers = next(csv.reader([header_line]))
+                    headers = [header.replace("/", "_") for header in headers]
 
-                    row = next(csv.reader([line]))
-                    data = {key: cls._parse_value(value) for key, value in zip(headers, row)}
-                    yield ServerSentEvent(data=json.dumps(data))
+                    while True:
+                        line = await f.readline()
+                        if not line:
+                            # At EOF, detect a truncate+rewrite (Lightning header
+                            # growth) by comparing the on-disk header, then
+                            # re-open from the top to recover the full history.
+                            try:
+                                async with await anyio.open_file(path, encoding="utf-8") as peek:
+                                    current_header = await peek.readline()
+                            except OSError:
+                                current_header = ""
+                            if current_header != header_line:
+                                break
+                            await asyncio.sleep(0.5)
+                            continue
+
+                        row = next(csv.reader([line]))
+                        data = {key: cls._parse_value(value) for key, value in zip(headers, row)}
+                        key = tuple(
+                            data.get(column) for column in ("step", "train_loss", "train_loss_step", "val_loss")
+                        )
+                        if key in emitted:
+                            continue
+                        emitted.add(key)
+                        yield ServerSentEvent(data=json.dumps(data))
         except asyncio.CancelledError:
             logger.debug(f"SSE log stream cancelled for {path}")
         except GeneratorExit:
