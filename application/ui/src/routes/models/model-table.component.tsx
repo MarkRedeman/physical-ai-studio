@@ -84,6 +84,10 @@ export const ModelRow = ({
                                     v{version}
                                 </Text>
                             )}
+
+                            <Text UNSAFE_style={{ color: 'var(--spectrum-gray-600)', fontSize: '0.85em' }}>
+                                {model.properties?.training_engine === 'lerobot' ? 'Lerobot' : 'PhsyicalAI'}
+                            </Text>
                         </Flex>
                         <Text>{new Date(model.created_at!).toLocaleString()}</Text>
                         <Text UNSAFE_className={duration ? undefined : classes.modelInfo}>{duration ?? '—'}</Text>
