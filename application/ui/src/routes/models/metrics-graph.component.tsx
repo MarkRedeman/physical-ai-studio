@@ -15,12 +15,15 @@ type MetricGraphProps = {
     data?: MetricGraphPoint[];
     xAxisLabel?: string;
     yAxisLabel: string;
+    yTickFormatter?: (value: number) => string;
 };
 
 const X_AXIS_TICK_COUNT = 8;
 const Y_AXIS_TICK_COUNT = 4;
 
-export const MetricGraph = ({ title, data, xAxisLabel, yAxisLabel }: MetricGraphProps) => {
+const defaultTickFormatter = (value: number) => Number(value).toFixed(4);
+
+export const MetricGraph = ({ title, data, xAxisLabel, yAxisLabel, yTickFormatter }: MetricGraphProps) => {
     const gradientId = useId();
 
     return (
@@ -54,7 +57,7 @@ export const MetricGraph = ({ title, data, xAxisLabel, yAxisLabel }: MetricGraph
                                     label={{ value: yAxisLabel, angle: -90, position: 'center', dx: -38, fill: '#666' }}
                                     tickCount={Y_AXIS_TICK_COUNT}
                                     tickMargin={12}
-                                    tickFormatter={(value) => Number(value).toFixed(4)}
+                                    tickFormatter={(value) => (yTickFormatter ?? defaultTickFormatter)(Number(value))}
                                 />
                                 <Area
                                     type='linear'

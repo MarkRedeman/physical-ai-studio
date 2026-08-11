@@ -25,6 +25,8 @@ const LogStreamContent = ({ sourceId }: { sourceId: string }) => {
             },
         }),
         staleTime: Infinity,
+        refetchOnMount: 'always',
+        retry: true,
     });
 
     const validLogs = useMemo(() => {

@@ -37,11 +37,22 @@ class ModelMetricsService:
         appears mid-training (e.g. ``val/loss``); the on-disk header is
         re-checked on each EOF so the file is re-opened from the top after such
         a rewrite, with already-emitted rows deduplicated.
+
+        A not-yet-created file (the CSV appears shortly after training starts)
+        is not an error: the generator waits and retries so a connection opened
+        before the first flush picks up rows the moment they are written.
         """
         emitted: set[tuple] = set()
         try:
             while True:
-                async with await anyio.open_file(path, encoding="utf-8") as f:
+                try:
+                    f = await anyio.open_file(path, encoding="utf-8")
+                except FileNotFoundError:
+                    # File not created yet; wait for the training process to
+                    # write the first metrics.csv.
+                    await asyncio.sleep(0.5)
+                    continue
+                async with f:
                     header_line = await f.readline()
                     if not header_line or not header_line.strip():
                         # File not written yet (or mid-rewrite); wait and retry.
@@ -79,11 +90,6 @@ class ModelMetricsService:
             logger.debug(f"SSE log stream cancelled for {path}")
         except GeneratorExit:
             logger.debug(f"SSE log stream closed for {path}")
-
-    @staticmethod
-    async def empty_metrics_stream() -> AsyncGenerator[ServerSentEvent]:
-        """Yield a terminal SSE event for sources with no log file yet."""
-        yield ServerSentEvent(data="DONE")
 
     @staticmethod
     def _parse_value(s: str) -> int | float | str | None:

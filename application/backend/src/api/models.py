@@ -159,9 +159,9 @@ async def stream_metrics(
     """Get an EventSourceResponse from the metrics of a model."""
     model = await model_service.get_model_by_id(model_id)
     metrics_path = await model_metrics_service.get_model_metrics_path(model)
-    if metrics_path.exists():
-        return EventSourceResponse(model_metrics_service.tail_csv_file(metrics_path))
-    return EventSourceResponse(model_metrics_service.empty_metrics_stream())
+    # tail_csv_file waits for the file to appear, so the stream stays open even
+    # when no metrics have been written yet.
+    return EventSourceResponse(model_metrics_service.tail_csv_file(metrics_path))
 
 
 @router.delete("/{model_id}")

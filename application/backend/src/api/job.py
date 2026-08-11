@@ -86,9 +86,9 @@ async def get_model_job_metrics(
     """Get model running metrics if job is a model job"""
     job = await job_service.get_job_by_id(job_id)
     metrics_path = await model_metrics_service.get_model_job_metrics_path(job)
-    if metrics_path.exists():
-        return EventSourceResponse(model_metrics_service.tail_csv_file(metrics_path))
-    return EventSourceResponse(model_metrics_service.empty_metrics_stream())
+    # tail_csv_file waits for the file to appear, so opening the stream before
+    # training has written its first metrics.csv rows still connects.
+    return EventSourceResponse(model_metrics_service.tail_csv_file(metrics_path))
 
 
 @router.get("/ws", tags=["WebSocket"], summary="Job updates (WebSocket)", status_code=426)

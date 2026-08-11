@@ -3,8 +3,6 @@ import csv
 import json
 from pathlib import Path
 
-from sse_starlette import ServerSentEvent
-
 from services.model_metrics_service import ModelMetricsService
 
 
@@ -27,7 +25,7 @@ async def _collect_until(
                 event = await asyncio.wait_for(gen.__anext__(), timeout=2.0)
             except StopAsyncIteration:
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 break
             rows.append(json.loads(event.data))
             last_event = asyncio.get_event_loop().time()
@@ -67,6 +65,28 @@ async def test_tail_csv_file_emits_existing_rows_first(tmp_path) -> None:
 
     steps = {row["step"] for row in rows if row["train_loss"] is not None}
     assert steps == {49, 99, 149}
+
+
+async def test_tail_csv_file_waits_for_file_created_after_stream_opens(tmp_path) -> None:
+    """A stream opened before metrics.csv exists must pick up rows once written.
+
+    Training writes the first rows a short while after the job starts, so the
+    metrics tab can connect before the file exists. The stream must not close
+    with an immediate DONE but stay open and emit rows as they appear.
+    """
+    path = tmp_path / "metrics.csv"
+
+    async def create_later() -> None:
+        await asyncio.sleep(0.2)
+        _write_initial_rows(path, step=49, count=2)
+
+    gen = ModelMetricsService.tail_csv_file(path)
+    task = asyncio.create_task(create_later())
+    rows = await _collect_until(gen, max_wait=8.0)
+    await task
+
+    steps = {row["step"] for row in rows if row["train_loss"] is not None}
+    assert steps == {49, 99}
 
 
 async def test_tail_csv_file_keeps_streaming_appended_rows(tmp_path) -> None:
