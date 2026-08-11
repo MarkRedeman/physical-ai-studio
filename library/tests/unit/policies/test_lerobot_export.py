@@ -12,10 +12,14 @@ import pytest
 # Skip all tests if lerobot not installed
 pytest.importorskip("lerobot")
 
+import torch  # noqa: E402
 from lerobot.configs.types import FeatureType, PolicyFeature  # noqa: E402
+from physicalai.config.serializable import dataclass_to_dict  # noqa: E402
 from physicalai.export.backends import ExportBackend  # noqa: E402
+from physicalai.export.mixin_policy import CONFIG_KEY, POLICY_NAME_KEY  # noqa: E402
 from physicalai.policies.lerobot.export import (  # noqa: E402
     ExportableLeRobotPolicy,
+    _LerobotInferenceWrapper,
     build_inputs_schema,
     build_outputs_schema,
     export_lerobot_policy,
@@ -73,6 +77,43 @@ class TestExportableLeRobotPolicy:
         )
         with pytest.raises(TypeError):
             export_lerobot_policy(bare, str(tmp_path))
+
+
+class TestLoadFromCheckpointDeviceAlignment:
+    def test_map_location_cpu_aligns_config_device(self, act_policy, tmp_path: Path) -> None:
+        """Loading a GPU-trained checkpoint with ``map_location="cpu"`` must yield an all-CPU policy.
+
+        LeRobot's config persists the training device, and its preprocessor
+        (``DeviceProcessorStep``) plus some policy forward passes target
+        ``config.device``. Loading to CPU without aligning the config device
+        leaves the trace sample on the accelerator while the weights sit on CPU,
+        which makes ``torch.export`` fail with "Unhandled FakeTensor Device
+        Propagation".
+        """
+        accelerator = "cuda" if torch.cuda.is_available() else ("xpu" if torch.xpu.is_available() else None)
+        if accelerator is None:
+            pytest.skip("No accelerator available to simulate a GPU-trained checkpoint")
+
+        config_dict = dataclass_to_dict(act_policy._config)
+        config_dict["device"] = accelerator
+
+        ckpt_path = tmp_path / "model.ckpt"
+        checkpoint = {
+            "state_dict": act_policy.state_dict(),
+            CONFIG_KEY: config_dict,
+            POLICY_NAME_KEY: "act",
+        }
+        # nosemgrep: trailofbits.python.pickles-in-pytorch.pickles-in-pytorch
+        torch.save(checkpoint, ckpt_path)  # nosec B614
+
+        loaded = ExportableLeRobotPolicy.load_from_checkpoint(ckpt_path, map_location="cpu")
+
+        assert loaded._config.device == "cpu"
+        sample = loaded._get_default_export_input_sample()
+        assert all(v.device.type == "cpu" for v in sample.values())
+
+        wrapper = _LerobotInferenceWrapper(loaded).eval()
+        torch.export.export(wrapper, args=(), kwargs={"observation": sample})
 
 
 class TestExportLerobotPolicy:

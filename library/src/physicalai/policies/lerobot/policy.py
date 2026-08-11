@@ -538,6 +538,18 @@ class LeRobotPolicy(ExportablePolicyMixin, LeRobotFromConfig, Policy):
         policy_cls = get_policy_class(policy_name)
         config_cls = policy_cls.config_class  # type: ignore[attr-defined]
         config = dict_to_dataclass(config_cls, config_dict, strict=False)
+
+        # The config's ``device`` is persisted from training (e.g. "cuda").
+        # When a plain device is requested via ``map_location``, align the
+        # config device with it so the reconstructed policy is consistent:
+        # LeRobot's preprocessor (``DeviceProcessorStep``) and some policy
+        # forward passes target ``config.device``, and a stale training device
+        # mixed with weights placed by ``map_location`` (e.g. CPU for export)
+        # breaks ``torch.export`` with "Unhandled FakeTensor Device
+        # Propagation". Callable/dict map_locations are left untouched.
+        if map_location is not None and not callable(map_location) and not isinstance(map_location, dict):
+            config.device = str(torch.device(map_location))
+
         dataset_stats = checkpoint.get(DATASET_STATS_KEY)
 
         # All wrappers (LeRobotPolicy and every NamedLeRobotPolicy subclass)
