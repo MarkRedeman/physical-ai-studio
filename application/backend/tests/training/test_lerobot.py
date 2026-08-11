@@ -23,9 +23,12 @@ from training import TrainingJobSpec
 from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, run_training_job
 from training.lerobot import (
     _build_config,
+    _input_sanity_flags,
     _latest_checkpoint,
     _lerobot_rename_map,
     _MetricsWriter,
+    _plan_extra_info,
+    _report_input_sanity,
     _resolve_device,
     _resolve_resume_checkpoint,
     _total_frames,
@@ -466,3 +469,67 @@ class TestJobLifecycle:
 
         train.assert_not_called()
         publish.assert_not_called()
+
+
+class TestPlanExtraInfo:
+    def test_renders_plan_telemetry(self) -> None:
+        cfg = MagicMock(batch_size=8, steps=160500, num_workers=8)
+        train = MagicMock(num_frames=231120)
+        eval_ds = MagicMock(num_frames=25680)
+        plan = _plan_extra_info(cfg, train, eval_ds, steps_per_epoch=32100, max_epochs=5)
+
+        assert plan["train_event"] == "plan"
+        assert plan["batch_size"] == 8
+        assert plan["steps_per_epoch"] == 32100
+        assert plan["train_frames"] == 231120
+        assert plan["val_frames"] == 25680
+        assert plan["epochs"] == 5
+        assert plan["total_steps"] == 160500
+        assert plan["num_workers"] == 8
+        # Renders through the shared job-log renderer.
+        assert render_progress_log(plan) is not None
+
+    def test_val_frames_none_without_eval_split(self) -> None:
+        cfg = MagicMock(batch_size=8, steps=32100, num_workers=8)
+        plan = _plan_extra_info(cfg, MagicMock(num_frames=231120), None, steps_per_epoch=28890, max_epochs=5)
+        assert plan["val_frames"] is None
+
+    def test_missing_frame_count_becomes_none(self) -> None:
+        cfg = MagicMock(batch_size=8, steps=32100, num_workers=8)
+        plan = _plan_extra_info(
+            cfg, MagicMock(num_frames=400), MagicMock(num_frames=None), steps_per_epoch=50, max_epochs=5
+        )
+        assert plan["train_frames"] == 400
+        assert plan["val_frames"] is None
+
+
+class TestInputSanity:
+    def test_flags_non_finite_and_degenerate(self) -> None:
+        flags = _input_sanity_flags(
+            {"mean": [float("nan")], "std": [0.1], "min": [0.0], "max": [1.0]},
+            {"mean": [0.0], "std": [0.0], "min": [0.0], "max": [0.0]},
+        )
+        assert "raw_non_finite" in flags
+        assert "norm_degenerate_std" in flags
+        assert "norm_degenerate_constant" in flags
+
+    def test_no_flags_for_healthy_inputs(self) -> None:
+        flags = _input_sanity_flags(
+            {"mean": [0.48], "std": [0.09], "min": [0.0], "max": [1.0]},
+            {"mean": [0.0], "std": [0.38], "min": [-2.2], "max": [2.3]},
+        )
+        assert flags == []
+
+    def test_report_input_sanity_emits_telemetry(self) -> None:
+        import torch
+
+        raw = {"observation.images.overview": torch.full((1, 3, 2, 2), 0.5)}
+        norm = {"observation.images.overview": torch.full((1, 3, 2, 2), 0.0)}
+        report = MagicMock()
+        _report_input_sanity(report, raw, norm, ["observation.images.overview"])
+        report.assert_called_once()
+        payload = report.call_args.args[2]
+        assert payload["train_event"] == "input_sanity"
+        cam = payload["cameras"]["observation.images.overview"]
+        assert "raw" in cam and "norm" in cam
+        assert "flags" in cam

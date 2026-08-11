@@ -9,11 +9,14 @@ stream reads the same regardless of where training ran.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
     from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def format_training_progress(*, global_step: int, max_steps: int, loss: float | None) -> str:
@@ -128,6 +131,8 @@ def render_progress_log(extra_info: Mapping[str, Any]) -> str | None:
         return _render_validation_log(str(event), extra_info)
     if extra_info.get("train_event") == "plan":
         return _render_training_plan(extra_info)
+    if extra_info.get("train_event") == "input_sanity":
+        return _render_input_sanity(extra_info)
     return _render_training_log(extra_info)
 
 
@@ -145,6 +150,62 @@ def _render_training_plan(extra_info: Mapping[str, Any]) -> str | None:
         )
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _render_input_sanity(extra_info: Mapping[str, Any]) -> str | None:
+    """Render the per-camera input-sanity line, or None when empty.
+
+    Emits a warning when any camera carries an anomaly flag (NaN/Inf, zero
+    variance, or a constant normalized channel) so broken decoding or a
+    preprocessing regression surfaces in the job log instead of silently
+    degrading the run.
+    """
+    cameras = extra_info.get("cameras")
+    if not isinstance(cameras, Mapping) or not cameras:
+        return None
+    rendered: list[str] = []
+    flagged = False
+    for key, entry in cameras.items():
+        if not isinstance(entry, Mapping):
+            continue
+        name = str(key).rsplit(".", 1)[-1]
+        parts = [name]
+        raw = entry.get("raw")
+        norm = entry.get("norm")
+        if isinstance(raw, Mapping):
+            parts.append(_format_camera_stats("raw", raw))
+        if isinstance(norm, Mapping):
+            parts.append(_format_camera_stats("norm", norm))
+        flags = entry.get("flags")
+        if isinstance(flags, list) and flags:
+            flagged = True
+            parts.append("FLAGS=" + ",".join(str(f) for f in flags))
+        rendered.append(" ".join(parts))
+    if not rendered:
+        return None
+    line = "Input sanity: " + "; ".join(rendered)
+    if flagged:
+        logger.warning(line)
+    return line
+
+
+def _format_camera_stats(label: str, stats: Mapping[str, Any]) -> str:
+    """Format per-channel stats as ``label[mean=[...] std=[...] min=.. max=..]``."""
+    mean = _fmt_stats_values(stats.get("mean"))
+    std = _fmt_stats_values(stats.get("std"))
+    lo = _fmt_stats_values(stats.get("min"))
+    hi = _fmt_stats_values(stats.get("max"))
+    return f"{label}[mean={mean} std={std} min={lo} max={hi}]"
+
+
+def _fmt_stats_values(value: object) -> str:
+    """Render a per-channel stat list, or a bare scalar, defensively."""
+    if isinstance(value, list) and value:
+        rendered = ",".join(f"{float(x):.4g}" for x in value if isinstance(x, int | float))
+        return f"[{rendered}]" if rendered else "[]"
+    if isinstance(value, int | float):
+        return f"{float(value):.4g}"
+    return str(value)
 
 
 def _optional_int(value: object) -> int | None:

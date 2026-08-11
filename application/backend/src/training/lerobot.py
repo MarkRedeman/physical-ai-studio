@@ -64,7 +64,7 @@ from lerobot.utils.constants import PRETRAINED_MODEL_DIR
 from lerobot.utils.utils import cycle
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from lerobot.policies.pretrained import PreTrainedPolicy
     from physicalai.train.callbacks import ReportFn, StopFn
@@ -161,6 +161,102 @@ def _total_frames(dataset_root: Path | str) -> int:
     """Return ``total_frames`` from a LeRobot snapshot's ``meta/info.json``."""
     with (Path(dataset_root) / "meta" / "info.json").open() as f:
         return int(json.load(f)["total_frames"])
+
+
+def _plan_extra_info(
+    cfg: TrainPipelineConfig,
+    train_dataset: Any,
+    eval_dataset: Any,
+    steps_per_epoch: int,
+    max_epochs: int,
+) -> dict[str, object]:
+    """Build the ``train_event: "plan"`` telemetry for the LeRobot engine.
+
+    Mirrors the ``ProgressReportingCallback`` plan payload so local and remote
+    backends render the same ``Training plan: ...`` job-log line regardless of
+    which engine trained the policy. Emitted once before the training loop.
+    """
+    val_frames = getattr(eval_dataset, "num_frames", None) if eval_dataset is not None else None
+    return {
+        "train_event": "plan",
+        "batch_size": cfg.batch_size,
+        "steps_per_epoch": steps_per_epoch,
+        "train_frames": getattr(train_dataset, "num_frames", None),
+        "val_frames": val_frames,
+        "epochs": max_epochs,
+        "total_steps": cfg.steps,
+        "num_workers": cfg.num_workers,
+    }
+
+
+def _tensor_stats(tensor: torch.Tensor) -> dict[str, list[float]]:
+    """Per-channel ``mean/std/min/max`` of a ``(B, C, ...)`` tensor.
+
+    Computed on the CPU with gradients detached so the diagnostic is cheap and
+    does not perturb the training graph.
+    """
+    t = tensor.detach().float().cpu()
+    flat = t.reshape(t.shape[0], t.shape[1], -1)
+    return {
+        "mean": flat.mean(dim=(0, 2)).round(decimals=4).tolist(),
+        "std": flat.std(dim=(0, 2)).round(decimals=4).tolist(),
+        "min": flat.min(dim=2).values.min(dim=0).values.round(decimals=4).tolist(),
+        "max": flat.max(dim=2).values.max(dim=0).values.round(decimals=4).tolist(),
+    }
+
+
+def _input_sanity_flags(
+    raw_stats: dict[str, list[float]] | None,
+    norm_stats: dict[str, list[float]] | None,
+) -> list[str]:
+    """Return anomaly flags for a camera's raw and normalized image stats.
+
+    Flags are informational: they surface NaN/Inf decoding, all-constant
+    frames, or a zero-variance normalized channel without aborting training.
+    """
+    flags: list[str] = []
+    for label, stats in (("raw", raw_stats), ("norm", norm_stats)):
+        if stats is None:
+            continue
+        values = stats["mean"] + stats["std"] + stats["min"] + stats["max"]
+        if any(not math.isfinite(v) for v in values):
+            flags.append(f"{label}_non_finite")
+    if norm_stats is not None:
+        if max(norm_stats["std"]) <= 1e-6:
+            flags.append("norm_degenerate_std")
+        if norm_stats["min"] == norm_stats["max"]:
+            flags.append("norm_degenerate_constant")
+    return flags
+
+
+def _report_input_sanity(
+    report: ReportFn,
+    raw_batch: Mapping[str, Any],
+    batch: Mapping[str, Any],
+    camera_keys: list[str],
+) -> None:
+    """Emit per-camera image statistics for the first training batch.
+
+    The raw statistics capture the collated frames (before preprocessing), the
+    normalized statistics capture the preprocessor output, and anomaly flags
+    call out NaN/Inf or degenerate frames. Consumers render this via
+    ``render_progress_log`` into the job log.
+    """
+    cameras: dict[str, dict[str, Any]] = {}
+    for cam_key in camera_keys:
+        if cam_key not in batch:
+            continue
+        entry: dict[str, Any] = {}
+        raw = raw_batch.get(cam_key)
+        if isinstance(raw, torch.Tensor):
+            entry["raw"] = _tensor_stats(raw)
+            entry["raw_dtype"] = str(raw.dtype)
+        norm = batch[cam_key]
+        if isinstance(norm, torch.Tensor):
+            entry["norm"] = _tensor_stats(norm)
+        entry["flags"] = _input_sanity_flags(entry.get("raw"), entry.get("norm"))
+        cameras[str(cam_key)] = entry
+    report(0, None, {"train_event": "input_sanity", "cameras": cameras})
 
 
 def _build_config(
@@ -427,18 +523,22 @@ def _train(  # noqa: C901, PLR0912, PLR0915
 
     dl_iter = cycle(dataloader)
     policy.train()
-    report(0, "Training model", {})
+    report(0, "Training model", _plan_extra_info(cfg, dataset, eval_dataset, steps_per_epoch, max_epochs))
     for current in range(step, cfg.steps):
         if should_stop():
             logger.info("LeRobot training canceled at step %d", current)
             return
 
         batch = next(dl_iter)
+        raw_batch = batch
         for cam_key in dataset.meta.camera_keys:
             if cam_key in batch and batch[cam_key].dtype == torch.uint8:
                 batch[cam_key] = batch[cam_key].to(dtype=torch.float32) / 255.0
         batch = preprocessor(batch)
         batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+
+        if current == step:
+            _report_input_sanity(report, raw_batch, batch, dataset.meta.camera_keys)
 
         with autocast_ctx or nullcontext():
             loss, _output_dict = policy.forward(batch)

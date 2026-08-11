@@ -100,6 +100,45 @@ class TestRenderTrainingPlan:
         assert render_progress_log({"train_event": "other"}) is None
 
 
+class TestRenderInputSanity:
+    def test_renders_per_camera_raw_and_norm_stats(self) -> None:
+        extra_info = {
+            "train_event": "input_sanity",
+            "cameras": {
+                "observation.images.overview": {
+                    "raw": {"mean": [0.482, 0.477, 0.481], "std": [0.088, 0.087, 0.083], "min": [0.0], "max": [1.0]},
+                    "norm": {"mean": [-0.013], "std": [0.388], "min": [-2.118], "max": [2.247]},
+                    "flags": [],
+                }
+            },
+        }
+        assert render_progress_log(extra_info) == (
+            "Input sanity: overview raw[mean=[0.482,0.477,0.481] std=[0.088,0.087,0.083] "
+            "min=[0] max=[1]] norm[mean=[-0.013] std=[0.388] min=[-2.118] max=[2.247]]"
+        )
+
+    def test_renders_anomaly_flags(self) -> None:
+        extra_info = {
+            "train_event": "input_sanity",
+            "cameras": {
+                "observation.images.gripper": {
+                    "raw": {"mean": [float("nan")], "std": [0.1], "min": [0.0], "max": [1.0]},
+                    "norm": {"mean": [0.0], "std": [0.0], "min": [0.0], "max": [0.0]},
+                    "flags": ["raw_non_finite", "norm_degenerate_std", "norm_degenerate_constant"],
+                }
+            },
+        }
+        line = render_progress_log(extra_info)
+        assert line is not None
+        assert "FLAGS=raw_non_finite,norm_degenerate_std,norm_degenerate_constant" in line
+
+    def test_skips_empty_cameras(self) -> None:
+        assert render_progress_log({"train_event": "input_sanity", "cameras": {}}) is None
+
+    def test_skips_malformed_cameras(self) -> None:
+        assert render_progress_log({"train_event": "input_sanity", "cameras": "oops"}) is None
+
+
 class TestFormatValidation:
     def test_start_renders_step(self) -> None:
         assert format_validation_start(global_step=300, max_steps=1000) == "Validation started at step=300/1000"
