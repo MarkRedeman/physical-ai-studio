@@ -70,6 +70,27 @@ def _quiet_onnx_export_logs() -> Generator[None, None, None]:
             onnx_logger.setLevel(level)
 
 
+@contextmanager
+def _match_default_device(model: torch.nn.Module) -> Generator[None, None, None]:
+    """Pin the torch default device to the model's device for the duration of the block.
+
+    ``torch.onnx.export`` / ``torch.export.export`` trace through the model, and
+    any tensor created by a device-less factory (e.g. ``torch.zeros(...)``)
+    inside ``forward`` is allocated on the process default device. On
+    accelerator machines that default is ``cuda:0``, so a device-less factory in
+    a model placed on CPU yields a fake tensor on ``cuda:0`` that mismatches the
+    CPU inputs/weights and makes tracing fail with "Unhandled FakeTensor Device
+    Propagation". Aligning the default device to the model's device keeps every
+    factory on the same device as the rest of the graph.
+    """
+    try:
+        device = next(iter(model.parameters())).device
+    except (StopIteration, TypeError):
+        device = torch.device("cpu")
+    with torch.device(device):
+        yield
+
+
 class ExportablePolicyMixin:
     """Mixin class for exporting torch model checkpoints.
 
@@ -486,12 +507,13 @@ class ExportablePolicyMixin:
                         input=input_shapes,
                     )
             else:
-                ov_model = openvino.convert_model(
-                    self.model,
-                    example_input={arg_name: input_sample},
-                    input=input_shapes,
-                    **extra_export_kwargs,
-                )
+                with _match_default_device(self.model):
+                    ov_model = openvino.convert_model(
+                        self.model,
+                        example_input={arg_name: input_sample},
+                        input=input_shapes,
+                        **extra_export_kwargs,
+                    )
             _postprocess_openvino_model(ov_model, extra_model_args.outputs)
 
         openvino.save_model(ov_model, str(model_path), compress_to_fp16=extra_model_args.compress_to_fp16)
@@ -597,11 +619,12 @@ class ExportablePolicyMixin:
             raise ImportError(msg) from e
 
         self.model.eval()
-        aten_dialect = torch.export.export(
-            self.model,
-            args=(input_sample,),
-            **extra_export_kwargs,
-        )
+        with _match_default_device(self.model):
+            aten_dialect = torch.export.export(
+                self.model,
+                args=(input_sample,),
+                **extra_export_kwargs,
+            )
 
         try:
             if delegate == "openvino":
@@ -707,14 +730,15 @@ class ExportablePolicyMixin:
             arg_name: Name of the forward method's first positional argument.
             **export_kwargs: Additional keyword arguments for torch.onnx.export.
         """
-        torch.onnx.export(
-            self.model,
-            args=(),
-            kwargs={arg_name: input_sample},
-            f=str(model_path),
-            input_names=list(input_sample.keys()),
-            **export_kwargs,
-        )
+        with _match_default_device(self.model):
+            torch.onnx.export(
+                self.model,
+                args=(),
+                kwargs={arg_name: input_sample},
+                f=str(model_path),
+                input_names=list(input_sample.keys()),
+                **export_kwargs,
+            )
 
     def _get_default_export_input_sample(self) -> dict[str, torch.Tensor] | None:
         """Retrieve a default export input sample for the model.

@@ -36,6 +36,7 @@ from physicalai.inference.runners.single_pass import SinglePass
 from torch import nn
 
 from physicalai.export.backends import ExportBackend
+from physicalai.export.mixin_policy import _match_default_device  # noqa: PLC2701
 from physicalai.policies.lerobot.policy import LeRobotPolicy
 
 if TYPE_CHECKING:
@@ -254,14 +255,15 @@ def _build_trace_sample(policy: ExportableLeRobotPolicy) -> dict[str, torch.Tens
 
 def _trace_onnx(wrapper: nn.Module, sample: dict[str, torch.Tensor], onnx_path: Path) -> None:
     """Trace the inference wrapper to ONNX, writing external data next to it."""
-    torch.onnx.export(
-        wrapper,
-        args=(),
-        kwargs={"observation": sample},
-        f=str(onnx_path),
-        input_names=list(sample.keys()),
-        output_names=["action"],
-    )
+    with _match_default_device(wrapper):
+        torch.onnx.export(
+            wrapper,
+            args=(),
+            kwargs={"observation": sample},
+            f=str(onnx_path),
+            input_names=list(sample.keys()),
+            output_names=["action"],
+        )
 
 
 def _export_graph_backend(policy: ExportableLeRobotPolicy, output_dir: Path, backend: ExportBackend) -> None:

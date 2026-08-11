@@ -20,6 +20,7 @@ from physicalai.export.backends import (
 from physicalai.export.mixin_policy import (
     ExportablePolicyMixin,
     ExportBackend,
+    _match_default_device,  # noqa: PLC2701
     _quiet_onnx_export_logs,  # noqa: PLC2701
 )
 from physicalai.inference.data import (
@@ -346,6 +347,67 @@ class TestQuietOnnxExportLogs:
                 assert onnxscript_logger.level == logging.ERROR
         finally:
             onnxscript_logger.setLevel(logging.NOTSET)
+
+
+class DeviceLessFactoryModel(torch.nn.Module):
+    """Model whose forward creates tensors without an explicit device."""
+
+    def __init__(self):
+        super().__init__()
+        self.linear = torch.nn.Linear(4, 4)
+
+    def forward(self, batch):
+        x = batch["data"]
+        return self.linear(x) + torch.zeros(x.shape[1]) + torch.arange(x.shape[1])
+
+    @property
+    def sample_input(self) -> dict[str, torch.Tensor]:
+        """Generate sample input."""
+        return {"data": torch.randn(1, 4)}
+
+
+class TestMatchDefaultDevice:
+    """Tests for the _match_default_device context manager."""
+
+    @staticmethod
+    def _accelerator() -> str | None:
+        """Return the available accelerator device, or None on CPU-only machines."""
+        return "cuda" if torch.cuda.is_available() else ("xpu" if torch.xpu.is_available() else None)
+
+    def test_export_pins_default_device_to_cpu_model(self):
+        """A device-less factory in a CPU model must not land on the accelerator default device."""
+        accelerator = self._accelerator()
+        if accelerator is None:
+            pytest.skip("No accelerator to simulate a foreign default device")
+
+        model = DeviceLessFactoryModel().to("cpu").eval()
+        x = {"data": torch.randn(1, 4)}
+
+        torch.set_default_device(accelerator)
+        try:
+            with pytest.raises(RuntimeError, match="FakeTensor Device Propagation"):
+                torch.export.export(model, args=(x,))
+
+            with _match_default_device(model):
+                torch.export.export(model, args=(x,))
+        finally:
+            torch.set_default_device("cpu")
+
+    def test_to_onnx_succeeds_with_accelerator_default_device(self, tmp_path):
+        """to_onnx must succeed even when the process default device is an accelerator."""
+        accelerator = self._accelerator()
+        if accelerator is None:
+            pytest.skip("No accelerator to simulate a foreign default device")
+
+        wrapper = ExportWrapper(DeviceLessFactoryModel())
+
+        torch.set_default_device(accelerator)
+        try:
+            output_path = tmp_path / "model.onnx"
+            wrapper.to_onnx(output_path)
+            assert output_path.exists()
+        finally:
+            torch.set_default_device("cpu")
 
 
 class TestToOpenVINO:
