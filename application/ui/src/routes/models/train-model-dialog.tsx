@@ -329,8 +329,8 @@ const TrainingParameters = ({
         <Flex direction='column' gap='size-150' width='100%'>
             {isLerobot && (
                 <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
-                    LeRobot uses the step budget and batch size set above, and manages precision and compilation
-                    automatically. Auto scaling the batch size is supported.
+                    LeRobot uses the step budget and batch size set above, and manages precision automatically. Auto
+                    scaling the batch size is supported.
                 </Text>
             )}
             <Flex direction='row' gap='size-150' width='100%'>
@@ -444,7 +444,7 @@ const TrainingParameters = ({
                 </Picker>
                 <Flex direction='column' gap='size-150' width='100%' justifyContent='center'>
                     <Flex direction='row' gap='size-100' alignItems='center'>
-                        <Checkbox isSelected={compileModel} onChange={onCompileModelChange} isDisabled={isLerobot}>
+                        <Checkbox isSelected={compileModel} onChange={onCompileModelChange}>
                             Compile model
                         </Checkbox>
                         <ContextualHelp variant='info'>

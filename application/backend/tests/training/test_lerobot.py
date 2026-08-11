@@ -451,7 +451,7 @@ class TestJobLifecycle:
             patch("torch.cuda.is_available", return_value=False),
         ):
             run_lerobot_training_job(
-                TrainingJobSpec(policy="act", training_engine="lerobot"),
+                TrainingJobSpec(policy="act", training_engine="lerobot", compile_model=True),
                 dataset_root=tmp_path / "snapshot",
                 output_dir=tmp_path / "model",
                 cache_dir=tmp_path / "cache" / "job",
@@ -460,7 +460,28 @@ class TestJobLifecycle:
             )
 
         train.assert_called_once()
+        assert train.call_args.kwargs["compile_model"] is True
         publish.assert_not_called()
+
+    def test_compile_model_defaults_to_false(self, tmp_path: Path) -> None:
+        from training.lerobot import run_lerobot_training_job
+
+        with (
+            patch("training.lerobot._build_config", return_value=MagicMock()),
+            patch("training.lerobot._train") as train,
+            patch("training.lerobot._publish"),
+            patch("torch.cuda.is_available", return_value=False),
+        ):
+            run_lerobot_training_job(
+                TrainingJobSpec(policy="act", training_engine="lerobot"),
+                dataset_root=tmp_path / "snapshot",
+                output_dir=tmp_path / "model",
+                cache_dir=tmp_path / "cache" / "job",
+                report=MagicMock(),
+                should_stop=lambda: False,
+            )
+
+        assert train.call_args.kwargs["compile_model"] is False
 
     def test_unknown_device_fails_before_training(self, tmp_path: Path) -> None:
         from training.lerobot import run_lerobot_training_job

@@ -122,6 +122,7 @@ def run_lerobot_training_job(
         should_stop=should_stop,
         max_epochs=spec.max_epochs,
         auto_scale_batch_size=spec.auto_scale_batch_size,
+        compile_model=spec.compile_model,
     )
     if should_stop():
         logger.info("LeRobot training canceled; skipping publish")
@@ -466,6 +467,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     should_stop: StopFn,
     max_epochs: int,
     auto_scale_batch_size: bool = False,
+    compile_model: bool = False,
 ) -> None:
     """Run the vendored single-process training loop."""
     assert cfg.policy is not None  # noqa: S101
@@ -479,6 +481,9 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     report(0, "Creating LeRobot policy", {})
     policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map={})
     policy = policy.to(device)
+    if compile_model:
+        compile_mode = getattr(cfg.policy, "compile_mode", "default")
+        policy.forward = torch.compile(policy.forward, mode=compile_mode)
 
     processor_kwargs: dict[str, Any] = {}
     if (cfg.policy.pretrained_path and not cfg.resume) or not cfg.policy.pretrained_path:
