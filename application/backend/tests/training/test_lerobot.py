@@ -357,21 +357,21 @@ class TestMetricsWriter:
             steps_per_epoch=10,
         )
 
-        writer.on_log_step(10, 0.5)
+        writer.on_log_step(10, 0.5, lr=0.0001)
         writer.on_eval(20, 0.25, elapsed_s=1.5)
         writer.close()
 
         csv_path = tmp_path / "job" / "version_0" / "metrics.csv"
         lines = csv_path.read_text().splitlines()
-        assert lines[0] == "epoch,step,train/loss_step,val/loss"
-        assert "1,10,0.500000," in lines
-        assert "2,20,,0.250000" in lines
+        assert lines[0] == "epoch,step,train/loss_step,val/loss,lr-AdamW"
+        assert "1,10,0.500000,,0.00010000" in lines
+        assert "2,20,,0.250000," in lines
 
     def test_reports_progress_in_the_shared_schema(self, tmp_path: Path) -> None:
         report = MagicMock()
         writer = _MetricsWriter(report=report, cache_dir=tmp_path / "job", max_steps=200, steps_per_epoch=50)
 
-        writer.on_log_step(50, 0.5)
+        writer.on_log_step(50, 0.5, lr=0.0001)
         _, _, extra_info = report.call_args.args
         assert render_progress_log(extra_info) == ("Training progress: step=50/200 (25%), train/loss_step=0.5")
 
@@ -383,7 +383,7 @@ class TestMetricsWriter:
         report = MagicMock()
         writer = _MetricsWriter(report=report, cache_dir=tmp_path / "job", max_steps=10, steps_per_epoch=2)
 
-        writer.on_log_step(10, 0.1)
+        writer.on_log_step(10, 0.1, lr=0.0001)
 
         assert report.call_args.args[0] == 99
 

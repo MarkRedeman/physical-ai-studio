@@ -612,7 +612,8 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         step_done = current + 1
         cadence = min(cfg.log_freq, _METRIC_LOG_EARLY_CADENCE) if step_done <= _METRIC_LOG_EARLY_STEPS else cfg.log_freq
         if cfg.log_freq > 0 and step_done % cadence == 0:
-            metrics.on_log_step(step_done, loss.item())
+            lr = optimizer.param_groups[0]["lr"]
+            metrics.on_log_step(step_done, loss.item(), lr)
         if cfg.eval_steps > 0 and eval_dataloader is not None and step_done % cfg.eval_steps == 0:
             eval_loss = _evaluate(policy, preprocessor, eval_dataloader, dataset.meta.camera_keys, autocast_ctx, device)
             metrics.on_eval(step_done, eval_loss)
@@ -694,13 +695,13 @@ class _MetricsWriter:
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
         self._csv = self.csv_path.open("w", newline="")
         self._writer = csv.writer(self._csv)
-        self._writer.writerow(["epoch", "step", "train/loss_step", "val/loss"])
+        self._writer.writerow(["epoch", "step", "train/loss_step", "val/loss", "lr-AdamW"])
         self._csv.flush()
         self._epoch = 0
 
-    def on_log_step(self, step: int, loss: float) -> None:
+    def on_log_step(self, step: int, loss: float, lr: float) -> None:
         self._epoch = step // self.steps_per_epoch
-        self._writer.writerow([self._epoch, step, f"{loss:.6f}", ""])
+        self._writer.writerow([self._epoch, step, f"{loss:.6f}", "", f"{lr:.8f}"])
         self._csv.flush()
         self.report(
             min(99, int(step / self.max_steps * 100)),
@@ -715,7 +716,7 @@ class _MetricsWriter:
 
     def on_eval(self, step: int, val_loss: float, elapsed_s: float | None = None) -> None:
         self._epoch = step // self.steps_per_epoch
-        self._writer.writerow([self._epoch, step, "", f"{val_loss:.6f}"])
+        self._writer.writerow([self._epoch, step, "", f"{val_loss:.6f}", ""])
         self._csv.flush()
         elapsed_s = elapsed_s if elapsed_s is not None else 0.0
         self.report(
