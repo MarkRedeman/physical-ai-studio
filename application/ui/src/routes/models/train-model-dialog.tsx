@@ -330,7 +330,7 @@ const TrainingParameters = ({
             {isLerobot && (
                 <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
                     LeRobot uses the step budget and batch size set above, and manages precision and compilation
-                    automatically.
+                    automatically. Auto scaling the batch size is supported.
                 </Text>
             )}
             <Flex direction='row' gap='size-150' width='100%'>
@@ -350,7 +350,7 @@ const TrainingParameters = ({
                         <Checkbox
                             isSelected={autoScaleBatchSize}
                             onChange={onAutoScaleBatchSizeChange}
-                            isDisabled={isAutoScaleBatchDisabled || isLerobot}
+                            isDisabled={isAutoScaleBatchDisabled}
                         >
                             Auto scale batch size
                         </Checkbox>

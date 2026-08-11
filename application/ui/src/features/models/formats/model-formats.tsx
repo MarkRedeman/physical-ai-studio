@@ -277,7 +277,9 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
             </Flex>
             {activeExportJob && (
                 <Text UNSAFE_style={{ fontSize: 12, opacity: 0.7 }}>
-                    Exporting {activeExportJob.payload.backends.map((backend) => backend.toUpperCase()).join(', ')}:{' '}
+                    {`Exporting ${activeExportJob.payload.backends
+                        .map((backend) => backend.toUpperCase())
+                        .join(', ')}: `}
                     {activeExportJob.progress}%
                 </Text>
             )}

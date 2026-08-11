@@ -22,15 +22,16 @@ from services.training_backends._log_format import render_progress_log
 from training import TrainingJobSpec
 from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, run_training_job
 from training.lerobot import (
+    _auto_scale_batch_size,
     _build_config,
     _input_sanity_flags,
     _latest_checkpoint,
-    _lerobot_rename_map,
     _MetricsWriter,
     _plan_extra_info,
     _report_input_sanity,
     _resolve_device,
     _resolve_resume_checkpoint,
+    _scale_probe_batch,
     _total_frames,
 )
 
@@ -165,20 +166,19 @@ class TestTotalFrames:
         assert _total_frames(_snapshot(tmp_path, total_frames=42)) == 42
 
 
-class TestRenameMap:
-    def test_converts_short_camera_names_to_full_lerobot_keys(self) -> None:
-        assert _lerobot_rename_map({"camera1": "front", "camera2": "left"}) == {
-            "observation.images.front": "observation.images.camera1",
-            "observation.images.left": "observation.images.camera2",
-        }
-
-    def test_omits_empty_camera_slots(self) -> None:
-        assert _lerobot_rename_map({"camera1": "front", "camera2": None}) == {
-            "observation.images.front": "observation.images.camera1",
-        }
-
-    def test_empty_map_stays_empty(self) -> None:
-        assert _lerobot_rename_map({}) == {}
+class TestRenameMapIgnored:
+    def test_build_config_never_sets_a_rename_map(self, tmp_path: Path) -> None:
+        spec = TrainingJobSpec(
+            policy="act", training_engine="lerobot", rename_map={"camera1": "overview", "camera2": None}
+        )
+        cfg = _build_config(
+            spec,
+            dataset_root=_snapshot(tmp_path),
+            device=_cpu(),
+            cache_dir=tmp_path / "cache",
+            resume_checkpoint=None,
+        )
+        assert cfg.rename_map == {}
 
 
 class TestConfigDerivation:
@@ -195,18 +195,8 @@ class TestConfigDerivation:
         assert cfg.steps == 3 * ((600 + 7) // 8)
         assert cfg.batch_size == 8
 
-    @pytest.mark.parametrize(
-        ("policy", "lr", "weight_decay", "grad_clip"),
-        [
-            ("act", 1e-4, 1e-4, 10.0),
-            ("diffusion", 1e-4, 1e-2, 10.0),
-            ("smolvla", 2e-5, 1e-2, 1.0),
-            ("pi05", 1e-4, 1e-2, 1.0),
-        ],
-    )
-    def test_policy_defaults(
-        self, tmp_path: Path, policy: str, lr: float, weight_decay: float, grad_clip: float
-    ) -> None:
+    @pytest.mark.parametrize("policy", ["act", "diffusion", "smolvla", "pi05"])
+    def test_policy_uses_its_lerobot_optimizer_preset(self, tmp_path: Path, policy: str) -> None:
         cfg = _build_config(
             TrainingJobSpec(policy=policy, training_engine="lerobot"),
             dataset_root=_snapshot(tmp_path),
@@ -216,11 +206,23 @@ class TestConfigDerivation:
         )
 
         assert cfg.batch_size == 8
-        assert cfg.optimizer.lr == lr
-        assert cfg.optimizer.weight_decay == weight_decay
-        assert cfg.optimizer.grad_clip_norm == grad_clip
+        assert cfg.use_policy_training_preset is True
+        # The optimizer is the policy's own lerobot preset, not a studio override.
+        assert cfg.optimizer.lr == cfg.policy.optimizer_lr
 
-    def test_scheduler_decay_matches_the_step_budget(self, tmp_path: Path) -> None:
+    def test_act_trains_with_constant_lr_no_scheduler(self, tmp_path: Path) -> None:
+        cfg = _build_config(
+            TrainingJobSpec(policy="act", training_engine="lerobot"),
+            dataset_root=_snapshot(tmp_path),
+            device=_cpu(),
+            cache_dir=tmp_path / "cache",
+            resume_checkpoint=None,
+        )
+
+        # ACT's lerobot preset defines no LR scheduler (constant learning rate).
+        assert cfg.scheduler is None
+
+    def test_log_cadence_matches_the_physicalai_contract(self, tmp_path: Path) -> None:
         cfg = _build_config(
             TrainingJobSpec(policy="act", training_engine="lerobot"),
             dataset_root=_snapshot(tmp_path, total_frames=600),
@@ -229,9 +231,7 @@ class TestConfigDerivation:
             resume_checkpoint=None,
         )
 
-        assert cfg.scheduler.num_decay_steps == cfg.steps
-        assert cfg.scheduler.peak_lr == cfg.optimizer.lr
-        assert cfg.scheduler.num_warmup_steps > 0
+        assert cfg.log_freq == max(1, min(100, cfg.steps // 1000))
 
     def test_val_split_maps_to_eval_split(self, tmp_path: Path) -> None:
         cfg = _build_config(
@@ -533,3 +533,36 @@ class TestInputSanity:
         cam = payload["cameras"]["observation.images.overview"]
         assert "raw" in cam and "norm" in cam
         assert "flags" in cam
+
+
+class TestAutoScaleBatchSize:
+    def test_scale_probe_batch_repeats_batch_dimension(self) -> None:
+        import torch
+
+        probe = {
+            "observation.images.overview": torch.zeros((2, 3, 4, 4)),
+            "observation.state": torch.zeros((2, 6)),
+            "action_is_pad": torch.zeros((2, 100), dtype=torch.bool),
+        }
+        scaled = _scale_probe_batch(probe, 3)
+        assert scaled["observation.images.overview"].shape[0] == 6
+        assert scaled["observation.state"].shape[0] == 6
+        assert scaled["action_is_pad"].shape[0] == 6
+
+    def test_scale_probe_batch_single_repeat_returns_same_object(self) -> None:
+        probe = {"observation.state": object()}
+        assert _scale_probe_batch(probe, 1) is probe
+
+    def test_auto_scale_is_a_noop_on_cpu(self) -> None:
+        import torch
+
+        cfg = MagicMock(batch_size=8)
+        result = _auto_scale_batch_size(
+            cfg,
+            policy=MagicMock(),
+            preprocessor=MagicMock(),
+            dataset=MagicMock(),
+            device=torch.device("cpu"),
+            report=MagicMock(),
+        )
+        assert result == 8

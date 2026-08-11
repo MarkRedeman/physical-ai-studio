@@ -55,8 +55,6 @@ from lerobot.configs.train import TrainPipelineConfig
 from lerobot.datasets import EpisodeAwareSampler, compute_sampler_state
 from lerobot.datasets.factory import make_train_eval_datasets
 from lerobot.optim.factory import make_optimizer_and_scheduler
-from lerobot.optim.optimizers import AdamWConfig
-from lerobot.optim.schedulers import CosineDecayWithWarmupSchedulerConfig
 from lerobot.policies import make_policy, make_pre_post_processors
 from lerobot.policies.factory import make_policy_config
 from lerobot.utils.collate import lerobot_collate_fn
@@ -73,19 +71,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_LR: dict[str, float] = {"act": 1e-4, "diffusion": 1e-4, "smolvla": 2e-5, "pi05": 1e-4}
-_WEIGHT_DECAY: dict[str, float] = {"act": 1e-4, "diffusion": 1e-2, "smolvla": 1e-2, "pi05": 1e-2}
-_GRAD_CLIP: dict[str, float] = {"act": 10.0, "diffusion": 10.0, "smolvla": 1.0, "pi05": 1.0}
-"""Optimizer defaults per policy from the LeRobot AGENT_GUIDE."""
+# Metric-log cadence contract, kept in sync with the physicalai engine's
+# ``ProgressReportingCallback``: log every 10 steps for the first 10k steps so
+# job metrics graphs fill in quickly, then fall back to the adaptive cadence.
+_METRIC_LOG_EARLY_CADENCE = 10
+_METRIC_LOG_EARLY_STEPS = 10_000
+
+# Upper bound for the auto batch-size search (power-of-two doubling).
+_MAX_AUTO_SCALE_BATCH = 512
 
 _DATASET_REPO_ID = "snapshot"
 """Placeholder repo id: datasets are always loaded from a local root here."""
-
-_OBS_IMAGES = "observation.images"
-"""LeRobot observation prefix for image features."""
-
-_MAX_EVAL_SAMPLES = 500
-"""Cap on held-out samples used per eval-loss check (split uniformly per task)."""
 
 
 def run_lerobot_training_job(
@@ -110,12 +106,24 @@ def run_lerobot_training_job(
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
+    if spec.rename_map:
+        logger.warning(
+            "Camera rename_map is not supported by the LeRobot engine; training on the dataset's cameras as-is"
+        )
+
     resume_checkpoint = _resolve_resume_checkpoint(resume_from)
     cfg = _build_config(
         spec, dataset_root=Path(dataset_root), device=device, cache_dir=cache_dir, resume_checkpoint=resume_checkpoint
     )
 
-    _train(cfg, device=device, report=report, should_stop=should_stop, max_epochs=spec.max_epochs)
+    _train(
+        cfg,
+        device=device,
+        report=report,
+        should_stop=should_stop,
+        max_epochs=spec.max_epochs,
+        auto_scale_batch_size=spec.auto_scale_batch_size,
+    )
     if should_stop():
         logger.info("LeRobot training canceled; skipping publish")
         return
@@ -259,6 +267,22 @@ def _report_input_sanity(
     report(0, None, {"train_event": "input_sanity", "cameras": cameras})
 
 
+def _resolve_optimizer_and_scheduler(cfg: TrainPipelineConfig) -> None:
+    """Populate the optimizer/scheduler from the policy's lerobot presets.
+
+    Mirrors ``TrainPipelineConfig.validate``, which the lerobot CLI calls but the
+    studio's direct-construction path does not: with ``use_policy_training_preset``
+    the policy config supplies the optimizer and (optional) scheduler, so ACT
+    trains at its documented constant ``optimizer_lr`` with no LR schedule.
+    """
+    if cfg.policy is None or not cfg.use_policy_training_preset:
+        return
+    if cfg.optimizer is None:
+        cfg.optimizer = cfg.trainable_config.get_optimizer_preset()
+    if cfg.scheduler is None:
+        cfg.scheduler = cfg.trainable_config.get_scheduler_preset()
+
+
 def _build_config(
     spec: TrainingJobSpec,
     *,
@@ -278,17 +302,18 @@ def _build_config(
         return _resume_config(resume_checkpoint, dataset_root=dataset_root, device=device, cache_dir=cache_dir)
 
     batch_size = spec.batch_size
+    # Provisional step budget from the snapshot's total frames; the train-split
+    # (eval_split holds episodes out) count is applied in ``_train``, mirroring
+    # the physicalai engine's epoch x train-batches derivation.
     steps_per_epoch = max(1, math.ceil(_total_frames(dataset_root) / batch_size))
     steps = max(1, spec.max_epochs * steps_per_epoch)
-    lr = _LR.get(spec.policy, 1e-4)
-    weight_decay = _WEIGHT_DECAY.get(spec.policy, 1e-2)
-    grad_clip_norm = _GRAD_CLIP.get(spec.policy, 1.0)
-    num_warmup_steps = max(50, steps // 50)
+    # Logging cadence and eval frequency follow the physicalai engine: adaptive
+    # progress cadence (~1000 entries, capped at every 100 steps) and an
+    # eval-loss pass once per epoch.
+    log_freq = max(1, min(100, steps // 1000))
+    eval_steps = steps_per_epoch if spec.val_split > 0 else 0
 
-    log_freq = max(1, steps // 100)
-    eval_steps = max(1, steps // 10) if spec.val_split > 0 else 0
-
-    return TrainPipelineConfig(
+    cfg = TrainPipelineConfig(
         dataset=DatasetConfig(
             repo_id=_DATASET_REPO_ID,
             root=str(dataset_root),
@@ -305,20 +330,15 @@ def _build_config(
         env_eval_freq=0,
         log_freq=log_freq,
         eval_steps=eval_steps,
-        max_eval_samples=_MAX_EVAL_SAMPLES,
+        max_eval_samples=0,
         save_checkpoint=True,
         save_freq=steps,
-        rename_map=_lerobot_rename_map(spec.rename_map),
-        use_policy_training_preset=False,
-        optimizer=AdamWConfig(lr=lr, weight_decay=weight_decay, grad_clip_norm=grad_clip_norm),
-        scheduler=CosineDecayWithWarmupSchedulerConfig(
-            num_warmup_steps=num_warmup_steps,
-            num_decay_steps=steps,
-            peak_lr=lr,
-            decay_lr=lr * 0.1,
-        ),
+        rename_map={},
+        use_policy_training_preset=True,
         wandb=WandBConfig(enable=False),
     )
+    _resolve_optimizer_and_scheduler(cfg)
+    return cfg
 
 
 def _resume_config(
@@ -338,6 +358,7 @@ def _resume_config(
     cfg.output_dir = cache_dir
     cfg.wandb.enable = False
     cfg.policy.device = device.type
+    _resolve_optimizer_and_scheduler(cfg)
     return cfg
 
 
@@ -357,56 +378,90 @@ def _resolve_resume_checkpoint(resume_from: Path | str | None) -> Path | None:
     return checkpoint
 
 
-def _lerobot_rename_map(rename_map: dict[str, str | None]) -> dict[str, str]:
-    """Convert the job's short-name camera map to lerobot's full-key rename map.
+def _make_probe_batch(
+    preprocessor: Any,
+    dataset: Any,
+    batch_size: int,
+    device: torch.device,
+) -> dict[str, Any] | None:
+    """Collate, preprocess, and move one batch to the device for the batch-size probe."""
+    collate_fn = lerobot_collate_fn if dataset.meta.has_language_columns else None
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+        collate_fn=collate_fn,
+    )
+    try:
+        batch = next(iter(loader))
+    except StopIteration:
+        return None
+    for cam_key in dataset.meta.camera_keys:
+        if cam_key in batch and batch[cam_key].dtype == torch.uint8:
+            batch[cam_key] = batch[cam_key].to(dtype=torch.float32) / 255.0
+    batch = preprocessor(batch)
+    return {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
 
-    The job carries ``{model_camera: dataset_camera | None}`` with short camera
-    names; lerobot's ``rename_observations_processor`` renames full observation
-    keys from dataset names to policy names. Entries with a ``None`` dataset
-    camera (empty slots) are omitted — full empty-camera support is a follow-up.
+
+def _scale_probe_batch(probe: dict[str, Any], repeats: int) -> dict[str, Any]:
+    """Repeat the probe batch to simulate a larger batch size for memory probing."""
+    if repeats <= 1:
+        return probe
+    return {
+        k: torch.cat([v] * repeats, dim=0) if isinstance(v, torch.Tensor) and v.ndim >= 1 else v
+        for k, v in probe.items()
+    }
+
+
+def _auto_scale_batch_size(
+    cfg: TrainPipelineConfig,
+    policy: Any,
+    preprocessor: Any,
+    dataset: Any,
+    device: torch.device,
+    report: ReportFn,
+) -> int:
+    """Return the largest power-of-two batch size that fits on the accelerator.
+
+    Mirrors the physicalai engine's ``auto_scale_batch_size`` (Lightning's
+    ``BatchSizeFinder``): probe real collated data with a forward/backward pass
+    (no optimizer step), doubling until out of memory or a 90% VRAM watermark.
+    Skipped on non-CUDA devices, where memory is not the binding constraint.
     """
-    full: dict[str, str] = {}
-    for model_camera, dataset_camera in rename_map.items():
-        if dataset_camera is not None:
-            full[f"{_OBS_IMAGES}.{dataset_camera}"] = f"{_OBS_IMAGES}.{model_camera}"
-    return full
+    if device.type != "cuda":
+        return cfg.batch_size
+    base = max(1, cfg.batch_size)
+    probe = _make_probe_batch(preprocessor, dataset, base, device)
+    if probe is None:
+        return cfg.batch_size
+    try:
+        total_memory = torch.cuda.get_device_properties(device).total_memory
+    except (AttributeError, RuntimeError):
+        total_memory = None
 
+    candidate = base
+    best = base
+    try:
+        while candidate <= _MAX_AUTO_SCALE_BATCH:
+            batch = _scale_probe_batch(probe, candidate // base)
+            policy.train()
+            loss, _output = policy.forward(batch)
+            loss.backward()
+            policy.zero_grad(set_to_none=True)
+            if total_memory is not None and torch.cuda.memory_allocated(device) > 0.9 * total_memory:
+                break
+            best = candidate
+            candidate *= 2
+    except torch.cuda.OutOfMemoryError:
+        torch.cuda.empty_cache()
+        logger.warning("Auto batch size: out of memory at %d; using %d", candidate, best)
 
-def _apply_rename_map_to_config(cfg: TrainPipelineConfig, dataset_meta: Any) -> None:
-    """Point the policy config's input features at the rename_map's policy names.
-
-    Lerobot's ``make_policy`` only *suppresses* the visual-feature consistency
-    check when a rename map is given; the model still expects the names baked
-    into ``cfg.input_features``. The rename processor rewrites observations from
-    dataset keys to policy keys, so the config must advertise the policy keys.
-    For a fresh policy (the studio trains from scratch) that means deriving the
-    input features from the dataset and renaming their keys via ``rename_map``.
-    """
-    from lerobot.configs.types import FeatureType
-    from lerobot.utils.feature_utils import dataset_to_policy_features
-
-    assert cfg.policy is not None  # noqa: S101
-    features = dataset_to_policy_features(dataset_meta.features)
-    renamed: dict[str, Any] = {}
-    for key, feature in features.items():
-        renamed[cfg.rename_map.get(key, key)] = feature
-    cfg.policy.input_features = {k: v for k, v in renamed.items() if v.type is not FeatureType.ACTION}
-
-
-def _set_preprocessor_rename_map(preprocessor: Any, rename_map: dict[str, str]) -> None:
-    """Set the rename map on the preprocessor's rename step.
-
-    The fresh processor factory builds a ``RenameObservationsProcessorStep`` with
-    an empty map and ignores ``preprocessor_overrides``, so the map is applied
-    directly on the built pipeline.
-    """
-    from lerobot.processor.rename_processor import RenameObservationsProcessorStep
-
-    for step in preprocessor.steps:
-        if isinstance(step, RenameObservationsProcessorStep):
-            step.rename_map = rename_map
-            return
-    logger.warning("LeRobot preprocessor has no rename step; camera rename_map was not applied")
+    if best != base:
+        report(0, f"Auto-scaled batch size to {best}", {})
+        logger.info("Auto-scaled LeRobot batch size from %d to %d", base, best)
+    return best
 
 
 def _train(  # noqa: C901, PLR0912, PLR0915
@@ -416,6 +471,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     report: ReportFn,
     should_stop: StopFn,
     max_epochs: int,
+    auto_scale_batch_size: bool = False,
 ) -> None:
     """Run the vendored single-process training loop."""
     assert cfg.policy is not None  # noqa: S101
@@ -427,9 +483,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     eval_dataset: Any = raw_eval
 
     report(0, "Creating LeRobot policy", {})
-    if cfg.rename_map:
-        _apply_rename_map_to_config(cfg, dataset.meta)
-    policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map=cfg.rename_map)
+    policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map={})
     policy = policy.to(device)
 
     processor_kwargs: dict[str, Any] = {}
@@ -441,8 +495,18 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         pretrained_revision=getattr(cfg.policy, "pretrained_revision", None),
         **processor_kwargs,
     )
-    if cfg.rename_map:
-        _set_preprocessor_rename_map(preprocessor, cfg.rename_map)
+
+    if auto_scale_batch_size and not cfg.resume:
+        cfg.batch_size = _auto_scale_batch_size(cfg, policy, preprocessor, dataset, device, report)
+
+    # Step budget mirrors the physicalai engine: max_epochs x train batches per
+    # epoch, where train batches derive from the train split only (eval_split
+    # holds episodes out). Logging and eval cadence follow the same contract.
+    steps_per_epoch = max(1, math.ceil(dataset.num_frames / cfg.batch_size))
+    if not cfg.resume:
+        cfg.steps = max(1, max_epochs * steps_per_epoch)
+        cfg.log_freq = max(1, min(100, cfg.steps // 1000))
+        cfg.eval_steps = steps_per_epoch if cfg.dataset.eval_split > 0 else 0
 
     report(0, "Creating optimizer and scheduler", {})
     optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, policy)
@@ -454,8 +518,9 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         checkpoint_path = cfg.checkpoint_path
         step, optimizer, lr_scheduler = load_training_state(checkpoint_path, optimizer, lr_scheduler)
         # A resumed run continues for the job's epoch budget, same basis as a fresh run.
-        steps_per_epoch = max(1, math.ceil(_total_frames(cfg.dataset.root) / cfg.batch_size))
         cfg.steps = step + max_epochs * steps_per_epoch
+        cfg.log_freq = max(1, min(100, cfg.steps // 1000))
+        cfg.eval_steps = steps_per_epoch if cfg.dataset.eval_split > 0 else 0
         logger.info("Resuming LeRobot training at step %d (total %d)", step, cfg.steps)
 
     # Data order is a pure function of (seed, epoch); resume is sample-exact.
@@ -512,7 +577,6 @@ def _train(  # noqa: C901, PLR0912, PLR0915
             persistent_workers=cfg.persistent_workers and cfg.num_workers > 0,
         )
 
-    steps_per_epoch = max(1, math.ceil(_total_frames(cfg.dataset.root) / cfg.batch_size))
     metrics = _MetricsWriter(
         report=report,
         cache_dir=cfg.output_dir,
@@ -556,7 +620,8 @@ def _train(  # noqa: C901, PLR0912, PLR0915
             update()
 
         step_done = current + 1
-        if cfg.log_freq > 0 and step_done % cfg.log_freq == 0:
+        cadence = min(cfg.log_freq, _METRIC_LOG_EARLY_CADENCE) if step_done <= _METRIC_LOG_EARLY_STEPS else cfg.log_freq
+        if cfg.log_freq > 0 and step_done % cadence == 0:
             metrics.on_log_step(step_done, loss.item())
         if cfg.eval_steps > 0 and eval_dataloader is not None and step_done % cfg.eval_steps == 0:
             eval_loss = _evaluate(policy, preprocessor, eval_dataloader, dataset.meta.camera_keys, autocast_ctx, device)
