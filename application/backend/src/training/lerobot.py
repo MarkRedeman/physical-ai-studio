@@ -481,9 +481,6 @@ def _train(  # noqa: C901, PLR0912, PLR0915
     report(0, "Creating LeRobot policy", {})
     policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map={})
     policy = policy.to(device)
-    if compile_model:
-        compile_mode = getattr(cfg.policy, "compile_mode", "default")
-        policy.forward = torch.compile(policy.forward, mode=compile_mode)
 
     processor_kwargs: dict[str, Any] = {}
     if (cfg.policy.pretrained_path and not cfg.resume) or not cfg.policy.pretrained_path:
@@ -497,6 +494,13 @@ def _train(  # noqa: C901, PLR0912, PLR0915
 
     if auto_scale_batch_size and not cfg.resume:
         cfg.batch_size = _auto_scale_batch_size(cfg, policy, preprocessor, dataset, device, report)
+
+    # Compile only after the batch-size probe has run: probing executes
+    # forward/backward, and an out-of-memory mid-probe can corrupt the compiled
+    # model's warmup state.
+    if compile_model:
+        compile_mode = getattr(cfg.policy, "compile_mode", "default")
+        policy.forward = torch.compile(policy.forward, mode=compile_mode)
 
     # Step budget mirrors the physicalai engine: max_epochs x train batches per
     # epoch, where train batches derive from the train split only (eval_split
