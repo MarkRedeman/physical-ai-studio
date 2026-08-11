@@ -33,7 +33,6 @@ from the dataset size.
 from __future__ import annotations
 
 import csv
-import json
 import logging
 import math
 import os
@@ -165,12 +164,6 @@ def _resolve_num_workers(spec: TrainingJobSpec) -> int:
     return spec.num_workers
 
 
-def _total_frames(dataset_root: Path | str) -> int:
-    """Return ``total_frames`` from a LeRobot snapshot's ``meta/info.json``."""
-    with (Path(dataset_root) / "meta" / "info.json").open() as f:
-        return int(json.load(f)["total_frames"])
-
-
 def _plan_extra_info(
     cfg: TrainPipelineConfig,
     train_dataset: Any,
@@ -283,6 +276,24 @@ def _resolve_optimizer_and_scheduler(cfg: TrainPipelineConfig) -> None:
         cfg.scheduler = cfg.trainable_config.get_scheduler_preset()
 
 
+def _training_budget(*, total_steps: int, steps_per_epoch: int, eval_split: float) -> tuple[int, int, int]:
+    """Return the physicalai-synced cadence for a run.
+
+    Mirrors the physicalai engine's ``ProgressReportingCallback``: an adaptive
+    log cadence (~1000 entries, capped at every 100 steps, with the early
+    every-10-steps phase applied in the training loop), an eval-loss pass once
+    per epoch, and a single final checkpoint. ``steps_per_epoch`` derives from
+    the train split only.
+
+    Returns:
+        Tuple of ``(log_freq, eval_steps, save_freq)``.
+    """
+    log_freq = max(1, min(100, total_steps // 1000))
+    eval_steps = steps_per_epoch if eval_split > 0 else 0
+    save_freq = total_steps
+    return log_freq, eval_steps, save_freq
+
+
 def _build_config(
     spec: TrainingJobSpec,
     *,
@@ -293,25 +304,16 @@ def _build_config(
 ) -> TrainPipelineConfig:
     """Build the LeRobot ``TrainPipelineConfig``.
 
-    Fresh runs derive a step budget from the job's epoch budget and batch size. Resumed runs load
+    Only the job's explicit choices override lerobot defaults: the dataset
+    (with its eval split), the policy, the batch size, and the dataloader
+    workers. Optimizer, scheduler, learning rate, seed, and cadence all follow
+    lerobot's own defaults; the physicalai-synced step/cadence budget is
+    applied in ``_train`` once the train-split size is known. Resumed runs load
     the checkpoint's ``train_config.json`` so optimizer, scheduler, and sampler
-    semantics come from the original run; only the dataset root, output dir,
-    and device are overridden.
+    semantics come from the original run.
     """
     if resume_checkpoint is not None:
         return _resume_config(resume_checkpoint, dataset_root=dataset_root, device=device, cache_dir=cache_dir)
-
-    batch_size = spec.batch_size
-    # Provisional step budget from the snapshot's total frames; the train-split
-    # (eval_split holds episodes out) count is applied in ``_train``, mirroring
-    # the physicalai engine's epoch x train-batches derivation.
-    steps_per_epoch = max(1, math.ceil(_total_frames(dataset_root) / batch_size))
-    steps = max(1, spec.max_epochs * steps_per_epoch)
-    # Logging cadence and eval frequency follow the physicalai engine: adaptive
-    # progress cadence (~1000 entries, capped at every 100 steps) and an
-    # eval-loss pass once per epoch.
-    log_freq = max(1, min(100, steps // 1000))
-    eval_steps = steps_per_epoch if spec.val_split > 0 else 0
 
     cfg = TrainPipelineConfig(
         dataset=DatasetConfig(
@@ -323,16 +325,8 @@ def _build_config(
         output_dir=cache_dir,
         job_name=f"lerobot-{spec.policy}",
         resume=False,
-        seed=1000,
         num_workers=_resolve_num_workers(spec),
-        batch_size=batch_size,
-        steps=steps,
-        env_eval_freq=0,
-        log_freq=log_freq,
-        eval_steps=eval_steps,
-        max_eval_samples=0,
-        save_checkpoint=True,
-        save_freq=steps,
+        batch_size=spec.batch_size,
         rename_map={},
         use_policy_training_preset=True,
         wandb=WandBConfig(enable=False),
@@ -501,12 +495,11 @@ def _train(  # noqa: C901, PLR0912, PLR0915
 
     # Step budget mirrors the physicalai engine: max_epochs x train batches per
     # epoch, where train batches derive from the train split only (eval_split
-    # holds episodes out). Logging and eval cadence follow the same contract.
+    # holds episodes out). Logging/eval/checkpoint cadence follows the same
+    # contract (see ``_training_budget``).
     steps_per_epoch = max(1, math.ceil(dataset.num_frames / cfg.batch_size))
     if not cfg.resume:
         cfg.steps = max(1, max_epochs * steps_per_epoch)
-        cfg.log_freq = max(1, min(100, cfg.steps // 1000))
-        cfg.eval_steps = steps_per_epoch if cfg.dataset.eval_split > 0 else 0
 
     report(0, "Creating optimizer and scheduler", {})
     optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, policy)
@@ -519,9 +512,11 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         step, optimizer, lr_scheduler = load_training_state(checkpoint_path, optimizer, lr_scheduler)
         # A resumed run continues for the job's epoch budget, same basis as a fresh run.
         cfg.steps = step + max_epochs * steps_per_epoch
-        cfg.log_freq = max(1, min(100, cfg.steps // 1000))
-        cfg.eval_steps = steps_per_epoch if cfg.dataset.eval_split > 0 else 0
         logger.info("Resuming LeRobot training at step %d (total %d)", step, cfg.steps)
+
+    cfg.log_freq, cfg.eval_steps, cfg.save_freq = _training_budget(
+        total_steps=cfg.steps, steps_per_epoch=steps_per_epoch, eval_split=cfg.dataset.eval_split
+    )
 
     # Data order is a pure function of (seed, epoch); resume is sample-exact.
     sampler = EpisodeAwareSampler(
@@ -554,19 +549,9 @@ def _train(  # noqa: C901, PLR0912, PLR0915
 
     eval_dataloader: torch.utils.data.DataLoader[Any] | None = None
     if eval_dataset is not None:
-        eval_ds: object = eval_dataset
-        if cfg.max_eval_samples > 0 and hasattr(eval_dataset, "hf_dataset"):
-            task_arr = eval_dataset.hf_dataset.data.column("task_index").to_numpy()
-            unique_tasks = sorted(set(task_arr.tolist()))
-            per_task = max(1, cfg.max_eval_samples // len(unique_tasks))
-            selected: list[int] = []
-            for t in unique_tasks:
-                frames = (task_arr == t).nonzero()[0][:per_task]
-                selected.extend(frames.tolist())
-            eval_ds = torch.utils.data.Subset(eval_dataset, selected)
         eval_collate_fn = lerobot_collate_fn if dataset.meta.has_language_columns else None
         eval_dataloader = torch.utils.data.DataLoader(
-            eval_ds,  # type: ignore[arg-type]
+            eval_dataset,  # type: ignore[arg-type]
             batch_size=cfg.batch_size,
             shuffle=False,
             num_workers=cfg.num_workers,

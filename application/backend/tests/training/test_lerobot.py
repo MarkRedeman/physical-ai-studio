@@ -32,7 +32,7 @@ from training.lerobot import (
     _resolve_device,
     _resolve_resume_checkpoint,
     _scale_probe_batch,
-    _total_frames,
+    _training_budget,
 )
 
 if TYPE_CHECKING:
@@ -161,11 +161,6 @@ def _xpu() -> object:
     return torch.device("xpu")
 
 
-class TestTotalFrames:
-    def test_reads_total_frames_from_info_json(self, tmp_path: Path) -> None:
-        assert _total_frames(_snapshot(tmp_path, total_frames=42)) == 42
-
-
 class TestRenameMapIgnored:
     def test_build_config_never_sets_a_rename_map(self, tmp_path: Path) -> None:
         spec = TrainingJobSpec(
@@ -181,19 +176,43 @@ class TestRenameMapIgnored:
         assert cfg.rename_map == {}
 
 
+class TestTrainingBudget:
+    def test_derives_cadence_from_train_split(self) -> None:
+        # 540 train frames (600 total, 10% eval), batch 8 -> 68 batches/epoch, 3 epochs.
+        steps_per_epoch = 68
+        total_steps = 3 * steps_per_epoch
+        log_freq, eval_steps, save_freq = _training_budget(
+            total_steps=total_steps, steps_per_epoch=steps_per_epoch, eval_split=0.1
+        )
+
+        assert log_freq == max(1, min(100, total_steps // 1000))
+        assert eval_steps == steps_per_epoch
+        assert save_freq == total_steps
+
+    def test_no_eval_without_val_split(self) -> None:
+        log_freq, eval_steps, save_freq = _training_budget(total_steps=1000, steps_per_epoch=50, eval_split=0.0)
+        assert eval_steps == 0
+        assert log_freq == 1
+        assert save_freq == 1000
+
+    def test_adaptive_cadence_caps_at_100(self) -> None:
+        log_freq, eval_steps, _ = _training_budget(total_steps=160500, steps_per_epoch=32100, eval_split=0.1)
+        assert log_freq == 100
+        assert eval_steps == 32100
+
+
 class TestConfigDerivation:
-    def test_steps_are_derived_from_epochs_and_dataset(self, tmp_path: Path) -> None:
-        snapshot = _snapshot(tmp_path, total_frames=600)
+    def test_build_config_overrides_only_batch_size(self, tmp_path: Path) -> None:
         cfg = _build_config(
-            TrainingJobSpec(policy="act", training_engine="lerobot", max_epochs=3),
-            dataset_root=snapshot,
+            TrainingJobSpec(policy="act", training_engine="lerobot", batch_size=16),
+            dataset_root=_snapshot(tmp_path),
             device=_cpu(),
             cache_dir=tmp_path / "cache",
             resume_checkpoint=None,
         )
 
-        assert cfg.steps == 3 * ((600 + 7) // 8)
-        assert cfg.batch_size == 8
+        assert cfg.batch_size == 16
+        assert cfg.use_policy_training_preset is True
 
     @pytest.mark.parametrize("policy", ["act", "diffusion", "smolvla", "pi05"])
     def test_policy_uses_its_lerobot_optimizer_preset(self, tmp_path: Path, policy: str) -> None:
@@ -222,17 +241,6 @@ class TestConfigDerivation:
         # ACT's lerobot preset defines no LR scheduler (constant learning rate).
         assert cfg.scheduler is None
 
-    def test_log_cadence_matches_the_physicalai_contract(self, tmp_path: Path) -> None:
-        cfg = _build_config(
-            TrainingJobSpec(policy="act", training_engine="lerobot"),
-            dataset_root=_snapshot(tmp_path, total_frames=600),
-            device=_cpu(),
-            cache_dir=tmp_path / "cache",
-            resume_checkpoint=None,
-        )
-
-        assert cfg.log_freq == max(1, min(100, cfg.steps // 1000))
-
     def test_val_split_maps_to_eval_split(self, tmp_path: Path) -> None:
         cfg = _build_config(
             TrainingJobSpec(policy="act", training_engine="lerobot", val_split=0.25),
@@ -243,18 +251,22 @@ class TestConfigDerivation:
         )
 
         assert cfg.dataset.eval_split == 0.25
-        assert cfg.eval_steps > 0
 
-    def test_zero_val_split_disables_eval(self, tmp_path: Path) -> None:
+    def test_build_config_keeps_lerobot_defaults(self, tmp_path: Path) -> None:
         cfg = _build_config(
-            TrainingJobSpec(policy="act", training_engine="lerobot", val_split=0.0),
+            TrainingJobSpec(policy="act", training_engine="lerobot"),
             dataset_root=_snapshot(tmp_path),
             device=_cpu(),
             cache_dir=tmp_path / "cache",
             resume_checkpoint=None,
         )
 
+        # Only the batch size / dataset / policy override lerobot defaults; the
+        # step and cadence budget is finalized in ``_train`` from the train split.
+        assert cfg.steps == 100_000
+        assert cfg.log_freq == 200
         assert cfg.eval_steps == 0
+        assert cfg.seed == 1000
 
     def test_policy_device_comes_from_the_spec(self, tmp_path: Path) -> None:
         cfg = _build_config(
