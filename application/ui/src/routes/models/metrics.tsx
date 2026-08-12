@@ -5,7 +5,7 @@ import { experimental_streamedQuery as streamedQuery, useQuery } from '@tanstack
 
 import { fetchClient } from '../../api/client';
 import { fetchSSE } from '../../api/fetch-sse';
-import { MetricGraph } from './metrics-graph.component';
+import { MetricGraph, type MetricGraphPoint, type MetricSeries } from './metrics-graph.component';
 
 export interface MetricsEntry {
     epoch: number;
@@ -16,31 +16,36 @@ export interface MetricsEntry {
     'lr-AdamW': number | null | undefined;
 }
 
-export type MetricPoint = { x: number; y: number };
-
-export const filterLossStepMetrics = (data?: MetricsEntry[]) => {
+/** Merge per-step train and validation loss into rows the combined chart plots. */
+export const buildLossMetrics = (data?: MetricsEntry[]): MetricGraphPoint[] => {
     if (!data) return [];
-    return data.flatMap((entry): MetricPoint[] => {
+    const rows = new Map<number, MetricGraphPoint>();
+    for (const entry of data) {
         // Prefer the per-step train/loss. Fall back to train/loss_step, which ACT
         // logged per-step historically, so jobs still streaming from older runs
         // keep charting.
-        const y = entry.train_loss ?? entry.train_loss_step;
-        return y == null ? [] : [{ x: entry.step, y }];
+        const train = entry.train_loss ?? entry.train_loss_step;
+        if (train == null && entry.val_loss == null) {
+            continue;
+        }
+        const row = rows.get(entry.step) ?? { x: entry.step };
+        if (train != null) {
+            row.train = train;
+        }
+        if (entry.val_loss != null) {
+            row.val = entry.val_loss;
+        }
+        rows.set(entry.step, row);
+    }
+    return [...rows.values()].sort((a, b) => a.x - b.x);
+};
+
+export const filterLrMetrics = (data?: MetricsEntry[]): MetricGraphPoint[] => {
+    if (!data) return [];
+    return data.flatMap((entry): MetricGraphPoint[] => {
+        const lr = entry['lr-AdamW'];
+        return lr == null ? [] : [{ x: entry.step, lr }];
     });
-};
-
-export const filterValLossMetrics = (data?: MetricsEntry[]) => {
-    if (!data) return [];
-    return data.flatMap((entry): MetricPoint[] =>
-        entry.val_loss == null ? [] : [{ x: entry.step, y: entry.val_loss }]
-    );
-};
-
-export const filterLrMetrics = (data?: MetricsEntry[]) => {
-    if (!data) return [];
-    return data.flatMap((entry): MetricPoint[] =>
-        entry['lr-AdamW'] == null ? [] : [{ x: entry.step, y: entry['lr-AdamW'] }]
-    );
 };
 
 const formatLearningRateTick = (value: number) => {
@@ -57,26 +62,30 @@ const METRICS_QUERY_OPTIONS = {
     retry: true,
 };
 
+const TRAIN_COLOR = 'var(--energy-blue)';
+const VALIDATION_COLOR = 'var(--spectrum-semantic-negative-color-default, #e34850)';
+
+const LOSS_SERIES: MetricSeries[] = [
+    { dataKey: 'train', name: 'Train Loss', color: TRAIN_COLOR },
+    { dataKey: 'val', name: 'Validation Loss', color: VALIDATION_COLOR },
+];
+
+const LR_SERIES: MetricSeries[] = [{ dataKey: 'lr', name: 'Learning Rate', color: TRAIN_COLOR }];
+
 const MetricsGraphs = ({ data }: { data?: MetricsEntry[] }) => {
-    const lossStepMetrics = useMemo(() => filterLossStepMetrics(data), [data]);
-    const valLossMetrics = useMemo(() => filterValLossMetrics(data), [data]);
+    const lossMetrics = useMemo(() => buildLossMetrics(data), [data]);
     const lrMetrics = useMemo(() => filterLrMetrics(data), [data]);
 
     return (
         <Flex wrap gap='size-200'>
-            <MetricGraph title={'Loss'} yAxisLabel={'Loss'} xAxisLabel='Step' data={lossStepMetrics} />
-            <MetricGraph
-                title={'Validation Loss'}
-                yAxisLabel={'Validation Loss'}
-                xAxisLabel='Step'
-                data={valLossMetrics}
-            />
+            <MetricGraph title={'Loss'} yAxisLabel={'Loss'} xAxisLabel='Step' data={lossMetrics} series={LOSS_SERIES} />
             {lrMetrics.length > 0 && (
                 <MetricGraph
                     title={'Learning Rate'}
                     yAxisLabel={'Learning Rate'}
                     xAxisLabel='Step'
                     data={lrMetrics}
+                    series={LR_SERIES}
                     yTickFormatter={formatLearningRateTick}
                 />
             )}
