@@ -88,6 +88,34 @@ class TestTorchAdapter:
             assert isinstance(outputs["action"], np.ndarray)
             np.testing.assert_array_almost_equal(outputs["action"], [[1.0, 2.0]])
 
+    def test_predict_with_lerobot_named_inputs(self, tmp_path: Path) -> None:
+        """Test predict accepts lerobot-style keys matching the manifest's input features."""
+        model_path = self._write_policy_manifest(tmp_path)
+
+        mock_model = MagicMock()
+        mock_model.return_value = torch.tensor([[1.0, 2.0]])
+        mock_model.eval.return_value = mock_model
+        mock_model.to.return_value = mock_model
+        mock_model.extra_export_args = {"torch": TorchExportParameters()}
+
+        with patch("physicalai.policies.act.ACT.load_from_checkpoint", return_value=mock_model):
+            adapter = TorchAdapter(device="cpu")
+            adapter.load(model_path)
+
+            outputs = adapter.predict({
+                "observation.state": np.array([[0.5, 0.3]], dtype=np.float32),
+                "observation.images.top": np.random.rand(1, 3, 96, 96).astype(np.float32),
+            })
+            assert "action" in outputs
+            np.testing.assert_array_almost_equal(outputs["action"], [[1.0, 2.0]])
+
+            # Policy must receive the flat lerobot dict as torch tensors,
+            # not an Observation (which would drop the "observation.*" keys).
+            called_with = mock_model.call_args[0][0]
+            assert isinstance(called_with, dict)
+            assert set(called_with) == {"observation.state", "observation.images.top"}
+            assert all(isinstance(v, torch.Tensor) for v in called_with.values())
+
     def test_predict_with_nested_images(self, tmp_path: Path) -> None:
         """Test predict with multi-camera images (dict of numpy arrays)."""
         model_path = self._write_policy_manifest(tmp_path)

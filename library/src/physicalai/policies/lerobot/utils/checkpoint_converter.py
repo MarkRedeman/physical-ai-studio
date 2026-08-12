@@ -12,7 +12,7 @@ from pathlib import Path
 
 import torch
 
-from physicalai.export.mixin_policy import CONFIG_KEY, POLICY_NAME_KEY
+from physicalai.export.mixin_policy import CONFIG_KEY, DATASET_STATS_KEY, POLICY_NAME_KEY
 from physicalai.policies.lerobot.policy import LeRobotPolicy
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,66 @@ def lightning_to_lerobot(
     return output_dir
 
 
+def _load_normalization_stats(lerobot_dir: Path) -> dict[str, dict[str, torch.Tensor]]:
+    """Reconstruct normalization statistics from a LeRobot pretrained directory.
+
+    Reads the preprocessor's normalizer step (``policy_preprocessor.json`` and
+    the referenced ``*.safetensors`` state file) and regroups its flat keys
+    (e.g. ``action.mean``, ``observation.state.std``) into the per-feature
+    mapping :class:`LeRobotPolicy` uses to build its normalize/unnormalize
+    processors. Without these stats the wrapper produces *normalized* actions
+    at inference, so they must be carried into the converted checkpoint.
+
+    Args:
+        lerobot_dir: Directory containing the pretrained LeRobot policy.
+
+    Returns:
+        Per-feature normalization statistics, or ``{}`` when the normalizer
+        step or its state file is missing.
+    """
+    from safetensors.torch import safe_open  # noqa: PLC0415
+
+    preprocessor_cfg_path = lerobot_dir / "policy_preprocessor.json"
+    if not preprocessor_cfg_path.exists():
+        logger.warning(
+            "No %s in %s; dataset normalization stats will not be carried into the checkpoint",
+            preprocessor_cfg_path.name,
+            lerobot_dir,
+        )
+        return {}
+
+    with preprocessor_cfg_path.open() as f:
+        preprocessor_cfg = json.load(f)
+
+    state_file: str | None = None
+    for step in preprocessor_cfg.get("steps", []):
+        if step.get("registry_name") == "normalizer_processor":
+            state_file = step.get("state_file")
+            break
+
+    if state_file is None:
+        logger.warning(
+            "No normalizer_processor step in %s; dataset normalization stats will not be carried into the checkpoint",
+            preprocessor_cfg_path,
+        )
+        return {}
+
+    stats_path = lerobot_dir / state_file
+    if not stats_path.exists():
+        logger.warning(
+            "Missing normalizer state file %s; dataset normalization stats will not be carried into the checkpoint",
+            stats_path,
+        )
+        return {}
+
+    stats: dict[str, dict[str, torch.Tensor]] = {}
+    with safe_open(stats_path, framework="pt") as sf:
+        for flat_key in sf.keys():  # noqa: SIM118 - safe_open is not iterable
+            feature, stat_name = flat_key.rsplit(".", 1)
+            stats.setdefault(feature, {})[stat_name] = sf.get_tensor(flat_key)
+    return stats
+
+
 def lerobot_to_lightning(
     lerobot_dir: str | Path,
     output_path: str | Path,
@@ -73,11 +133,14 @@ def lerobot_to_lightning(
 
     Creates a ``.ckpt`` file loadable by
     ``LeRobotPolicy.load_from_checkpoint()`` from a directory containing
-    ``config.json`` and ``model.safetensors``.
+    ``config.json``, ``model.safetensors``, and the preprocessor pipeline
+    (``policy_preprocessor.json`` + its state files). The normalizer's
+    dataset statistics are embedded in the checkpoint so the reconstructed
+    wrapper denormalizes actions at inference.
 
     Args:
-        lerobot_dir: Directory containing ``config.json`` and
-            ``model.safetensors``.
+        lerobot_dir: Directory containing ``config.json``,
+            ``model.safetensors``, and ``policy_preprocessor.json``.
         output_path: Path for the output ``.ckpt`` file.
         policy_name: Policy type name (e.g. ``"act"``). If *None*, inferred
             from ``config.json["type"]``.
@@ -121,6 +184,10 @@ def lerobot_to_lightning(
         CONFIG_KEY: config_dict,
         POLICY_NAME_KEY: policy_name,
     }
+
+    dataset_stats = _load_normalization_stats(lerobot_dir)
+    if dataset_stats:
+        checkpoint[DATASET_STATS_KEY] = dataset_stats
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # nosemgrep: trailofbits.python.pickles-in-pytorch.pickles-in-pytorch

@@ -800,6 +800,49 @@ class TestCheckpointConverter:
         for key in sample_lerobot_state:
             torch.testing.assert_close(state_dict[_LEROBOT_PREFIX + key], sample_lerobot_state[key])
 
+    def test_lerobot_to_lightning_carries_dataset_stats(self, sample_config, sample_lerobot_state, tmp_path):
+        """The converted checkpoint embeds the normalizer stats for denormalization."""
+        import json
+
+        from safetensors.torch import save_file
+
+        from physicalai.export.mixin_policy import DATASET_STATS_KEY
+        from physicalai.policies.lerobot.utils.checkpoint_converter import lerobot_to_lightning
+
+        lr_dir = tmp_path / "lerobot_model"
+        lr_dir.mkdir()
+        with (lr_dir / "config.json").open("w") as f:
+            json.dump(sample_config, f)
+        save_file(sample_lerobot_state, str(lr_dir / "model.safetensors"))
+        with (lr_dir / "policy_preprocessor.json").open("w") as f:
+            json.dump(
+                {
+                    "name": "policy_preprocessor",
+                    "steps": [
+                        {"registry_name": "normalizer_processor", "state_file": "norm.safetensors"},
+                    ],
+                },
+                f,
+            )
+        norm_state = {
+            "action.mean": torch.zeros(6),
+            "action.std": torch.ones(6),
+            "observation.state.mean": torch.zeros(6),
+            "observation.state.std": torch.ones(6),
+        }
+        save_file(norm_state, str(lr_dir / "norm.safetensors"))
+
+        ckpt_path = tmp_path / "converted.ckpt"
+        lerobot_to_lightning(lr_dir, ckpt_path)
+
+        # nosemgrep: trailofbits.python.pickles-in-pytorch.pickles-in-pytorch
+        ckpt = torch.load(str(ckpt_path), map_location="cpu", weights_only=True)
+        assert DATASET_STATS_KEY in ckpt
+        stats = ckpt[DATASET_STATS_KEY]
+        assert set(stats) == {"action", "observation.state"}
+        torch.testing.assert_close(stats["action"]["mean"], torch.zeros(6))
+        torch.testing.assert_close(stats["observation.state"]["std"], torch.ones(6))
+
     def test_lerobot_to_lightning_stores_config_and_policy_name(self, lerobot_dir, sample_config, tmp_path):
         """Checkpoint contains CONFIG_KEY and POLICY_NAME_KEY."""
         from physicalai.export.mixin_policy import CONFIG_KEY, POLICY_NAME_KEY

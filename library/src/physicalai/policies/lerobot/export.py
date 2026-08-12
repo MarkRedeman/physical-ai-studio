@@ -227,8 +227,12 @@ class ExportableLeRobotPolicy(LeRobotPolicy):
 # The shared export machinery derives artifact filenames and manifest policy
 # names from ``__class__.__name__.lower()``. Keep them identical to the bare
 # wrapper's (``lerobotpolicy.pt`` / ``lerobotpolicy.xml``) so re-exports match
-# the artifacts the LeRobot training engine already produces.
+# the artifacts the LeRobot training engine already produces. The manifest
+# records that class name as the policy ``class_path``, so expose it as a
+# module attribute too: inference load resolves ``class_path`` via
+# ``physicalai.config.import_class``, which needs a real module attribute.
 ExportableLeRobotPolicy.__name__ = "LerobotPolicy"
+LerobotPolicy = ExportableLeRobotPolicy
 
 
 def _build_trace_sample(policy: ExportableLeRobotPolicy) -> dict[str, torch.Tensor]:
