@@ -233,6 +233,7 @@ def _report_input_sanity(
     raw_batch: Mapping[str, Any],
     batch: Mapping[str, Any],
     camera_keys: list[str],
+    rename_map: Mapping[str, str] | None = None,
 ) -> None:
     """Emit per-camera image statistics for the first training batch.
 
@@ -240,13 +241,18 @@ def _report_input_sanity(
     normalized statistics capture the preprocessor output, and anomaly flags
     call out NaN/Inf or degenerate frames. Consumers render this via
     ``render_progress_log`` into the job log.
+
+    ``camera_keys`` are the keys the policy consumes (after any camera
+    ``rename_map`` was applied by the preprocessor); the raw frames are looked
+    up through the inverse of that map.
     """
+    inverse = {dst: src for src, dst in rename_map.items()} if rename_map else {}
     cameras: dict[str, dict[str, Any]] = {}
     for cam_key in camera_keys:
         if cam_key not in batch:
             continue
         entry: dict[str, Any] = {}
-        raw = raw_batch.get(cam_key)
+        raw = raw_batch.get(inverse.get(cam_key, cam_key))
         if isinstance(raw, torch.Tensor):
             entry["raw"] = _tensor_stats(raw)
             entry["raw_dtype"] = str(raw.dtype)
@@ -398,6 +404,19 @@ def _apply_rename_map(cfg: TrainPipelineConfig, rename_map: dict[str, str | None
             )
 
 
+def _apply_rename_map_to_policy(policy: Any, rename_map: Mapping[str, str]) -> None:
+    """Rename the policy config's input-feature keys per the camera rename map.
+
+    The preprocessor renames the dataset's observation keys into the policy's
+    camera schema (``cfg.rename_map``), so the policy config's ``input_features``
+    must point at the renamed keys for ``forward`` to find them in the batch.
+    Keys not covered by the map are left untouched.
+    """
+    policy.config.input_features = {
+        rename_map.get(key, key): feature for key, feature in policy.config.input_features.items()
+    }
+
+
 def _resume_config(
     resume_checkpoint: Path,
     *,
@@ -542,6 +561,11 @@ def _train(  # noqa: C901, PLR0912, PLR0915
 
     report(0, "Creating LeRobot policy", {})
     policy = make_policy(cfg=cfg.policy, ds_meta=dataset.meta, rename_map=cfg.rename_map)
+    if cfg.rename_map:
+        # The preprocessor renames the dataset's observation keys into the
+        # policy's camera schema; point the policy config's input features at
+        # the renamed keys so forward sees the renamed batch.
+        _apply_rename_map_to_policy(policy, cfg.rename_map)
     policy = policy.to(device)
 
     processor_kwargs: dict[str, Any] = {}
@@ -665,7 +689,7 @@ def _train(  # noqa: C901, PLR0912, PLR0915
         batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
 
         if current == step:
-            _report_input_sanity(report, raw_batch, batch, dataset.meta.camera_keys)
+            _report_input_sanity(report, raw_batch, batch, list(policy.config.image_features.keys()), cfg.rename_map)
 
         with autocast_ctx or nullcontext():
             loss, _output_dict = policy.forward(batch)

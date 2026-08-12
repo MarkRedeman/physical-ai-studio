@@ -22,6 +22,7 @@ from services.training_backends._log_format import render_progress_log
 from training import TrainingJobSpec
 from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, PRETRAINED_BASE_CHECKPOINTS, run_training_job
 from training.lerobot import (
+    _apply_rename_map_to_policy,
     _auto_scale_batch_size,
     _build_config,
     _input_sanity_flags,
@@ -219,6 +220,30 @@ class TestRenameMap:
         }
         # The policy's unused camera slot is padded by the empty_cameras field.
         assert cfg.policy.empty_cameras == 1
+
+    def test_policy_input_features_follow_the_rename_map(self) -> None:
+        """After the preprocessor renames dataset->policy keys, the policy config
+        must advertise the renamed camera keys so forward finds them in the batch."""
+        config = MagicMock()
+        config.input_features = {
+            "observation.state": object(),
+            "observation.images.overview": object(),
+            "observation.images.gripper": object(),
+            "action": object(),
+        }
+        policy = MagicMock(config=config)
+        rename_map = {
+            "observation.images.overview": "observation.images.camera1",
+            "observation.images.gripper": "observation.images.camera2",
+        }
+        _apply_rename_map_to_policy(policy, rename_map)
+
+        assert set(config.input_features) == {
+            "observation.state",
+            "observation.images.camera1",
+            "observation.images.camera2",
+            "action",
+        }
 
 
 class TestTrainingBudget:
@@ -611,6 +636,24 @@ class TestInputSanity:
         cam = payload["cameras"]["observation.images.overview"]
         assert "raw" in cam and "norm" in cam
         assert "flags" in cam
+
+    def test_report_input_sanity_with_rename_map(self) -> None:
+        import torch
+
+        raw = {"observation.images.overview": torch.full((1, 3, 2, 2), 0.5)}
+        norm = {"observation.images.camera1": torch.full((1, 3, 2, 2), 0.0)}
+        report = MagicMock()
+        _report_input_sanity(
+            report,
+            raw,
+            norm,
+            ["observation.images.camera1"],
+            rename_map={"observation.images.overview": "observation.images.camera1"},
+        )
+        cam = report.call_args.args[2]["cameras"]["observation.images.camera1"]
+        # Raw frames come from the dataset key (inverse of the rename map).
+        assert cam["raw"]["mean"] == [0.5, 0.5, 0.5]
+        assert cam["norm"]["mean"] == [0.0, 0.0, 0.0]
 
 
 class TestAutoScaleBatchSize:
