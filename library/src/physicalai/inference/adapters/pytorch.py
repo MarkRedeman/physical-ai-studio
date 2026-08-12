@@ -109,7 +109,7 @@ class TorchAdapter(RuntimeAdapter):
             self._policy = (
                 load_from_checkpoint(
                     model_path,
-                    map_location="cpu",
+                    map_location=self.device,
                     weights_only=False,
                     **({"compile_model": self.compile_model} if self.compile_model and supports_compile_model else {}),
                 )
@@ -157,10 +157,23 @@ class TorchAdapter(RuntimeAdapter):
             raise RuntimeError(msg)
 
         try:
-            # Build Observation from numpy dict and convert to torch tensors on device
-            observation = Observation.from_dict(inputs).to_torch(self.device)
-
-            torch_outputs = self._policy(observation)
+            # Lerobot-style keys (``observation.state``, ``observation.images.*``)
+            # match the manifest's input feature names and are what the other
+            # backends consume. Hand the torch dict straight to the policy; the
+            # LeRobot wrapper feeds it through its preprocessor pipeline. Other
+            # torch policies consume structured Observation payloads instead.
+            if any(str(key).startswith("observation.") for key in inputs):
+                torch_inputs = {
+                    str(key): value.to(self.device)
+                    if isinstance(value, torch.Tensor)
+                    else torch.from_numpy(value).to(self.device)
+                    for key, value in inputs.items()
+                }
+                torch_outputs = self._policy(torch_inputs)
+            else:
+                # Build Observation from numpy dict and convert to torch tensors on device
+                observation = Observation.from_dict(inputs).to_torch(self.device)
+                torch_outputs = self._policy(observation)
             return self._convert_outputs_to_numpy(torch_outputs)
 
         except Exception as e:
