@@ -7,7 +7,7 @@ import os
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -126,6 +126,16 @@ class Settings(BaseSettings):
     # Server
     host: str = Field(default="0.0.0.0", alias="HOST")  # noqa: S104 # nosec B104
     port: int = Field(default=7860, alias="PORT")
+
+    # Video encoding
+    # Passed through to lerobot's RGBEncoderConfig when building recordings.
+    streaming_vcodec: str = Field(default="auto", alias="STREAMING_VCODEC")
+    streaming_pix_fmt: str | None = Field(default=None, alias="STREAMING_PIX_FMT")
+    streaming_crf: int | float | None = Field(default=None, alias="STREAMING_CRF")
+    streaming_preset: int | str | None = Field(default=None, alias="STREAMING_PRESET")
+    streaming_extra_options: dict[str, Any] | None = Field(default=None, alias="STREAMING_EXTRA_OPTIONS")
+    streaming_encoder_threads: int | None = Field(default=None, alias="STREAMING_ENCODER_THREADS")
+    streaming_encoder_queue_maxsize: int = Field(default=60, alias="STREAMING_ENCODER_QUEUE_MAXSIZE")
 
     # Database
     database_file: str = Field(default="physicalai.db", alias="DATABASE_FILE", description="Database filename")
