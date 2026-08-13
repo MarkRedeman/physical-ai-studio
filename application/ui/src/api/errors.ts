@@ -33,8 +33,8 @@ export const isResourceInUseError = (error: unknown): boolean =>
 export const isSerialPermissionDeniedError = (error: unknown): boolean =>
     typeof error === 'object' &&
     error !== null &&
-    'error_code' in error &&
-    (error as Record<string, unknown>).error_code === 'serial_permission_denied';
+    typeof (error as Record<string, unknown>).error_code === 'string' &&
+    (error as Record<string, string>).error_code.toLowerCase() === 'serial_permission_denied';
 
 interface ApiErrorBody {
     error_code?: string;

@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
-from uuid import UUID
 
 from loguru import logger
 from physicalai.robot import SO101
 from physicalai.robot.so101 import SO101Calibration, SO101JointCalibration
 from physicalai.robot.so101.constants import TICKS_PER_REVOLUTION
-from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
+from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition, RobotProbe
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from exceptions import RobotIdentifyError
@@ -22,8 +20,6 @@ SO101Types = Literal["SO101_Follower", "SO101_Leader"]
 
 if TYPE_CHECKING:
     from physicalai_studio_plugin import CatalogRobot, CatalogRobotFactory, PortScanner
-
-    from schemas.robot import Robot
 
 
 class SO101RobotPayload(BaseModel):
@@ -121,13 +117,6 @@ async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: C
     )
 
 
-def serial_port_from_so101(robot: SO101Robot) -> SerialPortInfo:
-    """Build a serial identity from an SO101 robot configuration."""
-    connection_string = robot.payload.connection_string or None
-    serial_number = robot.payload.serial_number or None
-    return SerialPortInfo(connection_string=connection_string, serial_number=serial_number)
-
-
 def _resolve_serial_port(discovered: list[SerialPortInfo], target: SerialPortInfo) -> str | None:
     if target.serial_number is not None:
         for serial_port in discovered:
@@ -161,16 +150,14 @@ async def find_so101_port(
 _IDENTIFY_WIGGLE = 0.08
 
 
-def _identify_so101_motion(connection_string: str, joint: str) -> None:
-    """Move ``joint`` a small way and back to identify the robot.
+def identify_so101_robot_visually(connection_string: str) -> None:
+    """Move the gripper a small way and back to identify the robot.
 
-    Drives through the physicalai ``SO101`` driver in raw-ticks (uncalibrated)
-    mode, which applies the gripper torque/current/overload protection
-    registers on connect. Torque is disabled before disconnecting so the arm
-    relaxes afterwards.
+    Uses the physicalai ``SO101`` driver in raw-ticks (uncalibrated) mode, so no
+    calibration file is required. The gripper is only moved a small fraction of
+    its travel, never to a stop, so the STS3215 servos cannot trip overload.
     """
-    if joint not in SO101.JOINT_ORDER:
-        raise ValueError(f"Unknown SO101 joint: {joint!r}")
+    joint = "gripper"
     joint_index = SO101.JOINT_ORDER.index(joint)
 
     driver = SO101.uncalibrated(port=connection_string, role="follower")
@@ -183,7 +170,11 @@ def _identify_so101_motion(connection_string: str, joint: str) -> None:
 
         step = TICKS_PER_REVOLUTION * _IDENTIFY_WIGGLE
         lo, hi = 0.0, float(TICKS_PER_REVOLUTION - 1)
-        targets = (min(max(current + step, lo), hi), min(max(current - step, lo), hi), current)
+        targets = (
+            min(max(current + step, lo), hi),
+            min(max(current - step, lo), hi),
+            current,
+        )
 
         for target in targets:
             action = observation.joint_positions.copy()
@@ -203,34 +194,7 @@ def _identify_so101_motion(connection_string: str, joint: str) -> None:
         driver.disconnect()
 
 
-async def identify_so101_robot_visually(
-    manager: PortScanner,
-    robot: Robot,
-    joint: str | None = None,
-) -> None:
-    """Identify the robot by moving the joint a small way and back to its start.
-
-    Uses the physicalai ``SO101`` driver in raw-ticks (uncalibrated) mode, so no
-    calibration file is required. The joint is only moved a small fraction of
-    its travel, never to a stop, so the STS3215 servos cannot trip overload.
-    """
-    if not isinstance(robot.payload, SO101RobotPayload):
-        raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
-
-    if joint is None:
-        joint = "gripper"
-
-    connection_string = await find_so101_port(manager, serial_port_from_so101(robot))
-
-    if connection_string is None:
-        if robot.payload.serial_number:
-            raise ValueError(f"Could not find the serial port for serial number {robot.payload.serial_number}")
-        raise ValueError("Could not resolve a serial port from connection_string")
-
-    await asyncio.to_thread(_identify_so101_motion, connection_string, joint)
-
-
-class SO101Probe:
+class SO101Probe(RobotProbe[SO101RobotPayload]):
     """Probe for SO101 robots — serial port discovery + joint identification."""
 
     async def discover(self, manager: PortScanner) -> list[SerialPortInfo]:
@@ -241,21 +205,22 @@ class SO101Probe:
         self,
         payload: SO101RobotPayload,
         manager: PortScanner | None,
-        joint: str | None = None,
+        joint: str | None = None,  # noqa: ARG002 - identification always uses the gripper
     ) -> None:
         if manager is None:
             raise ValueError("PortScanner required for SO101 identification")
 
-        now = datetime.now()
-        robot = SO101Robot(
-            id=UUID(int=0),
-            name="",
-            type="SO101_Follower",
-            payload=payload,
-            created_at=now,
-            updated_at=now,
+        serial_port = SerialPortInfo(
+            connection_string=payload.connection_string or None,
+            serial_number=payload.serial_number or None,
         )
-        await identify_so101_robot_visually(manager, robot, joint)
+        connection_string = await find_so101_port(manager, serial_port)
+        if connection_string is None:
+            if payload.serial_number:
+                raise ValueError(f"Could not find the serial port for serial number {payload.serial_number}")
+            raise ValueError("Could not resolve a serial port from connection_string")
+
+        await asyncio.to_thread(identify_so101_robot_visually, connection_string)
 
     async def is_online(self, payload: SO101RobotPayload, manager: PortScanner | None = None) -> bool:
         serial_port = SerialPortInfo(

@@ -4,24 +4,22 @@
 """Tests for the SO-101 visual identification routine.
 
 ``identify_so101_robot_visually`` drives the physicalai ``SO101`` driver in
-raw-ticks (uncalibrated) mode and wiggles the joint a small amount around its
+raw-ticks (uncalibrated) mode and wiggles the gripper a small amount around its
 current position. The critical regression this guards is driving a joint to a
 physical stop, which can stall an STS3215 servo into overload protection.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 import numpy as np
 import pytest
 
 import robots.catalog.so101 as so101_module
 from exceptions import RobotIdentifyError
-from robots.catalog.so101 import SO101Robot, SO101RobotPayload, _identify_so101_motion, identify_so101_robot_visually
+from robots.catalog.so101 import SO101Probe, SO101RobotPayload
 from schemas import SerialPortInfo
 
 if TYPE_CHECKING:
@@ -106,16 +104,8 @@ class _FakePortScanner:
         return self.robots
 
 
-def _robot() -> SO101Robot:
-    now = datetime.now()
-    return SO101Robot(
-        id=UUID(int=0),
-        name="",
-        type="SO101_Follower",
-        payload=SO101RobotPayload(connection_string="", serial_number=SERIAL_NUMBER),
-        created_at=now,
-        updated_at=now,
-    )
+def _payload() -> SO101RobotPayload:
+    return SO101RobotPayload(connection_string="", serial_number=SERIAL_NUMBER)
 
 
 @pytest.fixture(autouse=True)
@@ -133,21 +123,15 @@ def _last_driver() -> _FakeDriver:
     return _FakeDriver.instances[-1]
 
 
-# ---------------------------------------------------------------------------
-# Motion
-# ---------------------------------------------------------------------------
-
-
-def test_identify_so101_motion_uses_uncalibrated_driver_with_safe_targets(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.asyncio
+async def test_identify_uses_uncalibrated_driver_with_safe_targets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(so101_module, "SO101", _FakeDriver)
 
     start = np.zeros(6, dtype=np.float32)
     start[5] = 2048.0
     _FakeDriver.default_start = start
 
-    _identify_so101_motion(PORT, "gripper")
+    await SO101Probe().identify(_payload(), _FakePortScanner())
 
     driver = _last_driver()
     assert driver.unit == "ticks"
@@ -163,9 +147,8 @@ def test_identify_so101_motion_uses_uncalibrated_driver_with_safe_targets(
     assert gripper_goals[-1] == 2048.0
 
 
-def test_identify_so101_motion_lets_connect_errors_propagate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.asyncio
+async def test_identify_lets_connect_errors_propagate(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FailingDriver(_FakeDriver):
         def connect(self) -> None:
             raise ConnectionError(f"Failed to open serial port {PORT}")
@@ -175,7 +158,7 @@ def test_identify_so101_motion_lets_connect_errors_propagate(
     # Port open / permission failures keep the standard serial error mapping
     # instead of the identify (power-cycle) error.
     with pytest.raises(ConnectionError, match="Failed to open serial port"):
-        _identify_so101_motion(PORT, "gripper")
+        await SO101Probe().identify(_payload(), _FakePortScanner())
 
     # physicalai cleans up the port itself when connect fails; torque is never
     # touched because the motion never started.
@@ -183,60 +166,23 @@ def test_identify_so101_motion_lets_connect_errors_propagate(
     assert _last_driver().torque_commands == []
 
 
-def test_identify_so101_motion_wraps_overload_as_robot_identify_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.asyncio
+async def test_identify_wraps_overload_as_robot_identify_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(so101_module, "SO101", _FakeDriver)
     _FakeDriver.default_start = np.array([0, 0, 0, 0, 0, 2048.0], dtype=np.float32)
     _FakeDriver.default_observation_failure = ConnectionError("Servo 'gripper' (ID 6) data not available in sync read")
 
     with pytest.raises(RobotIdentifyError, match="overload"):
-        _identify_so101_motion(PORT, "gripper")
+        await SO101Probe().identify(_payload(), _FakePortScanner())
 
     driver = _last_driver()
     assert driver.disconnected
     assert driver.torque_commands == [False]
 
 
-def test_identify_so101_motion_rejects_unknown_joint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(so101_module, "SO101", _FakeDriver)
-
-    with pytest.raises(ValueError, match="Unknown SO101 joint"):
-        _identify_so101_motion(PORT, "bogus")
-
-
-# ---------------------------------------------------------------------------
-# End-to-end identify
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
-async def test_identify_so101_robot_visually_drives_via_uncalibrated_driver(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(so101_module, "SO101", _FakeDriver)
-
-    start = np.zeros(6, dtype=np.float32)
-    start[5] = 2048.0
-    _FakeDriver.default_start = start
-
-    await identify_so101_robot_visually(_FakePortScanner(), _robot())
-
-    driver = _last_driver()
-    assert driver.unit == "ticks"
-    assert driver.role == "follower"
-    gripper_goals = [float(action[5]) for action in driver.actions]
-    assert all(0.0 <= goal <= 4095.0 for goal in gripper_goals)
-    assert gripper_goals[-1] == 2048.0
-    assert driver.disconnected
-    assert driver.torque_commands == [False]
-
-
-@pytest.mark.asyncio
-async def test_identify_so101_robot_visually_raises_when_port_not_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_identify_raises_when_port_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(so101_module, "SO101", _FakeDriver)
 
     with pytest.raises(ValueError, match="serial port"):
-        await identify_so101_robot_visually(_FakePortScanner(robots=[]), _robot())
+        await SO101Probe().identify(_payload(), _FakePortScanner(robots=[]))
