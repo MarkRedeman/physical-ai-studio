@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -8,9 +10,11 @@ from uuid import UUID
 from loguru import logger
 from physicalai.robot import SO101
 from physicalai.robot.so101 import SO101Calibration, SO101JointCalibration
+from physicalai.robot.so101.constants import TICKS_PER_REVOLUTION
 from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from exceptions import RobotIdentifyError
 from schemas import SerialPortInfo
 from schemas.robot_type import BaseRobot
 
@@ -20,14 +24,6 @@ if TYPE_CHECKING:
     from physicalai_studio_plugin import CatalogRobot, CatalogRobotFactory, PortScanner
 
     from schemas.robot import Robot
-
-
-class SO101CalibrationValue(BaseModel):
-    id: int
-    drive_mode: int
-    homing_offset: int
-    range_min: int
-    range_max: int
 
 
 class SO101RobotPayload(BaseModel):
@@ -158,16 +154,66 @@ async def find_so101_port(
     return _resolve_serial_port(manager.robots, serial_port)
 
 
+# Relative wiggle (fraction of the full encoder) moved around the current
+# position. Uncalibrated mode has no calibrated range, so identification only
+# moves a small amount relative to where the joint already is, keeping it clear
+# of the physical stops so it cannot stall and trip overload protection.
+_IDENTIFY_WIGGLE = 0.08
+
+
+def _identify_so101_motion(connection_string: str, joint: str) -> None:
+    """Move ``joint`` a small way and back to identify the robot.
+
+    Drives through the physicalai ``SO101`` driver in raw-ticks (uncalibrated)
+    mode, which applies the gripper torque/current/overload protection
+    registers on connect. Torque is disabled before disconnecting so the arm
+    relaxes afterwards.
+    """
+    if joint not in SO101.JOINT_ORDER:
+        raise ValueError(f"Unknown SO101 joint: {joint!r}")
+    joint_index = SO101.JOINT_ORDER.index(joint)
+
+    driver = SO101.uncalibrated(port=connection_string, role="follower")
+    driver.torque_on_disconnect = False
+    # Port open / permission failures keep the standard serial error mapping.
+    driver.connect()
+    try:
+        observation = driver.get_observation()
+        current = float(observation.joint_positions[joint_index])
+
+        step = TICKS_PER_REVOLUTION * _IDENTIFY_WIGGLE
+        lo, hi = 0.0, float(TICKS_PER_REVOLUTION - 1)
+        targets = (min(max(current + step, lo), hi), min(max(current - step, lo), hi), current)
+
+        for target in targets:
+            action = observation.joint_positions.copy()
+            action[joint_index] = target
+            driver.send_action(action)
+            time.sleep(1.0)
+            # A servo that trips overload protection stops responding to sync
+            # reads, so this surfaces immediately with a clear error.
+            driver.get_observation()
+    except ConnectionError as exc:
+        raise RobotIdentifyError(
+            f"Robot identify failed: {joint} stopped responding during motion. "
+            "The servo may have tripped overload protection. Power-cycle the robot and try again."
+        ) from exc
+    finally:
+        driver.set_torque(enabled=False)
+        driver.disconnect()
+
+
 async def identify_so101_robot_visually(
     manager: PortScanner,
     robot: Robot,
     joint: str | None = None,
 ) -> None:
-    """Identify the robot by moving the joint from current to min to max to initial position."""
-    import asyncio
+    """Identify the robot by moving the joint a small way and back to its start.
 
-    from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig
-
+    Uses the physicalai ``SO101`` driver in raw-ticks (uncalibrated) mode, so no
+    calibration file is required. The joint is only moved a small fraction of
+    its travel, never to a stop, so the STS3215 servos cannot trip overload.
+    """
     if not isinstance(robot.payload, SO101RobotPayload):
         raise ValueError(f"Trying to identify unsupported robot: {robot.type}")
 
@@ -180,21 +226,8 @@ async def identify_so101_robot_visually(
         if robot.payload.serial_number:
             raise ValueError(f"Could not find the serial port for serial number {robot.payload.serial_number}")
         raise ValueError("Could not resolve a serial port from connection_string")
-    connection = SOFollower(SOFollowerRobotConfig(port=connection_string))
-    connection.bus.connect()
 
-    PRESENT_POSITION_KEY = "Present_Position"
-    GOAL_POSITION_KEY = "Goal_Position"
-
-    current_position = connection.bus.sync_read(PRESENT_POSITION_KEY, normalize=False)
-    gripper_calibration = connection.bus.read_calibration()[joint]
-    connection.bus.write(GOAL_POSITION_KEY, joint, gripper_calibration.range_min, normalize=False)
-    await asyncio.sleep(1)
-    connection.bus.write(GOAL_POSITION_KEY, joint, gripper_calibration.range_max, normalize=False)
-    await asyncio.sleep(1)
-    connection.bus.write(GOAL_POSITION_KEY, joint, current_position[joint], normalize=False)
-    await asyncio.sleep(1)
-    connection.bus.disconnect()
+    await asyncio.to_thread(_identify_so101_motion, connection_string, joint)
 
 
 class SO101Probe:
