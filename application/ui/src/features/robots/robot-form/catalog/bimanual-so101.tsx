@@ -10,6 +10,8 @@ type SourceRobot = Extract<SchemaRobot, { type: 'SO101_Follower' | 'SO101_Leader
 const isEligibleSource = (robot: SchemaRobot, type: SourceRobot['type']): robot is SourceRobot =>
     robot.type === type && robot.payload.serial_number !== '' && robot.payload.calibration != null;
 
+// TODO: can we replace this using recursive form fields?
+// make the left and right payload be a so101 payload
 export const BimanualSO101FormFields = () => {
     const { project_id } = useProjectId();
     const { activeType, payload, updatePayloadField } = useRobotForm();
