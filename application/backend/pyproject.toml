@@ -7,11 +7,11 @@ requires-python = ">=3.12,<3.14"
 
 dependencies = [
   "opencv-python",
-  "physicalai-bimanual-so101-plugin",
-  "physicalai-lekiwi-plugin",
-  "physicalai-rebot-b601-plugin",
-  "physicalai-lerobot-plugin",
-  "physicalai-mujoco-so101-plugin",
+  # "physicalai-bimanual-so101-plugin",
+  # "physicalai-lekiwi-plugin",
+  # "physicalai-rebot-b601-plugin",
+  # "physicalai-lerobot-plugin",
+  # "physicalai-mujoco-so101-plugin",
   "cv2-enumerate-cameras",
   'harvesters; sys_platform != "darwin"',
   "fastapi[standard]<1",
@@ -40,13 +40,13 @@ dependencies = [
   "huggingface-hub>=0.27",
   "psutil~=7.2",
   "physicalai-studio-plugin",
-  "lerobot-robot-so101-slider",
-  "lerobot-teleoperator-so101-with-slider",
-  "lerobot-robot-so101-slider-pos",
-  "lerobot-teleoperator-so101-with-slider-pos",
-  "lerobot-teleoperator-spacemouse>=0.1.4",
-  "lerobot-yam>=0.1.1",
-  "lerobot-robot-xarm>=0.0.3",
+  # "lerobot-robot-so101-slider",
+  # "lerobot-teleoperator-so101-with-slider",
+  # "lerobot-robot-so101-slider-pos",
+  # "lerobot-teleoperator-so101-with-slider-pos",
+  # "lerobot-teleoperator-spacemouse>=0.1.4",
+  # "lerobot-yam>=0.1.1",
+  # "lerobot-robot-xarm>=0.0.3",
 ]
 
 [project.scripts]
