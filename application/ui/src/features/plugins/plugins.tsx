@@ -29,10 +29,10 @@ const PluginRobots = ({ robots }: { robots: SchemaPluginRobotResponse[] }) => {
         return <Text>Robots are discovered after installation.</Text>;
     }
     return (
-        <Flex gap='size-50' wrap>
+        <Flex gap='size-200' wrap>
             {robots.map((robot) => (
                 <View key={robot.type} padding='size-50' UNSAFE_className={classes.robotChip}>
-                    <Flex alignItems='center' gap='size-50'>
+                    <Flex alignItems='center' gap='size-100'>
                         <RoleBadge role={robot.role} />
                         <Text UNSAFE_className={classes.robotName}>{robot.display_name}</Text>
                     </Flex>
