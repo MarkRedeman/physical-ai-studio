@@ -72,7 +72,7 @@ const lerobotPlugin = {
 };
 
 describe('PluginsView', () => {
-    it('renders installed and available plugin sections', async () => {
+    it('renders installed and available plugins in a single table', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([installedPlugin, availablePlugin, lerobotPlugin]))
         );
@@ -80,11 +80,13 @@ describe('PluginsView', () => {
         render(<PluginsView />, { route: '/plugins', path: '/plugins' });
 
         expect(await screen.findByRole('heading', { name: 'Plugins' })).toBeVisible();
-        expect(screen.getByRole('heading', { name: 'Installed' })).toBeVisible();
-        expect(screen.getByRole('heading', { name: 'Available' })).toBeVisible();
+        expect(screen.getByText('Plugin')).toBeVisible();
+        expect(screen.getAllByText('Robots')).toHaveLength(2);
         expect(screen.getByText('ReBot Plugin')).toBeVisible();
         expect(screen.getByText('MuJoCo Plugin')).toBeVisible();
+        expect(screen.getByRole('heading', { name: 'Robots' })).toBeVisible();
         expect(screen.getByText('ReBot B601 DM Follower')).toBeVisible();
+        expect(screen.getAllByText('1 robot')).toHaveLength(2);
     });
 
     it('shows a restart-required banner after installing a plugin', async () => {
