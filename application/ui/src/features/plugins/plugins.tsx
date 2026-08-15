@@ -246,7 +246,7 @@ type PluginsTableProps = {
 };
 
 export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }: PluginsTableProps) => {
-    const [expandedPluginId, setExpandedPluginId] = useState<string | undefined>(plugins[0]?.id);
+    const [expandedPluginId, setExpandedPluginId] = useState<string | undefined>(undefined);
 
     return (
         <Grid columns={PLUGINS_GRID_COLUMNS} columnGap='size-400' width='100%'>
