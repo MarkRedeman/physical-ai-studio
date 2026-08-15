@@ -6,6 +6,7 @@ import {
     Checkbox,
     Content,
     Dialog,
+    DialogContainer,
     Divider,
     Flex,
     Heading,
@@ -15,9 +16,8 @@ import {
     View,
 } from '@geti-ui/ui';
 import { clsx } from 'clsx';
-import { useNavigate } from 'react-router';
 
-import { SchemaPluginRobotResponse } from '../../../api/openapi-spec';
+import { SchemaPluginResponse, SchemaPluginRobotResponse } from '../../../api/openapi-spec';
 import { ReactComponent as PhysicalAIStudioLogo } from '../../../assets/icons/physicalai-studio-logo.svg';
 import so101BimanualThumbnail from '../../../assets/thumbnails/BimanualSO101_Follower_thumbnail.png';
 import leKiwiThumbnail from '../../../assets/thumbnails/LeKiwi_Follower_thumbnail.png';
@@ -28,7 +28,7 @@ import reBotB601Thumbnail from '../../../assets/thumbnails/ReBot_B601_DM_Followe
 import so101Thumbnail from '../../../assets/thumbnails/SO101_Leader_thumbnail.png';
 import trossenBimanualThumbnail from '../../../assets/thumbnails/Trossen_Bimanual_WidowXAI_Follower_thumbnail.png';
 import trossenThumbnail from '../../../assets/thumbnails/Trossen_WidowXAI_Follower_thumbnail.png';
-import { paths } from '../../../router';
+import { InstallPluginDialog } from '../../plugins/install-plugin-dialog';
 import { usePluginsQuery } from '../../plugins/plugins.hooks';
 import { useRobotCatalogQuery } from '../robot-catalog.hooks';
 import { useRobotForm } from './provider';
@@ -155,12 +155,12 @@ const RobotCard = ({
 
 export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
     const { activeType, setActiveType } = useRobotForm();
-    const navigate = useNavigate();
     const catalog = useRobotCatalogQuery();
     const plugins = usePluginsQuery();
     const [role, setRole] = useState<RobotRoleFilter>('all');
     const [showExternal, setShowExternal] = useState(true);
     const [search, setSearch] = useState('');
+    const [installPlugin, setInstallPlugin] = useState<SchemaPluginResponse | undefined>();
     const normalizedSearch = search.trim().toLocaleLowerCase();
     const entries = catalog.data.filter(
         (entry) =>
@@ -187,9 +187,8 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
         close();
     };
 
-    const openPlugins = () => {
-        close();
-        navigate(paths.plugins.index({}));
+    const openPlugins = (plugin: SchemaPluginResponse) => {
+        setInstallPlugin(plugin);
     };
 
     const matchesFilters = (displayName: string, category: string, robotRole: string) =>
@@ -277,7 +276,7 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
                                         <Flex alignItems='baseline' gap='size-150'>
                                             <Heading level={4}>{plugin.category}</Heading>
                                             <Text>{plugin.description}</Text>
-                                            <Button variant='secondary' onPress={openPlugins}>
+                                            <Button variant='secondary' onPress={() => openPlugins(plugin)}>
                                                 Install plugin
                                             </Button>
                                         </Flex>
@@ -289,7 +288,7 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
                                                     category={plugin.category}
                                                     activeType={undefined}
                                                     isAvailable
-                                                    onSelect={openPlugins}
+                                                    onSelect={() => openPlugins(plugin)}
                                                 />
                                             ))}
                                         </Flex>
@@ -301,6 +300,11 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
                 )}
                 {entries.length === 0 && <Text>No robots match the selected filters.</Text>}
             </Content>
+            <DialogContainer onDismiss={() => setInstallPlugin(undefined)}>
+                {installPlugin && (
+                    <InstallPluginDialog plugin={installPlugin} close={() => setInstallPlugin(undefined)} />
+                )}
+            </DialogContainer>
         </Dialog>
     );
 };

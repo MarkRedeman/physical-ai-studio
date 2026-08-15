@@ -1,12 +1,11 @@
 import { useState } from 'react';
 
-import { ActionButton, Badge, Button, Flex, Grid, Heading, Icon, Link, Text, toast, View } from '@geti-ui/ui';
+import { ActionButton, Badge, Button, Flex, Grid, Heading, Icon, Link, Text, View } from '@geti-ui/ui';
 import { ChevronRightSmallLight } from '@geti-ui/ui/icons';
 import { clsx } from 'clsx';
 
-import { getApiErrorMessage, isResourceInUseError } from '../../api/errors';
 import { SchemaPluginExtensionResponse, SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
-import { useInstallPluginMutation, usePluginsQuery, useUninstallPluginMutation } from './plugins.hooks';
+import { usePluginActions, usePluginsQuery } from './plugins.hooks';
 import { RestartRequiredBanner } from './restart-required-banner';
 
 import classes from './plugins.module.css';
@@ -272,43 +271,9 @@ export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }
 
 export const PluginsView = () => {
     const pluginsQuery = usePluginsQuery();
-    const installMutation = useInstallPluginMutation();
-    const uninstallMutation = useUninstallPluginMutation();
-    const [restartRequired, setRestartRequired] = useState(false);
-    const [busyId, setBusyId] = useState<string | undefined>(undefined);
+    const { isBusy, busyId, restartRequired, install, uninstall } = usePluginActions();
 
     const plugins = pluginsQuery.data;
-    const isBusy = busyId !== undefined;
-
-    const install = async (pluginId: string) => {
-        setBusyId(pluginId);
-        try {
-            await installMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
-            setRestartRequired(true);
-            toast.positive('Plugin installed. Restart the server to activate it.');
-        } catch (error) {
-            toast.negative(getApiErrorMessage(error) ?? 'Failed to install the plugin.');
-        } finally {
-            setBusyId(undefined);
-        }
-    };
-
-    const uninstall = async (pluginId: string) => {
-        setBusyId(pluginId);
-        try {
-            await uninstallMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
-            setRestartRequired(true);
-            toast.positive('Plugin uninstalled. Restart the server to apply the change.');
-        } catch (error) {
-            if (isResourceInUseError(error)) {
-                toast.info(getApiErrorMessage(error) ?? 'This plugin is in use and cannot be uninstalled.');
-                return;
-            }
-            toast.negative(getApiErrorMessage(error) ?? 'Failed to uninstall the plugin.');
-        } finally {
-            setBusyId(undefined);
-        }
-    };
 
     return (
         <View padding='size-400' height='100%' maxWidth='240ch' marginX='auto'>

@@ -63,7 +63,7 @@ describe('RobotCatalogDialog', () => {
         expect(screen.getByText('Not installed')).toBeVisible();
     });
 
-    it('navigates to the plugins page when installing from the picker', async () => {
+    it('opens a plugin-specific install modal when installing from the picker', async () => {
         server.use(
             http.get('/api/robots/catalog', () => HttpResponse.json(catalogEntries)),
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin]))
@@ -79,6 +79,10 @@ describe('RobotCatalogDialog', () => {
         );
 
         await user.click(await screen.findByRole('button', { name: 'Install plugin' }));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(close).not.toHaveBeenCalled();
+        expect(await screen.findByRole('heading', { name: 'MuJoCo Plugin' })).toBeVisible();
+        expect(screen.getAllByText('MuJoCo-backed SO-101 simulation integration.')).toHaveLength(2);
+        expect(screen.getAllByText('MuJoCo SO101 Follower')).toHaveLength(2);
+        expect(screen.getByRole('button', { name: 'Install' })).toBeVisible();
     });
 });
