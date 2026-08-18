@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AlertDialog, DialogContainer, Flex, Text } from '@geti-ui/ui';
+import { AlertDialog, DialogContainer, Flex, ProgressCircle, Text } from '@geti-ui/ui';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { $api } from '../../api/client';
 import { fetchClient } from '../../api/client';
@@ -23,10 +24,13 @@ type RestartStateValue = {
 const HEALTH_POLL_INTERVAL_MS = 1500;
 const MAX_HEALTH_POLLS = 120;
 const HEALTHY_POLLS_REQUIRED = 2;
+const MIN_RESTART_DIALOG_MS = 2000;
 
 const RestartStateContext = createContext<RestartStateValue | null>(null);
 
 export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
+    const queryClient = useQueryClient();
+
     const restartMutation = $api.useMutation('post', '/api/system/restart', {
         meta: { skipInvalidation: true },
     });
@@ -39,6 +43,11 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     const [downObserved, setDownObserved] = useState(false);
     const [healthyPollCount, setHealthyPollCount] = useState(0);
     const pollAttemptsRef = useRef(0);
+    const restartRequestedAtRef = useRef<number | null>(null);
+    const completionScheduledRef = useRef(false);
+    const completionTimeoutRef = useRef<number | null>(null);
+    const suppressDismissRef = useRef(false);
+    const isRestarting = restartStatus !== 'idle' && restartStatus !== 'failed';
 
     const activeTrainingJobCount = jobs.filter(
         (job): job is SchemaTrainJob => job.type === 'training' && (job.status === 'running' || job.status === 'pending')
@@ -50,11 +59,20 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const openRestartPrompt = () => {
+        suppressDismissRef.current = false;
         setRestartPromptOpen(true);
     };
 
     const closeRestartPrompt = () => {
+        suppressDismissRef.current = false;
         setRestartPromptOpen(false);
+    };
+
+    const onDialogDismiss = () => {
+        if (suppressDismissRef.current) {
+            return;
+        }
+        closeRestartPrompt();
     };
 
     const restartServer = async () => {
@@ -63,10 +81,16 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
         }
 
         setRestartStatus('requesting');
-        setRestartPromptOpen(false);
+        suppressDismissRef.current = true;
         setDownObserved(false);
         setHealthyPollCount(0);
         pollAttemptsRef.current = 0;
+        restartRequestedAtRef.current = Date.now();
+        completionScheduledRef.current = false;
+        if (completionTimeoutRef.current !== null) {
+            window.clearTimeout(completionTimeoutRef.current);
+            completionTimeoutRef.current = null;
+        }
 
         try {
             await restartMutation.mutateAsync({});
@@ -91,6 +115,7 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
                 if (!cancelled) {
                     setIsPollingHealth(false);
                     setRestartStatus('failed');
+                    suppressDismissRef.current = false;
                 }
                 return;
             }
@@ -112,9 +137,28 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
                 setHealthyPollCount(nextHealthyPollCount);
 
                 if (nextHealthyPollCount >= HEALTHY_POLLS_REQUIRED) {
-                    setIsPollingHealth(false);
-                    setRestartRequired(false);
-                    setRestartStatus('idle');
+                    if (completionScheduledRef.current) {
+                        return;
+                    }
+
+                    completionScheduledRef.current = true;
+                    const startedAt = restartRequestedAtRef.current ?? Date.now();
+                    const elapsedMs = Date.now() - startedAt;
+                    const remainingMs = Math.max(0, MIN_RESTART_DIALOG_MS - elapsedMs);
+
+                    completionTimeoutRef.current = window.setTimeout(() => {
+                        if (cancelled) {
+                            return;
+                        }
+                        queryClient.clear();
+                        setIsPollingHealth(false);
+                        setRestartRequired(false);
+                        setRestartStatus('idle');
+                        suppressDismissRef.current = false;
+                        completionScheduledRef.current = false;
+                        completionTimeoutRef.current = null;
+                    }, remainingMs);
+
                     return;
                 }
 
@@ -139,6 +183,14 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
         };
     }, [downObserved, healthyPollCount, isPollingHealth]);
 
+    useEffect(() => {
+        return () => {
+            if (completionTimeoutRef.current !== null) {
+                window.clearTimeout(completionTimeoutRef.current);
+            }
+        };
+    }, []);
+
     const value = useMemo(
         () => ({
             restartRequired,
@@ -154,19 +206,26 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
         [activeTrainingJobCount, restartPromptOpen, restartRequired, restartStatus]
     );
 
+    const progressMessageByStatus: Partial<Record<RestartStatus, string>> = {
+        requesting: 'Sending restart request…',
+        waiting_for_down: 'Waiting for server shutdown…',
+        waiting_for_up: 'Waiting for server startup…',
+        failed: 'Could not confirm restart from health checks. You can retry.',
+    };
+
     return (
         <RestartStateContext.Provider value={value}>
             {children}
             {restartRequired && restartPromptOpen ? (
-                <DialogContainer onDismiss={closeRestartPrompt}>
+                <DialogContainer onDismiss={onDialogDismiss}>
                     <AlertDialog
                         title='Restart server now?'
                         variant='warning'
-                        primaryActionLabel='Restart now'
-                        cancelLabel='Later'
-                        onCancel={closeRestartPrompt}
+                        primaryActionLabel={isRestarting ? 'Restarting…' : restartStatus === 'failed' ? 'Retry restart' : 'Restart now'}
+                        cancelLabel={isRestarting ? undefined : 'Later'}
+                        onCancel={isRestarting ? undefined : closeRestartPrompt}
                         onPrimaryAction={restartServer}
-                        isPrimaryActionDisabled={restartStatus !== 'idle' && restartStatus !== 'failed'}
+                        isPrimaryActionDisabled={isRestarting}
                     >
                         <Flex direction='column' gap='size-150'>
                             <Text>Plugin changes require a server restart to become active.</Text>
@@ -175,6 +234,15 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
                                     Restarting now will interrupt {activeTrainingJobCount} active training job
                                     {activeTrainingJobCount === 1 ? '' : 's'}.
                                 </Text>
+                            ) : null}
+                            {isRestarting && progressMessageByStatus[restartStatus] ? (
+                                <Flex alignItems='center' gap='size-100'>
+                                    <ProgressCircle aria-label='Restarting server' isIndeterminate size='S' />
+                                    <Text>{progressMessageByStatus[restartStatus]}</Text>
+                                </Flex>
+                            ) : null}
+                            {!isRestarting && restartStatus === 'failed' && progressMessageByStatus[restartStatus] ? (
+                                <Text>{progressMessageByStatus[restartStatus]}</Text>
                             ) : null}
                         </Flex>
                     </AlertDialog>

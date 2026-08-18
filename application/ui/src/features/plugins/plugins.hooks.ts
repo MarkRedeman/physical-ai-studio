@@ -44,7 +44,6 @@ export const usePluginActions = () => {
             await installMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
             triggerRestartRequired();
             openRestartPrompt();
-            toast.positive('Plugin installed. Restart the server to activate it.');
         } catch (error) {
             toast.negative(getApiErrorMessage(error) ?? 'Failed to install the plugin.');
         } finally {
@@ -57,7 +56,7 @@ export const usePluginActions = () => {
         try {
             await uninstallMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
             triggerRestartRequired();
-            toast.positive('Plugin uninstalled. Restart the server to apply the change.');
+            openRestartPrompt();
         } catch (error) {
             if (isResourceInUseError(error)) {
                 toast.info(getApiErrorMessage(error) ?? 'This plugin is in use and cannot be uninstalled.');

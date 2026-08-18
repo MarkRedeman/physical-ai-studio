@@ -180,4 +180,21 @@ describe('PluginsView', () => {
         expect(uninstallButton).toBeDisabled();
         expect(screen.getByText(/In use by 2 robots/)).toBeVisible();
     });
+
+    it('opens the restart prompt after uninstalling a plugin', async () => {
+        server.use(
+            http.get('/api/plugins', () => HttpResponse.json([installedPlugin])),
+            http.post('/api/plugins/{plugin_id}/uninstall', () => HttpResponse.json({ restart_required: true })),
+            http.get('/api/jobs', () => HttpResponse.json([]))
+        );
+        const user = userEvent.setup();
+
+        render(<PluginsView />, { route: '/plugins', path: '/plugins' });
+
+        await user.click(await screen.findByRole('button', { name: 'Uninstall' }));
+
+        expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Restart now' })).toBeVisible();
+        await user.click(screen.getByRole('button', { name: 'Later' }));
+    });
 });
