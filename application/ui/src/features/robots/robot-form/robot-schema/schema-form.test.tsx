@@ -282,4 +282,41 @@ describe('SchemaForm', () => {
 
         expect(screen.getAllByRole('button', { name: 'Select robot' })).toHaveLength(2);
     });
+
+    it('hides a section when all of its fields are hidden default fields', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                calibration: {
+                    type: 'object',
+                    title: 'Calibration',
+                    default: {},
+                    properties: {
+                        offset: {
+                            type: 'integer',
+                            title: 'Offset',
+                            default: 0,
+                        },
+                    },
+                },
+            },
+            'x-physicalai-ui': {
+                sections: [
+                    {
+                        id: 'calibration',
+                        title: 'Calibration',
+                        fields: ['calibration'],
+                    },
+                ],
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.queryByRole('heading', { name: 'Calibration' })).not.toBeInTheDocument();
+    });
 });

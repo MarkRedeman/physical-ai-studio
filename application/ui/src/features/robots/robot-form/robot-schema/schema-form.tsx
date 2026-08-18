@@ -31,6 +31,20 @@ const boundFieldNamesForSections = (sections: SectionOptions[]): Set<string> =>
         )
     );
 
+const isFieldVisible = (
+    field: FieldSchema,
+    fieldName: string,
+    fieldRequired: Set<string>,
+    definitions: Record<string, FieldSchema>,
+    showDefaultFields: boolean
+) => {
+    const resolvedField = resolveReference(field, definitions);
+    const isRequired = fieldRequired.has(fieldName) || resolvedField['x-physicalai-ui']?.required === true;
+    if (!isRequired && resolvedField.default !== undefined && !showDefaultFields) return false;
+    if (resolvedField.type === 'object' && resolvedField.properties === undefined) return false;
+    return true;
+};
+
 export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const { activeType, payload, setPayload, updatePayloadField } = useRobotForm();
     const [showDefaultFields, setShowDefaultFields] = useState(false);
@@ -86,8 +100,11 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
                     const visibleSectionEntries = sectionEntries.filter(
                         ([name]) => !sectionBoundFieldNames.has(name)
                     );
+                    const renderableSectionEntries = visibleSectionEntries.filter(([name, field]) =>
+                        isFieldVisible(field, name, fieldRequired, definitions, showDefaultFields)
+                    );
                     if (
-                        visibleSectionEntries.length === 0 &&
+                        renderableSectionEntries.length === 0 &&
                         (section.controls ?? []).length === 0 &&
                         (section.infos ?? []).length === 0
                     )
@@ -100,7 +117,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
                             {renderInfos(section.infos ?? EMPTY_INFOS)}
                             {renderControls(section.controls ?? [])}
                             {renderFieldEntries(
-                                visibleSectionEntries,
+                                renderableSectionEntries,
                                 fieldRequired,
                                 values,
                                 onChange,

@@ -12,6 +12,7 @@ from physicalai_studio_plugin import (
     RobotAdapterOptions,
     RobotAsset,
     RobotCatalogDefinition,
+    RobotProbe,
     robot_payload_ui,
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
