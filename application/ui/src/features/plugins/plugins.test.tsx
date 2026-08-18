@@ -1,5 +1,4 @@
-import { screen } from '@testing-library/react';
-import { within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -124,10 +123,11 @@ describe('PluginsView', () => {
             }),
             http.get('/api/health', () => {
                 healthCalls += 1;
-                if (healthCalls === 1) {
-                    return HttpResponse.error();
-                }
-                return HttpResponse.json({ status: 'healthy' });
+                return HttpResponse.json({
+                    status: 'healthy',
+                    instance_id: restartCalls === 0 ? 'before-restart' : 'after-restart',
+                    restart_required: restartCalls === 0,
+                });
             })
         );
         const user = userEvent.setup();
@@ -141,9 +141,7 @@ describe('PluginsView', () => {
             expect(restartCalls).toBe(1);
         });
 
-        await vi.waitFor(() => {
-            expect(screen.queryByText('Plugin changes require a server restart to become active.')).not.toBeInTheDocument();
-        });
+        expect(await screen.findByText('Waiting for server restart…')).toBeVisible();
     });
 
     it('shows extensions for an installed plugin and lets the user install them', async () => {

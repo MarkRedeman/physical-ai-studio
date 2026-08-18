@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from api.dependencies import AsyncSessionDep
+from api.dependencies import AsyncSessionDep, HealthServiceDep
 from exceptions import ResourceInUseError, ResourceType
 from plugins.plugin_manager import (
     PluginExtensionInfo,
@@ -125,9 +125,11 @@ async def list_plugins(
 async def install_plugin(
     plugin_id: str,
     plugin_manager: PluginManagerDep,
+    health_service: HealthServiceDep,
 ) -> PluginOperationResponse:
     """Install a plugin distribution and require a server restart to activate."""
     plugin_manager.install(plugin_id)
+    health_service.mark_plugin_restart_required()
     return PluginOperationResponse()
 
 
@@ -136,6 +138,7 @@ async def uninstall_plugin(
     plugin_id: str,
     plugin_manager: PluginManagerDep,
     session: AsyncSessionDep,
+    health_service: HealthServiceDep,
 ) -> PluginOperationResponse:
     """Uninstall a plugin distribution after checking no robots reference its types."""
     in_use_robot_types = await find_robot_types_in_use_async(session, plugin_manager.robot_types(plugin_id))
@@ -150,4 +153,5 @@ async def uninstall_plugin(
             ),
         )
     plugin_manager.uninstall(plugin_id)
+    health_service.mark_plugin_restart_required()
     return PluginOperationResponse()

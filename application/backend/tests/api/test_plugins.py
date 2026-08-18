@@ -6,8 +6,10 @@ from fastapi.testclient import TestClient
 
 import api.plugins as plugins_api
 import api.system as system_api
+from api.dependencies import get_health_service
 from api.plugins import PluginExtensionInfo, PluginInfo, PluginManager, PluginRobot, get_plugin_manager
 from main import app
+from services.health_service import HealthService
 
 
 def _plugin_info(
@@ -46,7 +48,28 @@ def _override(manager: Mock, in_use: list[str]) -> None:
         return [type_ for type_ in in_use if type_ in robot_types]
 
     app.dependency_overrides[get_plugin_manager] = lambda: manager
+    app.dependency_overrides[get_health_service] = lambda: HealthService()
     plugins_api.find_robot_types_in_use_async = _fake_in_use
+
+
+def test_health_reports_server_instance_and_restart_state() -> None:
+    health_service = HealthService()
+    health_service.mark_plugin_restart_required()
+    app.dependency_overrides[get_health_service] = lambda: health_service
+
+    try:
+        client = TestClient(app)
+        response = client.get("/api/health")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "healthy",
+        "instance_id": health_service.instance_id,
+        "restart_required": True,
+    }
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_list_plugins_returns_manifest_plugins() -> None:

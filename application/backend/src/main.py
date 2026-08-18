@@ -12,6 +12,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from api.camera import router as camera_router
 from api.dataset import router as dataset_router
 from api.dataset_import import router as imports_router
+from api.dependencies import HealthServiceDep
 from api.environments import router as project_environments_router
 from api.hardware import router as hardware_router
 from api.job import router as job_router
@@ -73,10 +74,13 @@ async def _upload_size_guard(request: Request, call_next: RequestResponseEndpoin
 
 
 @app.get("/api/health")
-async def health_check() -> dict:
+async def health_check(response: Response, health_service: HealthServiceDep) -> dict[str, str | bool]:
     """Health check endpoint."""
+    response.headers["Cache-Control"] = "no-store"
     return {
         "status": "healthy",
+        "instance_id": health_service.instance_id,
+        "restart_required": health_service.plugin_restart_required,
     }
 
 
