@@ -42,14 +42,7 @@ class TrossenSingleArmPayload(BaseModel):
                         {
                             "id": "connection",
                             "title": "Connection",
-                            "controls": [
-                                {
-                                    "kind": "connection",
-                                    "label": "Connection",
-                                    "identify": True,
-                                    "bind": {"connection": "connection_string"},
-                                }
-                            ],
+                            "fields": ["connection_string"],
                         }
                     ]
                 }
