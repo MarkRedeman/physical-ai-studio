@@ -17,15 +17,26 @@ const bimanualRebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
                 port: {
                     type: 'string',
                     title: 'Port',
-                    'x-physicalai-ui': { group: 'connection', widget: 'device-selector' as const },
                 },
                 can_adapter: { type: 'string', title: 'Can Adapter', default: 'damiao' },
             },
             required: ['port'],
             'x-physicalai-ui': {
-                groups: {
-                    connection: { title: 'Select robot', device_discovery: true, connection_key: 'port' },
-                },
+                sections: [
+                    {
+                        id: 'connection',
+                        title: 'Select robot',
+                        fields: ['port'],
+                        controls: [
+                            {
+                                kind: 'connection',
+                                label: 'Select robot',
+                                bind: { connection: 'port' },
+                                device_discovery: true,
+                            },
+                        ],
+                    },
+                ],
             },
         },
     },
@@ -51,7 +62,6 @@ const lerobotSO101Schema: Parameters<typeof SchemaForm>[0]['schema'] = {
         port: {
             type: 'string',
             title: 'Port',
-            'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
         },
         cameras: {
             type: 'object',
@@ -62,33 +72,37 @@ const lerobotSO101Schema: Parameters<typeof SchemaForm>[0]['schema'] = {
     },
     required: ['port'],
     'x-physicalai-ui': {
-        groups: {
-            connection: { title: 'Select robot', device_discovery: true, connection_key: 'port' },
-        },
+        sections: [
+            {
+                id: 'connection',
+                fields: ['port'],
+                controls: [{ kind: 'connection', label: 'Select robot', device_discovery: true, bind: { connection: 'port' } }],
+            },
+        ],
     },
 };
 
 const rebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
     type: 'object',
     properties: {
-        connection_string: {
-            type: 'string',
-            'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
-        },
-        serial_number: {
-            type: 'string',
-            'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
-        },
+        connection_string: { type: 'string' },
+        serial_number: { type: 'string' },
     },
     'x-physicalai-ui': {
-        groups: {
-            connection: {
-                title: 'Select robot',
-                device_discovery: true,
-                connection_key: 'connection_string',
-                serial_number_key: 'serial_number',
+        sections: [
+            {
+                id: 'connection',
+                fields: ['connection_string', 'serial_number'],
+                controls: [
+                    {
+                        kind: 'connection',
+                        label: 'Select robot',
+                        device_discovery: true,
+                        bind: { connection: 'connection_string', serial_number: 'serial_number' },
+                    },
+                ],
             },
-        },
+        ],
     },
 };
 
@@ -104,19 +118,25 @@ describe('SchemaForm', () => {
             properties: {
                 connection_string: {
                     type: 'string',
-                    'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
                 },
             },
             'x-physicalai-ui': {
                 infos: [{ title: 'Before connecting', text: 'Power on the robot and unlock the arm.' }],
-                groups: {
-                    connection: {
-                        title: 'Connection',
-                        device_discovery: true,
-                        connection_key: 'connection_string',
-                        infos: [{ text: 'If no ports are listed, click refresh.' }],
+                sections: [
+                    {
+                        id: 'connection',
+                        fields: ['connection_string'],
+                        controls: [
+                            {
+                                kind: 'connection',
+                                label: 'Connection',
+                                device_discovery: true,
+                                bind: { connection: 'connection_string' },
+                                infos: [{ text: 'If no ports are listed, click refresh.' }],
+                            },
+                        ],
                     },
-                },
+                ],
             },
         };
 
@@ -130,6 +150,7 @@ describe('SchemaForm', () => {
         expect(screen.getByText('Power on the robot and unlock the arm.')).toBeVisible();
         expect(screen.getByText('If no ports are listed, click refresh.')).toBeVisible();
         expect(await screen.findByRole('button', { name: 'Connection' })).toBeVisible();
+        expect(screen.queryByRole('textbox', { name: 'Connection String' })).not.toBeInTheDocument();
     });
 
     it('shows description help text for boolean fields', () => {

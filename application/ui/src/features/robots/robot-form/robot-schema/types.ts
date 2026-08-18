@@ -4,29 +4,40 @@ export type RobotUiInfo = {
     variant?: 'info' | 'warning';
 };
 
-export type ConnectionGroupOptions = {
-    title?: string;
-    description?: string;
-    identify?: boolean;
-    connection_key?: string;
-    serial_number_key?: string;
-    manual_entry?: boolean;
-    infos?: RobotUiInfo[];
+export type RobotUiConnectionBinding = {
+    connection: string;
+    serial_number?: string;
 };
 
-export type GroupOptions = ConnectionGroupOptions & {
+export type ConnectionControlOptions = {
+    kind: 'connection';
+    label?: string;
+    description?: string;
     device_discovery?: boolean;
+    identify?: boolean;
+    manual_entry?: boolean;
+    infos?: RobotUiInfo[];
+    bind: RobotUiConnectionBinding;
+};
+
+export type ControlOptions = ConnectionControlOptions;
+
+export type SectionOptions = {
+    id: string;
+    title?: string;
+    description?: string;
+    infos?: RobotUiInfo[];
+    fields?: string[];
+    controls?: ControlOptions[];
 };
 
 export type FieldOptions = {
-    group?: string;
-    widget?: 'device-selector';
     required?: boolean;
 };
 
 export type ModelUiOptions = {
-    groups?: Record<string, GroupOptions>;
     infos?: RobotUiInfo[];
+    sections?: SectionOptions[];
 };
 
 export type FieldSchema = {
@@ -39,7 +50,7 @@ export type FieldSchema = {
     properties?: Record<string, FieldSchema>;
     additionalProperties?: FieldSchema | boolean;
     required?: string[];
-    ['x-physicalai-ui']?: FieldOptions & ModelUiOptions;
+    ['x-physicalai-ui']?: FieldOptions & Partial<ModelUiOptions>;
 };
 
 export type JsonSchema = {

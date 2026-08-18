@@ -2,7 +2,7 @@ import { ActionButton, ComboBox, Flex, Icon, Item, Text } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 
 import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../../robot-catalog.hooks';
-import { ConnectionGroupOptions } from '../types';
+import { ConnectionControlOptions } from '../types';
 
 type Device = { serial_number: string | null; connection_string: string | null };
 
@@ -57,20 +57,19 @@ const ComboBoxField = ({
 type ConnectionFieldProps = {
     robotType: string;
     payload: Record<string, unknown>;
-    options: ConnectionGroupOptions;
+    options: ConnectionControlOptions;
     onChange: (field: string, value: unknown) => void;
 };
 
 export const ConnectionField = ({ robotType, payload, options, onChange }: ConnectionFieldProps) => {
     const discover = useDiscoverRobotsQuery(robotType);
     const identify = useCatalogIdentifyMutation();
-    const connectionKey = options.connection_key;
-    const serialNumberKey = options.serial_number_key;
-    const value = connectionKey === undefined ? '' : String(payload[connectionKey] ?? '');
+    const connectionKey = options.bind.connection;
+    const serialNumberKey = options.bind.serial_number;
+    const value = String(payload[connectionKey] ?? '');
 
     const setManualValue = (next: string) => {
         if ((discover.data ?? []).some((device) => deviceTextValue(device) === next)) return;
-        if (connectionKey === undefined) return;
         onChange(connectionKey, next);
         if (serialNumberKey !== undefined) onChange(serialNumberKey, '');
     };
@@ -79,7 +78,7 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
         <Flex direction='column' gap='size-100'>
             <Flex gap='size-100' alignItems='end'>
                 <ComboBoxField
-                    label={options.title ?? 'Connection'}
+                    label={options.label ?? 'Connection'}
                     description={options.description}
                     value={value}
                     devices={discover.data ?? []}
@@ -87,7 +86,7 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
                     onInputChange={setManualValue}
                     onSelectionChange={(key) => {
                         const device = (discover.data ?? []).find((item) => deviceKey(item) === key);
-                        if (device === undefined || connectionKey === undefined) return;
+                        if (device === undefined) return;
                         onChange(connectionKey, device.connection_string ?? '');
                         if (serialNumberKey !== undefined)
                             onChange(serialNumberKey, normalizedSerialNumber(device.serial_number));
