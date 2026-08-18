@@ -79,7 +79,7 @@ export const ProjectLayout = () => {
                     gridTemplateColumns: 'minmax(0, 1fr)',
                     gridTemplateRows:
                         // eslint-disable-next-line max-len
-                        'var(--spectrum-global-dimension-size-800, 4rem) min-content minmax(0, 1fr) var(--spectrum-global-dimension-size-400)',
+                        'var(--spectrum-global-dimension-size-800, 4rem) min-content minmax(0, 1fr) 32px',
                 }}
                 minHeight={0}
                 height={'100%'}

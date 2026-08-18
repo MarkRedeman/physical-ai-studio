@@ -31,8 +31,8 @@ export const AppLayout = () => {
             width={'100%'}
         >
             <Grid
-                areas={['sidebar content', 'sidebar footer']}
-                rows={['minmax(0, 1fr)', 'var(--spectrum-global-dimension-size-400)']}
+                areas={['sidebar content', 'footer footer']}
+                rows={['minmax(0, 1fr)', '32px']}
                 columns={['size-3000', 'minmax(0, 1fr)']}
                 minHeight={0}
                 height='100%'
@@ -51,7 +51,7 @@ export const AppLayout = () => {
                         <Outlet />
                     </Suspense>
                 </View>
-                <AppFooter />
+                <AppFooter compact />
             </Grid>
         </Tabs>
     );

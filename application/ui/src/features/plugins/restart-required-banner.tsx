@@ -10,13 +10,44 @@ const statusText: Record<string, string> = {
     failed: 'Could not confirm restart from health checks. You can retry.',
 };
 
-export const RestartRequiredBanner = () => {
+export const RestartRequiredBanner = ({
+    compact = false,
+    inFooter = false,
+}: {
+    compact?: boolean;
+    inFooter?: boolean;
+}) => {
     const restartMutation = useRestartServerMutation();
     const isRestarting = restartMutation.isPending;
 
     const restart = async () => {
         await restartMutation.restartServer();
     };
+
+    const content = (
+        <Flex alignItems='center' justifyContent='space-between' gap='size-100'>
+            <Text>{statusText[restartMutation.restartStatus]}</Text>
+            <Button
+                variant='primary'
+                isDisabled={isRestarting}
+                onPress={restart}
+                UNSAFE_style={
+                    compact
+                        ? {
+                              minHeight: '24px',
+                              paddingInline: 'var(--spectrum-global-dimension-size-100)',
+                          }
+                        : undefined
+                }
+            >
+                {isRestarting ? 'Restarting…' : compact ? 'Restart' : 'Restart server'}
+            </Button>
+        </Flex>
+    );
+
+    if (inFooter) {
+        return content;
+    }
 
     return (
         <View
@@ -26,12 +57,7 @@ export const RestartRequiredBanner = () => {
             borderRadius='regular'
             backgroundColor='yellow-100'
         >
-            <Flex alignItems='center' justifyContent='space-between' gap='size-200'>
-                <Text>{statusText[restartMutation.restartStatus]}</Text>
-                <Button variant='primary' isDisabled={isRestarting} onPress={restart}>
-                    {isRestarting ? 'Restarting…' : 'Restart server'}
-                </Button>
-            </Flex>
+            {content}
         </View>
     );
 };

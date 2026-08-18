@@ -6,20 +6,24 @@ import { RestartRequiredBanner } from '../../features/plugins/restart-required-b
 import { useRestartState } from '../../features/plugins/restart-state';
 import { LogsDialog } from '../../features/logs/logs-dialog';
 
-export const AppFooter = ({ gridArea = 'footer' }: { gridArea?: string }) => {
+export const AppFooter = ({ gridArea = 'footer', compact = false }: { gridArea?: string; compact?: boolean }) => {
     const { restartRequired } = useRestartState();
 
     return (
         <View
             gridArea={gridArea}
-            borderTopColor={'gray-300'}
+            height='32px'
+            minHeight='32px'
+            maxHeight='32px'
+            borderTopColor={restartRequired ? 'yellow-500' : 'gray-300'}
             borderTopWidth={'thin'}
-            borderBottomColor={'gray-75'}
+            borderBottomColor={restartRequired ? 'yellow-400' : 'gray-75'}
             borderBottomWidth={'thin'}
+            backgroundColor={restartRequired ? 'yellow-200' : 'gray-75'}
             paddingX='size-100'
-            paddingY='size-25'
+            paddingY='size-0'
         >
-            <Flex alignItems={'center'} justifyContent='space-between' gap='size-100' height='100%'>
+            <Flex alignItems='center' justifyContent='space-between' gap='size-100' height='100%'>
                 <Flex alignItems={'center'} height='100%' gap='size-100' flex={1} minWidth={0}>
                     <View overflow={'hidden'}>
                         <DialogTrigger type='fullscreen'>
@@ -41,8 +45,8 @@ export const AppFooter = ({ gridArea = 'footer' }: { gridArea?: string }) => {
                     <JobStatus />
                 </Flex>
                 {restartRequired ? (
-                    <View maxWidth='72ch' minWidth={0}>
-                        <RestartRequiredBanner />
+                    <View maxWidth={compact ? '72ch' : '96ch'} minWidth={0}>
+                        <RestartRequiredBanner compact={compact} inFooter />
                     </View>
                 ) : null}
             </Flex>
