@@ -191,3 +191,31 @@ def test_no_payload_model_returns_raw_dict() -> None:
 
 def test_robot_field_ui_supports_required_option() -> None:
     assert robot_field_ui({"required": True}) == {"x-physicalai-ui": {"required": True}}
+
+
+def test_robot_payload_ui_supports_infos_and_group_description() -> None:
+    from physicalai_studio_plugin import robot_payload_ui
+
+    assert robot_payload_ui(
+        {
+            "infos": [{"title": "Before you start", "text": "Power on the robot."}],
+            "groups": {
+                "connection": {
+                    "title": "Connection",
+                    "description": "Pick a detected device or enter one manually.",
+                    "infos": [{"text": "USB hubs can rename ports after reboot.", "variant": "warning"}],
+                }
+            },
+        }
+    ) == {
+        "x-physicalai-ui": {
+            "infos": [{"title": "Before you start", "text": "Power on the robot."}],
+            "groups": {
+                "connection": {
+                    "title": "Connection",
+                    "description": "Pick a detected device or enter one manually.",
+                    "infos": [{"text": "USB hubs can rename ports after reboot.", "variant": "warning"}],
+                }
+            },
+        }
+    }
