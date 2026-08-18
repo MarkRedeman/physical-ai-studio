@@ -144,9 +144,46 @@ def test_uninstall_plugin_blocked_when_robots_in_use() -> None:
     manager.uninstall.assert_not_called()
 
 
-def test_restart_endpoint_returns_202(monkeypatch) -> None:
+def test_restart_endpoint_reexecs_process(monkeypatch) -> None:
+    execv = Mock(side_effect=SystemExit)
+    execvp = Mock()
     kill = Mock()
+    monkeypatch.setattr(system_api.os, "execv", execv)
+    monkeypatch.setattr(system_api.os, "execvp", execvp)
     monkeypatch.setattr(system_api.os, "kill", kill)
+    monkeypatch.setattr(system_api.time, "sleep", lambda _seconds: None)
+
+    class _FakeThread:
+        def __init__(self, target, *args, **kwargs):
+            self.target = target
+
+        def start(self) -> None:
+            try:
+                self.target()
+            except SystemExit:
+                pass
+
+    monkeypatch.setattr(system_api.threading, "Thread", _FakeThread)
+    monkeypatch.setattr(system_api.sys, "orig_argv", [system_api.sys.executable, "-m", "pytest"])
+
+    client = TestClient(app)
+    response = client.post("/api/system/restart")
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "restarting"}
+    execv.assert_called_once()
+    execvp.assert_not_called()
+    kill.assert_not_called()
+
+
+def test_restart_endpoint_falls_back_to_sigterm(monkeypatch) -> None:
+    execv = Mock(side_effect=OSError("boom"))
+    execvp = Mock(side_effect=OSError("boom"))
+    kill = Mock()
+    monkeypatch.setattr(system_api.os, "execv", execv)
+    monkeypatch.setattr(system_api.os, "execvp", execvp)
+    monkeypatch.setattr(system_api.os, "kill", kill)
+    monkeypatch.setattr(system_api.time, "sleep", lambda _seconds: None)
 
     class _FakeThread:
         def __init__(self, target, *args, **kwargs):
@@ -156,12 +193,15 @@ def test_restart_endpoint_returns_202(monkeypatch) -> None:
             self.target()
 
     monkeypatch.setattr(system_api.threading, "Thread", _FakeThread)
+    monkeypatch.setattr(system_api.sys, "orig_argv", ["python-not-found", "-m", "pytest"])
 
     client = TestClient(app)
     response = client.post("/api/system/restart")
 
     assert response.status_code == 202
     assert response.json() == {"status": "restarting"}
+    execvp.assert_called_once_with("python-not-found", ["python-not-found", "-m", "pytest"])
+    execv.assert_called_once()
     kill.assert_called_once()
     pid, signal = kill.call_args.args
     assert signal == system_api.signal.SIGTERM
