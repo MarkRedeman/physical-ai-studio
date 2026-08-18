@@ -11,7 +11,6 @@ from physicalai_studio_plugin import (
     RobotAdapterOptions,
     RobotAsset,
     RobotCatalogDefinition,
-    robot_field_ui,
     robot_payload_ui,
 )
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,16 +29,31 @@ if TYPE_CHECKING:
 class TrossenSingleArmPayload(BaseModel):
     """Connection configuration for Trossen single-arm robots."""
 
-    connection_string: str = Field(
-        ..., description="IP address of the robot", json_schema_extra=robot_field_ui({"group": "connection"})
-    )
+    connection_string: str = Field(..., description="IP address of the robot")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "connection_string": "192.168.1.100",
             },
-            **robot_payload_ui({"groups": {"connection": {"title": "Connection", "identify": True}}}),
+            **robot_payload_ui(
+                {
+                    "sections": [
+                        {
+                            "id": "connection",
+                            "title": "Connection",
+                            "controls": [
+                                {
+                                    "kind": "connection",
+                                    "label": "Connection",
+                                    "identify": True,
+                                    "bind": {"connection": "connection_string"},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
         },
     )
 
@@ -47,12 +61,8 @@ class TrossenSingleArmPayload(BaseModel):
 class TrossenBimanualPayload(BaseModel):
     """Connection configuration for Trossen bimanual robots."""
 
-    connection_string_left: str = Field(
-        ..., description="IP address of the left arm", json_schema_extra=robot_field_ui({"group": "connection"})
-    )
-    connection_string_right: str = Field(
-        ..., description="IP address of the right arm", json_schema_extra=robot_field_ui({"group": "connection"})
-    )
+    connection_string_left: str = Field(..., description="IP address of the left arm")
+    connection_string_right: str = Field(..., description="IP address of the right arm")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -60,7 +70,17 @@ class TrossenBimanualPayload(BaseModel):
                 "connection_string_left": "192.168.1.100",
                 "connection_string_right": "192.168.1.101",
             },
-            **robot_payload_ui({"groups": {"connection": {"title": "Connection", "identify": True}}}),
+            **robot_payload_ui(
+                {
+                    "sections": [
+                        {
+                            "id": "connection",
+                            "title": "Connection",
+                            "fields": ["connection_string_left", "connection_string_right"],
+                        }
+                    ]
+                }
+            ),
         },
     )
 

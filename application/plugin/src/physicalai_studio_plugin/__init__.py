@@ -14,10 +14,13 @@ from .probe import PortScanner, RobotProbe
 from .schemas import SerialPortInfo
 from .transport import shared_robot_name
 from .ui_schema import (
+    RobotUiConnectionBinding,
+    RobotUiConnectionControlOptions,
+    RobotUiControlOptions,
     RobotFieldUiOptions,
     RobotPayloadUiOptions,
-    RobotUiGroupOptions,
     RobotUiInfo,
+    RobotUiSectionOptions,
     robot_field_ui,
     robot_payload_ui,
 )
@@ -32,11 +35,14 @@ __all__ = [
     "RobotAsset",
     "RobotCatalogDefinition",
     "RobotCatalogRegistry",
+    "RobotUiConnectionBinding",
+    "RobotUiConnectionControlOptions",
+    "RobotUiControlOptions",
     "RobotFieldUiOptions",
     "RobotPayloadUiOptions",
     "RobotProbe",
-    "RobotUiGroupOptions",
     "RobotUiInfo",
+    "RobotUiSectionOptions",
     "SerialPortInfo",
     "shared_robot_name",
     "robot_field_ui",

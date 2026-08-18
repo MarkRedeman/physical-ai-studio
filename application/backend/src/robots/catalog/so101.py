@@ -8,12 +8,10 @@ from typing import TYPE_CHECKING, Literal
 from loguru import logger
 from physicalai.robot.so101 import SO101, SO101Calibration, SO101JointCalibration
 from physicalai.robot.so101.constants import TICKS_PER_REVOLUTION
-from physicalai_studio_plugin import RobotAdapterOptions, RobotAsset, RobotCatalogDefinition, RobotProbe
 from physicalai_studio_plugin import (
     RobotAdapterOptions,
     RobotAsset,
     RobotCatalogDefinition,
-    robot_field_ui,
     robot_payload_ui,
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -34,17 +32,10 @@ class SO101RobotPayload(BaseModel):
     connection_string: str = Field(
         default="",
         description="Serial port path; leave empty to auto-discover via serial_number",
-        json_schema_extra=robot_field_ui(
-            {
-                "group": "connection",
-                "widget": "device-selector",
-            }
-        ),
     )
     serial_number: str = Field(
         default="",
         description="USB serial number of the robot (when available)",
-        json_schema_extra=robot_field_ui({"group": "connection", "widget": "device-selector"}),
     )
     calibration: dict[str, SO101JointCalibration] | None = Field(
         default=None,
@@ -56,16 +47,30 @@ class SO101RobotPayload(BaseModel):
             "example": {"connection_string": "", "serial_number": "SO101-2024-001", "calibration": None},
             **robot_payload_ui(
                 {
-                    "groups": {
-                        "connection": {
+                    "sections": [
+                        {
+                            "id": "connection",
                             "title": "Connection",
-                            "device_discovery": True,
-                            "identify": True,
-                            "connection_key": "connection_string",
-                            "serial_number_key": "serial_number",
-                            "manual_entry": True,
-                        }
-                    }
+                            "controls": [
+                                {
+                                    "kind": "connection",
+                                    "label": "Connection",
+                                    "device_discovery": True,
+                                    "identify": True,
+                                    "manual_entry": True,
+                                    "bind": {
+                                        "connection": "connection_string",
+                                        "serial_number": "serial_number",
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "id": "calibration",
+                            "title": "Calibration",
+                            "fields": ["calibration"],
+                        },
+                    ]
                 }
             ),
         },
