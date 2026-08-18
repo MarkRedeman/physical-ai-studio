@@ -142,7 +142,7 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     ]);
 
     const value = useMemo(
-        () => ({
+        (): RestartStateValue => ({
             restartRequired,
             restartStatus: isRestarting ? 'restarting' : 'idle',
             restartPromptOpen,

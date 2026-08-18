@@ -1,15 +1,20 @@
 import { useState } from 'react';
 
-import { ActionButton, Badge, Button, Flex, Grid, Heading, Icon, Link, Text, View } from '@geti-ui/ui';
-import { ChevronRightSmallLight } from '@geti-ui/ui/icons';
+import { Badge, Button, Flex, Heading, Link, Text, View } from '@geti-ui/ui';
 import { clsx } from 'clsx';
 
 import { SchemaPluginExtensionResponse, SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
+import { Table, TableColumn } from '../../components/table/table';
 import { usePluginActions, usePluginsQuery } from './plugins.hooks';
 
 import classes from './plugins.module.css';
 
-export const PLUGINS_GRID_COLUMNS = 'max-content minmax(0, 2fr) max-content auto';
+const PLUGIN_COLUMNS: TableColumn[] = [
+    { width: 'max-content' },
+    { width: 'minmax(0, 2fr)', header: 'Plugin' },
+    { width: 'max-content', header: 'Robots' },
+    { width: 'auto', align: 'end' },
+];
 
 const ROLE_CLASS_NAMES = {
     follower: classes.roleFollower,
@@ -55,36 +60,32 @@ const ExtensionRow = ({
 }) => {
     const isThisBusy = busyId === extension.id && isBusy;
     return (
-        <Flex
-            alignItems='center'
-            justifyContent='space-between'
-            gap='size-200'
-            padding='size-100'
-            UNSAFE_className={classes.extensionRow}
-        >
-            <Flex direction='column' gap='size-50' flex={1}>
-                <Flex alignItems='center' gap='size-100'>
-                    <Heading level={4} margin={0}>
-                        {extension.name}
-                    </Heading>
-                    {extension.installed ? (
-                        <Badge variant='positive'>v{extension.installed_version}</Badge>
-                    ) : (
-                        <Badge variant='neutral'>Available</Badge>
-                    )}
+        <View padding='size-100' UNSAFE_className={classes.extensionRow}>
+            <Flex alignItems='center' justifyContent='space-between' gap='size-200'>
+                <Flex direction='column' gap='size-50' flex={1}>
+                    <Flex alignItems='center' gap='size-100'>
+                        <Heading level={4} margin={0}>
+                            {extension.name}
+                        </Heading>
+                        {extension.installed ? (
+                            <Badge variant='positive'>v{extension.installed_version}</Badge>
+                        ) : (
+                            <Badge variant='neutral'>Available</Badge>
+                        )}
+                    </Flex>
+                    <Text UNSAFE_className={classes.extensionDescription}>{extension.description}</Text>
                 </Flex>
-                <Text UNSAFE_className={classes.extensionDescription}>{extension.description}</Text>
+                {extension.installed ? (
+                    <Button variant='secondary' isDisabled={isBusy} onPress={() => onUninstall(extension.id)}>
+                        {isThisBusy ? 'Uninstalling…' : 'Uninstall'}
+                    </Button>
+                ) : (
+                    <Button variant='secondary' isDisabled={isBusy} onPress={() => onInstall(extension.id)}>
+                        {isThisBusy ? 'Installing…' : 'Install'}
+                    </Button>
+                )}
             </Flex>
-            {extension.installed ? (
-                <Button variant='secondary' isDisabled={isBusy} onPress={() => onUninstall(extension.id)}>
-                    {isThisBusy ? 'Uninstalling…' : 'Uninstall'}
-                </Button>
-            ) : (
-                <Button variant='secondary' isDisabled={isBusy} onPress={() => onInstall(extension.id)}>
-                    {isThisBusy ? 'Installing…' : 'Install'}
-                </Button>
-            )}
-        </Flex>
+        </View>
     );
 };
 
@@ -151,7 +152,7 @@ type PluginRowProps = {
     isBusy: boolean;
     busyId: string | undefined;
     isExpanded: boolean;
-    onToggleExpanded: () => void;
+    onExpandedChange: (isExpanded: boolean) => void;
     onInstall: (pluginId: string) => void;
     onUninstall: (pluginId: string) => void;
 };
@@ -161,34 +162,29 @@ const PluginRow = ({
     isBusy,
     busyId,
     isExpanded,
-    onToggleExpanded,
+    onExpandedChange,
     onInstall,
     onUninstall,
 }: PluginRowProps) => {
     const isInstalled = plugin.installed;
     const isInUse = plugin.in_use_robot_count > 0;
     const isInstalling = busyId === plugin.id && isBusy;
-    const contentId = `plugin-detail-${plugin.id}`;
-
     return (
-        <div
-            data-testid={`plugin-row-${plugin.id}`}
-            onClick={onToggleExpanded}
-            className={clsx(classes.pluginRow, isExpanded ? classes.rowExpanded : undefined)}
+        <Table.ExpandableRow
+            id={`plugin-row-${plugin.id}`}
+            label={plugin.name}
+            isExpanded={isExpanded}
+            onExpandedChange={onExpandedChange}
+            detail={
+                <PluginDetail
+                    plugin={plugin}
+                    isBusy={isBusy}
+                    busyId={busyId}
+                    onInstall={onInstall}
+                    onUninstall={onUninstall}
+                />
+            }
         >
-            <ActionButton
-                isQuiet
-                aria-expanded={isExpanded}
-                aria-controls={contentId}
-                aria-label={`Show details for ${plugin.name}`}
-                onPress={onToggleExpanded}
-                UNSAFE_className={classes.disclosureButton}
-            >
-                <Icon>
-                    <ChevronRightSmallLight />
-                </Icon>
-            </ActionButton>
-
             <Flex direction='column' gap='size-50'>
                 <Heading level={4} margin={0}>
                     {plugin.name}
@@ -200,41 +196,26 @@ const PluginRow = ({
                 {plugin.robots.length} robot{plugin.robots.length === 1 ? '' : 's'}
             </Text>
 
-            <Flex gap='size-100' alignItems='center' wrap UNSAFE_className={classes.actionsCell}>
-                {isInstalled ? (
-                    <Button variant='secondary' isDisabled={isInUse || isBusy} onPress={() => onUninstall(plugin.id)}>
-                        Uninstall
-                    </Button>
-                ) : (
-                    <Button variant='primary' isDisabled={isBusy} onPress={() => onInstall(plugin.id)}>
-                        {isInstalling ? 'Installing…' : 'Install'}
-                    </Button>
-                )}
-            </Flex>
-
-            {isExpanded && (
-                <Grid id={contentId} gridColumn={'1/-1'} marginTop={'size-150'}>
-                    <PluginDetail
-                        plugin={plugin}
-                        isBusy={isBusy}
-                        busyId={busyId}
-                        onInstall={onInstall}
-                        onUninstall={onUninstall}
-                    />
-                </Grid>
-            )}
-        </div>
+            <div onClick={(event) => event.stopPropagation()}>
+                <Flex gap='size-100' alignItems='center' wrap>
+                    {isInstalled ? (
+                        <Button
+                            variant='secondary'
+                            isDisabled={isInUse || isBusy}
+                            onPress={() => onUninstall(plugin.id)}
+                        >
+                            Uninstall
+                        </Button>
+                    ) : (
+                        <Button variant='primary' isDisabled={isBusy} onPress={() => onInstall(plugin.id)}>
+                            {isInstalling ? 'Installing…' : 'Install'}
+                        </Button>
+                    )}
+                </Flex>
+            </div>
+        </Table.ExpandableRow>
     );
 };
-
-export const PluginsTableHeader = () => (
-    <div className={classes.tableHeader}>
-        <div />
-        <Text>Plugin</Text>
-        <Text>Robots</Text>
-        <div />
-    </div>
-);
 
 type PluginsTableProps = {
     plugins: SchemaPluginResponse[];
@@ -248,8 +229,7 @@ export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }
     const [expandedPluginId, setExpandedPluginId] = useState<string | undefined>(undefined);
 
     return (
-        <Grid columns={PLUGINS_GRID_COLUMNS} columnGap='size-400' width='100%'>
-            <PluginsTableHeader />
+        <Table columns={PLUGIN_COLUMNS} isEmphasized>
             {plugins.map((plugin) => (
                 <PluginRow
                     key={plugin.id}
@@ -257,14 +237,12 @@ export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }
                     isBusy={isBusy}
                     busyId={busyId}
                     isExpanded={expandedPluginId === plugin.id}
-                    onToggleExpanded={() =>
-                        setExpandedPluginId((current) => (current === plugin.id ? undefined : plugin.id))
-                    }
+                    onExpandedChange={(isExpanded) => setExpandedPluginId(isExpanded ? plugin.id : undefined)}
                     onInstall={onInstall}
                     onUninstall={onUninstall}
                 />
             ))}
-        </Grid>
+        </Table>
     );
 };
 
