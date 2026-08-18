@@ -4,6 +4,7 @@ import { toast } from '@geti-ui/ui';
 
 import { $api } from '../../api/client';
 import { getApiErrorMessage, isResourceInUseError } from '../../api/errors';
+import { useRestartState } from './restart-state';
 
 export const usePluginsQuery = () => {
     return $api.useSuspenseQuery('get', '/api/plugins', {
@@ -24,15 +25,15 @@ export const useUninstallPluginMutation = () => {
 };
 
 export const useRestartServerMutation = () => {
-    return $api.useMutation('post', '/api/system/restart', {
-        meta: { skipInvalidation: true },
-    });
+    const { restartServer, restartStatus } = useRestartState();
+    const isPending = restartStatus !== 'idle' && restartStatus !== 'failed';
+    return { restartServer, restartStatus, isPending };
 };
 
 export const usePluginActions = () => {
     const installMutation = useInstallPluginMutation();
     const uninstallMutation = useUninstallPluginMutation();
-    const [restartRequired, setRestartRequired] = useState(false);
+    const { restartRequired, triggerRestartRequired } = useRestartState();
     const [busyId, setBusyId] = useState<string | undefined>(undefined);
 
     const isBusy = busyId !== undefined;
@@ -41,7 +42,7 @@ export const usePluginActions = () => {
         setBusyId(pluginId);
         try {
             await installMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
-            setRestartRequired(true);
+            triggerRestartRequired();
             toast.positive('Plugin installed. Restart the server to activate it.');
         } catch (error) {
             toast.negative(getApiErrorMessage(error) ?? 'Failed to install the plugin.');
@@ -54,7 +55,7 @@ export const usePluginActions = () => {
         setBusyId(pluginId);
         try {
             await uninstallMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
-            setRestartRequired(true);
+            triggerRestartRequired();
             toast.positive('Plugin uninstalled. Restart the server to apply the change.');
         } catch (error) {
             if (isResourceInUseError(error)) {

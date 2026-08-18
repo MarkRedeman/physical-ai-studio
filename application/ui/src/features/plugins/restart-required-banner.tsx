@@ -2,16 +2,20 @@ import { Button, Flex, Text, View } from '@geti-ui/ui';
 
 import { useRestartServerMutation } from './plugins.hooks';
 
+const statusText: Record<string, string> = {
+    idle: 'Restart the server to activate the plugin changes.',
+    requesting: 'Requesting server restart…',
+    waiting_for_down: 'Waiting for server to go down…',
+    waiting_for_up: 'Waiting for server startup…',
+    failed: 'Could not confirm restart from health checks. You can retry.',
+};
+
 export const RestartRequiredBanner = () => {
     const restartMutation = useRestartServerMutation();
     const isRestarting = restartMutation.isPending;
 
     const restart = async () => {
-        try {
-            await restartMutation.mutateAsync({});
-        } catch {
-            // The server may die before responding; treat errors as "restarting".
-        }
+        await restartMutation.restartServer();
     };
 
     return (
@@ -23,11 +27,7 @@ export const RestartRequiredBanner = () => {
             backgroundColor='yellow-100'
         >
             <Flex alignItems='center' justifyContent='space-between' gap='size-200'>
-                <Text>
-                    {isRestarting
-                        ? 'Server is restarting. Please wait a moment and reload the page once it is back.'
-                        : 'Restart the server to activate the plugin changes.'}
-                </Text>
+                <Text>{statusText[restartMutation.restartStatus]}</Text>
                 <Button variant='primary' isDisabled={isRestarting} onPress={restart}>
                     {isRestarting ? 'Restarting…' : 'Restart server'}
                 </Button>
