@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import importlib
 from importlib.metadata import entry_points
 from pathlib import Path
+import sys
 from typing import Annotated, Any, Literal, cast
 
 from loguru import logger
@@ -19,6 +21,22 @@ CATALOG_PLUGIN_ENTRYPOINT_GROUP = "physicalai.studio.catalog_plugins"
 RegisterPluginCallable = Callable[["RobotCatalogRegistry"], None]
 
 
+def _install_lerobot_types_backcompat_alias() -> None:
+    """Alias ``lerobot.lerobot_types`` to ``lerobot.types`` when needed.
+
+    Some third-party LeRobot plugins still import the old module path.
+    """
+    if "lerobot.lerobot_types" in sys.modules:
+        return
+
+    try:
+        lerobot_types = importlib.import_module("lerobot.types")
+    except Exception:
+        return
+
+    sys.modules["lerobot.lerobot_types"] = lerobot_types
+
+
 def _build_union(types: list[type]) -> Any:
     """Dynamically build Union[T1, T2, ...] from a list of types."""
     if not types:
@@ -31,6 +49,8 @@ def _build_union(types: list[type]) -> Any:
 
 class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
     def __init__(self) -> None:
+        _install_lerobot_types_backcompat_alias()
+
         self._definitions: dict[str, RobotCatalogDefinition] = {}
         self._robot_models: dict[str, type[BaseRobot]] = {}
         self._robot_adapter: TypeAdapter | None = None

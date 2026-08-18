@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -51,6 +53,17 @@ class MockAdapterOptions:
     include_velocities = False
     goal_time_scale = 1.0
     external_effort_gain = None
+
+
+def test_registry_installs_lerobot_types_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delitem(sys.modules, "lerobot.lerobot_types", raising=False)
+
+    with patch("robots.catalog.registry.entry_points", return_value=[]):
+        RobotCatalogRegistry()
+
+    alias = sys.modules.get("lerobot.lerobot_types")
+    assert alias is not None
+    assert getattr(alias, "RobotAction", None) is not None
 
 
 def test_registry_continues_when_plugin_discovery_fails() -> None:
