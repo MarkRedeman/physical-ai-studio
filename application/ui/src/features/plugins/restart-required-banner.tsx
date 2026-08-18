@@ -1,5 +1,6 @@
 import { Button, Flex, Text, View } from '@geti-ui/ui';
 
+import { useRestartState } from './restart-state';
 import { useRestartServerMutation } from './plugins.hooks';
 
 const statusText: Record<string, string> = {
@@ -19,9 +20,10 @@ export const RestartRequiredBanner = ({
 }) => {
     const restartMutation = useRestartServerMutation();
     const isRestarting = restartMutation.isPending;
+    const { openRestartPrompt } = useRestartState();
 
     const restart = async () => {
-        await restartMutation.restartServer();
+        openRestartPrompt();
     };
 
     const content = (
@@ -45,19 +47,21 @@ export const RestartRequiredBanner = ({
         </Flex>
     );
 
-    if (inFooter) {
-        return content;
-    }
-
     return (
-        <View
-            padding='size-200'
-            borderColor='yellow-400'
-            borderWidth='thin'
-            borderRadius='regular'
-            backgroundColor='yellow-100'
-        >
-            {content}
-        </View>
+        <>
+            {inFooter ? (
+                content
+            ) : (
+                <View
+                    padding='size-200'
+                    borderColor='yellow-400'
+                    borderWidth='thin'
+                    borderRadius='regular'
+                    backgroundColor='yellow-100'
+                >
+                    {content}
+                </View>
+            )}
+        </>
     );
 };

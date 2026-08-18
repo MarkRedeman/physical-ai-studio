@@ -6,7 +6,6 @@ import { clsx } from 'clsx';
 
 import { SchemaPluginExtensionResponse, SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
 import { usePluginActions, usePluginsQuery } from './plugins.hooks';
-import { RestartRequiredBanner } from './restart-required-banner';
 
 import classes from './plugins.module.css';
 
@@ -271,7 +270,7 @@ export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }
 
 export const PluginsView = () => {
     const pluginsQuery = usePluginsQuery();
-    const { isBusy, busyId, restartRequired, install, uninstall } = usePluginActions();
+    const { isBusy, busyId, install, uninstall } = usePluginActions();
 
     const plugins = pluginsQuery.data;
 
@@ -283,11 +282,6 @@ export const PluginsView = () => {
                     <Text>Install and manage plugins for the server.</Text>
                 </View>
             </Flex>
-            {restartRequired ? (
-                <View marginBottom={'size-250'}>
-                    <RestartRequiredBanner />
-                </View>
-            ) : null}
             <View UNSAFE_className={classes.container}>
                 {plugins.length === 0 ? (
                     <Text UNSAFE_className={classes.emptyList}>No plugins are configured.</Text>

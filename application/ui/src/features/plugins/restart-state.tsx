@@ -1,13 +1,22 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { $api, fetchClient } from '../../api/client';
+import { AlertDialog, DialogContainer, Flex, Text } from '@geti-ui/ui';
+
+import { $api } from '../../api/client';
+import { fetchClient } from '../../api/client';
+import { SchemaTrainJob } from '../../api/openapi-spec';
 
 type RestartStatus = 'idle' | 'requesting' | 'waiting_for_down' | 'waiting_for_up' | 'failed';
 
 type RestartStateValue = {
     restartRequired: boolean;
     restartStatus: RestartStatus;
+    restartPromptOpen: boolean;
+    activeTrainingJobCount: number;
+    hasActiveTrainingJobs: boolean;
     triggerRestartRequired: () => void;
+    openRestartPrompt: () => void;
+    closeRestartPrompt: () => void;
     restartServer: () => Promise<void>;
 };
 
@@ -17,55 +26,35 @@ const HEALTHY_POLLS_REQUIRED = 2;
 
 const RestartStateContext = createContext<RestartStateValue | null>(null);
 
-const restartStore = {
-    restartRequired: false,
-    restartStatus: 'idle' as RestartStatus,
-    subscribers: new Set<() => void>(),
-};
-
-const notifyRestartSubscribers = () => {
-    restartStore.subscribers.forEach((subscriber) => subscriber());
-};
-
 export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     const restartMutation = $api.useMutation('post', '/api/system/restart', {
         meta: { skipInvalidation: true },
     });
-    const [restartRequired, setRestartRequired] = useState(restartStore.restartRequired);
-    const [restartStatus, setRestartStatus] = useState<RestartStatus>(restartStore.restartStatus);
+    const { data: jobs = [] } = $api.useQuery('get', '/api/jobs');
+
+    const [restartRequired, setRestartRequired] = useState(false);
+    const [restartStatus, setRestartStatus] = useState<RestartStatus>('idle');
+    const [restartPromptOpen, setRestartPromptOpen] = useState(false);
     const [isPollingHealth, setIsPollingHealth] = useState(false);
     const [downObserved, setDownObserved] = useState(false);
     const [healthyPollCount, setHealthyPollCount] = useState(0);
     const pollAttemptsRef = useRef(0);
 
-    useEffect(() => {
-        const syncFromStore = () => {
-            setRestartRequired(restartStore.restartRequired);
-            setRestartStatus(restartStore.restartStatus);
-        };
-
-        restartStore.subscribers.add(syncFromStore);
-        syncFromStore();
-
-        return () => {
-            restartStore.subscribers.delete(syncFromStore);
-        };
-    }, []);
-
-    const updateStore = (updates: Partial<Pick<typeof restartStore, 'restartRequired' | 'restartStatus'>>) => {
-        if (updates.restartRequired !== undefined) {
-            restartStore.restartRequired = updates.restartRequired;
-            setRestartRequired(updates.restartRequired);
-        }
-        if (updates.restartStatus !== undefined) {
-            restartStore.restartStatus = updates.restartStatus;
-            setRestartStatus(updates.restartStatus);
-        }
-        notifyRestartSubscribers();
-    };
+    const activeTrainingJobCount = jobs.filter(
+        (job): job is SchemaTrainJob => job.type === 'training' && (job.status === 'running' || job.status === 'pending')
+    ).length;
 
     const triggerRestartRequired = () => {
-        updateStore({ restartRequired: true, restartStatus: 'idle' });
+        setRestartRequired(true);
+        setRestartStatus('idle');
+    };
+
+    const openRestartPrompt = () => {
+        setRestartPromptOpen(true);
+    };
+
+    const closeRestartPrompt = () => {
+        setRestartPromptOpen(false);
     };
 
     const restartServer = async () => {
@@ -73,7 +62,8 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
 
-        updateStore({ restartStatus: 'requesting' });
+        setRestartStatus('requesting');
+        setRestartPromptOpen(false);
         setDownObserved(false);
         setHealthyPollCount(0);
         pollAttemptsRef.current = 0;
@@ -84,7 +74,7 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
             // The server may restart before it sends a response.
         }
 
-        updateStore({ restartStatus: 'waiting_for_down' });
+        setRestartStatus('waiting_for_down');
         setIsPollingHealth(true);
     };
 
@@ -100,7 +90,7 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
             if (pollAttemptsRef.current > MAX_HEALTH_POLLS) {
                 if (!cancelled) {
                     setIsPollingHealth(false);
-                    updateStore({ restartStatus: 'failed' });
+                    setRestartStatus('failed');
                 }
                 return;
             }
@@ -123,17 +113,18 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
 
                 if (nextHealthyPollCount >= HEALTHY_POLLS_REQUIRED) {
                     setIsPollingHealth(false);
-                    updateStore({ restartRequired: false, restartStatus: 'idle' });
+                    setRestartRequired(false);
+                    setRestartStatus('idle');
                     return;
                 }
 
-                updateStore({ restartStatus: downObserved ? 'waiting_for_up' : 'waiting_for_down' });
+                setRestartStatus(downObserved ? 'waiting_for_up' : 'waiting_for_down');
                 return;
             }
 
             setDownObserved(true);
             setHealthyPollCount(0);
-            updateStore({ restartStatus: 'waiting_for_up' });
+            setRestartStatus('waiting_for_up');
         };
 
         const interval = window.setInterval(() => {
@@ -149,11 +140,48 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     }, [downObserved, healthyPollCount, isPollingHealth]);
 
     const value = useMemo(
-        () => ({ restartRequired, restartStatus, triggerRestartRequired, restartServer }),
-        [restartRequired, restartStatus]
+        () => ({
+            restartRequired,
+            restartStatus,
+            restartPromptOpen,
+            activeTrainingJobCount,
+            hasActiveTrainingJobs: activeTrainingJobCount > 0,
+            triggerRestartRequired,
+            openRestartPrompt,
+            closeRestartPrompt,
+            restartServer,
+        }),
+        [activeTrainingJobCount, restartPromptOpen, restartRequired, restartStatus]
     );
 
-    return <RestartStateContext.Provider value={value}>{children}</RestartStateContext.Provider>;
+    return (
+        <RestartStateContext.Provider value={value}>
+            {children}
+            {restartRequired && restartPromptOpen ? (
+                <DialogContainer onDismiss={closeRestartPrompt}>
+                    <AlertDialog
+                        title='Restart server now?'
+                        variant='warning'
+                        primaryActionLabel='Restart now'
+                        cancelLabel='Later'
+                        onCancel={closeRestartPrompt}
+                        onPrimaryAction={restartServer}
+                        isPrimaryActionDisabled={restartStatus !== 'idle' && restartStatus !== 'failed'}
+                    >
+                        <Flex direction='column' gap='size-150'>
+                            <Text>Plugin changes require a server restart to become active.</Text>
+                            {activeTrainingJobCount > 0 ? (
+                                <Text>
+                                    Restarting now will interrupt {activeTrainingJobCount} active training job
+                                    {activeTrainingJobCount === 1 ? '' : 's'}.
+                                </Text>
+                            ) : null}
+                        </Flex>
+                    </AlertDialog>
+                </DialogContainer>
+            ) : null}
+        </RestartStateContext.Provider>
+    );
 };
 
 export const useRestartState = () => {

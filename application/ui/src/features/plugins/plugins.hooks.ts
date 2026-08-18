@@ -33,7 +33,7 @@ export const useRestartServerMutation = () => {
 export const usePluginActions = () => {
     const installMutation = useInstallPluginMutation();
     const uninstallMutation = useUninstallPluginMutation();
-    const { restartRequired, triggerRestartRequired } = useRestartState();
+    const { restartRequired, triggerRestartRequired, openRestartPrompt } = useRestartState();
     const [busyId, setBusyId] = useState<string | undefined>(undefined);
 
     const isBusy = busyId !== undefined;
@@ -43,6 +43,7 @@ export const usePluginActions = () => {
         try {
             await installMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
             triggerRestartRequired();
+            openRestartPrompt();
             toast.positive('Plugin installed. Restart the server to activate it.');
         } catch (error) {
             toast.negative(getApiErrorMessage(error) ?? 'Failed to install the plugin.');

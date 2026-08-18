@@ -3,10 +3,9 @@ import { Close } from '@geti-ui/ui/icons';
 
 import { SchemaPluginResponse } from '../../api/openapi-spec';
 import { usePluginActions } from './plugins.hooks';
-import { RestartRequiredBanner } from './restart-required-banner';
 
 export const InstallPluginDialog = ({ plugin, close }: { plugin: SchemaPluginResponse; close: () => void }) => {
-    const { isBusy, busyId, restartRequired, install } = usePluginActions();
+    const { isBusy, busyId, install } = usePluginActions();
     const isInstalling = busyId === plugin.id && isBusy;
 
     return (
@@ -24,7 +23,6 @@ export const InstallPluginDialog = ({ plugin, close }: { plugin: SchemaPluginRes
             <Divider />
             <Content>
                 <Flex direction='column' gap='size-200'>
-                    {restartRequired ? <RestartRequiredBanner /> : null}
                     <Text>{plugin.description}</Text>
                     <View>
                         <Heading level={4}>Robots added</Heading>

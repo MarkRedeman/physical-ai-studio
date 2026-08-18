@@ -94,11 +94,11 @@ describe('PluginsView', () => {
         expect(screen.getAllByText('1 robot')).toHaveLength(2);
     });
 
-    it('shows a restart-required banner after installing a plugin', async () => {
+    it('opens a restart prompt after installing a plugin', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
             http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true })),
-            http.get('/api/health', () => HttpResponse.json({ status: 'healthy' }))
+            http.get('/api/jobs', () => HttpResponse.json([]))
         );
         const user = userEvent.setup();
 
@@ -106,16 +106,22 @@ describe('PluginsView', () => {
 
         await user.click(await screen.findByRole('button', { name: 'Install' }));
 
-        expect(await screen.findByText('Restart the server to activate the plugin changes.')).toBeVisible();
-        expect(screen.getByRole('button', { name: 'Restart server' })).toBeVisible();
+        expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Restart now' })).toBeVisible();
+        await user.click(screen.getByRole('button', { name: 'Later' }));
     });
 
-    it('clears restart-required banner after two healthy polls', async () => {
+    it('restarts after confirming the restart prompt', async () => {
         let healthCalls = 0;
+        let restartCalls = 0;
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
             http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true })),
-            http.post('/api/system/restart', () => HttpResponse.json({ status: 'restarting' })),
+            http.get('/api/jobs', () => HttpResponse.json([])),
+            http.post('/api/system/restart', () => {
+                restartCalls += 1;
+                return HttpResponse.json({ status: 'restarting' });
+            }),
             http.get('/api/health', () => {
                 healthCalls += 1;
                 if (healthCalls === 1) {
@@ -129,19 +135,22 @@ describe('PluginsView', () => {
         render(<PluginsView />, { route: '/plugins', path: '/plugins' });
 
         await user.click(await screen.findByRole('button', { name: 'Install' }));
-        await user.click(await screen.findByRole('button', { name: 'Restart server' }));
-
-        expect(await screen.findByText(/Waiting for server (to go down|startup)…/)).toBeVisible();
+        await user.click(await screen.findByRole('button', { name: 'Restart now' }));
 
         await vi.waitFor(() => {
-            expect(screen.queryByText('Restart the server to activate the plugin changes.')).not.toBeInTheDocument();
+            expect(restartCalls).toBe(1);
+        });
+
+        await vi.waitFor(() => {
+            expect(screen.queryByText('Plugin changes require a server restart to become active.')).not.toBeInTheDocument();
         });
     });
 
     it('shows extensions for an installed plugin and lets the user install them', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([lerobotPlugin])),
-            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true }))
+            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true })),
+            http.get('/api/jobs', () => HttpResponse.json([]))
         );
         const user = userEvent.setup();
 
@@ -154,7 +163,8 @@ describe('PluginsView', () => {
         expect(screen.getByText('SpaceMouse Teleoperator')).toBeVisible();
 
         await user.click(screen.getByRole('button', { name: 'Install' }));
-        expect(await screen.findByText('Restart the server to activate the plugin changes.')).toBeVisible();
+        expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
+        await user.click(screen.getByRole('button', { name: 'Later' }));
     });
 
     it('disables uninstall for plugins with robots in use', async () => {
