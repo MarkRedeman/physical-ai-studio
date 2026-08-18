@@ -3,10 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { http } from '../../../api/utils';
-import { server } from '../../../msw-node-setup';
-import { render } from '../../../test-utils/render';
-import { RobotFormProvider, useRobotForm } from './provider';
+import { http } from '../../../../api/utils';
+import { server } from '../../../../msw-node-setup';
+import { render } from '../../../../test-utils/render';
+import { RobotFormProvider, useRobotForm } from '../provider';
 import { SchemaForm } from './schema-form';
 
 const bimanualRebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
@@ -98,6 +98,61 @@ const Payload = () => {
 };
 
 describe('SchemaForm', () => {
+    it('renders top-level and group informational text blocks', async () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                connection_string: {
+                    type: 'string',
+                    'x-physicalai-ui': { group: 'connection', widget: 'device-selector' },
+                },
+            },
+            'x-physicalai-ui': {
+                infos: [{ title: 'Before connecting', text: 'Power on the robot and unlock the arm.' }],
+                groups: {
+                    connection: {
+                        title: 'Connection',
+                        device_discovery: true,
+                        connection_key: 'connection_string',
+                        infos: [{ text: 'If no ports are listed, click refresh.' }],
+                    },
+                },
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByText('Before connecting')).toBeVisible();
+        expect(screen.getByText('Power on the robot and unlock the arm.')).toBeVisible();
+        expect(screen.getByText('If no ports are listed, click refresh.')).toBeVisible();
+        expect(await screen.findByRole('button', { name: 'Connection' })).toBeVisible();
+    });
+
+    it('shows description help text for boolean fields', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                torque_enabled: {
+                    type: 'boolean',
+                    title: 'Torque Enabled',
+                    description: 'Toggle motor torque on startup.',
+                },
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByText('Toggle motor torque on startup.')).toBeVisible();
+    });
+
     it('renders defaulted UI-required fields without showing default fields', () => {
         const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
             type: 'object',

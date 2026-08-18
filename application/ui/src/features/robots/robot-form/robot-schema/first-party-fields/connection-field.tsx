@@ -1,15 +1,8 @@
 import { ActionButton, ComboBox, Flex, Icon, Item, Text } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 
-import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../robot-catalog.hooks';
-
-export type ConnectionGroupOptions = {
-    title?: string;
-    identify?: boolean;
-    connection_key?: string;
-    serial_number_key?: string;
-    manual_entry?: boolean;
-};
+import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../../robot-catalog.hooks';
+import { ConnectionGroupOptions } from '../types';
 
 type Device = { serial_number: string | null; connection_string: string | null };
 
@@ -18,6 +11,7 @@ type ComboBoxFieldProps = {
     value: string;
     devices: Device[];
     allowsCustomValue: boolean;
+    description?: string;
     onInputChange: (value: string) => void;
     onSelectionChange: (key: string | number | null) => void;
 };
@@ -38,11 +32,13 @@ const ComboBoxField = ({
     value,
     devices,
     allowsCustomValue,
+    description,
     onInputChange,
     onSelectionChange,
 }: ComboBoxFieldProps) => (
     <ComboBox
         label={label}
+        description={description}
         width='100%'
         allowsCustomValue={allowsCustomValue}
         inputValue={value}
@@ -84,6 +80,7 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
             <Flex gap='size-100' alignItems='end'>
                 <ComboBoxField
                     label={options.title ?? 'Connection'}
+                    description={options.description}
                     value={value}
                     devices={discover.data ?? []}
                     allowsCustomValue={options.manual_entry !== false}

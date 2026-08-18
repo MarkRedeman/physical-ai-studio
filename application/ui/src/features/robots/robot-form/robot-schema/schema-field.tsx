@@ -1,34 +1,7 @@
-import { Item, Picker, Switch, TextField } from '@geti-ui/ui';
+import { Flex, Item, Picker, Switch, Text, TextField } from '@geti-ui/ui';
 
-export type FieldSchema = {
-    type?: string;
-    title?: string;
-    description?: string;
-    default?: unknown;
-    enum?: unknown[];
-    $ref?: string;
-    properties?: Record<string, FieldSchema>;
-    additionalProperties?: FieldSchema | boolean;
-    required?: string[];
-    ['x-physicalai-ui']?: FieldOptions;
-};
-
-export type FieldOptions = {
-    group?: string;
-    widget?: 'device-selector';
-    required?: boolean;
-    groups?: Record<
-        string,
-        {
-            title?: string;
-            device_discovery?: boolean;
-            identify?: boolean;
-            connection_key?: string;
-            serial_number_key?: string;
-            manual_entry?: boolean;
-        }
-    >;
-};
+import { fieldLabel } from './schema-utils';
+import { FieldSchema } from './types';
 
 type FieldProps = {
     name: string;
@@ -38,9 +11,6 @@ type FieldProps = {
     onChange: (value: unknown) => void;
 };
 
-const fieldLabel = (name: string, schema: FieldSchema) =>
-    schema.title ?? name.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-
 const commonProps = ({ name, schema, isRequired }: Pick<FieldProps, 'name' | 'schema' | 'isRequired'>) => ({
     label: fieldLabel(name, schema),
     description: schema.description,
@@ -48,7 +18,7 @@ const commonProps = ({ name, schema, isRequired }: Pick<FieldProps, 'name' | 'sc
     width: '100%' as const,
 });
 
-export const EnumPickerField = ({ name, schema, value, isRequired, onChange }: FieldProps) => (
+const EnumPickerField = ({ name, schema, value, isRequired, onChange }: FieldProps) => (
     <Picker
         {...commonProps({ name, schema, isRequired })}
         selectedKey={String(value ?? '')}
@@ -60,13 +30,16 @@ export const EnumPickerField = ({ name, schema, value, isRequired, onChange }: F
     </Picker>
 );
 
-export const BooleanField = ({ name, schema, value, isRequired, onChange }: FieldProps) => (
-    <Switch isRequired={isRequired} isSelected={Boolean(value)} onChange={onChange}>
-        {fieldLabel(name, schema)}
-    </Switch>
+const BooleanField = ({ name, schema, value, isRequired, onChange }: FieldProps) => (
+    <Flex direction='column' gap='size-50'>
+        <Switch isRequired={isRequired} isSelected={Boolean(value)} onChange={onChange}>
+            {fieldLabel(name, schema)}
+        </Switch>
+        {schema.description !== undefined && schema.description !== '' && <Text>{schema.description}</Text>}
+    </Flex>
 );
 
-export const TextFieldValue = ({ name, schema, value, isRequired, onChange }: FieldProps) => {
+const TextFieldValue = ({ name, schema, value, isRequired, onChange }: FieldProps) => {
     const isNumeric = schema.type === 'integer' || schema.type === 'number';
     return (
         <TextField

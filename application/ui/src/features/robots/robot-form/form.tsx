@@ -7,10 +7,10 @@ import { $api } from '../../../api/client';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { useRobotCatalogQuery } from '../robot-catalog.hooks';
+import { SchemaForm } from './robot-schema/schema-form';
 import { BimanualSO101FormFields } from './catalog/bimanual-so101';
 import { useRobotForm } from './provider';
 import { RobotCatalogDialog } from './robot-catalog-dialog';
-import { SchemaForm } from './schema-form';
 
 export const RobotType = () => {
     const { activeType } = useRobotForm();

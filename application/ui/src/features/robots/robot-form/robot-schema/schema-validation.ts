@@ -1,19 +1,5 @@
-import { FieldSchema } from './schema-fields';
-
-type JsonSchema = {
-    properties?: Record<string, FieldSchema>;
-    $defs?: Record<string, FieldSchema>;
-};
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-
-const resolveReference = (schema: FieldSchema, definitions: Record<string, FieldSchema>): FieldSchema => {
-    if (schema.$ref === undefined) return schema;
-
-    const definition = definitions[schema.$ref.replace('#/$defs/', '')];
-    return definition === undefined ? schema : { ...definition, ...schema };
-};
+import { asRecord, resolveReference } from './schema-utils';
+import { FieldSchema, JsonSchema } from './types';
 
 const isMissingRequiredValue = (value: unknown, schema: FieldSchema) =>
     value === undefined ||

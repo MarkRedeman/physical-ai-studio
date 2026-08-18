@@ -2,64 +2,23 @@ import { useEffect, useState } from 'react';
 
 import { Flex, Heading, Switch, View } from '@geti-ui/ui';
 
-import { ConnectionField, ConnectionGroupOptions } from './connection-field';
-import { useRobotForm } from './provider';
-import { FieldSchema, SchemaField } from './schema-fields';
+import { useRobotForm } from '../provider';
+import { ConnectionField } from './first-party-fields/connection-field';
+import { InfoField } from './first-party-fields/info-field';
+import { SchemaField } from './schema-field';
+import {
+    EMPTY_DEFINITIONS,
+    EMPTY_PROPERTIES,
+    asRecord,
+    fieldLabel,
+    resolveReference,
+    schemaDefaults,
+    updateObjectField,
+} from './schema-utils';
+import { FieldSchema, GroupOptions, JsonSchema, RobotUiInfo } from './types';
 
-type JsonSchema = {
-    type?: string;
-    properties?: Record<string, FieldSchema>;
-    required?: string[];
-    $defs?: Record<string, FieldSchema>;
-    ['x-physicalai-ui']?: { groups?: Record<string, GroupOptions> };
-};
-type GroupOptions = ConnectionGroupOptions & {
-    title?: string;
-    device_discovery?: boolean;
-};
-
-const EMPTY_PROPERTIES: Record<string, FieldSchema> = {};
 const EMPTY_GROUPS: Record<string, GroupOptions> = {};
-const EMPTY_DEFINITIONS: Record<string, FieldSchema> = {};
-
-const fieldLabel = (name: string, schema: FieldSchema) =>
-    schema.title ?? name.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-    typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-
-const resolveReference = (schema: FieldSchema, definitions: Record<string, FieldSchema>): FieldSchema => {
-    if (schema.$ref === undefined) return schema;
-
-    const definitionName = schema.$ref.replace('#/$defs/', '');
-    const definition = definitions[definitionName];
-    return definition === undefined ? schema : { ...definition, ...schema };
-};
-
-const updateObjectField = (value: unknown, name: string, fieldValue: unknown): Record<string, unknown> => ({
-    ...asRecord(value),
-    [name]: fieldValue,
-});
-
-const schemaDefault = (schema: FieldSchema, definitions: Record<string, FieldSchema>): unknown => {
-    const resolvedSchema = resolveReference(schema, definitions);
-    if (resolvedSchema.default !== undefined) return resolvedSchema.default;
-    if (resolvedSchema.properties === undefined) return undefined;
-
-    const defaults = schemaDefaults(resolvedSchema.properties, definitions);
-    return Object.keys(defaults).length === 0 ? undefined : defaults;
-};
-
-const schemaDefaults = (
-    properties: Record<string, FieldSchema>,
-    definitions: Record<string, FieldSchema>
-): Record<string, unknown> =>
-    Object.fromEntries(
-        Object.entries(properties).flatMap(([name, field]) => {
-            const defaultValue = schemaDefault(field, definitions);
-            return defaultValue === undefined ? [] : [[name, defaultValue]];
-        })
-    );
+const EMPTY_INFOS: RobotUiInfo[] = [];
 
 export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const { activeType, payload, setPayload, updatePayloadField } = useRobotForm();
@@ -68,12 +27,16 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const groups = schema['x-physicalai-ui']?.groups ?? EMPTY_GROUPS;
     const definitions = schema.$defs ?? EMPTY_DEFINITIONS;
     const required = new Set(schema.required ?? []);
+    const infos = schema['x-physicalai-ui']?.infos ?? EMPTY_INFOS;
 
     useEffect(() => {
         if (Object.keys(payload).length !== 0) return;
         const defaults = schemaDefaults(properties, definitions);
         if (Object.keys(defaults).length !== 0) setPayload(defaults);
     }, [definitions, payload, properties, setPayload]);
+
+    const renderInfos = (fieldInfos: RobotUiInfo[]) =>
+        fieldInfos.map((info, index) => <InfoField key={`${info.title ?? info.text}-${index}`} info={info} />);
 
     const renderFields = (
         fieldProperties: Record<string, FieldSchema>,
@@ -92,13 +55,10 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
         return (
             <>
                 {connectionGroups.map(([name, options]) => (
-                    <ConnectionField
-                        key={name}
-                        robotType={activeType!}
-                        payload={values}
-                        options={options}
-                        onChange={onChange}
-                    />
+                    <Flex key={name} direction='column' gap='size-100'>
+                        {renderInfos(options.infos ?? EMPTY_INFOS)}
+                        <ConnectionField robotType={activeType!} payload={values} options={options} onChange={onChange} />
+                    </Flex>
                 ))}
                 {Object.entries(fieldProperties)
                     .filter(([name]) => !groupedFields.has(name))
@@ -119,17 +79,15 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
                                 >
                                     <Flex direction='column' gap='size-150'>
                                         <Heading level={4}>{fieldLabel(name, resolvedField)}</Heading>
+                                        {renderInfos((resolvedField['x-physicalai-ui'] as JsonSchema['x-physicalai-ui'])?.infos ?? EMPTY_INFOS)}
                                         {renderFields(
                                             resolvedField.properties ?? EMPTY_PROPERTIES,
                                             new Set(resolvedField.required ?? []),
                                             asRecord(values[name]),
                                             (nestedName, nestedValue) =>
-                                                onChange(
-                                                    name,
-                                                    updateObjectField(values[name], nestedName, nestedValue)
-                                                ),
-                                            (resolvedField['x-physicalai-ui'] as JsonSchema['x-physicalai-ui'])
-                                                ?.groups ?? EMPTY_GROUPS
+                                                onChange(name, updateObjectField(values[name], nestedName, nestedValue)),
+                                            (resolvedField['x-physicalai-ui'] as JsonSchema['x-physicalai-ui'])?.groups ??
+                                                EMPTY_GROUPS
                                         )}
                                     </Flex>
                                 </View>
@@ -155,6 +113,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
 
     return (
         <Flex direction='column' gap='size-200'>
+            {renderInfos(infos)}
             <Switch isSelected={showDefaultFields} onChange={setShowDefaultFields}>
                 Show default fields
             </Switch>
