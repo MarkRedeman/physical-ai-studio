@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Literal, NotRequired, Required, TypedDict
 
 
-class RobotUiInfo(TypedDict, total=False):
+class RobotUiInfoItem(TypedDict, total=False):
     """Read-only informational text shown in the Studio robot form."""
 
+    kind: Required[Literal["info"]]
     title: NotRequired[str]
     text: Required[str]
     variant: NotRequired[Literal["info", "warning"]]
@@ -26,7 +27,7 @@ class RobotUiConnectionBinding(TypedDict, total=False):
     serial_number: NotRequired[str]
 
 
-class RobotUiConnectionControlOptions(TypedDict, total=False):
+class RobotUiConnectionItem(TypedDict, total=False):
     """Options for the first-party connection control."""
 
     kind: Required[Literal["connection"]]
@@ -35,29 +36,29 @@ class RobotUiConnectionControlOptions(TypedDict, total=False):
     device_discovery: NotRequired[bool]
     identify: NotRequired[bool]
     manual_entry: NotRequired[bool]
-    infos: NotRequired[list[RobotUiInfo]]
     bind: Required[RobotUiConnectionBinding]
 
 
-RobotUiControlOptions = RobotUiConnectionControlOptions
+class RobotUiFieldItem(TypedDict):
+    """A standard payload field rendered in the form."""
+
+    kind: Required[Literal["field"]]
+    name: Required[str]
 
 
 class RobotUiSectionOptions(TypedDict, total=False):
-    """Presentation options for a section of payload fields and controls."""
+    """A recursively rendered section of form items."""
 
+    kind: Required[Literal["section"]]
     id: Required[str]
     title: NotRequired[str]
     description: NotRequired[str]
-    infos: NotRequired[list[RobotUiInfo]]
-    fields: NotRequired[list[str]]
-    controls: NotRequired[list[RobotUiControlOptions]]
+    items: Required[list[RobotUiItem]]
 
 
-class RobotPayloadUiOptions(TypedDict, total=False):
-    """Model-level options embedded in a payload's JSON Schema."""
+RobotUiItem = RobotUiInfoItem | RobotUiConnectionItem | RobotUiFieldItem | RobotUiSectionOptions
 
-    infos: NotRequired[list[RobotUiInfo]]
-    sections: NotRequired[list[RobotUiSectionOptions]]
+RobotPayloadUiOptions = list[RobotUiItem]
 
 
 FieldSchemaExtra = TypedDict("FieldSchemaExtra", {"x-physicalai-ui": RobotFieldUiOptions})
@@ -69,6 +70,6 @@ def robot_field_ui(options: RobotFieldUiOptions) -> FieldSchemaExtra:
     return {"x-physicalai-ui": options}
 
 
-def robot_payload_ui(options: RobotPayloadUiOptions) -> ModelSchemaExtra:
+def robot_payload_ui(items: RobotPayloadUiOptions) -> ModelSchemaExtra:
     """Create typed ``ConfigDict(json_schema_extra=...)`` metadata."""
-    return {"x-physicalai-ui": options}
+    return {"x-physicalai-ui": items}

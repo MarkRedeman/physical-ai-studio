@@ -1,4 +1,5 @@
-export type RobotUiInfo = {
+export type InfoItem = {
+    kind: 'info';
     title?: string;
     text: string;
     variant?: 'info' | 'warning';
@@ -9,36 +10,36 @@ export type RobotUiConnectionBinding = {
     serial_number?: string;
 };
 
-export type ConnectionControlOptions = {
+export type ConnectionItem = {
     kind: 'connection';
     label?: string;
     description?: string;
     device_discovery?: boolean;
     identify?: boolean;
     manual_entry?: boolean;
-    infos?: RobotUiInfo[];
     bind: RobotUiConnectionBinding;
 };
 
-export type ControlOptions = ConnectionControlOptions;
+export type FieldItem = {
+    kind: 'field';
+    name: string;
+};
 
-export type SectionOptions = {
+export type SectionItem = {
+    kind: 'section';
     id: string;
     title?: string;
     description?: string;
-    infos?: RobotUiInfo[];
-    fields?: string[];
-    controls?: ControlOptions[];
+    items: RobotUiItem[];
 };
+
+export type RobotUiItem = InfoItem | ConnectionItem | FieldItem | SectionItem;
 
 export type FieldOptions = {
     required?: boolean;
 };
 
-export type ModelUiOptions = {
-    infos?: RobotUiInfo[];
-    sections?: SectionOptions[];
-};
+export type ModelUiOptions = RobotUiItem[];
 
 export type FieldSchema = {
     type?: string;
@@ -50,7 +51,7 @@ export type FieldSchema = {
     properties?: Record<string, FieldSchema>;
     additionalProperties?: FieldSchema | boolean;
     required?: string[];
-    ['x-physicalai-ui']?: FieldOptions & Partial<ModelUiOptions>;
+    ['x-physicalai-ui']?: FieldOptions | ModelUiOptions;
 };
 
 export type JsonSchema = {

@@ -194,41 +194,37 @@ def test_robot_field_ui_supports_required_option() -> None:
     assert robot_field_ui({"required": True}) == {"x-physicalai-ui": {"required": True}}
 
 
-def test_robot_payload_ui_supports_infos_sections_and_controls() -> None:
+def test_robot_payload_ui_supports_recursive_items() -> None:
     assert robot_payload_ui(
-        {
-            "infos": [{"title": "Before you start", "text": "Power on the robot."}],
-            "sections": [
-                {
-                    "id": "connection",
-                    "title": "Connection",
-                    "description": "Pick a detected device or enter one manually.",
-                    "infos": [{"text": "USB hubs can rename ports after reboot.", "variant": "warning"}],
-                    "controls": [
-                        {
-                            "kind": "connection",
-                            "bind": {"connection": "connection_string", "serial_number": "serial_number"},
-                        }
-                    ],
-                }
-            ],
-        }
+        [
+            {
+                "kind": "section",
+                "id": "connection",
+                "title": "Connection",
+                "description": "Pick a detected device or enter one manually.",
+                "items": [
+                    {"kind": "info", "text": "USB hubs can rename ports after reboot.", "variant": "warning"},
+                    {
+                        "kind": "connection",
+                        "bind": {"connection": "connection_string", "serial_number": "serial_number"},
+                    },
+                ],
+            }
+        ]
     ) == {
-        "x-physicalai-ui": {
-            "infos": [{"title": "Before you start", "text": "Power on the robot."}],
-            "sections": [
-                {
-                    "id": "connection",
-                    "title": "Connection",
-                    "description": "Pick a detected device or enter one manually.",
-                    "infos": [{"text": "USB hubs can rename ports after reboot.", "variant": "warning"}],
-                    "controls": [
-                        {
-                            "kind": "connection",
-                            "bind": {"connection": "connection_string", "serial_number": "serial_number"},
-                        }
-                    ],
-                }
-            ],
-        }
+        "x-physicalai-ui": [
+            {
+                "kind": "section",
+                "id": "connection",
+                "title": "Connection",
+                "description": "Pick a detected device or enter one manually.",
+                "items": [
+                    {"kind": "info", "text": "USB hubs can rename ports after reboot.", "variant": "warning"},
+                    {
+                        "kind": "connection",
+                        "bind": {"connection": "connection_string", "serial_number": "serial_number"},
+                    },
+                ],
+            }
+        ]
     }

@@ -21,23 +21,21 @@ const bimanualRebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
                 can_adapter: { type: 'string', title: 'Can Adapter', default: 'damiao' },
             },
             required: ['port'],
-            'x-physicalai-ui': {
-                sections: [
-                    {
-                        id: 'connection',
-                        title: 'Select robot',
-                        fields: ['port'],
-                        controls: [
-                            {
-                                kind: 'connection',
-                                label: 'Select robot',
-                                bind: { connection: 'port' },
-                                device_discovery: true,
-                            },
-                        ],
-                    },
-                ],
-            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'section',
+                    id: 'connection',
+                    title: 'Select robot',
+                    items: [
+                        {
+                            kind: 'connection',
+                            label: 'Select robot',
+                            bind: { connection: 'port' },
+                            device_discovery: true,
+                        },
+                    ],
+                },
+            ],
         },
     },
     type: 'object',
@@ -71,15 +69,15 @@ const lerobotSO101Schema: Parameters<typeof SchemaForm>[0]['schema'] = {
         },
     },
     required: ['port'],
-    'x-physicalai-ui': {
-        sections: [
-            {
-                id: 'connection',
-                fields: ['port'],
-                controls: [{ kind: 'connection', label: 'Select robot', device_discovery: true, bind: { connection: 'port' } }],
-            },
-        ],
-    },
+    'x-physicalai-ui': [
+        {
+            kind: 'section',
+            id: 'connection',
+            items: [
+                { kind: 'connection', label: 'Select robot', device_discovery: true, bind: { connection: 'port' } },
+            ],
+        },
+    ],
 };
 
 const rebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
@@ -88,22 +86,20 @@ const rebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
         connection_string: { type: 'string' },
         serial_number: { type: 'string' },
     },
-    'x-physicalai-ui': {
-        sections: [
-            {
-                id: 'connection',
-                fields: ['connection_string', 'serial_number'],
-                controls: [
-                    {
-                        kind: 'connection',
-                        label: 'Select robot',
-                        device_discovery: true,
-                        bind: { connection: 'connection_string', serial_number: 'serial_number' },
-                    },
-                ],
-            },
-        ],
-    },
+    'x-physicalai-ui': [
+        {
+            kind: 'section',
+            id: 'connection',
+            items: [
+                {
+                    kind: 'connection',
+                    label: 'Select robot',
+                    device_discovery: true,
+                    bind: { connection: 'connection_string', serial_number: 'serial_number' },
+                },
+            ],
+        },
+    ],
 };
 
 const Payload = () => {
@@ -120,24 +116,29 @@ describe('SchemaForm', () => {
                     type: 'string',
                 },
             },
-            'x-physicalai-ui': {
-                infos: [{ title: 'Before connecting', text: 'Power on the robot and unlock the arm.' }],
-                sections: [
-                    {
-                        id: 'connection',
-                        fields: ['connection_string'],
-                        controls: [
-                            {
-                                kind: 'connection',
-                                label: 'Connection',
-                                device_discovery: true,
-                                bind: { connection: 'connection_string' },
-                                infos: [{ text: 'If no ports are listed, click refresh.' }],
-                            },
-                        ],
-                    },
-                ],
-            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'section',
+                    id: 'connection',
+                    items: [
+                        {
+                            kind: 'info',
+                            title: 'Before connecting',
+                            text: 'Power on the robot and unlock the arm.',
+                        },
+                        {
+                            kind: 'connection',
+                            label: 'Connection',
+                            device_discovery: true,
+                            bind: { connection: 'connection_string' },
+                        },
+                        {
+                            kind: 'info',
+                            text: 'If no ports are listed, click refresh.',
+                        },
+                    ],
+                },
+            ],
         };
 
         render(
@@ -172,6 +173,62 @@ describe('SchemaForm', () => {
         );
 
         expect(screen.getByText('Toggle motor torque on startup.')).toBeVisible();
+    });
+
+    it('renders recursively nested sections in item order', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                port: { type: 'string', title: 'Port' },
+            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'section',
+                    id: 'setup',
+                    title: 'Setup',
+                    items: [
+                        { kind: 'info', text: 'Connect the robot before configuring it.' },
+                        {
+                            kind: 'section',
+                            id: 'manual-connection',
+                            title: 'Manual connection',
+                            items: [{ kind: 'field', name: 'port' }],
+                        },
+                    ],
+                },
+            ],
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('heading', { name: 'Setup' })).toBeVisible();
+        expect(screen.getByText('Connect the robot before configuring it.')).toBeVisible();
+        expect(screen.getByRole('heading', { name: 'Manual connection' })).toBeVisible();
+        expect(screen.getByRole('textbox', { name: 'Port' })).toBeVisible();
+    });
+
+    it('renders unowned fields after explicit items', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                port: { type: 'string', title: 'Port' },
+                baud_rate: { type: 'integer', title: 'Baud Rate' },
+            },
+            'x-physicalai-ui': [{ kind: 'field', name: 'port' }],
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('textbox', { name: 'Port' })).toBeVisible();
+        expect(screen.getByRole('spinbutton', { name: 'Baud Rate' })).toBeVisible();
     });
 
     it('renders defaulted UI-required fields without showing default fields', () => {
@@ -300,15 +357,14 @@ describe('SchemaForm', () => {
                     },
                 },
             },
-            'x-physicalai-ui': {
-                sections: [
-                    {
-                        id: 'calibration',
-                        title: 'Calibration',
-                        fields: ['calibration'],
-                    },
-                ],
-            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'section',
+                    id: 'calibration',
+                    title: 'Calibration',
+                    items: [{ kind: 'field', name: 'calibration' }],
+                },
+            ],
         };
 
         render(

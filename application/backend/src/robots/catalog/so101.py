@@ -47,32 +47,32 @@ class SO101RobotPayload(BaseModel):
         json_schema_extra={
             "example": {"connection_string": "", "serial_number": "SO101-2024-001", "calibration": None},
             **robot_payload_ui(
-                {
-                    "sections": [
-                        {
-                            "id": "connection",
-                            "title": "Connection",
-                            "controls": [
-                                {
-                                    "kind": "connection",
-                                    "label": "Connection",
-                                    "device_discovery": True,
-                                    "identify": True,
-                                    "manual_entry": True,
-                                    "bind": {
-                                        "connection": "connection_string",
-                                        "serial_number": "serial_number",
-                                    },
-                                }
-                            ],
-                        },
-                        {
-                            "id": "calibration",
-                            "title": "Calibration",
-                            "fields": ["calibration"],
-                        },
-                    ]
-                }
+                [
+                    {
+                        "kind": "section",
+                        "id": "connection",
+                        "title": "Connection",
+                        "items": [
+                            {
+                                "kind": "connection",
+                                "label": "Connection",
+                                "device_discovery": True,
+                                "identify": True,
+                                "manual_entry": True,
+                                "bind": {
+                                    "connection": "connection_string",
+                                    "serial_number": "serial_number",
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "kind": "section",
+                        "id": "calibration",
+                        "title": "Calibration",
+                        "items": [{"kind": "field", "name": "calibration"}],
+                    },
+                ]
             ),
         },
     )

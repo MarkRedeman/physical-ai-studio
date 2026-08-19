@@ -1,9 +1,9 @@
 import { Text, View } from '@geti-ui/ui';
 
-import { RobotUiInfo } from '../types';
+import { InfoItem } from '../types';
 
 type InfoFieldProps = {
-    info: RobotUiInfo;
+    info: InfoItem;
 };
 
 export const InfoField = ({ info }: InfoFieldProps) => {

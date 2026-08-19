@@ -2,7 +2,7 @@ import { ActionButton, ComboBox, Flex, Icon, Item, Text } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 
 import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../../robot-catalog.hooks';
-import { ConnectionControlOptions } from '../types';
+import { ConnectionItem } from '../types';
 
 type Device = { serial_number: string | null; connection_string: string | null };
 
@@ -57,7 +57,7 @@ const ComboBoxField = ({
 type ConnectionFieldProps = {
     robotType: string;
     payload: Record<string, unknown>;
-    options: ConnectionControlOptions;
+    options: ConnectionItem;
     onChange: (field: string, value: unknown) => void;
 };
 

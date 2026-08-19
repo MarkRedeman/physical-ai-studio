@@ -37,15 +37,14 @@ class TrossenSingleArmPayload(BaseModel):
                 "connection_string": "192.168.1.100",
             },
             **robot_payload_ui(
-                {
-                    "sections": [
-                        {
-                            "id": "connection",
-                            "title": "Connection",
-                            "fields": ["connection_string"],
-                        }
-                    ]
-                }
+                [
+                    {
+                        "kind": "section",
+                        "id": "connection",
+                        "title": "Connection",
+                        "items": [{"kind": "field", "name": "connection_string"}],
+                    }
+                ]
             ),
         },
     )
@@ -64,15 +63,17 @@ class TrossenBimanualPayload(BaseModel):
                 "connection_string_right": "192.168.1.101",
             },
             **robot_payload_ui(
-                {
-                    "sections": [
-                        {
-                            "id": "connection",
-                            "title": "Connection",
-                            "fields": ["connection_string_left", "connection_string_right"],
-                        }
-                    ]
-                }
+                [
+                    {
+                        "kind": "section",
+                        "id": "connection",
+                        "title": "Connection",
+                        "items": [
+                            {"kind": "field", "name": "connection_string_left"},
+                            {"kind": "field", "name": "connection_string_right"},
+                        ],
+                    }
+                ]
             ),
         },
     )

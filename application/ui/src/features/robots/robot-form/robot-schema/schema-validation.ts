@@ -1,6 +1,9 @@
 import { asRecord, resolveReference } from './schema-utils';
 import { FieldSchema, JsonSchema } from './types';
 
+const isFieldUiOptions = (value: FieldSchema['x-physicalai-ui']): value is { required?: boolean } =>
+    value !== undefined && !Array.isArray(value);
+
 const isMissingRequiredValue = (value: unknown, schema: FieldSchema) =>
     value === undefined ||
     value === null ||
@@ -19,7 +22,11 @@ export const validateRequiredUiFields = (schema: JsonSchema, payload: Record<str
             const fieldName = `${prefix}${name}`;
             const value = values[name];
 
-            if (resolved['x-physicalai-ui']?.required && isMissingRequiredValue(value, resolved)) {
+            if (
+                isFieldUiOptions(resolved['x-physicalai-ui']) &&
+                resolved['x-physicalai-ui'].required &&
+                isMissingRequiredValue(value, resolved)
+            ) {
                 return [`${fieldName} is required`];
             }
 
