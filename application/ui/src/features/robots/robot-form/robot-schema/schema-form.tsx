@@ -76,7 +76,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
             return (
                 <View key={name} backgroundColor='gray-50' borderColor='gray-200' borderWidth='thin' padding='size-150'>
                     <Flex direction='column' gap='size-150'>
-                        <Heading level={4}>{fieldLabel(name, resolvedField)}</Heading>
+                        <Heading level={4}>{fieldLabel(name, field)}</Heading>
                         {renderItems(
                             nestedItems,
                             nestedProperties,

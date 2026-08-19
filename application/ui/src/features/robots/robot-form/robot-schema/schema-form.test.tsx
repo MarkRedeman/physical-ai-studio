@@ -40,8 +40,8 @@ const bimanualRebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
     },
     type: 'object',
     properties: {
-        left_arm_config: { $ref: '#/$defs/RebotB601FollowerConfigPayload', title: 'Left Arm Config' },
-        right_arm_config: { $ref: '#/$defs/RebotB601FollowerConfigPayload', title: 'Right Arm Config' },
+        left_arm_config: { $ref: '#/$defs/RebotB601FollowerConfigPayload', description: 'left_arm_config' },
+        right_arm_config: { $ref: '#/$defs/RebotB601FollowerConfigPayload', description: 'right_arm_config' },
     },
     required: ['left_arm_config', 'right_arm_config'],
 };
