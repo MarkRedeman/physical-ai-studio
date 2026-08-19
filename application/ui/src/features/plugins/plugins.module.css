@@ -1,0 +1,32 @@
+.card {
+    width: 360px;
+    max-width: 100%;
+    min-height: 180px;
+}
+
+.robotChip {
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-100);
+    background-color: var(--spectrum-global-color-gray-50);
+}
+
+.robotName {
+    font-size: var(--spectrum-global-dimension-font-size-75);
+}
+
+.roleBadge {
+    text-transform: capitalize;
+}
+
+.roleFollower {
+    background-color: #0071c5;
+}
+
+.roleLeader {
+    background-color: #8e2de2;
+}
+
+.inUse {
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    color: var(--spectrum-global-color-orange-600);
+}

@@ -97,3 +97,17 @@
     background-color: var(--role-color);
     content: '';
 }
+
+.availableCard {
+    opacity: 0.6;
+}
+
+.availableCard:hover {
+    opacity: 0.9;
+}
+
+.notInstalled {
+    display: block;
+    font-size: var(--spectrum-global-dimension-font-size-50);
+    color: var(--spectrum-global-color-yellow-400);
+}

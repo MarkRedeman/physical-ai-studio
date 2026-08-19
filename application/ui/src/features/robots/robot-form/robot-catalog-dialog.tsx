@@ -15,7 +15,9 @@ import {
     View,
 } from '@geti-ui/ui';
 import { clsx } from 'clsx';
+import { useNavigate } from 'react-router';
 
+import { SchemaPluginRobotResponse } from '../../../api/openapi-spec';
 import { ReactComponent as PhysicalAIStudioLogo } from '../../../assets/icons/physicalai-studio-logo.svg';
 import so101BimanualThumbnail from '../../../assets/thumbnails/BimanualSO101_Follower_thumbnail.png';
 import leKiwiThumbnail from '../../../assets/thumbnails/LeKiwi_Follower_thumbnail.png';
@@ -26,6 +28,8 @@ import reBotB601Thumbnail from '../../../assets/thumbnails/ReBot_B601_DM_Followe
 import so101Thumbnail from '../../../assets/thumbnails/SO101_Leader_thumbnail.png';
 import trossenBimanualThumbnail from '../../../assets/thumbnails/Trossen_Bimanual_WidowXAI_Follower_thumbnail.png';
 import trossenThumbnail from '../../../assets/thumbnails/Trossen_WidowXAI_Follower_thumbnail.png';
+import { paths } from '../../../router';
+import { usePluginsQuery } from '../../plugins/plugins.hooks';
 import { useRobotCatalogQuery } from '../robot-catalog.hooks';
 import { useRobotForm } from './provider';
 
@@ -108,22 +112,25 @@ const RobotCard = ({
     category,
     activeType,
     onSelect,
+    isAvailable = false,
 }: {
-    entry: CatalogEntry;
+    entry: CatalogEntry | SchemaPluginRobotResponse;
     category: string;
     activeType: string | undefined;
     onSelect: () => void;
+    isAvailable?: boolean;
 }) => {
     const thumbnail =
         category === 'LeRobot'
             ? leRobotThumbnail
-            : (CATALOG_MANIFEST[category]?.thumbnails?.[entry.type] ?? entry.preview_thumbnail);
+            : (CATALOG_MANIFEST[category]?.thumbnails?.[entry.type] ??
+              ('preview_thumbnail' in entry ? entry.preview_thumbnail : undefined));
 
     return (
         <Button
-            variant={activeType === entry.type ? 'accent' : 'secondary'}
+            variant={!isAvailable && activeType === entry.type ? 'accent' : 'secondary'}
             onPress={onSelect}
-            UNSAFE_className={classes.card}
+            UNSAFE_className={clsx(classes.card, isAvailable && classes.availableCard)}
             UNSAFE_style={{ alignItems: 'flex-start', justifyContent: 'flex-start' }}
         >
             <div className={classes.cardContent}>
@@ -139,6 +146,7 @@ const RobotCard = ({
                 <span aria-label={entry.role} className={clsx(classes.role, ROLE_CLASS_NAMES[entry.role])} />
                 <div className={classes.cardDetails}>
                     <Text>{entry.display_name}</Text>
+                    {isAvailable && <Text UNSAFE_className={classes.notInstalled}>Not installed</Text>}
                 </div>
             </div>
         </Button>
@@ -147,7 +155,9 @@ const RobotCard = ({
 
 export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
     const { activeType, setActiveType } = useRobotForm();
+    const navigate = useNavigate();
     const catalog = useRobotCatalogQuery();
+    const plugins = usePluginsQuery();
     const [role, setRole] = useState<RobotRoleFilter>('all');
     const [showExternal, setShowExternal] = useState(true);
     const [search, setSearch] = useState('');
@@ -168,10 +178,25 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
         categories.set(entry.category, [...(categories.get(entry.category) ?? []), entry]);
     });
 
+    const availablePlugins = plugins.data.filter(
+        (plugin) => !plugin.installed && plugin.robots.length > 0 && (showExternal || plugin.source !== 'external')
+    );
+
     const selectRobot = (type: string) => {
         setActiveType(type);
         close();
     };
+
+    const openPlugins = () => {
+        close();
+        navigate(paths.plugins.index({}));
+    };
+
+    const matchesFilters = (displayName: string, category: string, robotRole: string) =>
+        (role === 'all' || robotRole === role) &&
+        (normalizedSearch === '' ||
+            displayName.toLocaleLowerCase().includes(normalizedSearch) ||
+            category.toLocaleLowerCase().includes(normalizedSearch));
 
     return (
         <Dialog size='L' width={'100%'} height='100%'>
@@ -235,6 +260,45 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
                         </Flex>
                     </View>
                 ))}
+                {availablePlugins.length > 0 && (
+                    <View>
+                        <Flex alignItems='baseline' gap='size-150'>
+                            <Heading level={3}>Available plugins</Heading>
+                            <Text>Install a plugin to add these robots.</Text>
+                        </Flex>
+                        <Flex direction='column' gap='size-200'>
+                            {availablePlugins.map((plugin) => {
+                                const robots = plugin.robots.filter((robot) =>
+                                    matchesFilters(robot.display_name, plugin.category, robot.role)
+                                );
+                                if (robots.length === 0) return null;
+                                return (
+                                    <View key={plugin.id}>
+                                        <Flex alignItems='baseline' gap='size-150'>
+                                            <Heading level={4}>{plugin.category}</Heading>
+                                            <Text>{plugin.description}</Text>
+                                            <Button variant='secondary' onPress={openPlugins}>
+                                                Install plugin
+                                            </Button>
+                                        </Flex>
+                                        <Flex gap='size-200' UNSAFE_className={classes.robotRow}>
+                                            {robots.map((robot) => (
+                                                <RobotCard
+                                                    key={robot.type}
+                                                    entry={robot}
+                                                    category={plugin.category}
+                                                    activeType={undefined}
+                                                    isAvailable
+                                                    onSelect={openPlugins}
+                                                />
+                                            ))}
+                                        </Flex>
+                                    </View>
+                                );
+                            })}
+                        </Flex>
+                    </View>
+                )}
                 {entries.length === 0 && <Text>No robots match the selected filters.</Text>}
             </Content>
         </Dialog>

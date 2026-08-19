@@ -106,8 +106,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
                         const resolvedField = resolveReference(field, definitions);
                         const isRequired =
                             fieldRequired.has(name) || resolvedField['x-physicalai-ui']?.required === true;
-                        if (!isRequired && resolvedField.default !== undefined && !showDefaultFields)
-                            return null;
+                        if (!isRequired && resolvedField.default !== undefined && !showDefaultFields) return null;
 
                         if (resolvedField.properties !== undefined) {
                             return (

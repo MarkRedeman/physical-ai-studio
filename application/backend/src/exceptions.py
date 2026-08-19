@@ -15,6 +15,7 @@ class ResourceType(StrEnum):
     REMOTE_TRAINER = "Remote trainer"
     JOB = "JOB"
     JOB_FILE = "JOB_FILE"
+    PLUGIN = "Plugin"
 
 
 class BaseException(Exception):
@@ -296,5 +297,16 @@ class RobotIdentifyError(BaseException):
         super().__init__(
             message=message,
             error_code="robot_identify_error",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
+
+
+class PluginOperationError(BaseException):
+    """Raised when installing or uninstalling a robot plugin fails."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="plugin_operation_failed",
             http_status=http.HTTPStatus.BAD_REQUEST,
         )

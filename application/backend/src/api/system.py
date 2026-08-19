@@ -3,9 +3,12 @@
 
 """System information endpoints for hardware discovery."""
 
+import os
+import signal
+import threading
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 
 from api.dependencies import get_system_service
 from schemas.hardware import InferenceDeviceInfo, TrainingDevices
@@ -33,3 +36,21 @@ async def get_training_devices(
     are returned so the UI can block training instead of falling back to local CPU.
     """
     return await system_service.get_available_training_devices()
+
+
+@system_router.post("/restart", status_code=status.HTTP_202_ACCEPTED)
+async def restart_server() -> dict[str, str]:
+    """Gracefully restart the server to activate plugin changes.
+
+    Schedules a delayed SIGTERM so the response is flushed first. The process
+    supervisor (e.g. docker ``restart: unless-stopped``) brings the server back.
+    """
+    def _schedule_restart() -> None:
+        import time
+
+        time.sleep(1.0)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    threading.Thread(target=_schedule_restart, daemon=True).start()
+    return {"status": "restarting"}
+

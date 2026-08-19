@@ -1,0 +1,96 @@
+[
+  {
+    "id": "physicalai-rebot-b601-plugin",
+    "name": "ReBot Plugin",
+    "description": "ReBot B601 and Arm102 robot integrations.",
+    "category": "ReBot",
+    "source": "first_party",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@main#subdirectory=packages/physicalai-rebot-b601-plugin",
+    "robots": [
+      {
+        "type": "ReBot_B601_DM_Follower",
+        "display_name": "ReBot B601 DM Follower",
+        "role": "follower"
+      },
+      {
+        "type": "ReBot_Arm102_Leader",
+        "display_name": "ReBot Arm102 Leader",
+        "role": "leader"
+      }
+    ]
+  },
+  {
+    "id": "physicalai-bimanual-so101-plugin",
+    "name": "Bimanual SO-101 Plugin",
+    "description": "Bimanual twin SO-101 arms for learning from demonstration.",
+    "category": "SO101",
+    "source": "first_party",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@main#subdirectory=packages/physicalai-bimanual-so101-plugin",
+    "robots": [
+      {
+        "type": "BimanualSO101_Follower",
+        "display_name": "Bimanual SO101 Follower",
+        "role": "follower"
+      },
+      {
+        "type": "BimanualSO101_Leader",
+        "display_name": "Bimanual SO101 Leader",
+        "role": "leader"
+      }
+    ]
+  },
+  {
+    "id": "physicalai-lekiwi-plugin",
+    "name": "LeKiwi Plugin",
+    "description": "LeKiwi mobile manipulator integration.",
+    "category": "LeKiwi",
+    "source": "first_party",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@main#subdirectory=packages/physicalai-lekiwi-plugin",
+    "robots": [
+      {
+        "type": "LeKiwi_Follower",
+        "display_name": "LeKiwi Follower",
+        "role": "follower"
+      },
+      {
+        "type": "LeKiwi_Leader",
+        "display_name": "LeKiwi Leader",
+        "role": "leader"
+      }
+    ]
+  },
+  {
+    "id": "physicalai-lerobot-plugin",
+    "name": "LeRobot Plugin",
+    "description": "Robot and teleoperator configurations discovered from LeRobot.",
+    "category": "LeRobot",
+    "source": "first_party",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@main#subdirectory=packages/physicalai-lerobot-plugin",
+    "robots": []
+  },
+  {
+    "id": "physicalai-mujoco-so101-plugin",
+    "name": "MuJoCo Plugin",
+    "description": "MuJoCo-backed SO-101 simulation integration.",
+    "category": "MuJoCo",
+    "source": "first_party",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@main#subdirectory=packages/physicalai-mujoco-so101-plugin",
+    "robots": [
+      {
+        "type": "MuJoCo_SO101_Follower",
+        "display_name": "MuJoCo SO101 Follower",
+        "role": "follower"
+      },
+      {
+        "type": "MuJoCo_SO101_Bimanual_Follower",
+        "display_name": "MuJoCo SO101 Bimanual Follower",
+        "role": "follower"
+      }
+    ]
+  }
+]
