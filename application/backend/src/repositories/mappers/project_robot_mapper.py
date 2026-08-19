@@ -18,7 +18,7 @@ class ProjectRobotMapper(IBaseMapper):
         )
 
     @staticmethod
-    def from_schema(model: ProjectRobotDB) -> Robot | UnavailableRobot:
+    def from_schema(model: ProjectRobotDB, catalog_registry: RobotCatalogRegistry) -> Robot | UnavailableRobot:
         """Convert Robot db entity to schema."""
         robot = {
             "id": model.id,
@@ -28,6 +28,6 @@ class ProjectRobotMapper(IBaseMapper):
             "created_at": model.created_at,
             "updated_at": model.updated_at,
         }
-        if RobotCatalogRegistry().get_definition(model.type) is None:
+        if catalog_registry.get_definition(model.type) is None:
             return UnavailableRobot.model_validate(robot)
         return RobotAdapter.validate_python(robot)

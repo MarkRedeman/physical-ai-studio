@@ -18,11 +18,12 @@ from utils.serial_robot_tools import RobotConnectionManager
 
 
 class RobotService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, catalog_registry: RobotCatalogRegistry) -> None:
         self.session = session
+        self.catalog_registry = catalog_registry
 
     def _repo(self, project_id: UUID) -> ProjectRobotRepository:
-        return ProjectRobotRepository(self.session, project_id)
+        return ProjectRobotRepository(self.session, project_id, self.catalog_registry)
 
     async def get_robot_list(self, project_id: UUID) -> list[Robot | UnavailableRobot]:
         return await self._repo(project_id).get_all()
@@ -36,8 +37,6 @@ class RobotService:
         manager = RobotConnectionManager()
         await manager.find_robots()
 
-        registry = RobotCatalogRegistry()
-
         results: list[RobotWithConnectionState | UnavailableRobotWithConnectionState] = []
 
         for robot in robots:
@@ -45,7 +44,7 @@ class RobotService:
                 results.append(UnavailableRobotWithConnectionState(**robot.model_dump()))
                 continue
 
-            definition = registry.get_definition(robot.type)
+            definition = self.catalog_registry.get_definition(robot.type)
             is_online = False
             if definition is not None and definition.probe is not None:
                 is_online = await definition.probe.is_online(robot.payload, manager)
@@ -86,7 +85,7 @@ class RobotService:
             await repo.delete_by_id(robot_id)
         except IntegrityError as e:
             await self.session.rollback()
-            env_repo = ProjectEnvironmentRepository(self.session, project_id)
+            env_repo = ProjectEnvironmentRepository(self.session, project_id, self.catalog_registry)
             environment_names = await env_repo.find_environment_names_using_robot(robot_id)
             if environment_names:
                 raise ResourceInUseError(

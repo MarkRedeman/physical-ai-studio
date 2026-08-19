@@ -76,6 +76,20 @@ class ResourceInUseError(BaseException):
         )
 
 
+class RobotPluginUnavailableError(BaseException):
+    """Raised when a robot's catalog plugin is not installed."""
+
+    def __init__(self, robot_name: str, robot_type: str) -> None:
+        super().__init__(
+            message=(
+                f"Robot '{robot_name}' requires unavailable plugin type '{robot_type}'. "
+                "Reinstall the plugin before connecting."
+            ),
+            error_code="robot_plugin_unavailable",
+            http_status=http.HTTPStatus.CONFLICT,
+        )
+
+
 class ResourceAlreadyExistsError(BaseException):
     """
     Exception raised when a resource already exists.

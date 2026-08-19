@@ -8,6 +8,7 @@ from robots.catalog.widowxai import TrossenBimanualRobot, TrossenSingleArmRobot
 from schemas.robot_type import BaseRobot, RobotType
 
 __all__ = [
+    "ReadableRobot",
     "Robot",
     "RobotAdapter",
     "RobotType",
@@ -35,6 +36,9 @@ class UnavailableRobot(BaseRobot):
     type: str
     payload: dict[str, Any]
     unavailable: Literal[True] = True
+
+
+ReadableRobot = Robot | UnavailableRobot
 
 
 # ============================================================================
