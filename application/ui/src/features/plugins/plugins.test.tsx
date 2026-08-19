@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { http } from '../../../api/utils';
-import { server } from '../../../msw-node-setup';
-import { render } from '../../../test-utils/render';
+import { http } from '../../api/utils';
+import { server } from '../../msw-node-setup';
+import { render } from '../../test-utils/render';
 import { PluginsView } from './plugins';
 
 const installedPlugin = {
@@ -13,13 +13,18 @@ const installedPlugin = {
     name: 'ReBot Plugin',
     description: 'ReBot B601 and Arm102 robot integrations.',
     category: 'ReBot',
-    source: 'first_party',
+    source: 'first_party' as const,
     repo_url: 'https://github.com/example/rebot',
     installed: true,
     installed_version: '0.1.0',
     in_use_robot_count: 0,
     robots: [
-        { type: 'ReBot_B601_DM_Follower', display_name: 'ReBot B601 DM Follower', role: 'follower', installed: true },
+        {
+            type: 'ReBot_B601_DM_Follower',
+            display_name: 'ReBot B601 DM Follower',
+            role: 'follower' as const,
+            installed: true,
+        },
     ],
 };
 
@@ -28,17 +33,49 @@ const availablePlugin = {
     name: 'MuJoCo Plugin',
     description: 'MuJoCo-backed SO-101 simulation integration.',
     category: 'MuJoCo',
-    source: 'first_party',
+    source: 'first_party' as const,
     repo_url: 'https://github.com/example/mujoco',
     installed: false,
     installed_version: null,
     in_use_robot_count: 0,
-    robots: [{ type: 'MuJoCo_SO101_Follower', display_name: 'MuJoCo SO101 Follower', role: 'follower', installed: false }],
+    robots: [
+        {
+            type: 'MuJoCo_SO101_Follower',
+            display_name: 'MuJoCo SO101 Follower',
+            role: 'follower' as const,
+            installed: false,
+        },
+    ],
+};
+
+const lerobotPlugin = {
+    id: 'physicalai-lerobot-plugin',
+    name: 'LeRobot Plugin',
+    description: 'Robot and teleoperator configurations discovered from LeRobot.',
+    category: 'LeRobot',
+    source: 'first_party' as const,
+    repo_url: 'https://github.com/example/lerobot',
+    installed: true,
+    installed_version: '0.1.0',
+    in_use_robot_count: 0,
+    robots: [],
+    extensions: [
+        {
+            id: 'lerobot-teleoperator-spacemouse',
+            name: 'SpaceMouse Teleoperator',
+            description: 'Adds the LeRobot SpaceMouse leader teleoperator.',
+            repo_url: null,
+            installed: false,
+            installed_version: null,
+        },
+    ],
 };
 
 describe('PluginsView', () => {
     it('renders installed and available plugin sections', async () => {
-        server.use(http.get('/api/plugins', () => HttpResponse.json([installedPlugin, availablePlugin])));
+        server.use(
+            http.get('/api/plugins', () => HttpResponse.json([installedPlugin, availablePlugin, lerobotPlugin]))
+        );
 
         render(<PluginsView />, { route: '/plugins', path: '/plugins' });
 
@@ -53,9 +90,7 @@ describe('PluginsView', () => {
     it('shows a restart-required banner after installing a plugin', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
-            http.post('/api/plugins/{plugin_id}/install', () =>
-                HttpResponse.json({ restart_required: true })
-            )
+            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true }))
         );
         const user = userEvent.setup();
 
@@ -63,18 +98,28 @@ describe('PluginsView', () => {
 
         await user.click(await screen.findByRole('button', { name: 'Install' }));
 
-        expect(
-            await screen.findByText('Restart the server to activate the plugin changes.')
-        ).toBeVisible();
+        expect(await screen.findByText('Restart the server to activate the plugin changes.')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Restart server' })).toBeVisible();
     });
 
-    it('disables uninstall for plugins with robots in use', async () => {
+    it('shows extensions for an installed plugin and lets the user install them', async () => {
         server.use(
-            http.get('/api/plugins', () =>
-                HttpResponse.json([{ ...installedPlugin, in_use_robot_count: 2 }])
-            )
+            http.get('/api/plugins', () => HttpResponse.json([lerobotPlugin])),
+            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true }))
         );
+        const user = userEvent.setup();
+
+        render(<PluginsView />, { route: '/plugins', path: '/plugins' });
+
+        expect(await screen.findByRole('heading', { name: 'Extensions' })).toBeVisible();
+        expect(screen.getByText('SpaceMouse Teleoperator')).toBeVisible();
+
+        await user.click(screen.getByRole('button', { name: 'Install' }));
+        expect(await screen.findByText('Restart the server to activate the plugin changes.')).toBeVisible();
+    });
+
+    it('disables uninstall for plugins with robots in use', async () => {
+        server.use(http.get('/api/plugins', () => HttpResponse.json([{ ...installedPlugin, in_use_robot_count: 2 }])));
 
         render(<PluginsView />, { route: '/plugins', path: '/plugins' });
 

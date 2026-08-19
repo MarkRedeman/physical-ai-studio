@@ -36,6 +36,16 @@ def list_plugins() -> None:
             click.echo(f"  Robots: {', '.join(robot.type for robot in info.robots)}")
         else:
             click.echo("  Robots: discovered after install")
+        if info.extensions:
+            click.echo("  Extensions:")
+            for extension in info.extensions:
+                extension_status = "installed" if extension.installed else "available"
+                extension_version = (
+                    f" v{extension.installed_version}" if extension.installed_version else ""
+                )
+                click.echo(
+                    f"    [{extension_status}] {extension.name} ({extension.id}){extension_version}"
+                )
         if info.installed:
             in_use_types_for_plugin = [robot.type for robot in info.robots if robot.type in in_use_types]
             if in_use_types_for_plugin:

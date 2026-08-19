@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 import api.plugins as plugins_api
 import api.system as system_api
-from api.plugins import PluginInfo, PluginManager, PluginRobot, get_plugin_manager
+from api.plugins import PluginExtensionInfo, PluginInfo, PluginManager, PluginRobot, get_plugin_manager
 from main import app
 
 
@@ -15,6 +15,7 @@ def _plugin_info(
     plugin_id: str = "demo-plugin",
     installed: bool = False,
     robots: list[PluginRobot] | None = None,
+    extensions: list[PluginExtensionInfo] | None = None,
 ) -> PluginInfo:
     return PluginInfo(
         id=plugin_id,
@@ -26,6 +27,7 @@ def _plugin_info(
         installed=installed,
         installed_version="1.2.3" if installed else None,
         robots=robots if robots is not None else [],
+        extensions=extensions if extensions is not None else [],
     )
 
 

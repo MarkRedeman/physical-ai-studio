@@ -28,6 +28,16 @@ class ManifestRobot(BaseModel):
     role: Literal["follower", "leader"] = Field(..., description="Default robot role")
 
 
+class PluginExtensionEntry(BaseModel):
+    """An optional add-on installable only when its parent plugin is installed."""
+
+    id: str = Field(..., description="Python distribution name (PyPI normalised)")
+    name: str = Field(..., description="Display name shown in the UI")
+    description: str = Field(default="", description="Short extension description")
+    repo_url: str | None = Field(default=None, description="Project repository URL")
+    install_source: str = Field(..., description="Install spec passed to `uv pip install`")
+
+
 class PluginManifestEntry(BaseModel):
     """A known plugin distribution and the robots it contributes."""
 
@@ -39,6 +49,10 @@ class PluginManifestEntry(BaseModel):
     repo_url: str | None = Field(default=None, description="Project repository URL")
     install_source: str = Field(..., description="Install spec passed to `uv pip install`")
     robots: list[ManifestRobot] = Field(default_factory=list, description="Robot types contributed by the plugin")
+    extensions: list[PluginExtensionEntry] = Field(
+        default_factory=list,
+        description="Optional add-ons gated behind this plugin being installed",
+    )
 
 
 def load_plugin_manifest(path: Path = MANIFEST_PATH) -> list[PluginManifestEntry]:

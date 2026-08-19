@@ -8,13 +8,13 @@ export const usePluginsQuery = () => {
 
 export const useInstallPluginMutation = () => {
     return $api.useMutation('post', '/api/plugins/{plugin_id}/install', {
-        meta: { skipInvalidation: true },
+        meta: { invalidates: [['get', '/api/plugins']] },
     });
 };
 
 export const useUninstallPluginMutation = () => {
     return $api.useMutation('post', '/api/plugins/{plugin_id}/uninstall', {
-        meta: { skipInvalidation: true },
+        meta: { invalidates: [['get', '/api/plugins']] },
     });
 };
 

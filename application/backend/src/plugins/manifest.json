@@ -70,7 +70,58 @@
     "source": "first_party",
     "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
     "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@main#subdirectory=packages/physicalai-lerobot-plugin",
-    "robots": []
+    "robots": [],
+    "extensions": [
+      {
+        "id": "lerobot-robot-so101-slider",
+        "name": "SO101 Slider Robot",
+        "description": "Adds the LeRobot SO-101 slider follower robot.",
+        "repo_url": "https://github.com/pham-tuan-binh/leslider",
+        "install_source": "git+https://github.com/pham-tuan-binh/leslider.git@main#subdirectory=packages/lerobot_robot_so101_slider"
+      },
+      {
+        "id": "lerobot-teleoperator-so101-with-slider",
+        "name": "SO101 Slider Teleoperator",
+        "description": "Adds the LeRobot SO-101-with-slider leader teleoperator.",
+        "repo_url": "https://github.com/pham-tuan-binh/leslider",
+        "install_source": "git+https://github.com/pham-tuan-binh/leslider.git@main#subdirectory=packages/lerobot_teleoperator_so101_with_slider"
+      },
+      {
+        "id": "lerobot-robot-so101-slider-pos",
+        "name": "SO101 Slider Pos Robot",
+        "description": "Adds the LeRobot SO-101 slider-pos follower robot.",
+        "repo_url": "https://github.com/pham-tuan-binh/leslider",
+        "install_source": "git+https://github.com/pham-tuan-binh/leslider.git@main#subdirectory=packages/lerobot_robot_so101_slider_pos"
+      },
+      {
+        "id": "lerobot-teleoperator-so101-with-slider-pos",
+        "name": "SO101 Slider Pos Teleoperator",
+        "description": "Adds the LeRobot SO-101-with-slider-pos leader teleoperator.",
+        "repo_url": "https://github.com/pham-tuan-binh/leslider",
+        "install_source": "git+https://github.com/pham-tuan-binh/leslider.git@main#subdirectory=packages/lerobot_teleoperator_so101_with_slider_pos"
+      },
+      {
+        "id": "lerobot-teleoperator-spacemouse",
+        "name": "SpaceMouse Teleoperator",
+        "description": "Adds the LeRobot SpaceMouse leader teleoperator.",
+        "repo_url": "https://github.com/huggingface/lerobot",
+        "install_source": "lerobot-teleoperator-spacemouse"
+      },
+      {
+        "id": "lerobot-yam",
+        "name": "Yam Robot",
+        "description": "Adds the LeRobot YAMAHA YM2P60 follower robot.",
+        "repo_url": "https://github.com/huggingface/lerobot",
+        "install_source": "lerobot-yam"
+      },
+      {
+        "id": "lerobot-robot-xarm",
+        "name": "xArm Robot",
+        "description": "Adds the LeRobot UFACTORY xArm follower robot.",
+        "repo_url": "https://github.com/huggingface/lerobot",
+        "install_source": "lerobot-robot-xarm"
+      }
+    ]
   },
   {
     "id": "physicalai-mujoco-so101-plugin",

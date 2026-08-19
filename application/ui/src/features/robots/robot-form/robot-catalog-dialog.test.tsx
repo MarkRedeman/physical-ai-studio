@@ -14,8 +14,8 @@ const catalogEntries = [
         type: 'SO101_Follower',
         display_name: 'SO101 Follower',
         category: 'SO101',
-        source: 'internal',
-        role: 'follower',
+        source: 'internal' as const,
+        role: 'follower' as const,
         preview_thumbnail: null,
         urdf_path: '/api/robots/catalog/SO101_Follower/urdf',
         package_map: { SO101: '/api/robots/catalog/SO101_Follower' },
@@ -28,13 +28,18 @@ const availablePlugin = {
     name: 'MuJoCo Plugin',
     description: 'MuJoCo-backed SO-101 simulation integration.',
     category: 'MuJoCo',
-    source: 'first_party',
+    source: 'first_party' as const,
     repo_url: 'https://github.com/example/mujoco',
     installed: false,
     installed_version: null,
     in_use_robot_count: 0,
     robots: [
-        { type: 'MuJoCo_SO101_Follower', display_name: 'MuJoCo SO101 Follower', role: 'follower', installed: false },
+        {
+            type: 'MuJoCo_SO101_Follower',
+            display_name: 'MuJoCo SO101 Follower',
+            role: 'follower' as const,
+            installed: false,
+        },
     ],
 };
 

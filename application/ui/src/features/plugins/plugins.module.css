@@ -4,6 +4,21 @@
     min-height: 180px;
 }
 
+.extensionRow {
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-100);
+    background-color: var(--spectrum-global-color-gray-50);
+}
+
+.extensionDescription {
+    font-size: var(--spectrum-global-dimension-font-size-75);
+}
+
+.extensionHint {
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    color: var(--spectrum-global-color-gray-600);
+}
+
 .robotChip {
     border: 1px solid var(--spectrum-global-color-gray-300);
     border-radius: var(--spectrum-global-dimension-size-100);
