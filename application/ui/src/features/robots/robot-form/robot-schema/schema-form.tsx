@@ -36,6 +36,122 @@ const fieldNamesOwnedByItems = (items: RobotUiItem[]): Set<string> =>
         })
     );
 
+type OnChange = (name: string, value: unknown) => void;
+type IsFieldVisible = (name: string, field: FieldSchema, required: Set<string>) => boolean;
+type IsRenderable = (item: RobotUiItem, properties: Record<string, FieldSchema>, required: Set<string>) => boolean;
+
+type SchemaFormItemProps = SchemaFormItemsProps & {
+    item: RobotUiItem;
+};
+
+type SchemaFormItemsProps = {
+    items: RobotUiItem[];
+    properties: Record<string, FieldSchema>;
+    required: Set<string>;
+    values: Record<string, unknown>;
+    onChange: OnChange;
+    robotType: string;
+    definitions: Record<string, FieldSchema>;
+    isFieldVisible: IsFieldVisible;
+    isRenderable: IsRenderable;
+    renderUnownedFields: boolean;
+};
+
+type SchemaFormFieldProps = Omit<SchemaFormItemsProps, 'items' | 'renderUnownedFields'> & {
+    name: string;
+    field: FieldSchema;
+};
+
+const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
+    if (item.kind === 'info') return <InfoField info={item} />;
+    if (item.kind === 'connection') {
+        return (
+            <ConnectionField
+                robotType={props.robotType}
+                payload={props.values}
+                options={item}
+                onChange={props.onChange}
+            />
+        );
+    }
+    if (item.kind === 'field') {
+        const field = props.properties[item.name];
+        return field === undefined ? null : <SchemaFormField {...props} name={item.name} field={field} />;
+    }
+    if (!props.isRenderable(item, props.properties, props.required)) return null;
+    return (
+        <Flex direction='column' gap='size-150'>
+            {item.title !== undefined && <Heading level={4}>{item.title}</Heading>}
+            {item.description !== undefined && <Text>{item.description}</Text>}
+            <SchemaFormItems {...props} items={item.items} renderUnownedFields={false} />
+        </Flex>
+    );
+};
+
+const SchemaFormItems = ({ items, renderUnownedFields, ...props }: SchemaFormItemsProps) => {
+    const ownedFields = fieldNamesOwnedByItems(items);
+    const unownedFields = Object.entries(props.properties).filter(([name]) => !ownedFields.has(name));
+
+    return (
+        <>
+            {items.map((item, index) => (
+                <SchemaFormItem
+                    {...props}
+                    key={item.kind === 'section' ? item.id : `${item.kind}-${index}`}
+                    item={item}
+                    items={items}
+                    renderUnownedFields={renderUnownedFields}
+                />
+            ))}
+            {renderUnownedFields &&
+                unownedFields.map(([name, field]) => (
+                    <SchemaFormField {...props} key={name} name={name} field={field} />
+                ))}
+        </>
+    );
+};
+
+const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
+    if (!props.isFieldVisible(name, field, props.required)) return null;
+
+    const resolvedField = resolveReference(field, props.definitions);
+    const fieldUi = resolvedField['x-physicalai-ui'];
+    const isRequired = props.required.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
+    if (resolvedField.properties !== undefined) {
+        const nestedItems = isUiItems(fieldUi) ? fieldUi : EMPTY_ITEMS;
+        return (
+            <View backgroundColor='gray-50' borderColor='gray-200' borderWidth='thin' padding='size-150'>
+                <Flex direction='column' gap='size-150'>
+                    <Heading level={4}>{fieldLabel(name, field)}</Heading>
+                    <SchemaFormItems
+                        {...props}
+                        items={nestedItems}
+                        properties={resolvedField.properties}
+                        required={new Set(resolvedField.required ?? [])}
+                        values={asRecord(props.values[name])}
+                        onChange={(nestedName, nestedValue) =>
+                            props.onChange(name, updateObjectField(props.values[name], nestedName, nestedValue))
+                        }
+                        renderUnownedFields
+                    />
+                </Flex>
+            </View>
+        );
+    }
+
+    if (resolvedField.type === 'object') return null;
+
+    return (
+        <SchemaField
+            name={name}
+            schema={resolvedField}
+            value={props.values[name]}
+            isRequired={isRequired}
+            onChange={(value) => props.onChange(name, value)}
+        />
+    );
+};
+
 export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const { activeType, payload, setPayload, updatePayloadField } = useRobotForm();
     const [showDefaultFields, setShowDefaultFields] = useState(false);
@@ -50,119 +166,21 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
         if (Object.keys(defaults).length !== 0) setPayload(defaults);
     }, [definitions, payload, properties, setPayload]);
 
-    const isFieldVisible = (field: FieldSchema, fieldName: string, fieldRequired: Set<string>) => {
+    const isFieldVisible: IsFieldVisible = (name, field, fieldRequired) => {
         const resolvedField = resolveReference(field, definitions);
         const fieldUi = resolvedField['x-physicalai-ui'];
-        const isRequired = fieldRequired.has(fieldName) || (!isUiItems(fieldUi) && fieldUi?.required === true);
+        const isRequired = fieldRequired.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
         if (!isRequired && resolvedField.default !== undefined && !showDefaultFields) return false;
         return resolvedField.type !== 'object' || resolvedField.properties !== undefined;
     };
 
-    const renderField = (
-        name: string,
-        field: FieldSchema,
-        fieldRequired: Set<string>,
-        values: Record<string, unknown>,
-        onChange: (name: string, value: unknown) => void
-    ) => {
-        if (!isFieldVisible(field, name, fieldRequired)) return null;
-
-        const resolvedField = resolveReference(field, definitions);
-        const fieldUi = resolvedField['x-physicalai-ui'];
-        const isRequired = fieldRequired.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
-        if (resolvedField.properties !== undefined) {
-            const nestedItems = isUiItems(fieldUi) ? fieldUi : EMPTY_ITEMS;
-            const nestedProperties = resolvedField.properties ?? EMPTY_PROPERTIES;
-            return (
-                <View key={name} backgroundColor='gray-50' borderColor='gray-200' borderWidth='thin' padding='size-150'>
-                    <Flex direction='column' gap='size-150'>
-                        <Heading level={4}>{fieldLabel(name, field)}</Heading>
-                        {renderItems(
-                            nestedItems,
-                            nestedProperties,
-                            new Set(resolvedField.required ?? []),
-                            asRecord(values[name]),
-                            (nestedName, nestedValue) =>
-                                onChange(name, updateObjectField(values[name], nestedName, nestedValue)),
-                            true
-                        )}
-                    </Flex>
-                </View>
-            );
-        }
-
-        if (resolvedField.type === 'object') return null;
-
-        return (
-            <SchemaField
-                key={name}
-                name={name}
-                schema={resolvedField}
-                value={values[name]}
-                isRequired={isRequired}
-                onChange={(value) => onChange(name, value)}
-            />
-        );
-    };
-
-    const itemIsRenderable = (
-        item: RobotUiItem,
-        itemProperties: Record<string, FieldSchema>,
-        itemRequired: Set<string>
-    ): boolean => {
+    const isRenderable: IsRenderable = (item, itemProperties, itemRequired) => {
         if (item.kind === 'info' || item.kind === 'connection') return true;
         if (item.kind === 'field') {
             const field = itemProperties[item.name];
-            return field !== undefined && isFieldVisible(field, item.name, itemRequired);
+            return field !== undefined && isFieldVisible(item.name, field, itemRequired);
         }
-        return item.items.some((child) => itemIsRenderable(child, itemProperties, itemRequired));
-    };
-
-    const renderItems = (
-        itemList: RobotUiItem[],
-        itemProperties: Record<string, FieldSchema>,
-        itemRequired: Set<string>,
-        values: Record<string, unknown>,
-        onChange: (name: string, value: unknown) => void,
-        renderUnownedFields: boolean
-    ) => {
-        const ownedFields = fieldNamesOwnedByItems(itemList);
-        const unsectionedFields = Object.entries(itemProperties).filter(([name]) => !ownedFields.has(name));
-
-        return (
-            <>
-                {itemList.map((item, index) => {
-                    if (item.kind === 'info') return <InfoField key={`info-${index}`} info={item} />;
-                    if (item.kind === 'connection') {
-                        return (
-                            <ConnectionField
-                                key={`connection-${index}`}
-                                robotType={activeType!}
-                                payload={values}
-                                options={item}
-                                onChange={onChange}
-                            />
-                        );
-                    }
-                    if (item.kind === 'field') {
-                        const field = itemProperties[item.name];
-                        return field === undefined
-                            ? null
-                            : renderField(item.name, field, itemRequired, values, onChange);
-                    }
-                    if (!itemIsRenderable(item, itemProperties, itemRequired)) return null;
-                    return (
-                        <Flex key={item.id} direction='column' gap='size-150'>
-                            {item.title !== undefined && <Heading level={4}>{item.title}</Heading>}
-                            {item.description !== undefined && <Text>{item.description}</Text>}
-                            {renderItems(item.items, itemProperties, itemRequired, values, onChange, false)}
-                        </Flex>
-                    );
-                })}
-                {renderUnownedFields &&
-                    unsectionedFields.map(([name, field]) => renderField(name, field, itemRequired, values, onChange))}
-            </>
-        );
+        return item.items.some((child) => isRenderable(child, itemProperties, itemRequired));
     };
 
     return (
@@ -170,7 +188,18 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
             <Switch isSelected={showDefaultFields} onChange={setShowDefaultFields}>
                 Show default fields
             </Switch>
-            {renderItems(items, properties, required, payload, updatePayloadField, true)}
+            <SchemaFormItems
+                items={items}
+                properties={properties}
+                required={required}
+                values={payload}
+                onChange={updatePayloadField}
+                robotType={activeType!}
+                definitions={definitions}
+                isFieldVisible={isFieldVisible}
+                isRenderable={isRenderable}
+                renderUnownedFields
+            />
         </Flex>
     );
 };
