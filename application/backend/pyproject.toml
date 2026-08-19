@@ -130,14 +130,9 @@ url = "https://download.pytorch.org/whl/xpu"
 explicit = false
 
 [tool.uv.sources]
+physicalai = { git = "https://github.com/openvinotoolkit/physicalai.git", rev = "2528309e55ab6a5f7f71c6dc23b8baae21f80108" }
 physicalai-train = { path = "../../library", editable = true }
-physicalai = { path = "../../../physicalai", editable = true }
 physicalai-studio-plugin = { path = "../plugin", editable = true }
-physicalai-bimanual-so101-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-bimanual-so101-plugin", editable = true }
-physicalai-lekiwi-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-lekiwi-plugin", editable = true }
-physicalai-rebot-b601-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-rebot-b601-plugin", editable = true }
-physicalai-lerobot-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-lerobot-plugin", editable = true }
-physicalai-mujoco-so101-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-mujoco-so101-plugin", editable = true }
 
 # Keep torchao on PyPI for all extras.
 # The XPU index publishes `torchao` local-version wheels (e.g. `+xpu`) that can
@@ -156,10 +151,6 @@ torchvision = [
 ]
 # torch's XPU build depends on triton-xpu transitively; pin its index.
 triton-xpu = { index = "pytorch-xpu" }
-lerobot-robot-so101-slider = { git = "https://github.com/pham-tuan-binh/leslider.git", subdirectory = "packages/lerobot_robot_so101_slider" }
-lerobot-teleoperator-so101-with-slider = { git = "https://github.com/pham-tuan-binh/leslider.git", subdirectory = "packages/lerobot_teleoperator_so101_with_slider" }
-lerobot-robot-so101-slider-pos = { git = "https://github.com/pham-tuan-binh/leslider.git", subdirectory = "packages/lerobot_robot_so101_slider_pos" }
-lerobot-teleoperator-so101-with-slider-pos = { git = "https://github.com/pham-tuan-binh/leslider.git", subdirectory = "packages/lerobot_teleoperator_so101_with_slider_pos" }
 
 [dependency-groups]
 dev = [

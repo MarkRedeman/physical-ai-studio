@@ -6,7 +6,7 @@
     "category": "ReBot",
     "source": "first_party",
     "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "/home/mark/projects/geti/physicalai-rebot-b601-plugin/packages/physicalai-rebot-b601-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@mark/rebase-lerobot-plugin#subdirectory=packages/physicalai-rebot-b601-plugin",
     "robots": [
       {
         "type": "ReBot_B601_DM_Follower",
@@ -27,7 +27,7 @@
     "category": "SO101",
     "source": "first_party",
     "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "/home/mark/projects/geti/physicalai-rebot-b601-plugin/packages/physicalai-bimanual-so101-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@mark/rebase-lerobot-plugin#subdirectory=packages/physicalai-bimanual-so101-plugin",
     "robots": [
       {
         "type": "BimanualSO101_Follower",
@@ -48,7 +48,7 @@
     "category": "LeKiwi",
     "source": "first_party",
     "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "/home/mark/projects/geti/physicalai-rebot-b601-plugin/packages/physicalai-lekiwi-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@mark/rebase-lerobot-plugin#subdirectory=packages/physicalai-lekiwi-plugin",
     "robots": [
       {
         "type": "LeKiwi_Follower",
@@ -69,7 +69,7 @@
     "category": "LeRobot",
     "source": "first_party",
     "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "/home/mark/projects/geti/physicalai-rebot-b601-plugin/packages/physicalai-lerobot-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@mark/rebase-lerobot-plugin#subdirectory=packages/physicalai-lerobot-plugin",
     "robots": [],
     "extensions": [
       {
@@ -130,7 +130,7 @@
     "category": "MuJoCo",
     "source": "first_party",
     "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "/home/mark/projects/geti/physicalai-rebot-b601-plugin/packages/physicalai-mujoco-so101-plugin",
+    "install_source": "git+https://github.com/MarkRedeman/physicalai-rebot-b601-plugin.git@mark/rebase-lerobot-plugin#subdirectory=packages/physicalai-mujoco-so101-plugin",
     "robots": [
       {
         "type": "MuJoCo_SO101_Follower",
