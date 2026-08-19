@@ -11,6 +11,7 @@ import pytest
 
 from repositories.mappers.project_robot_mapper import ProjectRobotMapper
 from robots.catalog.widowxai import TrossenBimanualPayload, TrossenBimanualRobot
+from schemas.robot import UnavailableRobot
 
 
 def _make_bimanual_db_model(robot_type: str):
@@ -77,3 +78,13 @@ class TestProjectRobotMapperBimanual:
 
         assert restored.payload.connection_string_left == "192.168.10.1"
         assert restored.payload.connection_string_right == "192.168.10.2"
+
+    def test_from_schema_preserves_robot_from_unavailable_plugin(self):
+        db_model = _make_bimanual_db_model("MuJoCo_SO101_Follower")
+
+        result = ProjectRobotMapper.from_schema(db_model)
+
+        assert isinstance(result, UnavailableRobot)
+        assert result.type == "MuJoCo_SO101_Follower"
+        assert result.unavailable is True
+        assert result.payload == db_model.payload

@@ -5,7 +5,7 @@ from pydantic import Field, TypeAdapter, create_model
 from robots.catalog.registry import RobotCatalogRegistry
 from robots.catalog.so101 import SO101Robot
 from robots.catalog.widowxai import TrossenBimanualRobot, TrossenSingleArmRobot
-from schemas.robot_type import RobotType
+from schemas.robot_type import BaseRobot, RobotType
 
 __all__ = [
     "Robot",
@@ -16,6 +16,8 @@ __all__ = [
     "SO101Robot",
     "TrossenBimanualRobot",
     "TrossenSingleArmRobot",
+    "UnavailableRobot",
+    "UnavailableRobotWithConnectionState",
 ]
 
 # ============================================================================
@@ -25,6 +27,14 @@ __all__ = [
 _registry = RobotCatalogRegistry()
 Robot = _registry.make_robot_type()
 RobotAdapter: TypeAdapter = _registry.get_robot_adapter()
+
+
+class UnavailableRobot(BaseRobot):
+    """A persisted robot whose catalog plugin is not currently installed."""
+
+    type: str
+    payload: dict[str, Any]
+    unavailable: Literal[True] = True
 
 
 # ============================================================================
@@ -52,3 +62,7 @@ def _with_connection_status(robot_model: type) -> type:
 _connection_state_models = [_with_connection_status(model) for model in _registry.get_robot_types()]
 RobotWithConnectionState: Any = Annotated[_build_union(_connection_state_models), Field(discriminator="type")]
 RobotWithConnectionStateAdapter: TypeAdapter[Any] = TypeAdapter(RobotWithConnectionState)
+
+
+class UnavailableRobotWithConnectionState(UnavailableRobot):
+    connection_status: Literal["unknown"] = "unknown"

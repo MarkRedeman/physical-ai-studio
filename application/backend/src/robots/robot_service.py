@@ -7,7 +7,13 @@ from exceptions import ResourceInUseError, ResourceNotFoundError, ResourceType
 from repositories.project_environment_repo import ProjectEnvironmentRepository
 from repositories.project_robot_repo import ProjectRobotRepository
 from robots.catalog.registry import RobotCatalogRegistry
-from schemas.robot import Robot, RobotWithConnectionState, RobotWithConnectionStateAdapter
+from schemas.robot import (
+    Robot,
+    RobotWithConnectionState,
+    RobotWithConnectionStateAdapter,
+    UnavailableRobot,
+    UnavailableRobotWithConnectionState,
+)
 from utils.serial_robot_tools import RobotConnectionManager
 
 
@@ -18,10 +24,12 @@ class RobotService:
     def _repo(self, project_id: UUID) -> ProjectRobotRepository:
         return ProjectRobotRepository(self.session, project_id)
 
-    async def get_robot_list(self, project_id: UUID) -> list[Robot]:
+    async def get_robot_list(self, project_id: UUID) -> list[Robot | UnavailableRobot]:
         return await self._repo(project_id).get_all()
 
-    async def find_online_robots(self, project_id: UUID) -> list[RobotWithConnectionState]:
+    async def find_online_robots(
+        self, project_id: UUID
+    ) -> list[RobotWithConnectionState | UnavailableRobotWithConnectionState]:
         robots = await self.get_robot_list(project_id)
 
         # Single serial port scan shared across all probes
@@ -30,9 +38,13 @@ class RobotService:
 
         registry = RobotCatalogRegistry()
 
-        results: list[RobotWithConnectionState] = []
+        results: list[RobotWithConnectionState | UnavailableRobotWithConnectionState] = []
 
         for robot in robots:
+            if isinstance(robot, UnavailableRobot):
+                results.append(UnavailableRobotWithConnectionState(**robot.model_dump()))
+                continue
+
             definition = registry.get_definition(robot.type)
             is_online = False
             if definition is not None and definition.probe is not None:
@@ -49,7 +61,7 @@ class RobotService:
 
         return results
 
-    async def get_robot_by_id(self, project_id: UUID, robot_id: UUID) -> Robot:
+    async def get_robot_by_id(self, project_id: UUID, robot_id: UUID) -> Robot | UnavailableRobot:
         robot = await self._repo(project_id).get_by_id(robot_id)
 
         if robot is None:

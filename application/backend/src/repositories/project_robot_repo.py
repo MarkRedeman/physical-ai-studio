@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio.session import AsyncSession
 from db.schema import ProjectRobotDB
 from repositories.base import ProjectBaseRepository
 from repositories.mappers import ProjectRobotMapper
-from schemas.robot import Robot
+from schemas.robot import Robot, UnavailableRobot
 
 
 class ProjectRobotRepository(ProjectBaseRepository):
@@ -18,5 +18,5 @@ class ProjectRobotRepository(ProjectBaseRepository):
         return ProjectRobotMapper.to_schema
 
     @property
-    def from_schema(self) -> Callable[[ProjectRobotDB], Robot]:
+    def from_schema(self) -> Callable[[ProjectRobotDB], Robot | UnavailableRobot]:
         return ProjectRobotMapper.from_schema
