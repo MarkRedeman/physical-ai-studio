@@ -19,6 +19,7 @@ import { clsx } from 'clsx';
 
 import { SchemaPluginResponse, SchemaPluginRobotResponse } from '../../../api/openapi-spec';
 import { ReactComponent as PhysicalAIStudioLogo } from '../../../assets/icons/physicalai-studio-logo.svg';
+import projectThumbnailPlaceholder from '../../../assets/project-thumbnail-placeholder.webp';
 import so101BimanualThumbnail from '../../../assets/thumbnails/BimanualSO101_Follower_thumbnail.png';
 import leKiwiThumbnail from '../../../assets/thumbnails/LeKiwi_Follower_thumbnail.png';
 import leRobotThumbnail from '../../../assets/thumbnails/LeRobot_thumbnail.png';
@@ -122,7 +123,7 @@ const RobotCard = ({
 }) => {
     const thumbnail =
         category === 'LeRobot'
-            ? leRobotThumbnail
+            ? undefined
             : (CATALOG_MANIFEST[category]?.thumbnails?.[entry.type] ??
               ('preview_thumbnail' in entry ? entry.preview_thumbnail : undefined));
 
@@ -139,7 +140,7 @@ const RobotCard = ({
                         <img className={classes.thumbnail} src={thumbnail} alt='' />
                     ) : (
                         <div className={classes.thumbnailFallback}>
-                            <PhysicalAIStudioLogo width={56} height={56} style={{ filter: 'grayscale(100%)' }} />
+                            <img src={projectThumbnailPlaceholder} width={124} height={124} alt='' aria-hidden />
                         </div>
                     )}
                 </div>
@@ -172,9 +173,6 @@ export const RobotCatalogDialog = ({ close }: { close: () => void }) => {
     );
     const categories = new Map<string, typeof entries>();
     entries.forEach((entry) => {
-        // if (entry.category === 'MuJoCo') {
-        //     return;
-        // }
         categories.set(entry.category, [...(categories.get(entry.category) ?? []), entry]);
     });
 
