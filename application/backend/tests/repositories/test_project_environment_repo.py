@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from repositories.project_environment_repo import ProjectEnvironmentRepository
 from robots.catalog.registry import RobotCatalogRegistry
+from schemas.robot import RobotAdapter
 
 
 def _make_robot_db_model(*, robot_id: UUID | None = None, name: str = "Robot") -> MagicMock:
@@ -57,7 +58,10 @@ def test_build_robots_with_teleoperators_skips_missing_robot_and_logs_warning() 
     valid_link.tele_operator_robot_id = None
     valid_link.tele_operator_robot = None
 
-    repo = ProjectEnvironmentRepository(MagicMock(), uuid4(), RobotCatalogRegistry())
+    catalog_registry = MagicMock(spec=RobotCatalogRegistry)
+    catalog_registry.get_definition.return_value = MagicMock()
+    catalog_registry.get_robot_adapter.return_value = RobotAdapter
+    repo = ProjectEnvironmentRepository(MagicMock(), uuid4(), catalog_registry)
 
     with patch("repositories.project_environment_repo.logger.warning") as warning_mock:
         robots = repo._build_robots_with_teleoperators(
@@ -82,7 +86,10 @@ def test_build_robots_with_teleoperators_keeps_teleoperator_id_when_eager_robot_
     link.tele_operator_robot_id = str(teleop_robot_id)
     link.tele_operator_robot = None
 
-    repo = ProjectEnvironmentRepository(MagicMock(), uuid4(), RobotCatalogRegistry())
+    catalog_registry = MagicMock(spec=RobotCatalogRegistry)
+    catalog_registry.get_definition.return_value = MagicMock()
+    catalog_registry.get_robot_adapter.return_value = RobotAdapter
+    repo = ProjectEnvironmentRepository(MagicMock(), uuid4(), catalog_registry)
 
     with patch("repositories.project_environment_repo.logger.warning") as warning_mock:
         robots = repo._build_robots_with_teleoperators(environment_id, [link])

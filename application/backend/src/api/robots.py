@@ -4,7 +4,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 
 from api.dependencies import get_project_id, get_robot_id, get_robot_service
-from schemas.robot import Robot, RobotWithConnectionState, UnavailableRobot, UnavailableRobotWithConnectionState
+from schemas.robot import (
+    ReadableRobot,
+    Robot,
+    RobotWithConnectionState,
+    UnavailableRobot,
+    UnavailableRobotWithConnectionState,
+)
 from services import RobotService
 
 router = APIRouter(prefix="/api/projects/{project_id}/robots", tags=["Project Robots"])
@@ -16,7 +22,7 @@ ProjectID = Annotated[UUID, Depends(get_project_id)]
 async def list_project_robots(
     project_id: ProjectID,
     robot_service: Annotated[RobotService, Depends(get_robot_service)],
-) -> list[Robot | UnavailableRobot]:
+) -> list[ReadableRobot]:
     """Fetch all robots."""
     return await robot_service.get_robot_list(project_id)
 
