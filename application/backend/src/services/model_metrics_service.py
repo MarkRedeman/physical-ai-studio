@@ -67,6 +67,10 @@ class ModelMetricsService:
                         yield ServerSentEvent(data=line.removeprefix("data:").lstrip())
         except httpx.HTTPError as exc:
             logger.warning("Remote metrics stream failed for {}: {}", remote_job_id, exc)
+        except asyncio.CancelledError:
+            logger.debug("Remote metrics stream cancelled for {}", remote_job_id)
+        except GeneratorExit:
+            logger.debug("Remote metrics stream closed for {}", remote_job_id)
 
     @staticmethod
     async def empty_metrics_stream() -> AsyncGenerator[ServerSentEvent]:

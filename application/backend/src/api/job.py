@@ -85,6 +85,9 @@ async def get_model_job_metrics(
 ) -> EventSourceResponse:
     """Get model running metrics if job is a model job"""
     job = await job_service.get_job_by_id(job_id)
+    metrics_path = await model_metrics_service.get_model_job_metrics_path(job)
+    if metrics_path.exists():
+        return EventSourceResponse(model_metrics_service.tail_csv_file(metrics_path))
     if (
         isinstance(job, TrainJob)
         and job.payload.training_target is TrainingTarget.REMOTE
@@ -94,9 +97,6 @@ async def get_model_job_metrics(
         return EventSourceResponse(
             model_metrics_service.tail_remote_csv_file(job.payload.remote_trainer_url, str(job.payload.remote_job_id))
         )
-    metrics_path = await model_metrics_service.get_model_job_metrics_path(job)
-    if metrics_path.exists():
-        return EventSourceResponse(model_metrics_service.tail_csv_file(metrics_path))
     return EventSourceResponse(model_metrics_service.empty_metrics_stream())
 
 

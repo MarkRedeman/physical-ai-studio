@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -36,4 +37,5 @@ def test_metrics_stream_uses_studio_csv_shape(tmp_path, monkeypatch) -> None:
     response = TestClient(app).get(f"/jobs/{job_id}/metrics")
 
     assert response.status_code == 200
-    assert 'data: {"epoch": 0, "step": 4, "train_loss": 0.25}' in response.text
+    data = next(line.removeprefix("data: ") for line in response.text.splitlines() if line.startswith("data: "))
+    assert json.loads(data) == {"epoch": 0, "step": 4, "train_loss": 0.25}

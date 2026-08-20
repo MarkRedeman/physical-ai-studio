@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID  # noqa: TC003
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from loguru import logger
@@ -326,12 +327,12 @@ async def job_metrics(job_id: ResolvedJob, request: Request) -> EventSourceRespo
                 return
             await asyncio.sleep(0.5)
 
-        with path.open(encoding="utf-8") as metrics_file:
+        async with await anyio.open_file(path, encoding="utf-8") as metrics_file:
             header_line = ""
             while not header_line:
                 if await request.is_disconnected():
                     return
-                header_line = metrics_file.readline()
+                header_line = await metrics_file.readline()
                 if header_line:
                     break
                 state = manager.store.get(job_id.id)
@@ -342,7 +343,7 @@ async def job_metrics(job_id: ResolvedJob, request: Request) -> EventSourceRespo
             while True:
                 if await request.is_disconnected():
                     return
-                line = metrics_file.readline()
+                line = await metrics_file.readline()
                 if line:
                     row = next(csv.reader([line]))
                     data = {key: _parse_metric_value(value) for key, value in zip(headers, row, strict=False)}
