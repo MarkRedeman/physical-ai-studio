@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from physicalai_studio_plugin import RobotCatalogDefinition
+from pydantic import BaseModel
 
 from repositories.mappers.project_robot_mapper import ProjectRobotMapper
 from robots.catalog.registry import RobotCatalogRegistry
@@ -89,3 +91,24 @@ class TestProjectRobotMapperBimanual:
         assert result.type == "MuJoCo_SO101_Follower"
         assert result.unavailable is True
         assert result.payload == db_model.payload
+
+    def test_from_schema_uses_the_injected_registry_adapter(self):
+        class PluginPayload(BaseModel):
+            connection_string: str
+
+        registry = RobotCatalogRegistry()
+        registry.register_robot(
+            RobotCatalogDefinition(
+                type="Test_Plugin_Robot",
+                display_name="Test Plugin Robot",
+                role="follower",
+                robot_payload=PluginPayload,
+            )
+        )
+        db_model = _make_bimanual_db_model("Test_Plugin_Robot")
+        db_model.payload = {"connection_string": "test://robot"}
+
+        result = ProjectRobotMapper.from_schema(db_model, registry)
+
+        assert result.type == "Test_Plugin_Robot"
+        assert result.payload.connection_string == "test://robot"

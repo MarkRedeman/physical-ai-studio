@@ -105,7 +105,7 @@ interface RobotViewerProps {
 export const UnavailableRobotViewer = ({ robotType }: { robotType: string }) => (
     <div className={classes.viewer}>
         <div className={classes.canvas}>
-            <div className={classes.errorOverlay}>
+            <div className={classes.errorOverlay} role='alert'>
                 <span>
                     Plugin unavailable: reinstall <strong>{robotType}</strong> to view or interact with this robot.
                 </span>

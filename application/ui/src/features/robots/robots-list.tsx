@@ -107,7 +107,7 @@ export const ConnectionStatus = ({
 
     return (
         <StatusLight
-            variant={status === 'online' ? 'positive' : status == 'unknown' ? 'notice' : 'negative'}
+            variant={status === 'online' ? 'positive' : status === 'unknown' ? 'notice' : 'negative'}
             UNSAFE_className={classes.connectionStatus}
         >
             {isUnavailable ? (
