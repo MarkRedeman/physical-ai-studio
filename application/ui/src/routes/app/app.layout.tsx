@@ -32,7 +32,7 @@ export const AppLayout = () => {
         >
             <Grid
                 areas={['sidebar content', 'footer footer']}
-                rows={['minmax(0, 1fr)', 'var(--spectrum-global-dimension-size-400)']}
+                rows={['minmax(0, 1fr)', 'size-400']}
                 columns={['size-3000', 'minmax(0, 1fr)']}
                 minHeight={0}
                 height='100%'
