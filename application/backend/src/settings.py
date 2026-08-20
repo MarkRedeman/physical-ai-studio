@@ -56,6 +56,14 @@ class HuggingFaceSettings(BaseModel):
 
     hf_token: SecretStr | None = Field(default=None)
 
+    @field_validator("hf_token", mode="before")
+    @classmethod
+    def empty_token_is_unset(cls, value: str | None) -> str | None:
+        """Treat an empty form submission as removal of the stored token."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
 
 _USER_CONFIG_GROUPS: tuple[str, ...] = ("trainer", "huggingface")
 

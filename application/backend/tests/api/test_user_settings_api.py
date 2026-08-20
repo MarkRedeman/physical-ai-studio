@@ -46,3 +46,14 @@ def test_patch_settings_clears_huggingface_token(monkeypatch, tmp_path: Path) ->
 
     assert response.status_code == 200
     assert get_settings().huggingface.hf_token is None
+
+
+def test_patch_empty_huggingface_token_clears_setting(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+    write_user_settings({"huggingface": {"hf_token": "super-secret"}})
+
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"huggingface": {"hf_token": ""}})
+
+    assert response.status_code == 200
+    assert get_settings().huggingface.hf_token is None

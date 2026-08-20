@@ -1,7 +1,9 @@
 import { useState } from 'react';
 
+import { ActionButton, Flex, Icon, TextField } from '@geti-ui/ui';
+import { Close } from '@geti-ui/ui/icons';
+
 import { SchemaHuggingFaceSettings, SchemaSettingsUpdate } from '../../../api/openapi-spec';
-import { SecretChange, SecretField } from './secret-field';
 import { SettingsSection } from './settings-section';
 import { useSettingsPatch } from './use-settings-patch';
 
@@ -9,38 +11,73 @@ type HuggingFaceSettingsFormProps = { huggingface: SchemaHuggingFaceSettings };
 
 export const HuggingFaceSettingsForm = ({ huggingface }: HuggingFaceSettingsFormProps) => {
     const patchMutation = useSettingsPatch();
-    const [token, setToken] = useState<SecretChange>({ draft: '', remove: false });
+    const [token, setToken] = useState('');
     const [saved, setSaved] = useState(false);
-    const dirty = token.draft !== '' || token.remove;
+    const isSet = huggingface.hf_token != null;
 
     const save = () => {
         const body: SchemaSettingsUpdate = {
-            huggingface: {
-                hf_token: token.remove ? null : token.draft === '' ? undefined : token.draft,
-            },
+            huggingface: { hf_token: token },
         };
         patchMutation.mutate(
             { body },
             {
                 onSuccess: () => {
-                    setToken({ draft: '', remove: false });
+                    setToken('');
                     setSaved(true);
                 },
             }
         );
     };
 
+    const clear = () => {
+        patchMutation.mutate({ body: { huggingface: { hf_token: null } } }, { onSuccess: () => setSaved(true) });
+    };
+
     return (
         <SettingsSection
             title='Hugging Face'
             description='Token used to authenticate downloads of pretrained training assets.'
-            isDirty={dirty}
+            isDirty={!isSet && token !== ''}
             isPending={patchMutation.isPending}
             saved={saved}
             error={patchMutation.error}
             onSave={save}
         >
-            <SecretField label='Hugging Face token' isSet={huggingface.hf_token != null} onChange={setToken} />
+            {isSet ? (
+                <Flex alignItems='end' gap='size-100'>
+                    <TextField
+                        label='Hugging Face token'
+                        value={'hf_**********************************'}
+                        isReadOnly
+                        width='100%'
+                    />
+                    <ActionButton
+                        aria-label='Clear Hugging Face token'
+                        isQuiet
+                        onPress={clear}
+                        isDisabled={patchMutation.isPending}
+                    >
+                        <Icon>
+                            <Close />
+                        </Icon>
+                    </ActionButton>
+                </Flex>
+            ) : (
+                <TextField
+                    label='Hugging Face token'
+                    type='password'
+                    value={token}
+                    onChange={setToken}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            save();
+                        }
+                    }}
+                    width='100%'
+                />
+            )}
         </SettingsSection>
     );
 };
