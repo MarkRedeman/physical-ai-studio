@@ -45,6 +45,7 @@ class LocalTrainingBackend:
         spec = build_spec(context)
         spec.run_options = RunOptions(
             resume_from=_resume_checkpoint(context),
+            logger=get_settings().logger,
             hf_token=resolve_hf_token(),
         )
         await asyncio.to_thread(

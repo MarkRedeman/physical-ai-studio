@@ -121,7 +121,21 @@ class HotkeySettings(BaseModel):
     bindings: dict[str, str] = Field(default_factory=dict)
 
 
-_USER_CONFIG_GROUPS: tuple[str, ...] = ("trainer", "huggingface", "hotkeys")
+class LoggerSettings(BaseModel):
+    """Training-run Lightning logger configuration."""
+
+    providers: list[Literal["csv", "tensorboard", "wandb"]] = Field(default=["csv"])
+    wandb_project: str | None = Field(default=None)
+    wandb_entity: str | None = Field(default=None)
+    wandb_api_key: SecretStr | None = Field(default=None)
+
+    @field_validator("providers")
+    @classmethod
+    def dedupe_providers(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value)) or ["csv"]
+
+
+_USER_CONFIG_GROUPS: tuple[str, ...] = ("trainer", "huggingface", "logger", "hotkeys")
 
 
 def _storage_key(field_name: str) -> str:
@@ -290,6 +304,8 @@ class Settings(BaseSettings):
     huggingface: HuggingFaceSettings = HuggingFaceSettings()
     # User-configurable keyboard shortcut bindings.
     hotkeys: HotkeySettings = HotkeySettings()
+    # User-configurable training-run loggers.
+    logger: LoggerSettings = LoggerSettings()
 
     # Managed SSH trainers require a loopback-bound backend; see
     # `core.security.ssh_network_exposure`. The UI warns that SSH access has
