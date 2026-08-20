@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, JsonConfigSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
 
 
@@ -51,7 +51,13 @@ class TrainerClientSettings(BaseModel):
     stream_reconnect_backoff_max_s: float = Field(default=30.0)
 
 
-_USER_CONFIG_GROUPS: tuple[str, ...] = ("trainer",)
+class HuggingFaceSettings(BaseModel):
+    """Hugging Face credentials for authenticated training downloads."""
+
+    hf_token: SecretStr | None = Field(default=None)
+
+
+_USER_CONFIG_GROUPS: tuple[str, ...] = ("trainer", "huggingface")
 
 
 class UserConfigSettingsSource(JsonConfigSettingsSource):
@@ -142,6 +148,8 @@ class Settings(BaseSettings):
 
     # User-configurable client-side remote trainer timeouts.
     trainer: TrainerClientSettings = TrainerClientSettings()
+    # User-configurable Hugging Face credentials.
+    huggingface: HuggingFaceSettings = HuggingFaceSettings()
 
     # Server
     host: str = Field(default="0.0.0.0", alias="HOST")  # noqa: S104 # nosec B104
@@ -196,7 +204,7 @@ def write_user_settings(data: dict[str, Any]) -> None:
     fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="settings.", suffix=".json.tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
-            json.dump(filtered, tmp_file, indent=2)
+            json.dump(filtered, tmp_file, indent=2, default=_plain_secret_str)
             tmp_file.write("\n")
             tmp_file.flush()
             os.fsync(tmp_file.fileno())
@@ -207,6 +215,13 @@ def write_user_settings(data: dict[str, Any]) -> None:
         except OSError:
             pass
         raise
+
+
+def _plain_secret_str(value: Any) -> Any:
+    """Serialize SecretStr values as plaintext in the local settings file."""
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return value
 
 
 def load_user_settings_file() -> dict[str, Any]:

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import settings as settings_module
-from settings import Settings, get_default_storage_dir, merge_user_settings
+from settings import Settings, get_default_storage_dir, load_user_settings_file, merge_user_settings
 
 
 def test_default_storage_dir_uses_xdg_data_home(monkeypatch, tmp_path: Path) -> None:
@@ -64,3 +64,14 @@ def test_trainer_settings_patch_keeps_omitted_values(monkeypatch, tmp_path: Path
     settings = Settings()
     assert settings.trainer.request_timeout_s == 5.0
     assert settings.trainer.download_read_timeout_s == 10.0
+
+
+def test_huggingface_token_is_loaded_from_json(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+
+    merge_user_settings({"huggingface": {"hf_token": "hf_example"}})
+
+    settings = Settings()
+    assert settings.huggingface.hf_token is not None
+    assert settings.huggingface.hf_token.get_secret_value() == "hf_example"
+    assert load_user_settings_file() == {"huggingface": {"hf_token": "hf_example"}}
