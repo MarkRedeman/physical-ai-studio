@@ -1,16 +1,31 @@
 # Copyright (C) 2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-"""Application configuration management"""
+"""Application configuration management.
 
+Settings come from (highest precedence first):
+
+1. ``settings.json`` — a JSON config file under the storage directory (or
+   ``SETTINGS_FILE``), editable by hand or through the settings API/UI.
+2. Environment variables / ``.env`` — for the flat, environment-only fields
+   below (server, storage, database, ...).
+3. Field defaults.
+
+The user-configurable groups (``streaming``, ``trainer``, ``huggingface``,
+``logger``) are configured exclusively through ``settings.json`` (and the
+settings API/UI); they are not read from environment variables. There is no
+migration of legacy flat settings formats.
+"""
+
+import json
 import os
 import sys
-from functools import lru_cache
+import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, JsonConfigSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
 
 
 def get_default_storage_dir() -> Path:
@@ -31,6 +46,84 @@ def get_default_storage_dir() -> Path:
             return xdg_data_home_path / "physicalai"
 
     return Path("~/.local/share/physicalai").expanduser()
+
+
+def get_settings_file_path() -> Path:
+    """Return the path to the user-configurable ``settings.json`` file.
+
+    Overridable with the ``SETTINGS_FILE`` environment variable; defaults to a
+    ``settings.json`` next to the application's persistent data.
+    """
+    override = os.environ.get("SETTINGS_FILE")
+    if override:
+        return Path(override).expanduser()
+    return get_default_storage_dir() / "settings.json"
+
+
+class StreamingSettings(BaseModel):
+    """Streaming video-encoding settings for dataset recordings."""
+
+    vcodec: str = Field(default="auto", description="FFmpeg video codec, or 'auto' to probe for one.")
+    pix_fmt: str | None = Field(default=None, description="Pixel format; None lets the encoder pick.")
+    crf: int | float | None = Field(default=None, description="Constant-rate-factor (quality).")
+    preset: int | str | None = Field(default=None, description="Encoder preset.")
+    extra_options: dict[str, Any] | None = Field(default=None, description="Extra FFmpeg encoder options.")
+    encoder_threads: int | None = Field(default=None, description="Threads for the video encoder.")
+    encoder_queue_maxsize: int = Field(default=60, description="Max queued frames for the encoder.")
+
+
+class TrainerClientSettings(BaseModel):
+    """Client-side timeouts for talking to a remote trainer service."""
+
+    # Seconds to wait for trainer HTTP requests (excludes long-poll/SSE streams).
+    request_timeout_s: float = Field(default=30.0)
+    # Seconds to wait between chunks while streaming the model artifact. A stalled
+    # transfer (e.g. a proxy holding the connection open) must fail instead of
+    # hanging the job forever; this is a per-read gap, not a total transfer cap.
+    download_read_timeout_s: float = Field(default=120.0)
+    # Stop reconnecting after this continuous trainer outage.
+    stream_reconnect_max_s: float = Field(default=900.0)
+    # Upper bound on the exponential backoff between event-stream reconnect attempts.
+    stream_reconnect_backoff_max_s: float = Field(default=30.0)
+
+
+class HuggingFaceSettings(BaseModel):
+    """Hugging Face credentials used when training pulls pretrained assets."""
+
+    hf_token: SecretStr | None = Field(default=None, description="Hugging Face token for authenticated downloads.")
+
+
+class LoggerSettings(BaseModel):
+    """Training-run logging (Lightning logger) configuration."""
+
+    providers: list[Literal["csv", "tensorboard", "wandb"]] = Field(
+        default=["csv"],
+        description="Loggers to enable for training runs. Multiple providers run simultaneously.",
+    )
+    wandb_project: str | None = Field(default=None, description="W&B project name when 'wandb' is in providers.")
+    wandb_entity: str | None = Field(default=None, description="W&B entity/team when 'wandb' is in providers.")
+    wandb_api_key: SecretStr | None = Field(default=None, description="W&B API key when 'wandb' is in providers.")
+
+    @field_validator("providers", mode="after")
+    @classmethod
+    def dedupe_providers(cls, value: list[str]) -> list[str]:
+        """Remove duplicates, preserving order, and treat an empty list as CSV."""
+        deduped = list(dict.fromkeys(value))
+        if not deduped:
+            deduped = ["csv"]
+        return deduped
+
+
+#: Nested settings groups that are user-configurable via settings.json / the API.
+_USER_CONFIG_GROUPS: tuple[str, ...] = ("streaming", "trainer", "huggingface", "logger")
+
+
+class UserConfigSettingsSource(JsonConfigSettingsSource):
+    """JSON settings source restricted to the user-configurable groups."""
+
+    def __call__(self) -> dict[str, Any]:
+        data: dict[str, Any] = super().__call__()
+        return {key: value for key, value in data.items() if key in _USER_CONFIG_GROUPS}
 
 
 class Settings(BaseSettings):
@@ -111,31 +204,19 @@ class Settings(BaseSettings):
         """Storage directory for logs."""
         return self.storage_dir / "logs"
 
-    # Remote training
-    # Seconds to wait for trainer HTTP requests (excludes long-poll/SSE streams).
-    trainer_request_timeout_s: float = Field(default=30.0, alias="TRAINER_REQUEST_TIMEOUT_S")
-    # Seconds to wait between chunks while streaming the model artifact. A stalled
-    # transfer (e.g. a proxy holding the connection open) must fail instead of
-    # hanging the job forever; this is a per-read gap, not a total transfer cap.
-    trainer_download_read_timeout_s: float = Field(default=120.0, alias="TRAINER_DOWNLOAD_READ_TIMEOUT_S")
-    # Stop reconnecting after this continuous trainer outage.
-    trainer_stream_reconnect_max_s: float = Field(default=900.0, alias="TRAINER_STREAM_RECONNECT_MAX_S")
-    # Upper bound on the exponential backoff between event-stream reconnect attempts.
-    trainer_stream_reconnect_backoff_max_s: float = Field(default=30.0, alias="TRAINER_STREAM_RECONNECT_BACKOFF_MAX_S")
+    # User-configurable groups (editable via settings.json / the settings API).
+    # Streaming video encoding.
+    streaming: StreamingSettings = StreamingSettings()
+    # Client-side timeouts for the remote trainer connection.
+    trainer: TrainerClientSettings = TrainerClientSettings()
+    # Hugging Face credentials.
+    huggingface: HuggingFaceSettings = HuggingFaceSettings()
+    # Training-run logging.
+    logger: LoggerSettings = LoggerSettings()
 
     # Server
     host: str = Field(default="0.0.0.0", alias="HOST")  # noqa: S104 # nosec B104
     port: int = Field(default=7860, alias="PORT")
-
-    # Video encoding
-    # Passed through to lerobot's RGBEncoderConfig when building recordings.
-    streaming_vcodec: str = Field(default="auto", alias="STREAMING_VCODEC")
-    streaming_pix_fmt: str | None = Field(default=None, alias="STREAMING_PIX_FMT")
-    streaming_crf: int | float | None = Field(default=None, alias="STREAMING_CRF")
-    streaming_preset: int | str | None = Field(default=None, alias="STREAMING_PRESET")
-    streaming_extra_options: dict[str, Any] | None = Field(default=None, alias="STREAMING_EXTRA_OPTIONS")
-    streaming_encoder_threads: int | None = Field(default=None, alias="STREAMING_ENCODER_THREADS")
-    streaming_encoder_queue_maxsize: int = Field(default=60, alias="STREAMING_ENCODER_QUEUE_MAXSIZE")
 
     # Database
     database_file: str = Field(default="physicalai.db", alias="DATABASE_FILE", description="Database filename")
@@ -159,8 +240,106 @@ class Settings(BaseSettings):
         """Get synchronous database URL"""
         return f"sqlite:///{self.data_dir / self.database_file}"
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Wire the settings sources: init kwargs > settings.json > env > .env.
 
-@lru_cache
+        The JSON config file is read on every construction so UI changes are
+        picked up at point of use without a restart.
+        """
+        return (
+            init_settings,
+            UserConfigSettingsSource(settings_cls, json_file=get_settings_file_path()),
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
+
+
+def write_user_settings(data: dict[str, Any]) -> None:
+    """Atomically persist user-configurable settings to ``settings.json``.
+
+    Only the user-configurable groups are written; unknown keys are dropped.
+    The write is atomic (temp file + rename) so a crash never leaves a
+    truncated file behind.
+    """
+    path = get_settings_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    filtered = {key: value for key, value in data.items() if key in _USER_CONFIG_GROUPS and value is not None}
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="settings.", suffix=".json.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+            json.dump(filtered, tmp_file, indent=2, default=_plain_secret_str)
+            tmp_file.write("\n")
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _plain_secret_str(value: Any) -> Any:
+    """Serialize ``SecretStr`` values as their plaintext for the config file."""
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return value
+
+
+def load_user_settings_file() -> dict[str, Any]:
+    """Return the raw ``settings.json`` contents as a dict of groups.
+
+    Returns ``{}`` when the file is missing or unreadable, so merge operations
+    degrade gracefully instead of failing on a corrupt file.
+    """
+    path = get_settings_file_path()
+    if not path.exists():
+        return {}
+    try:
+        with path.open(encoding="utf-8") as settings_file:
+            data = json.load(settings_file)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def merge_user_settings(patch: dict[str, Any]) -> None:
+    """Apply a partial patch to ``settings.json``, keeping unspecified values.
+
+    Only the groups and fields present in ``patch`` are touched:
+    * a missing group keeps its current value;
+    * a group mapped to ``None`` removes that group entirely;
+    * a field mapped to ``None`` clears it;
+    * anything else overwrites the field.
+    Unknown keys are dropped.
+    """
+    current = load_user_settings_file()
+    for group in _USER_CONFIG_GROUPS:
+        if group not in patch:
+            continue
+        value = patch[group]
+        if value is None:
+            current.pop(group, None)
+        elif isinstance(value, dict):
+            current.setdefault(group, {}).update(value)
+    write_user_settings(current)
+
+
 def get_settings() -> Settings:
-    """Get cached application settings"""
+    """Return the application settings, freshly resolved from all sources.
+
+    Not cached: the settings file is small, and consumers call this at point of
+    use so that changes made through the settings API take effect without a
+    restart (including in worker processes).
+    """
     return Settings()

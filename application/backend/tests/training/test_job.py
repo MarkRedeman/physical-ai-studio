@@ -13,15 +13,18 @@ is mocked out; it is not under test.
 from __future__ import annotations
 
 import gc
+import os
 import weakref
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from lightning.pytorch.loggers import CSVLogger
 from physicalai.export import ExportablePolicyMixin, ExportBackend
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
-from training import TrainingJobSpec
+from settings import LoggerSettings
+from training import RunOptions, TrainingJobSpec
 from training.job import CHECKPOINT_NAME, EXPORTS_DIRNAME, PRETRAINED_BASE_CHECKPOINTS, build_policy, run_training_job
 
 JOB = "training.job"
@@ -183,6 +186,63 @@ def _run(
 
 
 class TestRunTrainingJob:
+    def test_run_options_select_logger_and_export_hf_token(self, tmp_path: Path, monkeypatch) -> None:
+        """Runner-local options ride on the spec: logger config and HF token."""
+        spec = TrainingJobSpec(
+            policy="act",
+            run_options=RunOptions(
+                resume_from=tmp_path / CHECKPOINT_NAME,
+                logger=LoggerSettings(providers=["csv"]),
+                hf_token=SecretStr("hf-test-token"),
+            ),
+        )
+
+        original = os.environ.get("HF_TOKEN")
+        hf_token_seen = None
+        try:
+            with (
+                patch("physicalai.data.LeRobotDataModule"),
+                patch(f"{JOB}.build_policy"),
+                patch("physicalai.train.trainer.Trainer") as trainer_class,
+            ):
+                run_training_job(
+                    spec,
+                    dataset_root=tmp_path / "snapshot",
+                    output_dir=tmp_path / "model",
+                    cache_dir=tmp_path / "cache" / "job",
+                    report=MagicMock(),
+                    should_stop=lambda: False,
+                )
+                hf_token_seen = os.environ.get("HF_TOKEN")
+        finally:
+            if original is None:
+                os.environ.pop("HF_TOKEN", None)
+            else:
+                os.environ["HF_TOKEN"] = original
+
+        assert hf_token_seen == "hf-test-token"
+        assert isinstance(trainer_class.call_args.kwargs["logger"], CSVLogger)
+
+    def test_spec_default_run_options_use_csv_logger_and_no_token(self, tmp_path: Path, monkeypatch) -> None:
+        spec = TrainingJobSpec(policy="act")
+
+        with (
+            patch("physicalai.data.LeRobotDataModule"),
+            patch(f"{JOB}.build_policy"),
+            patch("physicalai.train.trainer.Trainer") as trainer_class,
+        ):
+            run_training_job(
+                spec,
+                dataset_root=tmp_path / "snapshot",
+                output_dir=tmp_path / "model",
+                cache_dir=tmp_path / "cache" / "job",
+                report=MagicMock(),
+                should_stop=lambda: False,
+            )
+
+        assert isinstance(trainer_class.call_args.kwargs["logger"], CSVLogger)
+        assert not spec.run_options.hf_token
+
     def test_trainer_is_configured_from_the_spec(self, tmp_path: Path) -> None:
         spec = TrainingJobSpec(
             policy="act",

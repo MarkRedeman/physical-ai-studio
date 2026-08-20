@@ -31,11 +31,15 @@ from __future__ import annotations
 
 import gc
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
+
+from settings import LoggerSettings  # runtime use: pydantic resolves field types
+from training.logging import build_training_logger
 
 if TYPE_CHECKING:
     from physicalai.policies.base import Policy
@@ -65,13 +69,35 @@ _COMPILED_EXPORT_RELOAD_POLICIES = frozenset({"act", "smolvla"})
 """Policies that cannot be exported while ``torch.compile``d, so are reloaded first."""
 
 
+class RunOptions(BaseModel):
+    """Runner-local controls for one training run, carried on the spec.
+
+    Unlike the fields of :class:`TrainingJobSpec`, these are not about *what*
+    to train: they configure how the run executes — which checkpoint to
+    continue from, which loggers to enable, and any Hugging Face token for
+    authenticated downloads. They are populated by the caller (e.g. the local
+    training backend) and consumed by :func:`run_training_job`.
+    """
+
+    resume_from: Path | str | None = Field(default=None, description="Checkpoint to continue training from.")
+    logger: LoggerSettings | None = Field(
+        default=None,
+        description="Logger configuration. None uses a CSVLogger; see training.logging.build_training_logger.",
+    )
+    hf_token: SecretStr | None = Field(
+        default=None,
+        description="Hugging Face token for authenticated downloads of pretrained assets.",
+    )
+
+
 class TrainingJobSpec(BaseModel):
     """Everything needed to train one policy, and nothing else.
 
-    Deliberately free of paths, identifiers, and transport concerns: this is
-    the shared contract between an in-process runner and a remote trainer, so
-    it must describe *what* to train rather than *where*. Runner-local
-    concerns (dataset location, output location, resume checkpoint) are
+    Deliberately free of transport concerns (dataset location, output
+    location) and execution concerns (the user-configurable run options live
+    in :attr:`run_options`): this is the shared contract between an in-process
+    runner and a remote trainer, so it must describe *what* to train rather
+    than *where* or *how it executes locally*. Output destinations are
     arguments to :func:`run_training_job`.
 
     Example:
@@ -102,6 +128,10 @@ class TrainingJobSpec(BaseModel):
         default=None,
         ge=0,
         description="Zero-based index of the accelerator to train on. None lets Lightning pick one.",
+    )
+    run_options: RunOptions = Field(
+        default_factory=RunOptions,
+        description="Runner-local controls for this run (resume checkpoint, loggers, HF token).",
     )
 
 
@@ -138,7 +168,6 @@ def run_training_job(
     cache_dir: Path | str,
     report: ReportFn,
     should_stop: StopFn,
-    resume_from: Path | str | None = None,
 ) -> None:
     """Train one policy end to end: fit, checkpoint, and export.
 
@@ -166,23 +195,26 @@ def run_training_job(
     on top of that.
 
     Args:
-        spec: What to train.
+        spec: What to train, including any :class:`RunOptions`.
         dataset_root: Local root of the LeRobot dataset to train on.
         output_dir: Destination for the trained model. Replaced if it exists.
         cache_dir: Scratch directory for checkpoints and logs during training;
             moved to ``output_dir`` on success.
         report: Telemetry sink, called with ``(progress, message, extra_info)``.
         should_stop: Cooperative cancellation probe.
-        resume_from: Checkpoint to continue training from, e.g. a previously
-            trained model's ``model.ckpt``. None trains from scratch.
     """
     from lightning.pytorch.callbacks import ModelCheckpoint
-    from lightning.pytorch.loggers import CSVLogger
     from physicalai.data import LeRobotDataModule
     from physicalai.train.callbacks import ProgressReportingCallback
     from physicalai.train.trainer import Trainer
 
     from training.device import resolve_accelerator, resolve_devices, resolve_strategy
+
+    run_options = spec.run_options
+    resume_from = run_options.resume_from
+    hf_token = run_options.hf_token.get_secret_value() if run_options.hf_token is not None else None
+    if hf_token is not None:
+        os.environ["HF_TOKEN"] = hf_token
 
     accelerator = resolve_accelerator(spec.device_type)
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
@@ -197,8 +229,15 @@ def run_training_job(
     )
     policy = build_policy(spec, resume_from=resume_from)
 
+    if run_options.logger is not None:
+        run_logger = build_training_logger(run_options.logger, log_root=cache_dir.parent, run_name=cache_dir.stem)
+    else:
+        from lightning.pytorch.loggers import CSVLogger
+
+        run_logger = CSVLogger(cache_dir.parent, name=cache_dir.stem)
+
     trainer = Trainer(
-        logger=CSVLogger(cache_dir.parent, name=cache_dir.stem),
+        logger=run_logger,
         callbacks=[
             ModelCheckpoint(
                 dirpath=cache_dir,

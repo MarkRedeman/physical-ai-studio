@@ -22,6 +22,7 @@ from loguru import logger
 
 from schemas.job import _DEFAULT_MAX_EPOCHS
 from services.training_backends._log_format import render_progress_log
+from settings import get_settings
 
 if TYPE_CHECKING:
     from physicalai.train.callbacks import ReportFn
@@ -35,20 +36,27 @@ class LocalTrainingBackend:
 
     async def train(self, context: TrainingContext) -> None:
         """Run Lightning training, save, and export into the model directory."""
-        from training import run_training_job
+        from training import RunOptions, run_training_job
 
         if context.snapshot is None:
             raise ValueError("Local training requires a dataset snapshot")
 
+        settings = get_settings()
+        spec = build_spec(context)
+        spec.run_options = RunOptions(
+            resume_from=_resume_checkpoint(context),
+            logger=settings.logger,
+            hf_token=settings.huggingface.hf_token,
+        )
+
         await asyncio.to_thread(
             run_training_job,
-            build_spec(context),
+            spec,
             dataset_root=context.snapshot.path,
             output_dir=context.output_dir,
             cache_dir=context.cache_dir,
             report=self._reporter(context),
             should_stop=context.should_stop,
-            resume_from=_resume_checkpoint(context),
         )
 
     @staticmethod

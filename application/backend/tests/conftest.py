@@ -21,6 +21,10 @@ if _STORAGE_DIR_CREATED:
     _TEST_STORAGE_DIR = tempfile.mkdtemp(prefix="physicalai-backend-tests-")
     os.environ["STORAGE_DIR"] = _TEST_STORAGE_DIR
 
+# Point the user-configurable settings file at the isolated test storage dir so
+# tests never read/write a developer's real settings.json.
+os.environ.setdefault("SETTINGS_FILE", os.path.join(_TEST_STORAGE_DIR, "settings.json"))
+
 from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np

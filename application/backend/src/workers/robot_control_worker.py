@@ -97,17 +97,18 @@ class RobotControlWorker(BaseThreadWorker):
 
     def load_dataset(self, dataset: Dataset) -> None:
         settings = get_settings()
+        streaming = settings.streaming
         self.dataset = InternalLeRobotDataset(
             Path(dataset.path),
             access_mode=DatasetAccessMode.RECORDING_MUTATION,
             streaming_encoding_settings=StreamingEncodingSettings(
-                vcodec=settings.streaming_vcodec,
-                pix_fmt=settings.streaming_pix_fmt,
-                crf=settings.streaming_crf,
-                preset=settings.streaming_preset,
-                extra_options=settings.streaming_extra_options or {},
-                encoder_threads=settings.streaming_encoder_threads,
-                encoder_queue_maxsize=settings.streaming_encoder_queue_maxsize,
+                vcodec=streaming.vcodec,
+                pix_fmt=streaming.pix_fmt,
+                crf=streaming.crf,
+                preset=streaming.preset,
+                extra_options=streaming.extra_options or {},
+                encoder_threads=streaming.encoder_threads,
+                encoder_queue_maxsize=streaming.encoder_queue_maxsize,
             ),
         )
         self.events.start_recording_mutation.set()
