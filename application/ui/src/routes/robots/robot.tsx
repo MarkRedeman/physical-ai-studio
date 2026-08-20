@@ -6,17 +6,19 @@ import { JointControls } from '../../features/robots/controller/joint-controls';
 import { RobotViewer, UnavailableRobotViewer } from '../../features/robots/controller/robot-viewer';
 import { useCatalogIdentifyMutation } from '../../features/robots/robot-catalog.hooks';
 import { RobotModelsProvider } from '../../features/robots/robot-models-context';
+import { AvailableSchemaRobot, isUnavailableRobot } from '../../features/robots/robot-types';
 import { useRobot } from '../../features/robots/use-robot';
 
 export const Robot = () => {
     const robot = useRobot();
-    const isUnavailable = 'unavailable' in robot && robot.unavailable;
-
-    return isUnavailable ? <UnavailableRobotViewer robotType={robot.type} /> : <AvailableRobot />;
+    return isUnavailableRobot(robot) ? (
+        <UnavailableRobotViewer robotType={robot.type} />
+    ) : (
+        <AvailableRobot robot={robot} />
+    );
 };
 
-const AvailableRobot = () => {
-    const robot = useRobot();
+const AvailableRobot = ({ robot }: { robot: AvailableSchemaRobot }) => {
     const identifyMutation = useCatalogIdentifyMutation();
 
     const onIdentify = identifyMutation.isPending

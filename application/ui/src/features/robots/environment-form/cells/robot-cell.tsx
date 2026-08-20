@@ -2,34 +2,19 @@ import { Flex, ProgressCircle, Switch, View } from '@geti-ui/ui';
 
 import { $api } from '../../../../api/client';
 import { getRobotConnectionErrorTitle } from '../../../../api/errors';
-import { SchemaRobot } from '../../../../api/openapi-spec';
 import { useProjectId } from '../../../projects/use-project';
 import { RobotViewer, UnavailableRobotViewer } from '../../controller/robot-viewer';
 import { RobotModelsProvider } from '../../robot-models-context';
+import { AvailableSchemaRobot, isUnavailableRobot } from '../../robot-types';
 import { InlineAlert } from '../../setup-wizard/shared/inline-alert';
 import { RobotActionReadState, useJointState, useSynchronizeModelJoints } from '../../use-joint-state';
-
-const InnerCell = ({ follower_id, leader_id }: { follower_id: string; leader_id?: string }) => {
-    const { project_id } = useProjectId();
-
-    const { data: robot } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots/{robot_id}', {
-        params: { path: { project_id, robot_id: follower_id } },
-    });
-    const isUnavailable = 'unavailable' in robot && robot.unavailable;
-
-    if (isUnavailable) {
-        return <UnavailableRobotViewer robotType={robot.type} />;
-    }
-
-    return <AvailableRobotCell robot={robot} followerId={follower_id} leaderId={leader_id} />;
-};
 
 const AvailableRobotCell = ({
     robot,
     followerId,
     leaderId,
 }: {
-    robot: SchemaRobot;
+    robot: AvailableSchemaRobot;
     followerId: string;
     leaderId?: string;
 }) => {
@@ -88,9 +73,18 @@ const AvailableRobotCell = ({
 };
 
 export const RobotCell = ({ follower_id, leader_id }: { follower_id: string; leader_id?: string }) => {
+    const { project_id } = useProjectId();
+
+    const { data: robot } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots/{robot_id}', {
+        params: { path: { project_id, robot_id: follower_id } },
+    });
+    if (isUnavailableRobot(robot)) {
+        return <UnavailableRobotViewer robotType={robot.type} />;
+    }
+
     return (
         <RobotModelsProvider>
-            <InnerCell follower_id={follower_id} leader_id={leader_id} />
+            <AvailableRobotCell robot={robot} followerId={follower_id} leaderId={leader_id} />
         </RobotModelsProvider>
     );
 };

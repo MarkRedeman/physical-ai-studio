@@ -57,8 +57,10 @@ def test_build_robots_with_teleoperators_skips_missing_robot_and_logs_warning() 
     valid_link.tele_operator_robot_id = None
     valid_link.tele_operator_robot = None
 
+    repo = ProjectEnvironmentRepository(MagicMock(), uuid4(), RobotCatalogRegistry())
+
     with patch("repositories.project_environment_repo.logger.warning") as warning_mock:
-        robots = ProjectEnvironmentRepository._build_robots_with_teleoperators(
+        robots = repo._build_robots_with_teleoperators(
             environment_id,
             [dangling_link, valid_link],
         )
@@ -80,8 +82,10 @@ def test_build_robots_with_teleoperators_keeps_teleoperator_id_when_eager_robot_
     link.tele_operator_robot_id = str(teleop_robot_id)
     link.tele_operator_robot = None
 
+    repo = ProjectEnvironmentRepository(MagicMock(), uuid4(), RobotCatalogRegistry())
+
     with patch("repositories.project_environment_repo.logger.warning") as warning_mock:
-        robots = ProjectEnvironmentRepository._build_robots_with_teleoperators(environment_id, [link])
+        robots = repo._build_robots_with_teleoperators(environment_id, [link])
 
     assert len(robots) == 1
     assert robots[0].robot.name == "Follower"
