@@ -202,10 +202,10 @@ class _FakeClient:
 def _settings() -> MagicMock:
     settings = MagicMock()
     settings.trainer_url = "https://trainer.test"
-    settings.trainer_request_timeout_s = 5.0
-    settings.trainer_download_read_timeout_s = 120.0
-    settings.trainer_stream_reconnect_max_s = 900.0
-    settings.trainer_stream_reconnect_backoff_max_s = 30.0
+    settings.trainer.request_timeout_s = 5.0
+    settings.trainer.download_read_timeout_s = 120.0
+    settings.trainer.stream_reconnect_max_s = 900.0
+    settings.trainer.stream_reconnect_backoff_max_s = 30.0
     settings.data_import_max_uncompressed_bytes = 10 * 1024 * 1024
     settings.data_import_min_free_bytes = 0
     return settings
@@ -474,8 +474,8 @@ class TestRemoteTrainingBackend:
         """Persistent unreachability past the reconnect budget aborts the job."""
         settings = _settings()
         # Zero budget: the first failed reconnect+poll cycle exhausts it.
-        settings.trainer_stream_reconnect_max_s = 0.0
-        settings.trainer_stream_reconnect_backoff_max_s = 0.0
+        settings.trainer.stream_reconnect_max_s = 0.0
+        settings.trainer.stream_reconnect_backoff_max_s = 0.0
         context = _context(tmp_path)
         controller = _Controller(states=[])
         controller.raise_connection_error = True

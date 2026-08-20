@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import settings as settings_module
-from settings import Settings, get_default_storage_dir
+from settings import Settings, get_default_storage_dir, merge_user_settings
 
 
 def test_default_storage_dir_uses_xdg_data_home(monkeypatch, tmp_path: Path) -> None:
@@ -42,3 +42,25 @@ def test_data_dir_is_storage_backed_even_with_data_dir_env(monkeypatch, tmp_path
     settings = Settings(STORAGE_DIR="~/custom-storage")
 
     assert settings.data_dir == tmp_path / "custom-storage" / "data"
+
+
+def test_trainer_settings_are_loaded_from_json(monkeypatch, tmp_path: Path) -> None:
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setenv("SETTINGS_FILE", str(settings_file))
+
+    merge_user_settings({"trainer": {"request_timeout_s": 5.0}})
+
+    settings = Settings()
+    assert settings.trainer.request_timeout_s == 5.0
+    assert settings.trainer.download_read_timeout_s == 120.0
+
+
+def test_trainer_settings_patch_keeps_omitted_values(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+
+    merge_user_settings({"trainer": {"request_timeout_s": 5.0}})
+    merge_user_settings({"trainer": {"download_read_timeout_s": 10.0}})
+
+    settings = Settings()
+    assert settings.trainer.request_timeout_s == 5.0
+    assert settings.trainer.download_read_timeout_s == 10.0
