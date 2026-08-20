@@ -211,7 +211,7 @@ def test_get_settings_returns_default_hotkey_bindings(monkeypatch, tmp_path: Pat
     assert response.json()["hotkeys"]["bindings"] == {}
 
 
-def test_patch_hotkey_bindings_round_trips(monkeypatch, tmp_path: Path) -> None:
+def test_patch_logger_settings_masks_api_key(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
 
     with TestClient(app) as client:
@@ -223,3 +223,16 @@ def test_patch_hotkey_bindings_round_trips(monkeypatch, tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.json()["hotkeys"]["bindings"] == {"recording.discard_episode": "Shift+ArrowLeft"}
     assert get_settings().hotkeys.bindings == {"recording.discard_episode": "Shift+ArrowLeft"}
+
+def test_patch_hotkey_bindings_round_trips(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/settings",
+            json={"logger": {"providers": ["wandb"], "wandb_api_key": "super-secret"}},
+        )
+
+    assert response.status_code == 200
+    assert "super-secret" not in response.text
+    assert get_settings().logger.wandb_api_key is not None

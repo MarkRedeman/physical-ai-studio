@@ -153,7 +153,21 @@ class StreamingSettings(BaseModel):
     encoder_queue_maxsize: int = Field(default=60)
 
 
-_USER_CONFIG_GROUPS: tuple[str, ...] = ("streaming", "trainer", "huggingface", "hotkeys")
+class LoggerSettings(BaseModel):
+    """Training-run Lightning logger configuration."""
+
+    providers: list[Literal["csv", "tensorboard", "wandb"]] = Field(default=["csv"])
+    wandb_project: str | None = Field(default=None)
+    wandb_entity: str | None = Field(default=None)
+    wandb_api_key: SecretStr | None = Field(default=None)
+
+    @field_validator("providers")
+    @classmethod
+    def dedupe_providers(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value)) or ["csv"]
+
+
+_USER_CONFIG_GROUPS: tuple[str, ...] = ("streaming", "trainer", "huggingface", "logger", "hotkeys")
 
 
 def _storage_key(field_name: str) -> str:
@@ -317,6 +331,8 @@ class Settings(BaseSettings):
     hotkeys: HotkeySettings = HotkeySettings()
     # User-configurable video encoding for dataset recordings.
     streaming: StreamingSettings = StreamingSettings()
+    # User-configurable training-run loggers.
+    logger: LoggerSettings = LoggerSettings()
 
     # SSH-provisioned remote training
     # The feature is always active, subject only to

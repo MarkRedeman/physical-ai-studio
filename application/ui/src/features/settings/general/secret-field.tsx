@@ -7,10 +7,11 @@ export type SecretChange = { draft: string; remove: boolean };
 type SecretFieldProps = {
     label: string;
     isSet: boolean;
+    isDisabled?: boolean;
     onChange: (change: SecretChange) => void;
 };
 
-export const SecretField = ({ label, isSet, onChange }: SecretFieldProps) => {
+export const SecretField = ({ label, isSet, isDisabled = false, onChange }: SecretFieldProps) => {
     const [draft, setDraft] = useState('');
     const [remove, setRemove] = useState(false);
 
@@ -28,10 +29,16 @@ export const SecretField = ({ label, isSet, onChange }: SecretFieldProps) => {
                 value={draft}
                 onChange={(value) => update(value, remove)}
                 placeholder={isSet ? 'Leave empty to keep the configured value' : undefined}
+                isDisabled={isDisabled}
                 width='100%'
             />
             {isSet && (
-                <Switch isEmphasized isSelected={remove} onChange={(selected) => update(draft, selected)}>
+                <Switch
+                    isEmphasized
+                    isSelected={remove}
+                    isDisabled={isDisabled}
+                    onChange={(selected) => update(draft, selected)}
+                >
                     Remove the configured value
                 </Switch>
             )}

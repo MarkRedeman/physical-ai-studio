@@ -46,3 +46,10 @@
 .customizeHint {
     color: var(--spectrum-global-color-gray-700);
 }
+
+.wandbSettings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-200);
+    padding-left: var(--spectrum-global-dimension-size-400);
+}

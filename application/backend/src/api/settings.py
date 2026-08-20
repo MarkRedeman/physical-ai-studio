@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from settings import (
     HotkeySettings,
     HuggingFaceSettings,
+    LoggerSettings,
     Settings,
     SshProvisioningSettings,
     StreamingSettings,
@@ -29,6 +30,7 @@ class UserSettingsResponse(BaseModel):
     huggingface: HuggingFaceSettings
     ssh: SshProvisioningSettings
     hotkeys: HotkeySettings
+    logger: LoggerSettings
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "UserSettingsResponse":
@@ -38,6 +40,7 @@ class UserSettingsResponse(BaseModel):
             huggingface=settings.huggingface,
             ssh=settings.ssh,
             hotkeys=settings.hotkeys,
+            logger=settings.logger,
         )
 
 
@@ -49,6 +52,7 @@ class SettingsUpdate(BaseModel):
     huggingface: HuggingFaceSettings | None = None
     ssh: SshProvisioningSettings | None = None
     hotkeys: HotkeySettings | None = None
+    logger: LoggerSettings | None = None
 
 
 @router.get("")
