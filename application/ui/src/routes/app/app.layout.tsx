@@ -51,7 +51,7 @@ export const AppLayout = () => {
                         <Outlet />
                     </Suspense>
                 </View>
-                <AppFooter compact />
+                <AppFooter />
             </Grid>
         </Tabs>
     );
