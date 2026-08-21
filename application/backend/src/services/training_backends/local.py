@@ -15,10 +15,12 @@ module can be imported in environments without the `[train]` extra installed.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
+from pydantic import SecretStr
 
 from schemas.job import _DEFAULT_MAX_EPOCHS
 from services.training_backends._log_format import render_progress_log
@@ -42,9 +44,15 @@ class LocalTrainingBackend:
             raise ValueError("Local training requires a dataset snapshot")
 
         spec = build_spec(context)
+        hf_token = get_settings().huggingface.hf_token
+        # Fallback to Environment Variable based hf token if settings hasn't been set
+        if (hf_token is None or not hf_token.get_secret_value()) and (
+            legacy_hf_token := os.environ.get("HF_TOKEN", "")
+        ):
+            hf_token = SecretStr(legacy_hf_token)
         spec.run_options = RunOptions(
             resume_from=_resume_checkpoint(context),
-            hf_token=get_settings().huggingface.hf_token,
+            hf_token=hf_token,
         )
         await asyncio.to_thread(
             run_training_job,

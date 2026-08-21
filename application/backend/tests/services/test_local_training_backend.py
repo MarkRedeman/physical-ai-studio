@@ -174,6 +174,26 @@ class TestLocalTrainingBackend:
         assert token.get_secret_value() == "hf-secret"
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize("configured_token", [None, SecretStr("")])
+    async def test_train_falls_back_to_huggingface_token_environment_variable(
+        self, tmp_path, monkeypatch, configured_token
+    ):
+        context = _context(tmp_path, _payload())
+        settings = MagicMock()
+        settings.huggingface.hf_token = configured_token
+        monkeypatch.setenv("HF_TOKEN", "hf-legacy")
+
+        with (
+            patch("training.run_training_job") as mock_run,
+            patch(f"{LOCAL}.get_settings", return_value=settings),
+        ):
+            await LocalTrainingBackend().train(context)
+
+        token = mock_run.call_args.args[0].run_options.hf_token
+        assert token is not None
+        assert token.get_secret_value() == "hf-legacy"
+
+    @pytest.mark.anyio
     async def test_train_without_a_snapshot_is_rejected(self, tmp_path):
         context = _context(tmp_path, _payload())
         context.snapshot = None
