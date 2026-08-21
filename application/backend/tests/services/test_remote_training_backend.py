@@ -316,6 +316,12 @@ class TestRemoteTrainingBackend:
         assert max(reported) == 100
 
     @pytest.mark.anyio
+    async def test_submit_excludes_local_run_options_from_trainer_payload(self, tmp_path):
+        body = await _submitted_body(_settings(), _context(tmp_path))
+
+        assert "run_options" not in body["spec"]
+
+    @pytest.mark.anyio
     async def test_completion_deletes_remote_job_artifacts(self, tmp_path):
         """After a successful download, the trainer's copy of the job is cleaned up."""
         settings = _settings()
@@ -655,7 +661,7 @@ class TestHttpDatasetTransfer:
 
         body = await _submitted_body(settings, context)
 
-        assert body["spec"] == build_spec(context).model_dump(mode="json") | {
+        assert body["spec"] == build_spec(context).model_dump(mode="json", exclude={"run_options"}) | {
             "device_type": None,
             "device_index": None,
         }

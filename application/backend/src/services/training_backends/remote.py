@@ -322,7 +322,7 @@ class RemoteTrainingBackend:
 
         spec = build_spec(context).model_copy(update={"device_type": None, "device_index": None})
         body: dict[str, Any] = {
-            "spec": spec.model_dump(mode="json"),
+            "spec": spec.model_dump(mode="json", exclude={"run_options"}),
             "dataset_transfer": "http",
         }
         async with await self._client() as client:
