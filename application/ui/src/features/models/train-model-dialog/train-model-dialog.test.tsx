@@ -58,7 +58,6 @@ const mockProjectWithRemoteTrainer = () => {
         http.get('/api/remote-trainers', () => HttpResponse.json([remoteTrainer])),
         http.get('/api/settings', () =>
             HttpResponse.json({
-                streaming: { vcodec: 'auto', encoder_queue_maxsize: 60 },
                 trainer: {
                     request_timeout_s: 30,
                     download_read_timeout_s: 120,
@@ -66,7 +65,6 @@ const mockProjectWithRemoteTrainer = () => {
                     stream_reconnect_backoff_max_s: 30,
                 },
                 huggingface: { hf_token: null },
-                logger: { providers: ['csv'] },
             })
         )
     );
