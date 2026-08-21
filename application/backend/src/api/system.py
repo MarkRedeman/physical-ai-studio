@@ -5,49 +5,20 @@
 
 import os
 import signal
-import sys
-import threading
-import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
-from loguru import logger
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 
-from api.dependencies import get_system_service
+from api.dependencies import HealthServiceDep, get_system_service
 from schemas.hardware import InferenceDeviceInfo, TrainingDevices
 from services.system_service import SystemService
 
 system_router = APIRouter(prefix="/api/system", tags=["System"])
 
 
-def _restart_argv_candidates() -> list[list[str]]:
-    """Build candidate argv lists for in-place process restart."""
-    candidates: list[list[str]] = []
-
-    orig_argv = list(getattr(sys, "orig_argv", []) or [])
-    if orig_argv and orig_argv[0]:
-        candidates.append(orig_argv)
-
-    python_argv = [sys.executable, *sys.argv]
-    if python_argv[0] and python_argv not in candidates:
-        candidates.append(python_argv)
-
-    return candidates
-
-
-def _restart_process() -> bool:
-    """Try to replace the current process image in-place."""
-    for argv in _restart_argv_candidates():
-        executable = argv[0]
-        try:
-            if os.path.sep in executable:
-                os.execv(executable, argv)
-            else:
-                os.execvp(executable, argv)
-            return True
-        except OSError:
-            logger.exception("Restart exec failed for argv={}", argv)
-    return False
+def _stop_process() -> None:
+    """Request graceful shutdown so the process supervisor can restart the server."""
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 @system_router.get("/devices/inference")
@@ -72,19 +43,12 @@ async def get_training_devices(
 
 
 @system_router.post("/restart", status_code=status.HTTP_202_ACCEPTED)
-async def restart_server() -> dict[str, str]:
+async def restart_server(background_tasks: BackgroundTasks, health_service: HealthServiceDep) -> dict[str, str]:
     """Gracefully restart the server to activate plugin changes.
 
-    Schedules a delayed self-reexec so the response is flushed first. If reexec
-    fails, falls back to SIGTERM so an external supervisor can restart it.
+    The shutdown signal is sent after the response is flushed, allowing the
+    FastAPI lifespan to stop workers before the process supervisor restarts it.
     """
-
-    def _schedule_restart() -> None:
-        time.sleep(1.0)
-        if _restart_process():
-            return
-        logger.warning("Self-restart failed; falling back to SIGTERM")
-        os.kill(os.getpid(), signal.SIGTERM)
-
-    threading.Thread(target=_schedule_restart, daemon=True).start()
+    health_service.mark_plugin_restart_required()
+    background_tasks.add_task(_stop_process)
     return {"status": "restarting"}

@@ -1,3 +1,5 @@
+import os
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -13,6 +15,34 @@ from utils.serial_robot_tools import RobotConnectionManager
 from workers.model_worker_registry import ModelWorkerRegistry
 
 from .scheduler import Scheduler
+
+
+def _restart_argv_candidates() -> list[list[str]]:
+    """Build candidate argv lists for re-executing the current server process."""
+    candidates: list[list[str]] = []
+
+    orig_argv = list(getattr(sys, "orig_argv", []) or [])
+    if orig_argv and orig_argv[0]:
+        candidates.append(orig_argv)
+
+    python_argv = [sys.executable, *sys.argv]
+    if python_argv[0] and python_argv not in candidates:
+        candidates.append(python_argv)
+
+    return candidates
+
+
+def _restart_process() -> None:
+    """Replace this process image after graceful application shutdown."""
+    for argv in _restart_argv_candidates():
+        executable = argv[0]
+        try:
+            if os.path.sep in executable:
+                os.execv(executable, argv)  # noqa: S606
+            else:
+                os.execvp(executable, argv)  # noqa: S606
+        except OSError:
+            logger.exception("Restart exec failed for argv={}", argv)
 
 
 @asynccontextmanager
@@ -61,3 +91,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app_scheduler.shutdown()
     app.state.event_processor.shutdown()
     logger.info("Application shutdown completed")
+
+    if app.state.health_service.plugin_restart_required:
+        _restart_process()

@@ -75,6 +75,7 @@ async def _upload_size_guard(request: Request, call_next: RequestResponseEndpoin
 async def health_check(response: Response, health_service: HealthServiceDep) -> dict[str, str | bool]:
     """Health check endpoint."""
     response.headers["Cache-Control"] = "no-store"
+    health_service.refresh_plugin_restart_required()
     return {
         "status": "healthy",
         "instance_id": health_service.instance_id,
