@@ -49,7 +49,7 @@ export const HuggingFaceSettingsForm = ({ huggingface }: HuggingFaceSettingsForm
                     <TextField
                         label='Hugging Face token'
                         value={'hf_**********************************'}
-                        isReadOnly
+                        isDisabled
                         width='100%'
                     />
                     <ActionButton
@@ -61,6 +61,14 @@ export const HuggingFaceSettingsForm = ({ huggingface }: HuggingFaceSettingsForm
                         <Icon>
                             <Close />
                         </Icon>
+                        <span
+                            style={{
+                                paddingLeft: 'var(--spectrum-global-dimension-size-100)',
+                                paddingRight: 'var(--spectrum-global-dimension-size-200)',
+                            }}
+                        >
+                            Clear
+                        </span>
                     </ActionButton>
                 </Flex>
             ) : (
