@@ -3,8 +3,8 @@ import { pluginBabel } from '@rsbuild/plugin-babel';
 import { pluginReact } from '@rsbuild/plugin-react';
 import { pluginSvgr } from '@rsbuild/plugin-svgr';
 
-const { publicVars } = loadEnv({ prefixes: ['PUBLIC_'] });
-const apiProxyTarget = process.env.PUBLIC_API_PROXY_TARGET ?? 'http://localhost:7860';
+const { publicVars, rawPublicVars } = loadEnv({ prefixes: ['PUBLIC_'] });
+const apiProxyTarget = rawPublicVars.PUBLIC_API_PROXY_TARGET ?? 'http://localhost:7860';
 
 export default defineConfig({
     plugins: [
