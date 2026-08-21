@@ -26,6 +26,7 @@ from services import (
 from services.dataset_import.service import DatasetImportService
 from services.environment_service import EnvironmentService
 from services.event_processor import EventProcessor
+from services.health_service import HealthService
 from services.job_service import JobService
 from services.log_service import LogService
 from services.robot_catalog_service import RobotCatalogService
@@ -59,6 +60,17 @@ def get_system_service() -> SystemService:
 
 
 SystemServiceDep = Annotated[SystemService, Depends(get_system_service)]
+
+
+def get_health_service(request: HTTPConnection) -> HealthService:
+    """Provide the process-local health service initialized during application startup."""
+    health_service = getattr(request.app.state, "health_service", None)
+    if health_service is None:
+        raise RuntimeError("Health service not initialized")
+    return cast("HealthService", health_service)
+
+
+HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
 
 
 def get_project_service(session: AsyncSessionDep) -> ProjectService:
