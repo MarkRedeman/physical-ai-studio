@@ -159,7 +159,9 @@ describe('TrainModelDialog', () => {
 
         await user.click(await screen.findByLabelText('Select SmolVLA policy'));
 
-        expect(await screen.findByText(/This policy downloads pretrained assets from Hugging Face/i)).toBeInTheDocument();
+        expect(
+            await screen.findByText(/This policy downloads pretrained assets from Hugging Face/i)
+        ).toBeInTheDocument();
         expect(screen.queryByText(/gated base model/i)).not.toBeInTheDocument();
     });
 
@@ -172,7 +174,9 @@ describe('TrainModelDialog', () => {
         await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
         await user.click(screen.getByLabelText('Select Pi0.5 policy'));
 
-        expect(await screen.findByText(/This policy downloads pretrained assets from Hugging Face/i)).toBeInTheDocument();
+        expect(
+            await screen.findByText(/This policy downloads pretrained assets from Hugging Face/i)
+        ).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Train' })).toBeDisabled();
     });
 

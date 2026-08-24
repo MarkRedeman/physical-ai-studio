@@ -22,11 +22,16 @@ export const PolicyAccessAlert = ({ policy }: PolicyAccessAlertProps) => {
                 <Flex direction='column' gap='size-100'>
                     <span>
                         {failedRequirements.some((requirement) => requirement.status === 'missing_token')
-                            ? 'This policy needs a Hugging Face token to download pretrained assets.'
-                            : 'Your Hugging Face token does not have access to every required pretrained asset.'}
+                            ? 'This policy downloads pretrained assets from Hugging Face, but no token is configured.'
+                            : 'Your Hugging Face token does not have access to this policy.'}
                     </span>
                     {failedRequirements.map((requirement) => (
-                        <SpectrumLink key={requirement.repository} href={requirement.access_url} target='_blank'>
+                        <SpectrumLink
+                            key={requirement.repository}
+                            href={requirement.access_url}
+                            target='_blank'
+                            rel='noopener noreferrer'
+                        >
                             Request access to {requirement.repository}
                         </SpectrumLink>
                     ))}

@@ -11,6 +11,8 @@ from settings import get_settings
 
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
 
+_AccessStatus = Literal["granted", "missing_token", "denied", "unavailable", "not_required"]
+
 _POLICY_CLASSES = {
     "act": ACT,
     "pi0": Pi0,
@@ -36,7 +38,7 @@ class HuggingFaceRequirementAccess(BaseModel):
     """Access status for one Hub repository a policy needs."""
 
     repository: str
-    status: Literal["granted", "missing_token", "denied", "unavailable", "not_required"]
+    status: _AccessStatus
     access_url: str
     required: bool
 
@@ -84,6 +86,7 @@ async def check_huggingface_access(policy: str) -> HuggingFaceAccessResponse:
 
     async def check_requirement(repository: str, required: bool) -> HuggingFaceRequirementAccess:
         access_url = f"https://huggingface.co/{repository}"
+        status: _AccessStatus
         try:
             await asyncio.to_thread(HfApi(token=token_value).auth_check, repository)
         except (GatedRepoError, RepositoryNotFoundError):
