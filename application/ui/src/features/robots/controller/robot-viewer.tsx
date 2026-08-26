@@ -10,7 +10,6 @@ import { URDFRobot } from 'urdf-loader';
 
 import { useContainerSize } from '../../../components/zoom/use-container-size';
 import { useRobotCatalogDefinitionQuery } from '../robot-catalog.hooks';
-import { SchemaRobot } from '../robot-types';
 import { mapJointToURDFJoint, useLoadModelQuery } from './../robot-models-context';
 import { RobotViewerScene, SCENE_COLORS, useConfigureModelShadows } from './../robot-viewer-scene';
 
@@ -97,7 +96,7 @@ const ActualURDFModel = ({ model, isTrossen }: { model: URDFRobot; isTrossen: bo
 };
 
 interface RobotViewerProps {
-    robot: Pick<SchemaRobot, 'type'>;
+    robot: { type: string };
     featureValues?: number[];
     featureNames?: string[];
 }
