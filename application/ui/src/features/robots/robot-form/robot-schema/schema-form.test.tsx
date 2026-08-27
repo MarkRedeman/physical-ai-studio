@@ -271,6 +271,77 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('textbox', { name: /Robot ID/ })).toBeRequired();
     });
 
+    it('renders an error when identify fails', async () => {
+        const identifySchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                port: { type: 'string', title: 'Port' },
+            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'connection',
+                    label: 'Select robot',
+                    device_discovery: true,
+                    identify: true,
+                    bind: { connection: 'port' },
+                },
+            ],
+        };
+        server.use(
+            http.get('/api/robots/catalog/{robot_type}/discover', () => HttpResponse.json([])),
+            http.post('/api/robots/catalog/{robot_type}/identify', () =>
+                HttpResponse.json({ message: 'Could not reach the robot.' }, { status: 400 })
+            )
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={identifySchema} />
+            </RobotFormProvider>
+        );
+
+        await user.click(await screen.findByRole('button', { name: 'Identify' }));
+
+        expect(await screen.findByText(/Identify Failed/)).toBeVisible();
+        expect(screen.getByText(/Could not reach the robot\./)).toBeVisible();
+    });
+
+    it('shows a permission denied message when identify fails with a serial permission error', async () => {
+        const identifySchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                port: { type: 'string', title: 'Port' },
+            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'connection',
+                    label: 'Select robot',
+                    device_discovery: true,
+                    identify: true,
+                    bind: { connection: 'port' },
+                },
+            ],
+        };
+        server.use(
+            http.get('/api/robots/catalog/{robot_type}/discover', () => HttpResponse.json([])),
+            http.post('/api/robots/catalog/{robot_type}/identify', () =>
+                HttpResponse.json({ error_code: 'serial_permission_denied', message: 'No access' }, { status: 403 })
+            )
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={identifySchema} />
+            </RobotFormProvider>
+        );
+
+        await user.click(await screen.findByRole('button', { name: 'Identify' }));
+
+        expect(await screen.findByText(/Permission Denied/)).toBeVisible();
+    });
+
     it('stores serial-capable device values in their respective payload fields', async () => {
         server.use(
             http.get('/api/robots/catalog/{robot_type}/discover', () =>
