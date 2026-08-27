@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 import { Button, Flex, Heading, Icon, Item, Picker, TextField } from '@geti-ui/ui';
 import { ChevronLeft } from '@geti-ui/ui/icons';
 
@@ -10,7 +12,7 @@ import { useRobotForm } from './provider';
 import { SchemaForm } from './robot-schema/schema-form';
 
 export const RobotType = () => {
-    const { activeType, name, setName } = useRobotForm();
+    const { activeType, name, setName, setSuggestedName, suggestedName } = useRobotForm();
     const { setActiveType } = useRobotForm();
     const catalogQuery = useRobotCatalogQuery();
 
@@ -24,9 +26,13 @@ export const RobotType = () => {
                 if (selected === null) {
                     return;
                 }
-                setActiveType(selected.toString());
                 const entry = catalogQuery.data.find(({ type }) => type === selected);
-                if (entry !== undefined && name === '') {
+                setActiveType(selected.toString());
+                if (entry === undefined) {
+                    return;
+                }
+                setSuggestedName(entry.display_name);
+                if (name === '' || name === suggestedName) {
                     setName(entry.display_name);
                 }
             }}
@@ -39,7 +45,14 @@ export const RobotType = () => {
 };
 
 export const FormFields = () => {
-    const { activeType, name, setName } = useRobotForm();
+    const { activeType, name, setName, suggestedName, nameFieldRef } = useRobotForm();
+
+    useEffect(() => {
+        if (name !== '' && name === suggestedName) {
+            nameFieldRef.current?.focus();
+        }
+    }, [name, nameFieldRef, suggestedName]);
+
     return (
         <>
             <TextField
@@ -48,6 +61,7 @@ export const FormFields = () => {
                 width='100%'
                 value={name}
                 onChange={setName}
+                ref={nameFieldRef}
                 // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
             />
