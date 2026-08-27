@@ -1,7 +1,9 @@
 import { ActionButton, ComboBox, Flex, Icon, Item, Text } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 
+import { getApiErrorMessage, isSerialPermissionDeniedError } from '../../../../../api/errors';
 import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../../robot-catalog.hooks';
+import { InlineAlert } from '../../../setup-wizard/shared/inline-alert';
 import { ConnectionItem } from '../types';
 
 type Device = { serial_number: string | null; connection_string: string | null };
@@ -61,6 +63,25 @@ type ConnectionFieldProps = {
     onChange: (field: string, value: unknown) => void;
 };
 
+const IdentifyError = ({ error }: { error: unknown }) => {
+    if (isSerialPermissionDeniedError(error)) {
+        return (
+            <InlineAlert variant='error'>
+                <strong>Permission Denied</strong>: The application does not have permission to access the robot&apos;s
+                USB port.
+            </InlineAlert>
+        );
+    }
+
+    return (
+        <InlineAlert variant='error'>
+            <strong>Identify Failed</strong>:{' '}
+            {getApiErrorMessage(error) ??
+                'The robot could not be identified. Make sure it is powered on and not already in use, then try again.'}
+        </InlineAlert>
+    );
+};
+
 export const ConnectionField = ({ robotType, payload, options, onChange }: ConnectionFieldProps) => {
     const discover = useDiscoverRobotsQuery(robotType);
     const identify = useCatalogIdentifyMutation();
@@ -106,6 +127,7 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
                     </ActionButton>
                 )}
             </Flex>
+            {identify.isError && <IdentifyError error={identify.error} />}
         </Flex>
     );
 };
