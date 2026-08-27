@@ -19,7 +19,6 @@ from api.robot_observations import robot_observations_websocket
 from api.runtime_ws import runtime_websocket
 from robots.robot_client_factory import RobotClientFactory
 from services.job_service import JobService
-from services.robot_catalog_service import RobotCatalogService
 from settings import Settings
 from utils.serial_robot_tools import RobotConnectionManager
 
@@ -32,13 +31,11 @@ def _dependency_calls(endpoint: Callable[..., object]) -> set[Callable[..., obje
 
 def test_robot_client_factory_uses_provided_manager() -> None:
     robot_manager = MagicMock(spec=RobotConnectionManager)
-    catalog_service = MagicMock(spec=RobotCatalogService)
 
-    factory = get_robot_client_factory(robot_manager, catalog_service)
+    factory = get_robot_client_factory(robot_manager)
 
     assert isinstance(factory, RobotClientFactory)
     assert factory.robot_manager is robot_manager
-    assert factory.catalog_registry is catalog_service.registry
 
 
 def test_model_metrics_service_uses_injected_settings() -> None:

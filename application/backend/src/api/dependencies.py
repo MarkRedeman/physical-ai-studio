@@ -128,16 +128,13 @@ def get_robot_manager_service(request: HTTPConnection) -> RobotConnectionManager
 RobotConnectionManagerDep = Annotated[RobotConnectionManager, Depends(get_robot_manager_service)]
 
 
-def get_robot_client_factory(
-    robot_manager: RobotConnectionManagerDep,
-    catalog_service: RobotCatalogServiceDep,
-) -> RobotClientFactory:
+def get_robot_client_factory(robot_manager: RobotConnectionManagerDep) -> RobotClientFactory:
     """Provide a RobotClientFactory bound to the application robot manager.
 
     Request scoped: the factory is a thin wrapper around the shared
     RobotConnectionManager and is the seam used to fake robot hardware in tests.
     """
-    return RobotClientFactory(robot_manager=robot_manager, catalog_registry=catalog_service.registry)
+    return RobotClientFactory(robot_manager=robot_manager)
 
 
 RobotClientFactoryDep = Annotated[RobotClientFactory, Depends(get_robot_client_factory)]

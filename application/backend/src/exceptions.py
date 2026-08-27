@@ -16,6 +16,7 @@ class ResourceType(StrEnum):
     REMOTE_SERVER = "Remote server"
     JOB = "JOB"
     JOB_FILE = "JOB_FILE"
+    PLUGIN = "Plugin"
 
 
 class BaseException(Exception):
@@ -690,4 +691,14 @@ class TrainerProtocolVersionMismatchError(BaseException):
             ),
             error_code="trainer_protocol_mismatch",
             http_status=http.HTTPStatus.CONFLICT,
+        )
+
+class PluginOperationError(BaseException):
+    """Raised when installing or uninstalling a robot plugin fails."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            error_code="plugin_operation_failed",
+            http_status=http.HTTPStatus.BAD_REQUEST,
         )

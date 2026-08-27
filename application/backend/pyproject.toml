@@ -39,6 +39,8 @@ dependencies = [
   "physicalai-studio-plugin",
   "asyncssh~=2.24",
   "packaging>=24.0",
+  "physicalai-mujoco-so101-plugin",
+  "physicalai-rebot-b601-plugin",
 ]
 
 [project.scripts]
@@ -123,7 +125,8 @@ explicit = false
 
 [tool.uv.sources]
 physicalai-train = { path = "../../library", editable = true }
-physicalai = { git = "https://github.com/openvinotoolkit/physicalai.git", rev = "9be95d88d5b9f8342f6952d8ec288fb108fa416e" }
+# physicalai = { git = "https://github.com/openvinotoolkit/physicalai.git", rev = "9be95d88d5b9f8342f6952d8ec288fb108fa416e" }
+physicalai = { path = "../../../physicalai", editable = true }
 physicalai-studio-plugin = { path = "../plugin", editable = true }
 # Keep torchao on PyPI for all extras.
 # The XPU index publishes `torchao` local-version wheels (e.g. `+xpu`) that can
@@ -142,6 +145,8 @@ torchvision = [
 ]
 # torch's XPU build depends on triton-xpu transitively; pin its index.
 triton-xpu = { index = "pytorch-xpu" }
+physicalai-mujoco-so101-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-mujoco-so101-plugin", editable = true }
+physicalai-rebot-b601-plugin = { path = "../../../physicalai-rebot-b601-plugin/packages/physicalai-rebot-b601-plugin", editable = true }
 
 [dependency-groups]
 dev = [

@@ -4,7 +4,7 @@ from robots.catalog.registry import RobotCatalogRegistry
 from schemas.robot import Robot, RobotAdapter, UnavailableRobot
 
 
-class ProjectRobotMapper(IBaseMapper[ProjectRobotDB, Robot | UnavailableRobot]):
+class ProjectRobotMapper(IBaseMapper):
     """Mapper for Robot schema entity <-> DB entity conversions."""
 
     @staticmethod
@@ -18,12 +18,8 @@ class ProjectRobotMapper(IBaseMapper[ProjectRobotDB, Robot | UnavailableRobot]):
         )
 
     @staticmethod
-    def from_schema(
-        model: ProjectRobotDB,
-        catalog_registry: RobotCatalogRegistry | None = None,
-    ) -> Robot | UnavailableRobot:
+    def from_schema(model: ProjectRobotDB, catalog_registry: RobotCatalogRegistry) -> Robot | UnavailableRobot:
         """Convert Robot db entity to schema."""
-        catalog_registry = catalog_registry or RobotCatalogRegistry()
         robot = {
             "id": model.id,
             "name": model.name,
