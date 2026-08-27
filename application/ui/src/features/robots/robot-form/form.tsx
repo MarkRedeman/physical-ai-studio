@@ -10,7 +10,7 @@ import { useRobotForm } from './provider';
 import { SchemaForm } from './robot-schema/schema-form';
 
 export const RobotType = () => {
-    const { activeType } = useRobotForm();
+    const { activeType, name, setName } = useRobotForm();
     const { setActiveType } = useRobotForm();
     const catalogQuery = useRobotCatalogQuery();
 
@@ -21,8 +21,13 @@ export const RobotType = () => {
             width='100%'
             selectedKey={activeType}
             onSelectionChange={(selected) => {
-                if (selected !== null) {
-                    setActiveType(selected.toString());
+                if (selected === null) {
+                    return;
+                }
+                setActiveType(selected.toString());
+                const entry = catalogQuery.data.find(({ type }) => type === selected);
+                if (entry !== undefined && name === '') {
+                    setName(entry.display_name);
                 }
             }}
         >
@@ -37,7 +42,15 @@ export const FormFields = () => {
     const { activeType, name, setName } = useRobotForm();
     return (
         <>
-            <TextField isRequired label='Robot name' width='100%' value={name} onChange={setName} />
+            <TextField
+                isRequired
+                label='Robot name'
+                width='100%'
+                value={name}
+                onChange={setName}
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+            />
             {activeType !== undefined && <SelectedRobotFields activeType={activeType} />}
         </>
     );
