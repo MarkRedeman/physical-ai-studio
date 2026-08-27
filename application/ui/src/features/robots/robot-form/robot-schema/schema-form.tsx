@@ -185,6 +185,11 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
 
     return (
         <Flex direction='column' gap='size-200'>
+            <Flex justifyContent='end'>
+                <Switch isSelected={showDefaultFields} onChange={setShowDefaultFields}>
+                    Show default fields
+                </Switch>
+            </Flex>
             <SchemaFormItems
                 items={items}
                 properties={properties}
@@ -197,9 +202,6 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
                 isRenderable={isRenderable}
                 renderUnownedFields
             />
-            <Switch isSelected={showDefaultFields} onChange={setShowDefaultFields}>
-                Show default fields
-            </Switch>
         </Flex>
     );
 };
