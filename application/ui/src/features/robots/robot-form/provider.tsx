@@ -1,4 +1,6 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, RefObject, useContext, useMemo, useRef, useState } from 'react';
+
+import { TextFieldRef } from '@geti-ui/ui';
 
 import type { SchemaRobotInput } from '../robot-types';
 
@@ -8,14 +10,18 @@ export type RobotFormData = { name: string; payload: RobotPayload };
 type RobotFormState = {
     activeType: string | undefined;
     name: string;
+    /** Display name last auto-filled for the active robot type. */
+    suggestedName: string;
     payload: RobotPayload;
 };
 
 type RobotFormContextValue = RobotFormState & {
     setActiveType: (type: string) => void;
     setName: (name: string) => void;
+    setSuggestedName: (name: string) => void;
     setPayload: (payload: RobotPayload) => void;
     updatePayloadField: (field: string, value: unknown) => void;
+    nameFieldRef: RefObject<TextFieldRef | null>;
 };
 
 const RobotFormContext = createContext<RobotFormContextValue | null>(null);
@@ -30,19 +36,24 @@ export const RobotFormProvider = ({
     const [state, setState] = useState<RobotFormState>(() => ({
         activeType: robot?.type,
         name: robot?.name ?? '',
+        suggestedName: '',
         payload: isPayload(robot?.payload) ? robot.payload : {},
     }));
+
+    const nameFieldRef = useRef<TextFieldRef | null>(null);
 
     const value = useMemo<RobotFormContextValue>(
         () => ({
             ...state,
             setActiveType: (activeType) => setState((previous) => ({ ...previous, activeType, payload: {} })),
             setName: (name) => setState((previous) => ({ ...previous, name })),
+            setSuggestedName: (suggestedName) => setState((previous) => ({ ...previous, suggestedName })),
             setPayload: (payload) => setState((previous) => ({ ...previous, payload })),
             updatePayloadField: (field, fieldValue) =>
                 setState((previous) => ({ ...previous, payload: { ...previous.payload, [field]: fieldValue } })),
+            nameFieldRef,
         }),
-        [state]
+        [nameFieldRef, state]
     );
 
     return <RobotFormContext.Provider value={value}>{children}</RobotFormContext.Provider>;
