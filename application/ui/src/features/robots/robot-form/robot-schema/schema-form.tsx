@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
-import { Flex, Heading, Switch, Text, View } from '@geti-ui/ui';
+import { Flex, Heading, Text, View } from '@geti-ui/ui';
 
 import { useRobotForm } from '../provider';
-import { ConnectionField } from './first-party-fields/connection-field';
-import { InfoField } from './first-party-fields/info-field';
+import { ConnectionField } from './components/connection-field';
+import { InfoField } from './components/info-field';
 import { SchemaField } from './schema-field';
 import {
     asRecord,
