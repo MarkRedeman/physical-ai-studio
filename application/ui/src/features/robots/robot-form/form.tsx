@@ -52,8 +52,9 @@ export const FormFields = () => {
         case 'Trossen_Bimanual_WidowXAI_Follower':
             formFields = <BiManualWidowxAIFormFields />;
             break;
-        case 'BimanualSO101_Follower':
-        case 'BimanualSO101_Leader':
+        // Bimanual SO101 is a plugin robot type not present in the backend catalog; kept for persisted robots.
+        case 'BimanualSO101_Follower' as ConfigurableRobotType:
+        case 'BimanualSO101_Leader' as ConfigurableRobotType:
             formFields = <BimanualSO101FormFields />;
             break;
     }

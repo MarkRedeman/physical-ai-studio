@@ -31,7 +31,7 @@ type SetRobotFormContextType = {
 
 const SetRobotFormContext = createContext<SetRobotFormContextType | null>(null);
 
-const FORM_DATA_FAMILY: Record<ConfigurableRobotType, string> = {
+const FORM_DATA_FAMILY: Record<ConfigurableRobotType | 'BimanualSO101_Follower' | 'BimanualSO101_Leader', string> = {
     SO101_Follower: 'so101',
     SO101_Leader: 'so101',
     Trossen_WidowXAI_Follower: 'widowx',
@@ -45,9 +45,11 @@ const FORM_DATA_FAMILY: Record<ConfigurableRobotType, string> = {
 const getInitialState = (robot?: AvailableSchemaRobot): RobotFormState => ({
     activeType: robot?.type ?? 'SO101_Follower',
     BimanualSO101_Follower: getInitialBimanualSO101FormData(
-        robot?.type === 'BimanualSO101_Follower' ? robot : undefined
+        robot?.type === ('BimanualSO101_Follower' as ConfigurableRobotType) ? robot : undefined
     ),
-    BimanualSO101_Leader: getInitialBimanualSO101FormData(robot?.type === 'BimanualSO101_Leader' ? robot : undefined),
+    BimanualSO101_Leader: getInitialBimanualSO101FormData(
+        robot?.type === ('BimanualSO101_Leader' as ConfigurableRobotType) ? robot : undefined
+    ),
     SO101_Follower: getInitialSO101FormData(robot?.type === 'SO101_Follower' ? robot : undefined),
     SO101_Leader: getInitialSO101FormData(robot?.type === 'SO101_Leader' ? robot : undefined),
     Trossen_WidowXAI_Follower: getInitialWidowxFormData(

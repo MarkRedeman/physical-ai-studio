@@ -1,18 +1,33 @@
 import { Flex, Item, Picker, Text } from '@geti-ui/ui';
 
 import { $api } from '../../../../api/client';
-import type { SchemaBimanualSo101Payload } from '../../../../api/openapi-spec';
+import type { SchemaSo101JointCalibration } from '../../../../api/openapi-spec';
 import { useProjectId } from '../../../projects/use-project';
-import type { SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../../robot-types';
+import type { ConfigurableRobotType, SchemaRobot, SchemaRobotInput, SchemaRobotType } from '../../robot-types';
 import { useRobotFormFields } from '../provider';
+
+// Bimanual SO101 is a plugin robot type; the backend does not return it in the OpenAPI catalog, so its payload schema
+// is defined here.
+type BimanualSO101Payload = {
+    left_serial_number: string;
+    right_serial_number: string;
+    left_calibration: Record<string, SchemaSo101JointCalibration> | null;
+    right_calibration: Record<string, SchemaSo101JointCalibration> | null;
+    baudrate: number;
+    role: 'follower' | 'leader';
+    disable_torque_on_disconnect: boolean;
+};
 
 export interface BimanualSO101FormData {
     name: string;
-    payload: SchemaBimanualSo101Payload;
+    payload: BimanualSO101Payload;
 }
 
 type SO101SourceRobot = Extract<SchemaRobot, { type: 'SO101_Follower' | 'SO101_Leader' }>;
-type BimanualSO101Robot = Extract<SchemaRobot, { type: 'BimanualSO101_Follower' | 'BimanualSO101_Leader' }>;
+type BimanualSO101Robot = SchemaRobot & {
+    type: 'BimanualSO101_Follower' | 'BimanualSO101_Leader';
+    payload: BimanualSO101Payload;
+};
 
 const isBimanualSO101Robot = (robot: SchemaRobot): robot is BimanualSO101Robot =>
     robot.type === 'BimanualSO101_Follower' || robot.type === 'BimanualSO101_Leader';
@@ -55,7 +70,7 @@ export const buildBimanualSO101Body = (
             ...formData.payload,
             role: schemaType === 'BimanualSO101_Leader' ? 'leader' : 'follower',
         },
-    } as SchemaRobotInput;
+    } as unknown as SchemaRobotInput;
 };
 
 const isEligibleSource = (robot: SchemaRobot, type: SO101SourceRobot['type']): robot is SO101SourceRobot =>
@@ -85,7 +100,8 @@ export const BimanualSO101FormFields = () => {
     const robotsQuery = $api.useSuspenseQuery('get', '/api/projects/{project_id}/robots', {
         params: { path: { project_id } },
     });
-    const sourceType = activeType === 'BimanualSO101_Leader' ? 'SO101_Leader' : 'SO101_Follower';
+    const sourceType =
+        activeType === ('BimanualSO101_Leader' as ConfigurableRobotType) ? 'SO101_Leader' : 'SO101_Follower';
     const eligibleRobots = robotsQuery.data.filter((robot) => isEligibleSource(robot, sourceType));
     const leftRobots = eligibleRobots.filter(
         (robot) => robot.payload.serial_number !== formData.payload.right_serial_number
