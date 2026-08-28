@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
     Button,
@@ -25,7 +25,7 @@ type HealthResponse = {
 
 type RestartStateValue = {
     restartRequired: boolean;
-    restartStatus: 'idle' | 'restarting' | 'failed';
+    isRestarting: boolean;
     restartPromptOpen: boolean;
     activeTrainingJobCount: number;
     hasActiveTrainingJobs: boolean;
@@ -36,15 +36,63 @@ type RestartStateValue = {
 };
 
 const HEALTH_POLL_INTERVAL_MS = 1500;
-const MIN_RESTART_DIALOG_MS = 2000;
 
 const RestartStateContext = createContext<RestartStateValue | null>(null);
+
+type RestartPromptDialogProps = {
+    isRestarting: boolean;
+    activeTrainingJobCount: number;
+    onDismiss: () => void;
+    onRestart: () => Promise<void>;
+};
+
+const RestartPromptDialog = ({
+    isRestarting,
+    activeTrainingJobCount,
+    onDismiss,
+    onRestart,
+}: RestartPromptDialogProps) => (
+    <DialogContainer onDismiss={onDismiss}>
+        <Dialog>
+            <Heading>Restart server now?</Heading>
+            <Divider />
+            <Content>
+                <Flex direction='column' gap='size-150'>
+                    <Text>Plugin changes require a server restart to become active.</Text>
+                    {activeTrainingJobCount > 0 ? (
+                        <Text>
+                            Restarting now will interrupt {activeTrainingJobCount} active training job
+                            {activeTrainingJobCount === 1 ? '' : 's'}.
+                        </Text>
+                    ) : null}
+                    {isRestarting ? (
+                        <Flex alignItems='center' gap='size-100'>
+                            <ProgressCircle aria-label='Restarting server' isIndeterminate size='S' />
+                            <Text>Waiting for server restart…</Text>
+                        </Flex>
+                    ) : null}
+                </Flex>
+            </Content>
+            <ButtonGroup>
+                <Button variant='accent' isDisabled={isRestarting} onPress={() => void onRestart()}>
+                    {isRestarting ? 'Restarting…' : 'Restart now'}
+                </Button>
+                {!isRestarting ? (
+                    <Button variant='secondary' onPress={onDismiss}>
+                        Later
+                    </Button>
+                ) : null}
+            </ButtonGroup>
+        </Dialog>
+    </DialogContainer>
+);
 
 export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     const queryClient = useQueryClient();
     const [restartRequested, setRestartRequested] = useState(false);
     const [restartPromptOpen, setRestartPromptOpen] = useState(false);
-    const [previousInstanceId, setPreviousInstanceId] = useState<string>();
+    const [isRestarting, setIsRestarting] = useState(false);
+    const lastInstanceId = useRef<string | undefined>(undefined);
 
     const restartMutation = $api.useMutation('post', '/api/system/restart', {
         meta: { skipInvalidation: true },
@@ -57,7 +105,6 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
         refetchOnReconnect: 'always',
     });
     const health = healthQuery.data as HealthResponse | undefined;
-    const isRestarting = previousInstanceId !== undefined;
     const restartRequired = restartRequested || health?.restart_required === true;
 
     const activeTrainingJobCount = jobs.filter(
@@ -86,12 +133,12 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
 
         const { data } = await healthQuery.refetch();
         const instanceId = (data as HealthResponse | undefined)?.instance_id;
-        if (instanceId === undefined) {
-            return;
+        if (instanceId !== undefined) {
+            lastInstanceId.current = instanceId;
         }
 
         setRestartPromptOpen(true);
-        setPreviousInstanceId(instanceId);
+        setIsRestarting(true);
 
         try {
             await restartMutation.mutateAsync({});
@@ -101,27 +148,19 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     }, [healthQuery, isRestarting, restartMutation]);
 
     useEffect(() => {
-        if (!isRestarting || health?.instance_id === previousInstanceId || health?.restart_required !== false) {
+        const instanceId = health?.instance_id;
+        if (instanceId === undefined) {
             return;
         }
 
-        const remainingMs = Math.max(0, restartMutation.submittedAt + MIN_RESTART_DIALOG_MS - Date.now());
-        const timeout = window.setTimeout(() => {
+        if (lastInstanceId.current !== undefined && instanceId !== lastInstanceId.current) {
             queryClient.clear();
-            setPreviousInstanceId(undefined);
+            setIsRestarting(false);
             setRestartRequested(false);
             setRestartPromptOpen(false);
-        }, remainingMs);
-
-        return () => window.clearTimeout(timeout);
-    }, [
-        health?.instance_id,
-        health?.restart_required,
-        isRestarting,
-        previousInstanceId,
-        queryClient,
-        restartMutation.submittedAt,
-    ]);
+        }
+        lastInstanceId.current = instanceId;
+    }, [health?.instance_id, queryClient]);
 
     useEffect(() => {
         if (!isRestarting || healthQuery.isFetching) {
@@ -138,7 +177,7 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
     const value = useMemo(
         (): RestartStateValue => ({
             restartRequired,
-            restartStatus: isRestarting ? 'restarting' : 'idle',
+            isRestarting,
             restartPromptOpen,
             activeTrainingJobCount,
             hasActiveTrainingJobs: activeTrainingJobCount > 0,
@@ -154,39 +193,12 @@ export const RestartStateProvider = ({ children }: { children: ReactNode }) => {
         <RestartStateContext.Provider value={value}>
             {children}
             {restartRequired && restartPromptOpen ? (
-                <DialogContainer onDismiss={closeRestartPrompt}>
-                    <Dialog>
-                        <Heading>Restart server now?</Heading>
-                        <Divider />
-                        <Content>
-                            <Flex direction='column' gap='size-150'>
-                                <Text>Plugin changes require a server restart to become active.</Text>
-                                {activeTrainingJobCount > 0 ? (
-                                    <Text>
-                                        Restarting now will interrupt {activeTrainingJobCount} active training job
-                                        {activeTrainingJobCount === 1 ? '' : 's'}.
-                                    </Text>
-                                ) : null}
-                                {isRestarting ? (
-                                    <Flex alignItems='center' gap='size-100'>
-                                        <ProgressCircle aria-label='Restarting server' isIndeterminate size='S' />
-                                        <Text>Waiting for server restart…</Text>
-                                    </Flex>
-                                ) : null}
-                            </Flex>
-                        </Content>
-                        <ButtonGroup>
-                            <Button variant='accent' isDisabled={isRestarting} onPress={() => void restartServer()}>
-                                {isRestarting ? 'Restarting…' : 'Restart now'}
-                            </Button>
-                            {!isRestarting ? (
-                                <Button variant='secondary' onPress={closeRestartPrompt}>
-                                    Later
-                                </Button>
-                            ) : null}
-                        </ButtonGroup>
-                    </Dialog>
-                </DialogContainer>
+                <RestartPromptDialog
+                    isRestarting={isRestarting}
+                    activeTrainingJobCount={activeTrainingJobCount}
+                    onDismiss={closeRestartPrompt}
+                    onRestart={restartServer}
+                />
             ) : null}
         </RestartStateContext.Provider>
     );
@@ -198,10 +210,4 @@ export const useRestartState = () => {
         throw new Error('useRestartState must be used within RestartStateProvider');
     }
     return context;
-};
-
-export const useRestartServerMutation = () => {
-    const { restartServer, restartStatus } = useRestartState();
-    const isPending = restartStatus !== 'idle' && restartStatus !== 'failed';
-    return { restartServer, restartStatus, isPending };
 };
