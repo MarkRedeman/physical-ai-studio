@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 
 import { AvailableSchemaRobot, ConfigurableRobotType, SchemaRobotInput } from '../robot-types';
+import { getInitialBimanualSO101FormData } from './catalog/bimanual-so101';
 import { getInitialSO101FormData } from './catalog/so101';
 import { getInitialWidowxFormData } from './catalog/widowxai';
 import { getInitialBimanualFormData } from './catalog/widowxai-bimanual';
@@ -14,6 +15,8 @@ type RobotFormState = {
     Trossen_WidowXAI_Leader: FormDataForSchema['Trossen_WidowXAI_Leader'];
     Trossen_Bimanual_WidowXAI_Follower: FormDataForSchema['Trossen_Bimanual_WidowXAI_Follower'];
     Trossen_Bimanual_WidowXAI_Leader: FormDataForSchema['Trossen_Bimanual_WidowXAI_Leader'];
+    BimanualSO101_Follower: FormDataForSchema['BimanualSO101_Follower'];
+    BimanualSO101_Leader: FormDataForSchema['BimanualSO101_Leader'];
 };
 
 const RobotFormContext = createContext<RobotFormState | null>(null);
@@ -35,10 +38,16 @@ const FORM_DATA_FAMILY: Record<ConfigurableRobotType, string> = {
     Trossen_WidowXAI_Leader: 'widowx',
     Trossen_Bimanual_WidowXAI_Follower: 'bimanual',
     Trossen_Bimanual_WidowXAI_Leader: 'bimanual',
+    BimanualSO101_Follower: 'bimanual_so101',
+    BimanualSO101_Leader: 'bimanual_so101',
 };
 
 const getInitialState = (robot?: AvailableSchemaRobot): RobotFormState => ({
     activeType: robot?.type ?? 'SO101_Follower',
+    BimanualSO101_Follower: getInitialBimanualSO101FormData(
+        robot?.type === 'BimanualSO101_Follower' ? robot : undefined
+    ),
+    BimanualSO101_Leader: getInitialBimanualSO101FormData(robot?.type === 'BimanualSO101_Leader' ? robot : undefined),
     SO101_Follower: getInitialSO101FormData(robot?.type === 'SO101_Follower' ? robot : undefined),
     SO101_Leader: getInitialSO101FormData(robot?.type === 'SO101_Leader' ? robot : undefined),
     Trossen_WidowXAI_Follower: getInitialWidowxFormData(
