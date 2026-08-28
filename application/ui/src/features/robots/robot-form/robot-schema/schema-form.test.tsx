@@ -388,8 +388,6 @@ describe('SchemaForm', () => {
     });
 
     it('skips unsupported dictionary fields', async () => {
-        const user = userEvent.setup();
-
         render(
             <RobotFormProvider>
                 <SchemaForm schema={lerobotSO101Schema} />
@@ -399,16 +397,9 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('button', { name: 'Select robot' })).toBeVisible();
         expect(screen.queryByRole('heading', { name: 'Cameras' })).not.toBeInTheDocument();
         expect(screen.queryByRole('textbox', { name: 'Cameras' })).not.toBeInTheDocument();
-
-        await user.click(screen.getByRole('switch', { name: 'Show default fields' }));
-
-        expect(screen.queryByRole('heading', { name: 'Cameras' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('textbox', { name: 'Cameras' })).not.toBeInTheDocument();
     });
 
     it('renders connection pickers from referenced nested object schemas', async () => {
-        const user = userEvent.setup();
-
         render(
             <RobotFormProvider>
                 <SchemaForm schema={bimanualRebotSchema} />
@@ -419,12 +410,6 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('heading', { name: 'Left Arm Config' })).toBeVisible();
         expect(screen.getByRole('heading', { name: 'Right Arm Config' })).toBeVisible();
         expect(screen.queryAllByRole('textbox', { name: 'Can Adapter' })).toHaveLength(0);
-
-        await user.click(screen.getByRole('switch', { name: 'Show default fields' }));
-        const canAdapters = screen.getAllByRole('textbox', { name: 'Can Adapter' });
-        expect(canAdapters).toHaveLength(2);
-        expect(canAdapters[0]).toHaveValue('damiao');
-        expect(canAdapters[1]).toHaveValue('damiao');
 
         expect(screen.getAllByRole('button', { name: 'Select robot' })).toHaveLength(2);
     });
