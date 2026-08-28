@@ -154,7 +154,6 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
 
 export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const { activeType, payload, setPayload, updatePayloadField } = useRobotForm();
-    const [showDefaultFields, setShowDefaultFields] = useState(false);
     const properties = schema.properties ?? EMPTY_PROPERTIES;
     const definitions = schema.$defs ?? EMPTY_DEFINITIONS;
     const required = new Set(schema.required ?? []);
@@ -169,8 +168,12 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const isFieldVisible: IsFieldVisible = (name, field, fieldRequired) => {
         const resolvedField = resolveReference(field, definitions);
         const fieldUi = resolvedField['x-physicalai-ui'];
+
         const isRequired = fieldRequired.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
-        if (!isRequired && resolvedField.default !== undefined && !showDefaultFields) return false;
+        if (!isRequired && resolvedField.default !== undefined) {
+            return false;
+        }
+
         return resolvedField.type !== 'object' || resolvedField.properties !== undefined;
     };
 
@@ -185,11 +188,6 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
 
     return (
         <Flex direction='column' gap='size-200'>
-            <Flex justifyContent='end'>
-                <Switch isSelected={showDefaultFields} onChange={setShowDefaultFields}>
-                    Show default fields
-                </Switch>
-            </Flex>
             <SchemaFormItems
                 items={items}
                 properties={properties}
