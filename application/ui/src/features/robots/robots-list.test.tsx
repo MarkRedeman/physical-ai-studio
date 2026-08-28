@@ -12,7 +12,6 @@ import { http } from '../../api/utils';
 import { server } from '../../msw-node-setup';
 import { createQueryClient } from '../../query-client/query-client';
 import { render } from '../../test-utils/render';
-import { RestartStateProvider } from '../system/restart-state';
 import { RobotsList } from './robots-list';
 
 const PROJECT_ID = 'test-project-id';
@@ -49,9 +48,7 @@ const renderRobotsListAtShowRoute = () => {
     const providers = (children: ReactNode) => (
         <QueryClientProvider client={queryClient}>
             <ThemeProvider>
-                <RestartStateProvider>
-                    <Suspense>{children}</Suspense>
-                </RestartStateProvider>
+                <Suspense>{children}</Suspense>
             </ThemeProvider>
         </QueryClientProvider>
     );

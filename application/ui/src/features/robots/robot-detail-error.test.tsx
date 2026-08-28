@@ -12,7 +12,6 @@ import { http } from '../../api/utils';
 import { server } from '../../msw-node-setup';
 import { createQueryClient } from '../../query-client/query-client';
 import { Robot } from '../../routes/robots/robot';
-import { RestartStateProvider } from '../system/restart-state';
 import { RobotDetailError } from './robot-detail-error';
 
 const PROJECT_ID = 'project-id';
@@ -38,11 +37,9 @@ const renderAtShowRoute = () => {
     return rtlRender(
         <QueryClientProvider client={queryClient}>
             <ThemeProvider>
-                <RestartStateProvider>
-                    <Suspense>
-                        <RouterProvider router={router} />
-                    </Suspense>
-                </RestartStateProvider>
+                <Suspense>
+                    <RouterProvider router={router} />
+                </Suspense>
             </ThemeProvider>
         </QueryClientProvider>
     );
