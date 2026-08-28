@@ -61,6 +61,24 @@ export const buildBimanualSO101Body = (
 const isEligibleSource = (robot: SchemaRobot, type: SO101SourceRobot['type']): robot is SO101SourceRobot =>
     robot.type === type && robot.payload.serial_number !== '' && robot.payload.calibration != null;
 
+interface SO101ArmPickerProps {
+    arm: 'left' | 'right';
+    robots: SO101SourceRobot[];
+    selectedKey: string | number | null;
+    onSelect: (robotId: string | number | null) => void;
+}
+
+const SO101ArmPicker = ({ arm, robots, selectedKey, onSelect }: SO101ArmPickerProps) => (
+    <Picker isRequired label={`Select ${arm} arm`} width='100%' selectedKey={selectedKey} onSelectionChange={onSelect}>
+        {robots.map((robot) => (
+            <Item key={robot.id} textValue={robot.name}>
+                <Text>{robot.name}</Text>
+                <Text slot='description'>{robot.payload.serial_number}</Text>
+            </Item>
+        ))}
+    </Picker>
+);
+
 export const BimanualSO101FormFields = () => {
     const { project_id } = useProjectId();
     const { formData, updateField, activeType } = useRobotFormFields<BimanualSO101FormData>();
@@ -104,29 +122,20 @@ export const BimanualSO101FormFields = () => {
         return eligibleRobots.find((robot) => robot.payload.serial_number === serial_number)?.id ?? null;
     };
 
-    const armPicker = (arm: 'left' | 'right', robots: SO101SourceRobot[]) => (
-        <Picker
-            isRequired
-            label={`Select ${arm} arm`}
-            width='100%'
-            selectedKey={selectedRobotId(arm)}
-            onSelectionChange={(robotId) => {
-                selectArm(arm, robotId);
-            }}
-        >
-            {robots.map((robot) => (
-                <Item key={robot.id} textValue={robot.name}>
-                    <Text>{robot.name}</Text>
-                    <Text slot='description'>{robot.payload.serial_number}</Text>
-                </Item>
-            ))}
-        </Picker>
-    );
-
     return (
         <Flex direction='column' gap='size-100' width='100%'>
-            {armPicker('left', leftRobots)}
-            {armPicker('right', rightRobots)}
+            <SO101ArmPicker
+                arm='left'
+                robots={leftRobots}
+                selectedKey={selectedRobotId('left')}
+                onSelect={(robotId) => selectArm('left', robotId)}
+            />
+            <SO101ArmPicker
+                arm='right'
+                robots={rightRobots}
+                selectedKey={selectedRobotId('right')}
+                onSelect={(robotId) => selectArm('right', robotId)}
+            />
         </Flex>
     );
 };
