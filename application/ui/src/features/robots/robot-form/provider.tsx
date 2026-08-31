@@ -10,15 +10,12 @@ export type RobotFormData = { name: string; payload: RobotPayload };
 type RobotFormState = {
     activeType: string | undefined;
     name: string;
-    /** Display name last auto-filled for the active robot type. */
-    suggestedName: string;
     payload: RobotPayload;
 };
 
 type RobotFormContextValue = RobotFormState & {
     setActiveType: (type: string) => void;
     setName: (name: string) => void;
-    setSuggestedName: (name: string) => void;
     setPayload: (payload: RobotPayload) => void;
     updatePayloadField: (field: string, value: unknown) => void;
     nameFieldRef: RefObject<TextFieldRef | null>;
@@ -36,7 +33,6 @@ export const RobotFormProvider = ({
     const [state, setState] = useState<RobotFormState>(() => ({
         activeType: robot?.type,
         name: robot?.name ?? '',
-        suggestedName: '',
         payload: isPayload(robot?.payload) ? robot.payload : {},
     }));
 
@@ -47,7 +43,6 @@ export const RobotFormProvider = ({
             ...state,
             setActiveType: (activeType) => setState((previous) => ({ ...previous, activeType, payload: {} })),
             setName: (name) => setState((previous) => ({ ...previous, name })),
-            setSuggestedName: (suggestedName) => setState((previous) => ({ ...previous, suggestedName })),
             setPayload: (payload) => setState((previous) => ({ ...previous, payload })),
             updatePayloadField: (field, fieldValue) =>
                 setState((previous) => ({ ...previous, payload: { ...previous.payload, [field]: fieldValue } })),
