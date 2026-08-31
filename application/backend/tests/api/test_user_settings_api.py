@@ -49,6 +49,17 @@ def test_patch_settings_clears_huggingface_token(monkeypatch, tmp_path: Path) ->
     assert get_settings().huggingface.hf_token is None
 
 
+def test_patch_streaming_settings(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"streaming": {"vcodec": "libx264", "encoder_threads": 4}})
+
+    assert response.status_code == 200
+    assert response.json()["streaming"]["vcodec"] == "libx264"
+    assert get_settings().streaming.encoder_threads == 4
+
+
 def test_patch_empty_huggingface_token_clears_setting(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
     write_user_settings({"huggingface": {"hf_token": "super-secret"}})

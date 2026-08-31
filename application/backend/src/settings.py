@@ -141,7 +141,19 @@ class HotkeySettings(BaseModel):
     bindings: dict[str, str] = Field(default_factory=dict)
 
 
-_USER_CONFIG_GROUPS: tuple[str, ...] = ("trainer", "huggingface", "hotkeys")
+class StreamingSettings(BaseModel):
+    """Streaming video encoding settings for dataset recordings."""
+
+    vcodec: str = Field(default="auto")
+    pix_fmt: str | None = Field(default=None)
+    crf: int | float | None = Field(default=None)
+    preset: int | str | None = Field(default=None)
+    extra_options: dict[str, Any] | None = Field(default=None)
+    encoder_threads: int | None = Field(default=None)
+    encoder_queue_maxsize: int = Field(default=60)
+
+
+_USER_CONFIG_GROUPS: tuple[str, ...] = ("streaming", "trainer", "huggingface", "hotkeys")
 
 
 def _storage_key(field_name: str) -> str:
@@ -303,6 +315,8 @@ class Settings(BaseSettings):
     huggingface: HuggingFaceSettings = HuggingFaceSettings()
     # User-configurable keyboard shortcut bindings.
     hotkeys: HotkeySettings = HotkeySettings()
+    # User-configurable video encoding for dataset recordings.
+    streaming: StreamingSettings = StreamingSettings()
 
     # SSH-provisioned remote training
     # The feature is always active, subject only to

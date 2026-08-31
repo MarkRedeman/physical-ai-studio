@@ -69,8 +69,7 @@ class InternalLeRobotDataset(DatasetClient):
             self.has_episodes = self._dataset.num_episodes > 0
 
     def _resolved_streaming_encoding_settings_write(self) -> dict:
-        settings = self._streaming_encoding_settings.with_resolved_vcodec()
-        return settings.to_lerobot_write_kwargs()
+        return self._streaming_encoding_settings.to_lerobot_write_kwargs()
 
     def _resume_for_writing(self, repo_id: str | None = None) -> None:
         if not self._check_repository_exists(self.path):

@@ -23,3 +23,12 @@
 .saved {
     color: var(--spectrum-global-color-gray-700);
 }
+
+.presetDescription {
+    display: block;
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.recommendation {
+    margin-top: var(--spectrum-global-dimension-size-100);
+}

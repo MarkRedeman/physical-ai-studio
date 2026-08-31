@@ -11,6 +11,7 @@ from settings import (
     HuggingFaceSettings,
     Settings,
     SshProvisioningSettings,
+    StreamingSettings,
     TrainerClientSettings,
     get_settings,
     merge_user_settings,
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/api/settings", tags=["Settings"])
 class UserSettingsResponse(BaseModel):
     """Effective user-configurable settings, with secrets masked."""
 
+    streaming: StreamingSettings
     trainer: TrainerClientSettings
     huggingface: HuggingFaceSettings
     ssh: SshProvisioningSettings
@@ -31,6 +33,7 @@ class UserSettingsResponse(BaseModel):
     @classmethod
     def from_settings(cls, settings: Settings) -> "UserSettingsResponse":
         return cls(
+            streaming=settings.streaming,
             trainer=settings.trainer,
             huggingface=settings.huggingface,
             ssh=settings.ssh,
@@ -41,6 +44,7 @@ class UserSettingsResponse(BaseModel):
 class SettingsUpdate(BaseModel):
     """Partial update for user-configurable application settings."""
 
+    streaming: StreamingSettings | None = None
     trainer: TrainerClientSettings | None = None
     huggingface: HuggingFaceSettings | None = None
     ssh: SshProvisioningSettings | None = None

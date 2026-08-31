@@ -58,6 +58,15 @@ const mockProjectWithRemoteTrainer = () => {
         http.get('/api/remote-trainers', () => HttpResponse.json([remoteTrainer])),
         http.get('/api/settings', () =>
             HttpResponse.json({
+                streaming: {
+                    vcodec: 'auto',
+                    pix_fmt: null,
+                    crf: null,
+                    preset: null,
+                    extra_options: null,
+                    encoder_threads: null,
+                    encoder_queue_maxsize: 60,
+                },
                 trainer: {
                     request_timeout_s: 30,
                     download_read_timeout_s: 120,

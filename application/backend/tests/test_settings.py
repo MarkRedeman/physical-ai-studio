@@ -97,3 +97,11 @@ def test_hotkey_bindings_patch_replaces_whole_map(monkeypatch, tmp_path: Path) -
 
     settings = Settings()
     assert settings.hotkeys.bindings == {"a": "Z"}
+
+def test_streaming_settings_are_loaded_from_json(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+    merge_user_settings({"streaming": {"vcodec": "libx264", "encoder_threads": 4}})
+
+    settings = Settings()
+    assert settings.streaming.vcodec == "libx264"
+    assert settings.streaming.encoder_threads == 4

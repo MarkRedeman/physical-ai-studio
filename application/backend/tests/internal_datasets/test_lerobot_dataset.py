@@ -1,11 +1,13 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from lerobot.configs import RGBEncoderConfig
 
 from internal_datasets.access_mode import DatasetAccessMode
+from internal_datasets.lerobot import streaming_encoding_settings
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
-from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings
+from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings, StudioRGBEncoderConfig
 
 
 def test_streaming_settings_translate_to_lerobot_kwargs() -> None:
@@ -23,7 +25,7 @@ def test_streaming_settings_translate_to_lerobot_kwargs() -> None:
     assert kwargs["encoder_queue_maxsize"] == 60
     assert isinstance(kwargs["rgb_encoder"], RGBEncoderConfig)
     assert kwargs["rgb_encoder"].vcodec == "h264"
-    assert kwargs["rgb_encoder"].g is None
+    assert kwargs["rgb_encoder"].g == 2
     assert "vcodec" not in kwargs
 
 
@@ -50,7 +52,7 @@ def test_create_uses_rgb_encoder_and_not_vcodec(tmp_path: Path) -> None:
     kwargs = create_mock.call_args.kwargs
     assert isinstance(kwargs["rgb_encoder"], RGBEncoderConfig)
     assert kwargs["rgb_encoder"].vcodec == "h264"
-    assert kwargs["rgb_encoder"].g is None
+    assert kwargs["rgb_encoder"].g == 2
     assert kwargs["streaming_encoding"] is True
     assert kwargs["encoder_threads"] == 2
     assert kwargs["encoder_queue_maxsize"] == 60
@@ -110,7 +112,7 @@ def test_resume_dataset_uses_write_kwargs_and_not_vcodec(tmp_path: Path) -> None
     kwargs = resume_mock.call_args.kwargs
     assert isinstance(kwargs["rgb_encoder"], RGBEncoderConfig)
     assert kwargs["rgb_encoder"].vcodec == "h264"
-    assert kwargs["rgb_encoder"].g is None
+    assert kwargs["rgb_encoder"].g == 2
     assert kwargs["streaming_encoding"] is True
     assert kwargs["encoder_threads"] == 2
     assert kwargs["encoder_queue_maxsize"] == 60
@@ -136,3 +138,34 @@ def test_resume_dataset_raises_in_read_only_mode(tmp_path: Path) -> None:
         except ValueError as exc:
             assert "RECORDING_MUTATION" in str(exc)
     resume_mock.assert_not_called()
+
+
+def test_streaming_settings_translate_extra_encoding_fields() -> None:
+    settings = StreamingEncodingSettings(vcodec="h264", pix_fmt="yuv420p", g=10, crf=23, preset="medium")
+
+    rgb_encoder = settings.to_lerobot_write_kwargs()["rgb_encoder"]
+
+    assert (rgb_encoder.pix_fmt, rgb_encoder.g, rgb_encoder.crf, rgb_encoder.preset) == ("yuv420p", 10, 23, "medium")
+
+
+def test_hardware_codec_defaults_to_nv12_pix_fmt() -> None:
+    with patch.object(streaming_encoding_settings, "_is_vcodec_usable", return_value=True):
+        rgb_encoder = StreamingEncodingSettings(vcodec="h264_nvenc").to_lerobot_write_kwargs()["rgb_encoder"]
+
+    assert rgb_encoder.pix_fmt == "nv12"
+
+
+def test_vcodec_candidates_prefer_hardware_and_exclude_native_codecs() -> None:
+    candidates = streaming_encoding_settings.vcodec_candidates()
+
+    assert candidates[:3] == ["av1_qsv", "hevc_qsv", "h264_qsv"]
+    assert "h264" not in candidates
+    assert "hevc" not in candidates
+
+
+def test_explicit_unusable_vcodec_raises() -> None:
+    with (
+        patch.object(streaming_encoding_settings, "_is_vcodec_usable", return_value=False),
+        pytest.raises(ValueError, match="not usable"),
+    ):
+        StudioRGBEncoderConfig(vcodec="av1_qsv")
