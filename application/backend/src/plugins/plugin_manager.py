@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Literal
 from exceptions import PluginOperationError, ResourceNotFoundError, ResourceType
 from robots.catalog.registry import RobotCatalogRegistry
 
-from .manifest import PluginExtensionEntry, PluginManifestEntry, PluginSource, load_plugin_manifest
+from .manifest import PluginManifestEntry, load_plugin_manifest
 
 if TYPE_CHECKING:
     from importlib.metadata import Distribution
@@ -32,31 +32,16 @@ class PluginRobot:
 
 
 @dataclass
-class PluginExtensionInfo:
-    """An optional add-on gated behind its parent plugin, with install state."""
-
-    id: str
-    name: str
-    description: str
-    repo_url: str | None
-    installed: bool
-    installed_version: str | None
-
-
-@dataclass
 class PluginInfo:
     """Full plugin status combining the manifest with runtime discovery."""
 
     id: str
     name: str
     description: str
-    category: str
-    source: PluginSource
     repo_url: str | None
     installed: bool
     installed_version: str | None
     robots: list[PluginRobot]
-    extensions: list[PluginExtensionInfo]
 
 
 class PluginManager:
@@ -88,29 +73,19 @@ class PluginManager:
         return [self._to_info(entry, self._installed_dist(entry.id)) for entry in self._manifest]
 
     def get(self, plugin_id: str) -> PluginInfo:
-        """Return a single manifest plugin or extension, raising if unknown."""
-        for entry in self._manifest:
-            if entry.id == plugin_id:
-                return self._to_info(entry, self._installed_dist(plugin_id))
-            for extension in entry.extensions:
-                if extension.id == plugin_id:
-                    return self._to_extension_info(extension)
-        raise ResourceNotFoundError(ResourceType.PLUGIN, plugin_id)
+        """Return a single manifest plugin, raising if unknown."""
+        return self._to_info(self._resolve(plugin_id), self._installed_dist(plugin_id))
 
     def robot_types(self, plugin_id: str) -> list[str]:
         """Return every robot type a plugin contributes (manifest plus installed catalog types)."""
-        entry, extension = self._resolve(plugin_id)
-        if extension is not None:
-            if self._installed_dist(extension.id) is None:
-                return []
-            return self.registry.robot_types_for_distribution(extension.id)
+        entry = self._resolve(plugin_id)
         types = [robot.type for robot in entry.robots]
         if self._installed_dist(plugin_id) is not None:
             types.extend(self.registry.robot_types_for_distribution(entry.id))
         return types
 
     async def install(self, plugin_id: str) -> None:
-        """Install a plugin or extension distribution into the active environment.
+        """Install a plugin distribution into the active environment.
 
         Serialized per manager instance: only one install/uninstall can touch
         the environment at a time. The subprocess runs in a worker thread so a
@@ -119,21 +94,16 @@ class PluginManager:
         which the restart-required flow already accounts for.
         """
         async with self._operation_lock:
-            entry, extension = self._resolve(plugin_id)
-            if extension is not None and self._installed_dist(entry.id) is None:
-                raise PluginOperationError(
-                    f"Install '{entry.name}' first before installing the extension '{extension.name}'."
-                )
+            entry = self._resolve(plugin_id)
             if self._installed_dist(plugin_id) is not None:
                 raise PluginOperationError(f"Plugin '{plugin_id}' is already installed.")
-            install_source = extension.install_source if extension is not None else entry.install_source
             await asyncio.to_thread(
                 self._run,
-                ["uv", "pip", "install", "--python", sys.executable, install_source],
+                ["uv", "pip", "install", "--python", sys.executable, entry.install_source],
             )
 
     async def uninstall(self, plugin_id: str) -> None:
-        """Uninstall a plugin or extension distribution from the active environment.
+        """Uninstall a plugin distribution from the active environment.
 
         Serialized per manager instance; see ``install``.
         """
@@ -150,14 +120,11 @@ class PluginManager:
     # Internals
     # ------------------------------------------------------------------
 
-    def _resolve(self, plugin_id: str) -> tuple[PluginManifestEntry, PluginExtensionEntry | None]:
-        """Resolve a plugin id to its manifest entry and, if applicable, its extension."""
+    def _resolve(self, plugin_id: str) -> PluginManifestEntry:
+        """Resolve a plugin id to its manifest entry, raising if unknown."""
         for entry in self._manifest:
             if entry.id == plugin_id:
-                return entry, None
-            for extension in entry.extensions:
-                if extension.id == plugin_id:
-                    return entry, extension
+                return entry
         raise ResourceNotFoundError(ResourceType.PLUGIN, plugin_id)
 
     @staticmethod
@@ -200,24 +167,10 @@ class PluginManager:
             id=entry.id,
             name=entry.name,
             description=entry.description,
-            category=entry.category,
-            source=entry.source,
             repo_url=entry.repo_url,
             installed=installed,
             installed_version=dist.version if dist is not None else None,
             robots=robots,
-            extensions=[self._to_extension_info(extension) for extension in entry.extensions],
-        )
-
-    def _to_extension_info(self, extension: PluginExtensionEntry) -> PluginExtensionInfo:
-        dist = self._installed_dist(extension.id)
-        return PluginExtensionInfo(
-            id=extension.id,
-            name=extension.name,
-            description=extension.description,
-            repo_url=extension.repo_url,
-            installed=dist is not None,
-            installed_version=dist.version if dist is not None else None,
         )
 
     @staticmethod

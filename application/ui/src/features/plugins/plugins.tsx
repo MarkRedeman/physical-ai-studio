@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Badge, Button, Flex, Heading, Link, Text, View } from '@geti-ui/ui';
 import { clsx } from 'clsx';
 
-import { SchemaPluginExtensionResponse, SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
+import { SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
 import { Table, TableColumn } from '../../components/table/table';
 import { usePluginActions, usePluginsQuery } from './plugins.hooks';
 
@@ -45,64 +45,7 @@ const PluginRobots = ({ robots }: { robots: SchemaPluginRobotResponse[] }) => {
     );
 };
 
-const ExtensionRow = ({
-    extension,
-    isBusy,
-    busyId,
-    onInstall,
-    onUninstall,
-}: {
-    extension: SchemaPluginExtensionResponse;
-    isBusy: boolean;
-    busyId: string | undefined;
-    onInstall: (pluginId: string) => void;
-    onUninstall: (pluginId: string) => void;
-}) => {
-    const isThisBusy = busyId === extension.id && isBusy;
-    return (
-        <View padding='size-100' UNSAFE_className={classes.extensionRow}>
-            <Flex alignItems='center' justifyContent='space-between' gap='size-200'>
-                <Flex direction='column' gap='size-50' flex={1}>
-                    <Flex alignItems='center' gap='size-100'>
-                        <Heading level={4} margin={0}>
-                            {extension.name}
-                        </Heading>
-                        {extension.installed ? (
-                            <Badge variant='positive'>v{extension.installed_version}</Badge>
-                        ) : (
-                            <Badge variant='neutral'>Available</Badge>
-                        )}
-                    </Flex>
-                    <Text UNSAFE_className={classes.extensionDescription}>{extension.description}</Text>
-                </Flex>
-                {extension.installed ? (
-                    <Button variant='secondary' isDisabled={isBusy} onPress={() => onUninstall(extension.id)}>
-                        {isThisBusy ? 'Uninstalling…' : 'Uninstall'}
-                    </Button>
-                ) : (
-                    <Button variant='secondary' isDisabled={isBusy} onPress={() => onInstall(extension.id)}>
-                        {isThisBusy ? 'Installing…' : 'Install'}
-                    </Button>
-                )}
-            </Flex>
-        </View>
-    );
-};
-
-const PluginDetail = ({
-    plugin,
-    isBusy,
-    busyId,
-    onInstall,
-    onUninstall,
-}: {
-    plugin: SchemaPluginResponse;
-    isBusy: boolean;
-    busyId: string | undefined;
-    onInstall: (pluginId: string) => void;
-    onUninstall: (pluginId: string) => void;
-}) => {
-    const extensions = plugin.extensions ?? [];
+const PluginDetail = ({ plugin }: { plugin: SchemaPluginResponse }) => {
     return (
         <View backgroundColor='gray-75' padding='size-300' borderColor='gray-300' borderWidth='thin'>
             <Flex direction='column' gap='size-200'>
@@ -119,28 +62,6 @@ const PluginDetail = ({
                     <Link href={plugin.repo_url} target='_blank' rel='noreferrer'>
                         GitHub
                     </Link>
-                ) : null}
-                {extensions.length > 0 ? (
-                    plugin.installed ? (
-                        <Flex direction='column' gap='size-100'>
-                            <Heading level={4}>Extensions</Heading>
-                            {extensions.map((extension) => (
-                                <ExtensionRow
-                                    key={extension.id}
-                                    extension={extension}
-                                    isBusy={isBusy}
-                                    busyId={busyId}
-                                    onInstall={onInstall}
-                                    onUninstall={onUninstall}
-                                />
-                            ))}
-                        </Flex>
-                    ) : (
-                        <Text UNSAFE_className={classes.extensionHint}>
-                            {extensions.length} extension{extensions.length === 1 ? '' : 's'} become available after
-                            installing this plugin.
-                        </Text>
-                    )
                 ) : null}
             </Flex>
         </View>
@@ -175,15 +96,7 @@ const PluginRow = ({
             label={plugin.name}
             isExpanded={isExpanded}
             onExpandedChange={onExpandedChange}
-            detail={
-                <PluginDetail
-                    plugin={plugin}
-                    isBusy={isBusy}
-                    busyId={busyId}
-                    onInstall={onInstall}
-                    onUninstall={onUninstall}
-                />
-            }
+            detail={<PluginDetail plugin={plugin} />}
         >
             <Flex direction='column' gap='size-50'>
                 <Heading level={4} margin={0}>

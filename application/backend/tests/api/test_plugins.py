@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 import api.plugins as plugins_api
 from api.dependencies import get_health_service
-from api.plugins import PluginExtensionInfo, PluginInfo, PluginManager, PluginRobot, get_plugin_manager
+from api.plugins import PluginInfo, PluginManager, PluginRobot, get_plugin_manager
 from main import app
 from services.health_service import HealthService
 
@@ -16,19 +16,15 @@ def _plugin_info(
     plugin_id: str = "demo-plugin",
     installed: bool = False,
     robots: list[PluginRobot] | None = None,
-    extensions: list[PluginExtensionInfo] | None = None,
 ) -> PluginInfo:
     return PluginInfo(
         id=plugin_id,
         name="Demo Plugin",
         description="A demo plugin.",
-        category="Demo",
-        source="first_party",
         repo_url="https://example.com/demo",
         installed=installed,
         installed_version="1.2.3" if installed else None,
         robots=robots if robots is not None else [],
-        extensions=extensions if extensions is not None else [],
     )
 
 
@@ -163,30 +159,4 @@ def test_uninstall_plugin_blocked_when_robots_in_use() -> None:
 
     assert response.status_code == 409
     assert "Demo_Follower" in response.json()["message"]
-    manager.uninstall.assert_not_called()
-
-
-def test_uninstall_extension_blocked_when_robots_in_use() -> None:
-    extension = PluginExtensionInfo(
-        id="demo-extension",
-        name="Demo Extension",
-        description="An optional add-on.",
-        repo_url=None,
-        installed=True,
-        installed_version="1.2.3",
-    )
-    manager = _stub_manager(
-        info=_plugin_info(installed=True, extensions=[extension]),
-        robot_types=["Ext_Follower"],
-    )
-    _override(manager, in_use=["Ext_Follower"])
-
-    try:
-        client = TestClient(app)
-        response = client.post("/api/plugins/demo-extension/uninstall")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 409
-    assert "Ext_Follower" in response.json()["message"]
     manager.uninstall.assert_not_called()
