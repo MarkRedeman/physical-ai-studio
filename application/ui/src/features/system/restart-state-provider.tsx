@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { $api } from '../../api/client';
 import { SchemaTrainJob } from '../../api/openapi-spec';
+import { pluralize } from '../../utils';
 
 type HealthResponse = {
     status?: string;
@@ -61,8 +62,8 @@ const RestartPromptDialog = ({
                     <Text>Plugin changes require a server restart to become active.</Text>
                     {activeTrainingJobCount > 0 ? (
                         <Text>
-                            Restarting now will interrupt {activeTrainingJobCount} active training job
-                            {activeTrainingJobCount === 1 ? '' : 's'}.
+                            Restarting now will interrupt {activeTrainingJobCount} active{' '}
+                            {pluralize(activeTrainingJobCount, 'training job', 'training jobs')}.
                         </Text>
                     ) : null}
                     {isRestarting ? (
