@@ -190,7 +190,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     return (
         <Flex direction='column' gap='size-200'>
             <Flex justifyContent='end'>
-                <Switch isSelected={showAdvanced} onChange={setShowAdvanced}>
+                <Switch isSelected={showAdvanced} onChange={setShowAdvanced} isHidden>
                     Show advanced options
                 </Switch>
             </Flex>
