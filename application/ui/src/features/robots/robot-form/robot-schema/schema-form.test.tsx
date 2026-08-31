@@ -404,9 +404,7 @@ describe('SchemaForm', () => {
         expect(screen.queryByRole('textbox', { name: 'Cameras' })).not.toBeInTheDocument();
     });
 
-    it('renders connection pickers from referenced nested object schemas', async () => {
-        const user = userEvent.setup();
-
+    it('renders connection pickers from referenced nested object schemas', () => {
         render(
             <RobotFormProvider>
                 <SchemaForm schema={bimanualRebotSchema} />
@@ -416,14 +414,8 @@ describe('SchemaForm', () => {
 
         expect(screen.getByRole('heading', { name: 'Left Arm Config' })).toBeVisible();
         expect(screen.getByRole('heading', { name: 'Right Arm Config' })).toBeVisible();
+        expect(screen.queryByRole('switch', { name: 'Show advanced options' })).not.toBeInTheDocument();
         expect(screen.queryAllByRole('textbox', { name: 'Can Adapter' })).toHaveLength(0);
-
-        await user.click(screen.getByRole('switch', { name: 'Show advanced options' }));
-        const canAdapters = screen.getAllByRole('textbox', { name: 'Can Adapter' });
-        expect(canAdapters).toHaveLength(2);
-        expect(canAdapters[0]).toHaveValue('damiao');
-        expect(canAdapters[1]).toHaveValue('damiao');
-
         expect(screen.getAllByRole('button', { name: 'Select robot' })).toHaveLength(2);
     });
 
@@ -483,7 +475,7 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('switch', { name: 'Torque Enabled' })).toBeChecked();
     });
 
-    it('shows advanced configuration fields after enabling the toggle', async () => {
+    it('keeps advanced configuration fields hidden when the toggle is hidden', () => {
         const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
             type: 'object',
             properties: {
@@ -496,7 +488,6 @@ describe('SchemaForm', () => {
                 },
             },
         };
-        const user = userEvent.setup();
 
         render(
             <RobotFormProvider>
@@ -505,11 +496,8 @@ describe('SchemaForm', () => {
         );
 
         expect(screen.getByRole('textbox', { name: 'Connection String' })).toBeVisible();
+        expect(screen.queryByRole('switch', { name: 'Show advanced options' })).not.toBeInTheDocument();
         expect(screen.queryByRole('switch', { name: 'Use ROS' })).not.toBeInTheDocument();
-
-        await user.click(screen.getByRole('switch', { name: 'Show advanced options' }));
-
-        expect(screen.getByRole('switch', { name: 'Use ROS' })).toBeVisible();
     });
 
     it('keeps advanced configuration field defaults in the payload', () => {
