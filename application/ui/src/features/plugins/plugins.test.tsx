@@ -12,8 +12,6 @@ const installedPlugin = {
     id: 'physicalai-rebot-b601-plugin',
     name: 'ReBot Plugin',
     description: 'ReBot B601 and Arm102 robot integrations.',
-    category: 'ReBot',
-    source: 'first_party' as const,
     repo_url: 'https://github.com/example/rebot',
     installed: true,
     installed_version: '0.1.0',
@@ -32,8 +30,6 @@ const availablePlugin = {
     id: 'physicalai-mujoco-so101-plugin',
     name: 'MuJoCo Plugin',
     description: 'MuJoCo-backed SO-101 simulation integration.',
-    category: 'MuJoCo',
-    source: 'first_party' as const,
     repo_url: 'https://github.com/example/mujoco',
     installed: false,
     installed_version: null,
@@ -52,23 +48,11 @@ const lerobotPlugin = {
     id: 'physicalai-lerobot-plugin',
     name: 'LeRobot Plugin',
     description: 'Robot and teleoperator configurations discovered from LeRobot.',
-    category: 'LeRobot',
-    source: 'first_party' as const,
     repo_url: 'https://github.com/example/lerobot',
     installed: true,
     installed_version: '0.1.0',
     in_use_robot_count: 0,
     robots: [],
-    extensions: [
-        {
-            id: 'lerobot-teleoperator-spacemouse',
-            name: 'SpaceMouse Teleoperator',
-            description: 'Adds the LeRobot SpaceMouse leader teleoperator.',
-            repo_url: null,
-            installed: false,
-            installed_version: null,
-        },
-    ],
 };
 
 describe('PluginsView', () => {
@@ -140,27 +124,6 @@ describe('PluginsView', () => {
         });
 
         expect(await screen.findByText('Waiting for server restart…')).toBeVisible();
-    });
-
-    it('shows extensions for an installed plugin and lets the user install them', async () => {
-        server.use(
-            http.get('/api/plugins', () => HttpResponse.json([lerobotPlugin])),
-            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true })),
-            http.get('/api/jobs', () => HttpResponse.json([]))
-        );
-        const user = userEvent.setup();
-
-        render(<PluginsView />, { route: '/plugins', path: '/plugins' });
-
-        const lerobotRow = await screen.findByTestId('plugin-row-physicalai-lerobot-plugin');
-        await user.click(within(lerobotRow).getByText('LeRobot Plugin'));
-
-        expect(await screen.findByRole('heading', { name: 'Extensions' })).toBeVisible();
-        expect(screen.getByText('SpaceMouse Teleoperator')).toBeVisible();
-
-        await user.click(screen.getByRole('button', { name: 'Install' }));
-        expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
-        await user.click(screen.getByRole('button', { name: 'Later' }));
     });
 
     it('disables uninstall for plugins with robots in use', async () => {

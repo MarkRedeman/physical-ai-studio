@@ -8,13 +8,7 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import AsyncSessionDep, HealthServiceDep
 from exceptions import ResourceInUseError, ResourceType
-from plugins.plugin_manager import (
-    PluginExtensionInfo,
-    PluginInfo,
-    PluginManager,
-    PluginRobot,
-    find_robot_types_in_use_async,
-)
+from plugins.plugin_manager import PluginInfo, PluginManager, PluginRobot, find_robot_types_in_use_async
 
 router = APIRouter(prefix="/api/plugins", tags=["Plugins"])
 
@@ -26,30 +20,15 @@ class PluginRobotResponse(BaseModel):
     installed: bool = Field(..., description="Whether the robot type is currently available in the catalog")
 
 
-class PluginExtensionResponse(BaseModel):
-    id: str = Field(..., description="Python distribution name")
-    name: str = Field(..., description="Display name shown in the UI")
-    description: str = Field(..., description="Short extension description")
-    repo_url: str | None = Field(default=None, description="Project repository URL")
-    installed: bool = Field(..., description="Whether the extension distribution is installed")
-    installed_version: str | None = Field(default=None, description="Installed extension version")
-
-
 class PluginResponse(BaseModel):
     id: str = Field(..., description="Python distribution name")
     name: str = Field(..., description="Display name shown in the UI")
     description: str = Field(..., description="Short plugin description")
-    category: str = Field(..., description="Robot catalog category label")
-    source: Literal["internal", "first_party", "external"] = Field(..., description="Plugin ownership classification")
     repo_url: str | None = Field(default=None, description="Project repository URL")
     installed: bool = Field(..., description="Whether the plugin distribution is installed")
     installed_version: str | None = Field(default=None, description="Installed plugin version")
     in_use_robot_count: int = Field(..., description="Number of persisted robots using this plugin's robot types")
     robots: list[PluginRobotResponse] = Field(..., description="Robot types contributed by the plugin")
-    extensions: list[PluginExtensionResponse] = Field(
-        default_factory=list,
-        description="Optional add-ons gated behind this plugin being installed",
-    )
 
 
 class PluginOperationResponse(BaseModel):
@@ -74,30 +53,16 @@ def _to_robot_response(robot: PluginRobot) -> PluginRobotResponse:
     )
 
 
-def _to_extension_response(extension: PluginExtensionInfo) -> PluginExtensionResponse:
-    return PluginExtensionResponse(
-        id=extension.id,
-        name=extension.name,
-        description=extension.description,
-        repo_url=extension.repo_url,
-        installed=extension.installed,
-        installed_version=extension.installed_version,
-    )
-
-
 def _to_response(plugin: PluginInfo, in_use_robot_count: int) -> PluginResponse:
     return PluginResponse(
         id=plugin.id,
         name=plugin.name,
         description=plugin.description,
-        category=plugin.category,
-        source=plugin.source,
         repo_url=plugin.repo_url,
         installed=plugin.installed,
         installed_version=plugin.installed_version,
         in_use_robot_count=in_use_robot_count,
         robots=[_to_robot_response(robot) for robot in plugin.robots],
-        extensions=[_to_extension_response(extension) for extension in plugin.extensions],
     )
 
 

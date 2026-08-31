@@ -44,21 +44,11 @@ def _manifest_entry(plugin_id: str = "demo-plugin") -> PluginManifestEntry:
         id=plugin_id,
         name="Demo Plugin",
         description="A demo plugin.",
-        category="Demo",
-        source="first_party",
         repo_url="https://example.com/demo",
         install_source="demo-plugin",
         robots=[
             {"type": "Demo_Follower", "display_name": "Demo Follower", "role": "follower"},
             {"type": "Demo_Leader", "display_name": "Demo Leader", "role": "leader"},
-        ],
-        extensions=[
-            {
-                "id": "demo-extension",
-                "name": "Demo Extension",
-                "description": "An optional add-on.",
-                "install_source": "demo-extension",
-            }
         ],
     )
 
@@ -200,81 +190,6 @@ def test_robot_types_combines_manifest_and_installed_catalog(monkeypatch: pytest
     manager = _manager(registry=registry)
 
     assert set(manager.robot_types("demo-plugin")) == {"Demo_Follower", "Demo_Leader", "Extra_Follower"}
-
-
-def test_list_plugins_reports_extensions_with_install_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-plugin", "demo-extension"}))
-    manager = _manager()
-
-    plugin = manager.list_plugins()[0]
-
-    assert len(plugin.extensions) == 1
-    extension = plugin.extensions[0]
-    assert extension.id == "demo-extension"
-    assert extension.installed is True
-    assert extension.installed_version == "1.2.3"
-
-
-def test_get_extension_returns_extension_info(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
-    manager = _manager()
-
-    extension = manager.get("demo-extension")
-
-    assert extension.id == "demo-extension"
-    assert extension.installed is False
-
-
-def test_install_extension_requires_parent_plugin(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
-    run = Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout=""))
-    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
-    manager = _manager()
-
-    with pytest.raises(PluginOperationError, match="Install 'Demo Plugin' first"):
-        asyncio.run(manager.install("demo-extension"))
-
-    run.assert_not_called()
-
-
-def test_install_extension_allowed_when_parent_installed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-plugin"}))
-    run = Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout=""))
-    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
-    manager = _manager()
-
-    asyncio.run(manager.install("demo-extension"))
-
-    command = run.call_args.args[0]
-    assert command[-1] == "demo-extension"
-
-
-def test_uninstall_extension_runs_uv_pip_uninstall(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-plugin", "demo-extension"}))
-    run = Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout=""))
-    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
-    manager = _manager()
-
-    asyncio.run(manager.uninstall("demo-extension"))
-
-    command = run.call_args.args[0]
-    assert command[2] == "uninstall"
-    assert command[-1] == "demo-extension"
-
-
-def test_robot_types_extension_reports_installed_catalog_types(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-extension"}))
-    registry = _FakeRegistry([], {"demo-extension": ["Ext_Follower", "Ext_Leader"]})
-    manager = _manager(registry=registry)
-
-    assert set(manager.robot_types("demo-extension")) == {"Ext_Follower", "Ext_Leader"}
-
-
-def test_robot_types_extension_empty_when_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
-    manager = _manager()
-
-    assert manager.robot_types("demo-extension") == []
 
 
 def test_install_operations_serialize(monkeypatch: pytest.MonkeyPatch) -> None:
