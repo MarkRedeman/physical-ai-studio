@@ -12,7 +12,7 @@ import { useRobotForm } from './provider';
 import { SchemaForm } from './robot-schema/schema-form';
 
 export const RobotType = () => {
-    const { activeType, name, setName, setSuggestedName, suggestedName } = useRobotForm();
+    const { activeType, name, setName } = useRobotForm();
     const { setActiveType } = useRobotForm();
     const catalogQuery = useRobotCatalogQuery();
 
@@ -31,8 +31,8 @@ export const RobotType = () => {
                 if (entry === undefined) {
                     return;
                 }
-                setSuggestedName(entry.display_name);
-                if (name === '' || name === suggestedName) {
+                const previousSuggestedName = catalogQuery.data.find(({ type }) => type === activeType)?.display_name;
+                if (name === '' || name === previousSuggestedName) {
                     setName(entry.display_name);
                 }
             }}
@@ -45,7 +45,9 @@ export const RobotType = () => {
 };
 
 export const FormFields = () => {
-    const { activeType, name, setName, suggestedName, nameFieldRef } = useRobotForm();
+    const { activeType, name, setName, nameFieldRef } = useRobotForm();
+    const catalogQuery = useRobotCatalogQuery();
+    const suggestedName = catalogQuery.data.find(({ type }) => type === activeType)?.display_name;
 
     useEffect(() => {
         if (name !== '' && name === suggestedName) {
