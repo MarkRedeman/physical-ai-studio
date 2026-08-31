@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-import { Flex, Heading, Text, View } from '@geti-ui/ui';
+import { Flex, Heading, Switch, Text, View } from '@geti-ui/ui';
 
 import { useRobotForm } from '../provider';
 import { ConnectionField } from './components/connection-field';
@@ -154,6 +154,7 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
 
 export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const { activeType, payload, setPayload, updatePayloadField } = useRobotForm();
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const properties = schema.properties ?? EMPTY_PROPERTIES;
     const definitions = schema.$defs ?? EMPTY_DEFINITIONS;
     const required = new Set(schema.required ?? []);
@@ -170,7 +171,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
         const fieldUi = resolvedField['x-physicalai-ui'];
 
         const isRequired = fieldRequired.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
-        if (!isRequired && resolvedField.default !== undefined) {
+        if (!isRequired && !isUiItems(fieldUi) && fieldUi?.advanced_configuration === true && !showAdvanced) {
             return false;
         }
 
@@ -188,6 +189,11 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
 
     return (
         <Flex direction='column' gap='size-200'>
+            <Flex justifyContent='end'>
+                <Switch isSelected={showAdvanced} onChange={setShowAdvanced}>
+                    Show advanced options
+                </Switch>
+            </Flex>
             <SchemaFormItems
                 items={items}
                 properties={properties}

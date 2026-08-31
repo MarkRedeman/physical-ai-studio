@@ -18,7 +18,12 @@ const bimanualRebotSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
                     type: 'string',
                     title: 'Port',
                 },
-                can_adapter: { type: 'string', title: 'Can Adapter', default: 'damiao' },
+                can_adapter: {
+                    type: 'string',
+                    title: 'Can Adapter',
+                    default: 'damiao',
+                    'x-physicalai-ui': { advanced_configuration: true },
+                },
             },
             required: ['port'],
             'x-physicalai-ui': [
@@ -249,7 +254,7 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('textbox', { name: 'Connection String' })).toBeVisible();
     });
 
-    it('renders defaulted UI-required fields without showing default fields', () => {
+    it('renders defaulted fields that are marked required', () => {
         const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
             type: 'object',
             properties: {
@@ -400,6 +405,8 @@ describe('SchemaForm', () => {
     });
 
     it('renders connection pickers from referenced nested object schemas', async () => {
+        const user = userEvent.setup();
+
         render(
             <RobotFormProvider>
                 <SchemaForm schema={bimanualRebotSchema} />
@@ -411,10 +418,16 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('heading', { name: 'Right Arm Config' })).toBeVisible();
         expect(screen.queryAllByRole('textbox', { name: 'Can Adapter' })).toHaveLength(0);
 
+        await user.click(screen.getByRole('switch', { name: 'Show advanced options' }));
+        const canAdapters = screen.getAllByRole('textbox', { name: 'Can Adapter' });
+        expect(canAdapters).toHaveLength(2);
+        expect(canAdapters[0]).toHaveValue('damiao');
+        expect(canAdapters[1]).toHaveValue('damiao');
+
         expect(screen.getAllByRole('button', { name: 'Select robot' })).toHaveLength(2);
     });
 
-    it('hides a section when all of its fields are hidden default fields', () => {
+    it('hides a section when all of its fields are advanced configuration fields', () => {
         const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
             type: 'object',
             properties: {
@@ -422,6 +435,7 @@ describe('SchemaForm', () => {
                     type: 'object',
                     title: 'Calibration',
                     default: {},
+                    'x-physicalai-ui': { advanced_configuration: true },
                     properties: {
                         offset: {
                             type: 'integer',
@@ -448,5 +462,77 @@ describe('SchemaForm', () => {
         );
 
         expect(screen.queryByRole('heading', { name: 'Calibration' })).not.toBeInTheDocument();
+    });
+
+    it('renders defaulted fields unless they are advanced configuration fields', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                baud_rate: { type: 'integer', title: 'Baud Rate', default: 115200 },
+                torque_enabled: { type: 'boolean', title: 'Torque Enabled', default: true },
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('spinbutton', { name: 'Baud Rate' })).toBeVisible();
+        expect(screen.getByRole('switch', { name: 'Torque Enabled' })).toBeChecked();
+    });
+
+    it('shows advanced configuration fields after enabling the toggle', async () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                connection_string: { type: 'string', title: 'Connection String' },
+                use_ros: {
+                    type: 'boolean',
+                    title: 'Use ROS',
+                    default: false,
+                    'x-physicalai-ui': { advanced_configuration: true },
+                },
+            },
+        };
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('textbox', { name: 'Connection String' })).toBeVisible();
+        expect(screen.queryByRole('switch', { name: 'Use ROS' })).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('switch', { name: 'Show advanced options' }));
+
+        expect(screen.getByRole('switch', { name: 'Use ROS' })).toBeVisible();
+    });
+
+    it('keeps advanced configuration field defaults in the payload', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                connection_string: { type: 'string', title: 'Connection String' },
+                control_mode: {
+                    type: 'string',
+                    title: 'Control Mode',
+                    default: 'position',
+                    'x-physicalai-ui': { advanced_configuration: true },
+                },
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('status')).toHaveTextContent(JSON.stringify({ control_mode: 'position' }));
     });
 });

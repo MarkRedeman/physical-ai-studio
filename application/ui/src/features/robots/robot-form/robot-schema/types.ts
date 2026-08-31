@@ -37,6 +37,7 @@ export type RobotUiItem = InfoItem | ConnectionItem | FieldItem | SectionItem;
 
 export type FieldOptions = {
     required?: boolean;
+    advanced_configuration?: boolean;
 };
 
 export type ModelUiOptions = RobotUiItem[];
