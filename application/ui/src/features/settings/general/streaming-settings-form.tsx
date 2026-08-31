@@ -141,7 +141,6 @@ export const StreamingSettingsForm = ({ streaming }: StreamingSettingsFormProps)
     const [saved, setSaved] = useState(false);
     const { data: trainingDevices } = $api.useQuery('get', '/api/system/devices/training');
     const recommendedMode = recommendedPreset(trainingDevices?.devices);
-    const recommendation = STREAMING_PRESETS.find((preset) => preset.id === recommendedMode);
     const selectedPreset = STREAMING_PRESETS.find((preset) => preset.id === mode);
     const isCustom = mode === 'custom';
 
@@ -185,6 +184,19 @@ export const StreamingSettingsForm = ({ streaming }: StreamingSettingsFormProps)
         setEncoderQueueMaxsize(selected.values.encoder_queue_maxsize);
     };
 
+    const customize = () => {
+        setMode('custom');
+    };
+
+    const summaryRows = [
+        { label: 'Video codec', value: vcodec },
+        { label: 'Pixel format', value: pixFmt === '' ? 'Encoder default' : pixFmt },
+        { label: 'CRF', value: crf === null ? 'Encoder default' : String(crf) },
+        { label: 'Preset', value: encoderPreset === '' ? 'Encoder default' : encoderPreset },
+        { label: 'Encoder threads', value: encoderThreads === null ? 'Auto' : String(encoderThreads) },
+        { label: 'Encoder queue size', value: String(encoderQueueMaxsize) },
+    ];
+
     return (
         <SettingsSection
             title='Streaming'
@@ -205,87 +217,90 @@ export const StreamingSettingsForm = ({ streaming }: StreamingSettingsFormProps)
                 {(option) => (
                     <Item key={option.id} textValue={option.name}>
                         <Text>{option.name}</Text>
-                        <Text slot='description'>{option.description}</Text>
+                        <Text slot='description'>
+                            {option.id === recommendedMode ? `Recommended · ${option.description}` : option.description}
+                        </Text>
                     </Item>
                 )}
             </Picker>
-            {recommendation !== undefined && recommendation.id !== mode && (
-                <Flex UNSAFE_className={classes.recommendation} alignItems='center' gap='size-150' wrap>
-                    <Text UNSAFE_className={classes.presetDescription}>
-                        Detected hardware is best suited to {recommendation.name}.
-                    </Text>
-                    <ActionButton onPress={() => selectMode(recommendation.id)}>Apply recommended preset</ActionButton>
-                </Flex>
+            {!isCustom && selectedPreset !== undefined ? (
+                <>
+                    <Text UNSAFE_className={classes.presetDescription}>{selectedPreset.description}</Text>
+                    <Flex direction='column' gap='size-100' UNSAFE_className={classes.summary}>
+                        {summaryRows.map((row) => (
+                            <Flex key={row.label} justifyContent='space-between' gap='size-200'>
+                                <Text UNSAFE_className={classes.summaryLabel}>{row.label}</Text>
+                                <Text UNSAFE_className={classes.summaryValue}>{row.value}</Text>
+                            </Flex>
+                        ))}
+                    </Flex>
+                    <Flex alignItems='center' gap='size-200'>
+                        <ActionButton onPress={customize}>Customize</ActionButton>
+                        <Text UNSAFE_className={classes.customizeHint}>Adjust the preset values in custom mode.</Text>
+                    </Flex>
+                </>
+            ) : (
+                <>
+                    <TextField
+                        label='Video codec'
+                        value={vcodec}
+                        onChange={(value) => {
+                            setVcodec(value);
+                            markDirty();
+                        }}
+                        width='100%'
+                    />
+                    <TextField
+                        label='Pixel format'
+                        value={pixFmt}
+                        onChange={(value) => {
+                            setPixFmt(value);
+                            markDirty();
+                        }}
+                        placeholder='Leave empty to let the encoder pick'
+                        width='100%'
+                    />
+                    <NumberField
+                        label='CRF'
+                        value={crf ?? undefined}
+                        onChange={(value) => {
+                            setCrf(Number.isNaN(value) ? null : value);
+                            markDirty();
+                        }}
+                        width='100%'
+                    />
+                    <TextField
+                        label='Preset'
+                        value={encoderPreset}
+                        onChange={(value) => {
+                            setEncoderPreset(value);
+                            markDirty();
+                        }}
+                        placeholder='e.g. veryfast or a number'
+                        width='100%'
+                    />
+                    <NumberField
+                        label='Encoder threads'
+                        value={encoderThreads ?? undefined}
+                        onChange={(value) => {
+                            setEncoderThreads(Number.isNaN(value) ? null : value);
+                            markDirty();
+                        }}
+                        width='100%'
+                    />
+                    <NumberField
+                        label='Encoder queue size'
+                        value={encoderQueueMaxsize}
+                        onChange={(value) => {
+                            if (!Number.isNaN(value)) {
+                                setEncoderQueueMaxsize(value);
+                                markDirty();
+                            }
+                        }}
+                        width='100%'
+                    />
+                </>
             )}
-            {!isCustom && selectedPreset !== undefined && (
-                <Text UNSAFE_className={classes.presetDescription}>
-                    {selectedPreset.description} Fields are read-only while a preset is selected.
-                </Text>
-            )}
-            <TextField
-                label='Video codec'
-                value={vcodec}
-                isReadOnly={!isCustom}
-                onChange={(value) => {
-                    setVcodec(value);
-                    markDirty();
-                }}
-                width='100%'
-            />
-            <TextField
-                label='Pixel format'
-                value={pixFmt}
-                isReadOnly={!isCustom}
-                onChange={(value) => {
-                    setPixFmt(value);
-                    markDirty();
-                }}
-                placeholder='Leave empty to let the encoder pick'
-                width='100%'
-            />
-            <NumberField
-                label='CRF'
-                value={crf ?? undefined}
-                isReadOnly={!isCustom}
-                onChange={(value) => {
-                    setCrf(Number.isNaN(value) ? null : value);
-                    markDirty();
-                }}
-                width='100%'
-            />
-            <TextField
-                label='Preset'
-                value={encoderPreset}
-                isReadOnly={!isCustom}
-                onChange={(value) => {
-                    setEncoderPreset(value);
-                    markDirty();
-                }}
-                placeholder='e.g. veryfast or a number'
-                width='100%'
-            />
-            <NumberField
-                label='Encoder threads'
-                value={encoderThreads ?? undefined}
-                isReadOnly={!isCustom}
-                onChange={(value) => {
-                    setEncoderThreads(Number.isNaN(value) ? null : value);
-                    markDirty();
-                }}
-                width='100%'
-            />
-            <NumberField
-                label='Encoder queue size'
-                value={encoderQueueMaxsize}
-                isReadOnly={!isCustom}
-                onChange={(value) => {
-                    if (!Number.isNaN(value)) {
-                        setEncoderQueueMaxsize(value);
-                        markDirty();
-                    }
-                }}
-                width='100%'
-            />
         </SettingsSection>
     );
 };
