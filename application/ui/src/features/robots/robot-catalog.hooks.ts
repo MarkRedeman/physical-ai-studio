@@ -1,6 +1,6 @@
 import { $api } from '../../api/client';
 import { SchemaRobotCatalogDefinitionResponse } from '../../api/openapi-spec';
-import { SchemaRobot } from './robot-types';
+import { SchemaRobot, SchemaRobotType } from './robot-types';
 
 export const useRobotCatalogQuery = () => {
     return $api.useSuspenseQuery('get', '/api/robots/catalog', {
@@ -8,7 +8,7 @@ export const useRobotCatalogQuery = () => {
     });
 };
 
-export const useRobotCatalogDefinitionQuery = (robotType: string) => {
+export const useRobotCatalogDefinitionQuery = (robotType: SchemaRobotType) => {
     return $api.useSuspenseQuery(
         'get',
         '/api/robots/catalog',
@@ -28,7 +28,7 @@ export const useRobotCatalogDefinitionQuery = (robotType: string) => {
     );
 };
 
-export const useDiscoverRobotsQuery = (robotType: string) => {
+export const useDiscoverRobotsQuery = (robotType: SchemaRobotType) => {
     return $api.useQuery('get', '/api/robots/catalog/{robot_type}/discover', {
         params: { path: { robot_type: robotType } },
     });

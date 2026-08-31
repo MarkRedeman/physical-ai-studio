@@ -7,6 +7,7 @@ import { $api } from '../../../api/client';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../router';
 import { useRobotCatalogQuery } from '../robot-catalog.hooks';
+import { SchemaRobotType } from '../robot-types';
 import { BimanualSO101FormFields } from './catalog/bimanual-so101';
 import { useRobotForm } from './provider';
 import { SchemaForm } from './robot-schema/schema-form';
@@ -82,7 +83,7 @@ const SelectedRobotFields = ({ activeType }: { activeType: string }) => {
     );
 };
 
-const useRobotCatalogSchema = (robotType: string) => {
+const useRobotCatalogSchema = (robotType: SchemaRobotType) => {
     return $api.useSuspenseQuery('get', '/api/robots/catalog/{robot_type}/schema', {
         params: { path: { robot_type: robotType } },
     });

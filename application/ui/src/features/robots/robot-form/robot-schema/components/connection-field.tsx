@@ -3,6 +3,7 @@ import { Refresh } from '@geti-ui/ui/icons';
 
 import { getApiErrorMessage, isSerialPermissionDeniedError } from '../../../../../api/errors';
 import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../../robot-catalog.hooks';
+import { SchemaRobotType } from '../../../robot-types';
 import { InlineAlert } from '../../../setup-wizard/shared/inline-alert';
 import { ConnectionItem } from '../types';
 
@@ -57,7 +58,7 @@ const ComboBoxField = ({
 );
 
 type ConnectionFieldProps = {
-    robotType: string;
+    robotType: SchemaRobotType;
     payload: Record<string, unknown>;
     options: ConnectionItem;
     onChange: (field: string, value: unknown) => void;

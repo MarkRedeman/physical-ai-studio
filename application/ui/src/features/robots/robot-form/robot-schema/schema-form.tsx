@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Flex, Heading, Switch, Text, View } from '@geti-ui/ui';
 
+import { SchemaRobotType } from '../../robot-types';
 import { useRobotForm } from '../provider';
 import { ConnectionField } from './components/connection-field';
 import { InfoField } from './components/info-field';
@@ -50,7 +51,7 @@ type SchemaFormItemsProps = {
     required: Set<string>;
     values: Record<string, unknown>;
     onChange: OnChange;
-    robotType: string;
+    robotType: SchemaRobotType;
     definitions: Record<string, FieldSchema>;
     isFieldVisible: IsFieldVisible;
     isRenderable: IsRenderable;

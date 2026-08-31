@@ -6,6 +6,7 @@ import { degToRad } from 'three/src/math/MathUtils.js';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 
 import { useRobotCatalogDefinitionQuery } from './robot-catalog.hooks';
+import { SchemaRobotType } from './robot-types';
 
 export const mapJointToURDFJoint = (
     joint: { name: string; value: number },
@@ -88,7 +89,7 @@ export const useRobotModels = () => {
     return useContext(RobotModelsContext)!;
 };
 
-export const useLoadModelQuery = (robotType: string) => {
+export const useLoadModelQuery = (robotType: SchemaRobotType) => {
     const { getModel, setModel } = useRobotModels();
 
     const { data: definition } = useRobotCatalogDefinitionQuery(robotType);
