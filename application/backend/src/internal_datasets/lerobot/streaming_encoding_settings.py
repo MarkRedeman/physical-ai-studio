@@ -100,10 +100,14 @@ class StudioRGBEncoderConfig(RGBEncoderConfig):
     def resolve_vcodec(self) -> None:
         self.vcodec = VIDEO_CODECS_ALIASES.get(self.vcodec, self.vcodec)
         if self.vcodec != "auto":
-            if not _is_vcodec_usable(self.vcodec):
-                raise ValueError(f"Video codec {self.vcodec!r} is not usable for encoding (probe encode failed)")
-            self._apply_default_pix_fmt()
-            return
+            if _is_vcodec_usable(self.vcodec):
+                self._apply_default_pix_fmt()
+                return
+            requested = self.vcodec
+            logging.warning(
+                "Video codec '%s' is not usable for encoding (probe encode failed); falling back to an available codec",
+                requested,
+            )
         for candidate in vcodec_candidates():
             if _candidate_is_viable(candidate):
                 self.vcodec = candidate

@@ -163,9 +163,21 @@ def test_vcodec_candidates_prefer_hardware_and_exclude_native_codecs() -> None:
     assert "hevc" not in candidates
 
 
-def test_explicit_unusable_vcodec_raises() -> None:
+def test_explicit_unusable_vcodec_falls_back() -> None:
+    def usable(vcodec: str) -> bool:
+        return vcodec != "av1_qsv"
+
+    with patch.object(streaming_encoding_settings, "_is_vcodec_usable", side_effect=usable):
+        rgb_encoder = StudioRGBEncoderConfig(vcodec="av1_qsv")
+        rgb_encoder.resolve_vcodec()
+
+    assert rgb_encoder.vcodec != "av1_qsv"
+    assert rgb_encoder.vcodec in streaming_encoding_settings.vcodec_candidates()
+
+
+def test_explicit_unusable_vcodec_raises_when_nothing_usable() -> None:
     with (
         patch.object(streaming_encoding_settings, "_is_vcodec_usable", return_value=False),
-        pytest.raises(ValueError, match="not usable"),
+        pytest.raises(RuntimeError, match="No usable video encoder"),
     ):
-        StudioRGBEncoderConfig(vcodec="av1_qsv")
+        StudioRGBEncoderConfig(vcodec="av1_qsv").resolve_vcodec()
