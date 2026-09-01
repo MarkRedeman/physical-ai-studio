@@ -41,20 +41,20 @@ const BooleanField = ({ name, schema, value, isRequired, onChange }: FieldProps)
 
 const TextFieldValue = ({ name, schema, value, isRequired, onChange }: FieldProps) => {
     const isNumeric = schema.type === 'integer' || schema.type === 'number';
+
+    const parseValue = (next: string): unknown => {
+        if (!isNumeric) return next;
+
+        const parsed = schema.type === 'integer' ? Number.parseInt(next, 10) : Number.parseFloat(next);
+        return Number.isNaN(parsed) ? undefined : parsed;
+    };
+
     return (
         <TextField
             {...commonProps({ name, schema, isRequired })}
             type={isNumeric ? 'number' : 'text'}
             value={value === undefined || value === null ? '' : String(value)}
-            onChange={(next) =>
-                onChange(
-                    schema.type === 'integer'
-                        ? Number.parseInt(next, 10)
-                        : schema.type === 'number'
-                          ? Number.parseFloat(next)
-                          : next
-                )
-            }
+            onChange={(next) => onChange(parseValue(next))}
         />
     );
 };

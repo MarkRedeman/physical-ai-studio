@@ -366,7 +366,7 @@ describe('SchemaForm', () => {
         await user.click(screen.getByRole('option', { name: '00000000050C' }));
         await user.keyboard('{Escape}');
 
-        expect(screen.getByRole('status')).toHaveTextContent(
+        expect(await screen.findByRole('status')).toHaveTextContent(
             JSON.stringify({ connection_string: '/dev/ttyACM0', serial_number: '00000000050C' })
         );
     });
@@ -389,7 +389,52 @@ describe('SchemaForm', () => {
         await user.click(await screen.findByRole('button', { name: 'Select robot' }));
         await user.click(screen.getByRole('option', { name: 'No serial number' }));
 
+        expect(await screen.findByRole('status')).toHaveTextContent(
+            JSON.stringify({ cameras: {}, port: '/dev/ttyUSB0' })
+        );
+    });
+
+    it('stores a manually entered value that matches a discovered connection', async () => {
+        server.use(
+            http.get('/api/robots/catalog/{robot_type}/discover', () =>
+                HttpResponse.json([{ serial_number: null, connection_string: '/dev/ttyUSB0' }])
+            )
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={lerobotSO101Schema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+
+        await user.click(await screen.findByRole('button', { name: 'Select robot' }));
+        await user.type(screen.getByRole('searchbox', { name: 'Select robot' }), '/dev/ttyUSB0');
+        await user.keyboard('{Escape}');
+
         expect(screen.getByRole('status')).toHaveTextContent(JSON.stringify({ cameras: {}, port: '/dev/ttyUSB0' }));
+    });
+
+    it('does not store NaN when a numeric field is cleared', async () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                baud_rate: { type: 'integer', title: 'Baud Rate', default: 115200 },
+            },
+        };
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+
+        await user.clear(screen.getByRole('spinbutton', { name: 'Baud Rate' }));
+
+        expect(screen.getByRole('status')).toHaveTextContent('{}');
     });
 
     it('skips unsupported dictionary fields', async () => {

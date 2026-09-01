@@ -79,7 +79,7 @@ const SelectedRobotFields = ({ activeType }: { activeType: string }) => {
     return isBimanualSO101 ? (
         <BimanualSO101FormFields />
     ) : (
-        schema.data && <SchemaForm schema={schema.data as Parameters<typeof SchemaForm>[0]['schema']} />
+        <SchemaForm schema={schema.data as Parameters<typeof SchemaForm>[0]['schema']} />
     );
 };
 

@@ -12,6 +12,7 @@ import {
     EMPTY_DEFINITIONS,
     EMPTY_PROPERTIES,
     fieldLabel,
+    isRequiredField,
     resolveReference,
     schemaDefaults,
     updateObjectField,
@@ -90,8 +91,12 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
 };
 
 const SchemaFormItems = ({ items, renderUnownedFields, ...props }: SchemaFormItemsProps) => {
-    const ownedFields = fieldNamesOwnedByItems(items);
-    const unownedFields = Object.entries(props.properties).filter(([name]) => !ownedFields.has(name));
+    const unownedFields = renderUnownedFields
+        ? (() => {
+              const ownedFields = fieldNamesOwnedByItems(items);
+              return Object.entries(props.properties).filter(([name]) => !ownedFields.has(name));
+          })()
+        : [];
 
     return (
         <>
@@ -117,7 +122,7 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
 
     const resolvedField = resolveReference(field, props.definitions);
     const fieldUi = resolvedField['x-physicalai-ui'];
-    const isRequired = props.required.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
+    const isRequired = isRequiredField(name, resolvedField, props.required);
     if (resolvedField.properties !== undefined) {
         const nestedItems = isUiItems(fieldUi) ? fieldUi : EMPTY_ITEMS;
         return (
@@ -171,7 +176,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
         const resolvedField = resolveReference(field, definitions);
         const fieldUi = resolvedField['x-physicalai-ui'];
 
-        const isRequired = fieldRequired.has(name) || (!isUiItems(fieldUi) && fieldUi?.required === true);
+        const isRequired = isRequiredField(name, resolvedField, fieldRequired);
         if (!isRequired && !isUiItems(fieldUi) && fieldUi?.advanced_configuration === true && !showAdvanced) {
             return false;
         }

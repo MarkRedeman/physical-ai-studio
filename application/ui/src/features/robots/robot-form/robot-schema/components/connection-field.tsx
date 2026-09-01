@@ -89,9 +89,11 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
     const connectionKey = options.bind.connection;
     const serialNumberKey = options.bind.serial_number;
     const value = String(payload[connectionKey] ?? '');
-
     const setManualValue = (next: string) => {
-        if ((discover.data ?? []).some((device) => deviceTextValue(device) === next)) return;
+        // Selecting a serial-capable device emits its serial number as an input change after selection.
+        if ((discover.data ?? []).some((device) => device.serial_number !== null && deviceTextValue(device) === next)) {
+            return;
+        }
         onChange(connectionKey, next);
         if (serialNumberKey !== undefined) onChange(serialNumberKey, '');
     };

@@ -17,6 +17,11 @@ export const resolveReference = (schema: FieldSchema, definitions: Record<string
     return definition === undefined ? schema : { ...definition, ...schema };
 };
 
+export const isRequiredField = (name: string, schema: FieldSchema, required: Set<string>) => {
+    const uiOptions = schema['x-physicalai-ui'];
+    return required.has(name) || (!Array.isArray(uiOptions) && uiOptions?.required === true);
+};
+
 const schemaDefault = (schema: FieldSchema, definitions: Record<string, FieldSchema>): unknown => {
     const resolvedSchema = resolveReference(schema, definitions);
     if (resolvedSchema.default !== undefined) return resolvedSchema.default;
