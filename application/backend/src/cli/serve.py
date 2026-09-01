@@ -1,5 +1,6 @@
 """Serve backend and frontend CLI commands."""
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import click
 
 from cli.database import _run_migrations
 from core.security import get_ssh_feature_availability
+from plugins.plugin_manager import PluginManager
 from robots.catalog.assets import builtin_robot_assets_are_available
 from robots.catalog.sync_robot_assets import sync_robot_assets
 from settings import get_settings
@@ -41,6 +43,7 @@ def start_server(host: str, port: int) -> None:
     os.environ["HOST"] = host
     os.environ["PORT"] = str(port)
     get_ssh_feature_availability.cache_clear()
+    _restore_recorded_plugins()
     _sync_missing_robot_assets()
     _run_migrations()
 
@@ -70,3 +73,15 @@ def _sync_missing_robot_assets() -> None:
     except (subprocess.CalledProcessError, OSError) as error:
         click.echo(f"✗ Failed to sync robot assets: {error}")
         sys.exit(1)
+
+
+def _restore_recorded_plugins() -> None:
+    """Restore plugins before importing the FastAPI app and robot schemas."""
+    settings = get_settings()
+    manager = PluginManager(record_path=settings.storage_dir / "installed-plugins.json")
+    try:
+        asyncio.run(manager.restore_installed())
+    except Exception:
+        # A missing package or unavailable index must not prevent Studio from
+        # starting. The persisted record remains available for the next boot.
+        click.echo("⚠ Could not restore all recorded plugins; continuing startup.")

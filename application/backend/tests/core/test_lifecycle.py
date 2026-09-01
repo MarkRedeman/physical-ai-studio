@@ -37,6 +37,9 @@ def _stub_heavy_startup(monkeypatch):
     robot_manager = MagicMock()
     robot_manager.find_robots = AsyncMock()
     monkeypatch.setattr(lifecycle_module, "RobotConnectionManager", lambda: robot_manager)
+    plugin_manager = MagicMock()
+    monkeypatch.setattr(lifecycle_module, "PluginManager", lambda **_kwargs: plugin_manager)
+    return plugin_manager
 
 
 async def _run_startup_and_capture_logs(app: FastAPI) -> list[str]:
@@ -88,3 +91,12 @@ async def test_ssh_feature_disabled_by_default_logs_no_warning(monkeypatch, _stu
     assert app.state.ssh_feature_availability.enabled is False
     assert app.state.ssh_feature_availability.active is False
     assert not any("SSH remote-trainer feature disabled at startup" in message for message in messages)
+
+
+@pytest.mark.anyio
+async def test_startup_stores_plugin_manager(_stub_heavy_startup) -> None:
+    app = FastAPI()
+
+    await _run_startup_and_capture_logs(app)
+
+    assert app.state.plugin_manager is _stub_heavy_startup

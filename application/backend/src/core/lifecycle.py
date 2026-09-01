@@ -8,6 +8,7 @@ from loguru import logger
 
 from core.logging import setup_logging, setup_uvicorn_logging
 from core.security import get_ssh_feature_availability
+from plugins.plugin_manager import PluginManager
 from services.camera_claims import CameraClaimRegistry
 from services.event_processor import EventProcessor
 from services.health_service import HealthService
@@ -56,6 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     app.state.settings = settings
     app.state.health_service = HealthService()
+    app.state.plugin_manager = PluginManager(record_path=settings.storage_dir / "installed-plugins.json")
 
     # Camera settings pinned by live runtime sessions in this API process.
     # In-memory on purpose: see CameraClaimRegistry. Keyed by fingerprint so

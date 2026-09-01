@@ -11,6 +11,7 @@ from core.scheduler import Scheduler
 from core.security import SshFeatureAvailability, get_ssh_feature_availability
 from db.engine import get_async_db_session
 from exceptions import SshFeatureDisabledError
+from plugins.plugin_manager import PluginManager
 from robots.robot_client_factory import RobotClientFactory
 from services import (
     DatasetDownloadService,
@@ -74,6 +75,17 @@ def get_health_service(request: HTTPConnection) -> HealthService:
 
 
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
+
+
+def get_plugin_manager(request: HTTPConnection) -> PluginManager:
+    """Provide the lifecycle-owned plugin manager."""
+    plugin_manager = getattr(request.app.state, "plugin_manager", None)
+    if plugin_manager is None:
+        raise RuntimeError("Plugin manager not initialized")
+    return cast("PluginManager", plugin_manager)
+
+
+PluginManagerDep = Annotated[PluginManager, Depends(get_plugin_manager)]
 
 
 def get_project_service(session: AsyncSessionDep) -> ProjectService:

@@ -12,11 +12,13 @@ from api.dependencies import (
     get_log_service,
     get_model_metrics_service,
     get_model_service,
+    get_plugin_manager,
     get_project_service,
     get_robot_client_factory,
 )
 from api.robot_observations import robot_observations_websocket
 from api.runtime_ws import runtime_websocket
+from plugins.plugin_manager import PluginManager
 from robots.robot_client_factory import RobotClientFactory
 from services.job_service import JobService
 from services.robot_catalog_service import RobotCatalogService
@@ -39,6 +41,26 @@ def test_robot_client_factory_uses_provided_manager() -> None:
     assert isinstance(factory, RobotClientFactory)
     assert factory.robot_manager is robot_manager
     assert factory.catalog_registry is catalog_service.registry
+
+
+def test_plugin_manager_uses_lifecycle_state() -> None:
+    plugin_manager = MagicMock(spec=PluginManager)
+    request = MagicMock()
+    request.app.state.plugin_manager = plugin_manager
+
+    assert get_plugin_manager(request) is plugin_manager
+
+
+def test_plugin_manager_requires_lifecycle_initialization() -> None:
+    request = MagicMock()
+    del request.app.state.plugin_manager
+
+    try:
+        get_plugin_manager(request)
+    except RuntimeError as error:
+        assert str(error) == "Plugin manager not initialized"
+    else:
+        raise AssertionError("Expected an uninitialized plugin manager to raise")
 
 
 def test_model_metrics_service_uses_injected_settings() -> None:

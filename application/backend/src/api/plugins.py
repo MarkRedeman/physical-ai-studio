@@ -1,14 +1,13 @@
 """Plugin management API endpoints."""
 
-from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from api.dependencies import AsyncSessionDep, HealthServiceDep
+from api.dependencies import AsyncSessionDep, HealthServiceDep, PluginManagerDep
 from exceptions import ResourceInUseError, ResourceType
-from plugins.plugin_manager import PluginInfo, PluginManager, PluginRobot, find_robot_types_in_use_async
+from plugins.plugin_manager import PluginInfo, PluginRobot, find_robot_types_in_use_async
 
 router = APIRouter(prefix="/api/plugins", tags=["Plugins"])
 
@@ -33,15 +32,6 @@ class PluginResponse(BaseModel):
 
 class PluginOperationResponse(BaseModel):
     restart_required: bool = Field(default=True, description="A server restart is required to activate the change")
-
-
-@lru_cache
-def get_plugin_manager() -> PluginManager:
-    """Provide a shared PluginManager instance."""
-    return PluginManager()
-
-
-PluginManagerDep = Annotated[PluginManager, Depends(get_plugin_manager)]
 
 
 def _to_robot_response(robot: PluginRobot) -> PluginRobotResponse:

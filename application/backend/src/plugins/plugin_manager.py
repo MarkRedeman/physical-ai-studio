@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
 from importlib import metadata
 from typing import TYPE_CHECKING, Literal
+
+from loguru import logger
 
 from exceptions import PluginOperationError, ResourceNotFoundError, ResourceType
 from robots.catalog.registry import RobotCatalogRegistry
@@ -16,6 +19,7 @@ from .manifest import PluginManifestEntry, load_plugin_manifest
 
 if TYPE_CHECKING:
     from importlib.metadata import Distribution
+    from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm.session import Session
@@ -51,9 +55,11 @@ class PluginManager:
         self,
         manifest: list[PluginManifestEntry] | None = None,
         registry: RobotCatalogRegistry | None = None,
+        record_path: Path | None = None,
     ) -> None:
         self._manifest = manifest if manifest is not None else load_plugin_manifest()
         self._registry = registry
+        self._record_path = record_path
         # Serializes install/uninstall so concurrent requests cannot race `uv pip`
         # against the same environment. Install/uninstall run in a worker thread
         # so a long download does not block the event loop; the lock is acquired
@@ -101,6 +107,7 @@ class PluginManager:
                 self._run,
                 ["uv", "pip", "install", "--python", sys.executable, entry.install_source],
             )
+            self._save_record(self._load_record() | {plugin_id})
 
     async def uninstall(self, plugin_id: str) -> None:
         """Uninstall a plugin distribution from the active environment.
@@ -115,6 +122,26 @@ class PluginManager:
                 self._run,
                 ["uv", "pip", "uninstall", "--python", sys.executable, plugin_id],
             )
+            self._save_record(self._load_record() - {plugin_id})
+
+    async def restore_installed(self) -> list[str]:
+        """Restore recorded plugins missing from the active environment.
+
+        Restoration is best effort. A missing package, unavailable package
+        index, or malformed stale record entry must not prevent Studio from
+        starting; failed entries remain recorded so the next startup retries.
+        """
+        restored: list[str] = []
+        for plugin_id in self._load_record():
+            if self._installed_dist(plugin_id) is not None:
+                continue
+            try:
+                await self.install(plugin_id)
+            except (PluginOperationError, ResourceNotFoundError):
+                logger.warning("Could not restore recorded plugin '{}'", plugin_id)
+                continue
+            restored.append(plugin_id)
+        return restored
 
     # ------------------------------------------------------------------
     # Internals
@@ -126,6 +153,35 @@ class PluginManager:
             if entry.id == plugin_id:
                 return entry
         raise ResourceNotFoundError(ResourceType.PLUGIN, plugin_id)
+
+    def _load_record(self) -> set[str]:
+        """Load persisted plugin IDs, treating missing or invalid data as empty."""
+        if self._record_path is None or not self._record_path.exists():
+            return set()
+        try:
+            with self._record_path.open(encoding="utf-8") as record_file:
+                data = json.load(record_file)
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Could not read persisted plugin record at {}", self._record_path)
+            return set()
+        if not isinstance(data, list) or not all(isinstance(plugin_id, str) for plugin_id in data):
+            logger.warning("Ignoring invalid persisted plugin record at {}", self._record_path)
+            return set()
+        return set(data)
+
+    def _save_record(self, plugin_ids: set[str]) -> None:
+        """Persist plugin IDs without making a successful operation fail."""
+        if self._record_path is None:
+            return
+        try:
+            self._record_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = self._record_path.with_suffix(f"{self._record_path.suffix}.tmp")
+            with temporary_path.open("w", encoding="utf-8") as record_file:
+                json.dump(sorted(plugin_ids), record_file, indent=2)
+                record_file.write("\n")
+            temporary_path.replace(self._record_path)
+        except OSError:
+            logger.warning("Could not write persisted plugin record at {}", self._record_path)
 
     @staticmethod
     def _installed_dist(plugin_id: str) -> Distribution | None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from importlib import metadata
 from importlib.metadata import PackageNotFoundError
@@ -222,6 +223,101 @@ def test_install_operations_serialize(monkeypatch: pytest.MonkeyPatch) -> None:
         assert max_active == 1
 
     asyncio.run(_run())
+
+
+def test_install_persists_plugin_id(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
+    run = Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout=""))
+    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
+    record_path = tmp_path / "installed-plugins.json"
+    manager = PluginManager(manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=record_path)
+
+    asyncio.run(manager.install("demo-plugin"))
+
+    assert json.loads(record_path.read_text()) == ["demo-plugin"]
+
+
+def test_uninstall_removes_plugin_id_from_record(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-plugin"}))
+    run = Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout=""))
+    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
+    record_path = tmp_path / "installed-plugins.json"
+    record_path.write_text('["demo-plugin"]\n')
+    manager = PluginManager(manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=record_path)
+
+    asyncio.run(manager.uninstall("demo-plugin"))
+
+    assert json.loads(record_path.read_text()) == []
+
+
+def test_restore_installed_reinstalls_missing_plugins(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
+    run = Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout=""))
+    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
+    record_path = tmp_path / "installed-plugins.json"
+    record_path.write_text('["demo-plugin"]\n')
+    manager = PluginManager(manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=record_path)
+
+    restored = asyncio.run(manager.restore_installed())
+
+    assert restored == ["demo-plugin"]
+    assert run.call_args.args[0][-1] == "demo-plugin"
+
+
+def test_restore_installed_skips_present_plugins(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-plugin"}))
+    run = Mock()
+    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
+    record_path = tmp_path / "installed-plugins.json"
+    record_path.write_text('["demo-plugin"]\n')
+    manager = PluginManager(manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=record_path)
+
+    restored = asyncio.run(manager.restore_installed())
+
+    assert restored == []
+    run.assert_not_called()
+
+
+def test_restore_installed_warns_and_continues_on_failure(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
+    run = Mock(return_value=SimpleNamespace(returncode=1, stderr="offline", stdout=""))
+    monkeypatch.setattr("plugins.plugin_manager.subprocess.run", run)
+    record_path = tmp_path / "installed-plugins.json"
+    record_path.write_text('["demo-plugin"]\n')
+    manager = PluginManager(manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=record_path)
+
+    restored = asyncio.run(manager.restore_installed())
+
+    assert restored == []
+    assert json.loads(record_path.read_text()) == ["demo-plugin"]
+
+
+def test_missing_or_invalid_record_is_empty(tmp_path) -> None:
+    manager = PluginManager(
+        manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=tmp_path / "missing.json"
+    )
+
+    assert asyncio.run(manager.restore_installed()) == []
+
+    invalid_path = tmp_path / "invalid.json"
+    invalid_path.write_text('{"plugin": "demo-plugin"}\n')
+    invalid_manager = PluginManager(
+        manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=invalid_path
+    )
+    assert asyncio.run(invalid_manager.restore_installed()) == []
+
+
+def test_manager_without_record_path_does_not_persist(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(metadata, "distribution", _fake_distribution(set()))
+    monkeypatch.setattr(
+        "plugins.plugin_manager.subprocess.run",
+        Mock(return_value=SimpleNamespace(returncode=0, stderr="", stdout="")),
+    )
+    manager = _manager()
+
+    asyncio.run(manager.install("demo-plugin"))
+
+    assert not list(tmp_path.iterdir())
 
 
 def test_load_manifest_roundtrip() -> None:

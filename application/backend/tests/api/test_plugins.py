@@ -5,9 +5,10 @@ from unittest.mock import AsyncMock, Mock
 from fastapi.testclient import TestClient
 
 import api.plugins as plugins_api
-from api.dependencies import get_health_service
-from api.plugins import PluginInfo, PluginManager, PluginRobot, get_plugin_manager
+from api.dependencies import get_health_service, get_plugin_manager
+from api.plugins import PluginInfo, PluginRobot
 from main import app
+from plugins.plugin_manager import PluginManager
 from services.health_service import HealthService
 
 
