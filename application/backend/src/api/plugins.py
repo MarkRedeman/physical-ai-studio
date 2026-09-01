@@ -26,6 +26,10 @@ class PluginOperationResponse(BaseModel):
     restart_required: bool = Field(default=True, description="A server restart is required to activate the change")
 
 
+class InstallPluginRequest(BaseModel):
+    plugin_id: str = Field(..., description="Python distribution name of the plugin to install")
+
+
 @lru_cache
 def get_plugin_manager() -> PluginManager:
     """Provide a shared PluginManager instance."""
@@ -56,14 +60,14 @@ async def list_plugins(
     return [_to_response(plugin) for plugin in plugins]
 
 
-@router.post("/{plugin_id}")
+@router.post("")
 async def install_plugin(
-    plugin_id: str,
+    request: InstallPluginRequest,
     plugin_manager: PluginManagerDep,
     health_service: HealthServiceDep,
 ) -> PluginOperationResponse:
     """Install a plugin distribution and require a server restart to activate."""
-    await plugin_manager.install(plugin_id)
+    await plugin_manager.install(request.plugin_id)
     health_service.mark_plugin_restart_required()
     return PluginOperationResponse()
 

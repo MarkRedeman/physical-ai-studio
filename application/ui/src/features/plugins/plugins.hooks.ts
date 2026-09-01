@@ -13,7 +13,7 @@ export const usePluginsQuery = () => {
 };
 
 export const useInstallPluginMutation = () => {
-    return $api.useMutation('post', '/api/plugins/{plugin_id}', {
+    return $api.useMutation('post', '/api/plugins', {
         meta: { invalidates: [['get', '/api/plugins']] },
     });
 };
@@ -35,7 +35,7 @@ export const usePluginActions = () => {
     const install = async (pluginId: string) => {
         setBusyId(pluginId);
         try {
-            await installMutation.mutateAsync({ params: { path: { plugin_id: pluginId } } });
+            await installMutation.mutateAsync({ body: { plugin_id: pluginId } });
             triggerRestartRequired();
             openRestartPrompt();
         } catch (error) {

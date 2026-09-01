@@ -111,7 +111,7 @@ def test_install_plugin_returns_restart_required() -> None:
 
     try:
         client = TestClient(app)
-        response = client.post("/api/plugins/demo-plugin")
+        response = client.post("/api/plugins", json={"plugin_id": "demo-plugin"})
     finally:
         app.dependency_overrides.clear()
 
@@ -135,7 +135,7 @@ def test_uninstall_plugin_returns_restart_required() -> None:
     manager.uninstall.assert_called_once_with("demo-plugin")
 
 
-def test_uninstall_plugin_blocked_when_robots_in_use() -> None:
+def test_uninstall_plugin_allows_robots_in_use() -> None:
     manager = _stub_manager(
         info=_plugin_info(installed=True, robots=[PluginRobot("Demo_Follower", "Demo Follower", "follower", True)]),
     )
