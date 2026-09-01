@@ -3,8 +3,8 @@
     "id": "physicalai-rebot-b601-plugin",
     "name": "ReBot Robot Plugin",
     "description": "ReBot B601 and Arm102 robot integrations.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "physicalai-rebot-b601-plugin",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
+    "install_source": "physicalai-rebot-b601-plugin>=0.4.3",
     "robots": [
       {
         "type": "ReBot_B601_DM_Follower",
@@ -22,8 +22,8 @@
     "id": "physicalai-bimanual-so101-plugin",
     "name": "Bimanual SO-101 Robot Plugin",
     "description": "Bimanual twin SO-101 arms for learning from demonstration.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "physicalai-bimanual-so101-plugin",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
+    "install_source": "physicalai-bimanual-so101-plugin>=0.2.3",
     "robots": [
       {
         "type": "BimanualSO101_Follower",
@@ -41,8 +41,8 @@
     "id": "physicalai-lekiwi-plugin",
     "name": "LeKiwi Robot Plugin",
     "description": "LeKiwi mobile manipulator integration.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "physicalai-lekiwi-plugin",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
+    "install_source": "physicalai-lekiwi-plugin>=0.2.3",
     "robots": [
       {
         "type": "LeKiwi_Follower",
@@ -60,16 +60,16 @@
     "id": "physicalai-lerobot-plugin",
     "name": "LeRobot Robot Plugin",
     "description": "Robot and teleoperator configurations discovered from LeRobot.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "physicalai-lerobot-plugin",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
+    "install_source": "physicalai-lerobot-plugin>=0.2.3",
     "robots": []
   },
   {
     "id": "physicalai-mujoco-so101-plugin",
     "name": "MuJoCo Robot Plugin",
     "description": "MuJoCo-backed SO-101 simulation integration.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-rebot-b601-plugin",
-    "install_source": "physicalai-mujoco-so101-plugin",
+    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
+    "install_source": "physicalai-mujoco-so101-plugin>=0.2.3",
     "robots": [
       {
         "type": "MuJoCo_SO101_Follower",
