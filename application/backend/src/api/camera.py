@@ -30,18 +30,14 @@ def _formats_to_response(raw: list[tuple[int, int, int]]) -> list[SupportedCamer
 
 # Cache required on MacOS to avoid repeated cam.open() which may block camera stream
 @cache
-def _query_formats(driver: str, fingerprint: str) -> list[SupportedCameraFormat]:
+def _query_formats(driver: str, fingerprint_key: str) -> list[SupportedCameraFormat]:
     """Query real formats from a device via physicalai.capture."""
 
     if driver == "basler":
         # TODO: Replace with cached Basler hardware discovery once implementated in physicalai.capture
         return _formats_to_response([(640, 480, 30), (768, 480, 30), (1920, 1200, 30)])
 
-    try:
-        f = json.loads(fingerprint)
-    except json.JSONDecodeError as e:
-        msg = f"Unable to parse fingerprint into a dictionary: {e}"
-        raise ValueError(msg)
+    f = json.loads(fingerprint_key)
 
     if driver == "usb_camera":
         from physicalai.capture import UVCCamera
@@ -63,7 +59,14 @@ async def get_supported_formats(
     fingerprint: str,
 ) -> list[SupportedCameraFormat]:
     """Returns the supported camera resolution and fps associated to the camera."""
-    return _query_formats(driver, fingerprint)
+    try:
+        parsed = json.loads(fingerprint)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Unable to parse fingerprint into a dictionary: {e}") from e
+    if not isinstance(parsed, dict) or not parsed:
+        raise ValueError("Camera fingerprint must be a non-empty JSON object")
+    fingerprint_key = json.dumps(parsed, sort_keys=True, separators=(",", ":"))
+    return _query_formats(driver, fingerprint_key)
 
 
 def get_camera_from_query(websocket: WebSocket) -> ProjectCamera:
@@ -114,6 +117,8 @@ async def camera_websocket(
 
     worker = None
     try:
+        if camera.fingerprint is None:
+            raise ValueError("Camera must be reselected")
         worker = CameraWorker(
             camera,
             scheduler.mp_stop_event,

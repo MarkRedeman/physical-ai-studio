@@ -23,6 +23,7 @@ import { NavLink, Outlet, useParams } from 'react-router';
 import { $api } from '../../api/client';
 import { getApiErrorMessage, isRecordingLockedError, isResourceInUseError } from '../../api/errors';
 import { SchemaProjectCamera } from '../../api/types';
+import { fingerprintKey, formatFingerprint } from '../../features/cameras/fingerprint';
 import { useProjectId } from '../../features/projects/use-project';
 import { ConnectionStatus } from '../../features/robots/robots-list';
 import { paths } from '../../router';
@@ -129,7 +130,7 @@ const CameraListItem = ({
                                 {camera.driver}: {camera.hardware_name}
                             </li>
                             <li style={{ marginLeft: 'var(--spectrum-global-dimension-size-200)' }}>
-                                {camera.fingerprint}
+                                {formatFingerprint(camera.fingerprint)}
                             </li>
                         </ul>
                     </View>
@@ -171,9 +172,10 @@ export const CamerasList = () => {
 
             <Flex direction='column' gap='size-100'>
                 {projectCameras.map((camera) => {
-                    const hardwareCamera = hardwareCameras.find((hardware) => {
-                        return hardware.fingerprint === camera.fingerprint;
-                    });
+                    const cameraFingerprint = fingerprintKey(camera.fingerprint);
+                    const hardwareCamera = cameraFingerprint
+                        ? hardwareCameras.find((hardware) => fingerprintKey(hardware.fingerprint) === cameraFingerprint)
+                        : undefined;
                     const to = paths.project.cameras.show({ project_id, camera_id: camera.id ?? 'undefined' });
 
                     return (
