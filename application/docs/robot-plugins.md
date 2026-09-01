@@ -1,225 +1,337 @@
-# Robot Catalog Plugins
+# Robot Plugins
 
-Robot catalog plugins let Studio discover, configure, connect to, and display
-robot drivers without changing Studio itself. Studio discovers installed plugins
-through the `physicalai.studio.catalog_plugins` Python entry-point group.
+Robot plugins add robot drivers and robot types to Physical AI Studio without
+requiring changes to Studio itself. A plugin provides a Python entry point,
+one or more catalog definitions, and the code needed to build and connect each
+robot.
 
-## Plugin Shape
+This page covers installing and using plugins, then developing a plugin. For
+the internal design and lifecycle, see [Robot Plugin Architecture](./explanation/robot-plugin-architecture.md).
 
-Declare an entry point in the plugin's `pyproject.toml`:
+## Install a Curated Plugin
+
+Curated plugins are listed on Studio's **Plugins** page.
+
+1. Open **Plugins** from the main navigation.
+2. Select **Install** next to the plugin you want to use.
+3. Wait for the installation to finish.
+4. Restart Studio when prompted.
+
+The restart is required because Python entry points and the robot catalog are
+loaded when the backend starts.
+
+[//]: # (Screenshot suggestion: Plugins page showing available and installed plugin rows with an Install button.)
+
+[//]: # (Screenshot suggestion: Plugin installation progress followed by the restart-required prompt.)
+
+## Use A Plugin Robot
+
+After the plugin has been installed and Studio has restarted:
+
+1. Open a project.
+2. Open **Robots** and select **Add robot**.
+3. Select the follower or leader robot type supplied by the plugin.
+4. Complete the configuration form and save the robot.
+
+The robot picker and robot form are automatically updated after installation
+and restart. The form is generated from the plugin's catalog definition and
+payload model, so different robot types can expose different configuration
+fields and connection controls.
+
+A **follower** executes actions during teleoperation or inference. A **leader**
+provides input for teleoperation.
+
+[//]: # (Screenshot suggestion: Robot type picker showing a newly available plugin robot after restart.)
+
+[//]: # (Screenshot suggestion: Plugin-provided robot configuration form with a connection selector and advanced options.)
+
+## Install An Unofficial Plugin
+
+An unofficial plugin can be installed directly into the backend environment.
+This is useful for private integrations, experiments, and plugins that have not
+been added to Studio's curated list.
+
+From the Studio repository:
+
+```bash
+cd application/backend
+uv add physicalai-my-robot-plugin
+uv sync
+```
+
+Install from Git:
+
+```bash
+cd application/backend
+uv add "physicalai-my-robot-plugin @ git+https://github.com/example/physicalai-my-robot-plugin.git"
+```
+
+For a local editable plugin, add a path source to
+`application/backend/pyproject.toml`:
+
+```toml
+[tool.uv.sources]
+physicalai-my-robot-plugin = { path = "../../physicalai-my-robot-plugin", editable = true }
+```
+
+Then run `uv sync` and restart Studio. Direct installation still requires the
+plugin to declare the `physicalai.studio.catalog_plugins` entry point. It will
+appear in the robot picker after restart, but it will not appear on the
+**Plugins** page unless it is added to Studio's curated manifest.
+
+For Docker deployments, installing a package into a running container is not a
+persistent deployment method. Rebuilding or replacing the container can remove
+the package. Use a custom image or a development setup when the plugin must
+survive container replacement.
+
+## Plugin Structure
+
+A minimal plugin can have this structure:
+
+```text
+physicalai-my-robot-plugin/
+├── pyproject.toml
+├── README.md
+├── src/
+│   └── physicalai_my_robot_plugin/
+│       ├── __init__.py
+│       └── studio_catalog.py
+├── urdf/                    # optional robot models and meshes
+└── tests/
+```
+
+The [physicalai-plugins repository][physicalai-plugins] contains complete
+examples. In particular, the ReBot package demonstrates multiple robot types,
+serial discovery, payload validation, URDF assets, and driver builders. The
+bimanual SO-101, LeKiwi, LeRobot, and MuJoCo packages demonstrate other common
+patterns.
+
+[physicalai-plugins]: https://github.com/MarkRedeman/physicalai-plugins
+
+Install the SDK used by a plugin with:
+
+```bash
+uv add physicalai-studio-plugin
+```
+
+Declare the Studio entry point in `pyproject.toml`:
 
 ```toml
 [project.entry-points."physicalai.studio.catalog_plugins"]
 my-robot = "physicalai_my_robot_plugin.studio_catalog:register_physicalai_studio_plugin"
 ```
 
-The entry point registers one `RobotCatalogDefinition` per robot type:
+## The `studio_catalog.py` Interface
+
+The entry-point callable receives Studio's catalog registry. Register one
+`RobotCatalogDefinition` for every robot type:
 
 ```python
-from physicalai_studio_plugin import RobotCatalogDefinition
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from physicalai_studio_plugin import (
+    CatalogRobotFactory,
+    CatalogRobot,
+    RobotCatalogDefinition,
+    RobotProbe,
+)
+from pydantic import BaseModel
 
 
-def register_physicalai_studio_plugin(registry) -> None:
+class MyRobotPayload(BaseModel):
+    connection_string: str = ""
+
+
+async def build_my_robot(
+    robot: CatalogRobot[MyRobotPayload],
+    factory: CatalogRobotFactory,
+):
+    # Resolve the configured connection and return a Physical AI Robot.
+    raise NotImplementedError
+
+
+def register_physicalai_studio_plugin(registry: Any) -> None:
     registry.register_robot(
         RobotCatalogDefinition(
             type="MyRobot_Follower",
             display_name="My Robot Follower",
+            role="follower",
             category="My Robot",
             source="external",
-            role="follower",
             robot_payload=MyRobotPayload,
             robot_builder=build_my_robot,
-            probe=MyRobotProbe(),
+            probe=RobotProbe(),
         )
     )
 ```
 
-`type` is a stable persisted identifier and must be unique across all installed
-plugins. `display_name` is the label shown to users. `role` is either
-`follower` (a robot that executes actions) or `leader` (a teleoperation input).
+The example shows the important contract; a real plugin should implement the
+builder and probe rather than raise `NotImplementedError`.
 
-## Catalog Presentation
+`RobotCatalogDefinition` fields have these responsibilities:
 
-`category` groups related cards in the Studio robot-selection dialog. Use a
-short, product-level name such as `ReBot`, `LeRobot`, or `SO101`.
+- `type`: stable, globally unique identifier persisted in Studio projects.
+- `display_name`: human-readable name shown in the robot picker.
+- `role`: `follower` or `leader`.
+- `category`: short label used to group related robot cards.
+- `source`: `internal`, `first_party`, or `external`.
+- `robot_payload`: Pydantic model defining configuration data.
+- `robot_builder`: async callable that returns a Physical AI robot driver.
+- `probe`: optional discovery, identification, and online-status implementation.
+- `asset`: optional URDF, mesh, joint-map, and thumbnail information.
+- `adapter_options`: optional control and effort-forwarding behavior.
 
-`source` describes ownership:
+The `type` value must not be casually renamed. It is stored in project data and
+must remain unique across all installed plugins.
 
-- `internal`: supplied by Studio itself.
-- `first_party`: supplied by an Intel or Physical AI maintained plugin.
-- `external`: supplied by another integration.
+The full SDK reference is in [`application/plugin/README.md`](../plugin/README.md).
 
-Users can hide external robots in the catalog browser. Third-party plugins
-should therefore set `source="external"`.
+## Render The Robot Form
 
-Set `RobotAsset.preview_thumbnail` to an optional path relative to the asset
-root. Studio serves it as the selection-card image and uses a fallback when it
-is not provided.
+Studio renders a plugin's robot form from the Pydantic payload model's JSON
+Schema. Standard Pydantic metadata provides most of the UI:
 
-## Payload, Connection, And Assets
+- `title` becomes a field label.
+- `description` becomes help text.
+- `default` pre-fills a value.
+- `enum` renders a selection control.
+- Required fields and validation come from the model.
+- Nested Pydantic models render recursively.
 
-`robot_payload` is a Pydantic model describing configuration submitted by the
-Studio form. The async `robot_builder` receives this validated payload and a
-`CatalogRobotFactory`, and returns the Physical AI driver. A `RobotProbe` can
-implement device discovery, identification, and reachability checks.
+Use `robot_field_ui(...)` for Studio-specific field behavior:
 
-`asset` is optional. When supplied, a `RobotAsset` identifies a URDF, ROS
-package paths, joint mapping, and an optional root resolver. Studio serves the
-URDF and associated meshes to its 3D viewer. When a robot has no URDF, set
-`asset=None`; users can still select, configure, and connect it, but Studio
-shows no 3D preview.
+```python
+from physicalai_studio_plugin import robot_field_ui
+from pydantic import Field
 
-## Configuring The Robot Form UI
+timeout: float = Field(
+    default=10.0,
+    json_schema_extra=robot_field_ui({"advanced_configuration": True}),
+)
+```
 
-Studio renders the robot payload form from your payload model's JSON Schema.
-Use standard Pydantic schema fields first:
+Use `robot_payload_ui(...)` when fields need ordering, sections, guidance, or a
+first-party connection control. The supported item kinds are:
 
-- `title`: field label shown in the form.
-- `description`: help text shown under a field (works for text, number, enum,
-  boolean, and first-party controls).
-- `default`: default value pre-filled in the form.
-- `enum`: renders a dropdown picker.
-
-`robot_payload_ui(...)` is optional. Without it, Studio renders the payload
-directly from JSON Schema. Use it when you need ordering, sections, information,
-or a first-party multi-field component.
-
-### Field-level UI options (`robot_field_ui`)
-
-Attach to `Field(..., json_schema_extra=robot_field_ui({...}))`.
-
-- `required` (`bool`): treats a field as required in Studio UI even if the
-  underlying schema field is optional/defaulted.
-- `advanced_configuration` (`bool`): hides an optional field behind the form's
-  "Show advanced options" switch until the user enables it. Use for fine-tuning
-  fields with a safe default that most users should not need to change.
-
-### Payload UI items (`robot_payload_ui`)
-
-Attach an ordered list of items to `ConfigDict(json_schema_extra={...})`:
-
-- `section`: recursively groups items under an optional heading and description.
-- `field`: renders one named schema field.
-- `connection`: renders the first-party serial device selector and owns its
-  bound payload fields.
-- `info`: renders read-only guidance text.
-
-Fields not named by an item and not owned by a control render after configured
-items using normal JSON Schema rendering. This lets plugins customize only the
-parts of a form that need special UI.
-
-### Section item (`RobotUiSectionOptions`)
-
-Each section item supports:
-
-- `kind` (`"section"`, required): item type.
-- `id` (`str`, required): stable section identifier.
-- `title` (`str`): optional heading.
-- `description` (`str`): optional section help text.
-- `items` (`list[RobotUiItem]`, required): recursively rendered children.
-
-### Field item (`RobotUiFieldItem`)
-
-- `kind` (`"field"`, required): item type.
-- `name` (`str`, required): field name in the current payload model.
-
-### Connection item (`RobotUiConnectionItem`)
-
-- `kind` (`"connection"`, required): control type.
-- `label` (`str`): control label.
-- `description` (`str`): control help text.
-- `device_discovery` (`bool`): enables discover/refresh device behavior.
-- `identify` (`bool`): shows an `Identify` button that calls the probe's
-  `identify(...)` with current payload.
-- `manual_entry` (`bool`): when `false`, only discovered values can be used;
-  when omitted/`true`, user can type a custom value.
-- `bind` (`RobotUiConnectionBinding`, required): payload field bindings.
-
-Connection bindings:
-
-- `bind.connection` (`str`, required): payload key that stores selected/manual
-  connection value.
-- `bind.serial_number` (`str`, optional): payload key that stores selected
-  serial number when available.
-
-Connection bindings are relative to the payload object that declares the item.
-For nested Pydantic models, define UI items on that nested model rather than
-using a dotted field path.
-
-### Info item (`RobotUiInfoItem`)
-
-- `kind` (`"info"`, required): item type.
-- `title` (`str`, optional): short heading.
-- `text` (`str`, required): body text.
-- `variant` (`"info" | "warning"`, optional): visual emphasis.
-
-### Example
+- `section`: groups items under an optional heading.
+- `field`: places a normal payload field.
+- `connection`: renders Studio's serial-device selector and owns its bindings.
+- `info`: renders read-only guidance or warnings.
 
 ```python
 from physicalai_studio_plugin import robot_payload_ui
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class MyRobotPayload(BaseModel):
-    connection_string: str = Field(
-        default="",
-        title="Connection",
-        description="Select a discovered port or enter one manually.",
-    )
-    serial_number: str = Field(
-        default="",
-        title="Serial number",
-        description="Optional hardware serial identifier.",
-    )
-    torque_enabled: bool = Field(
-        default=True,
-        description="Enable motor torque during startup.",
-    )
+    connection_string: str = ""
+    serial_number: str = ""
 
     model_config = ConfigDict(
-        json_schema_extra={
-            **robot_payload_ui(
-                [
-                    {
-                        "kind": "section",
-                        "id": "connection",
-                        "title": "Connection",
-                        "description": "Use Refresh to rescan ports.",
-                        "items": [
-                            {
-                                "kind": "info",
-                                "title": "Before connecting",
-                                "text": "Power on the robot and clear the workspace.",
-                            },
-                            {
-                                "kind": "connection",
-                                "label": "Robot connection",
-                                "device_discovery": True,
-                                "identify": True,
-                                "manual_entry": True,
-                                "bind": {
-                                    "connection": "connection_string",
-                                    "serial_number": "serial_number",
-                                },
-                            },
-                            {
-                                "kind": "info",
-                                "text": "USB hubs can change assigned port names after reboot.",
-                                "variant": "warning",
-                            },
-                        ],
+        json_schema_extra=robot_payload_ui(
+            [
+                {
+                    "kind": "connection",
+                    "label": "Select robot",
+                    "device_discovery": True,
+                    "bind": {
+                        "connection": "connection_string",
+                        "serial_number": "serial_number",
                     },
-                    {
-                        "kind": "section",
-                        "id": "behavior",
-                        "title": "Behavior",
-                        "items": [{"kind": "field", "name": "torque_enabled"}],
-                    },
-                ]
-            )
-        }
+                },
+            ]
+        )
     )
 ```
 
-See `application/plugin/README.md` for the full SDK reference and the ReBot
-catalog implementations for complete examples.
+Connection bindings are relative to the payload model that declares them. A
+nested payload should define its own connection metadata instead of using a
+dotted path such as `left_arm.connection_string`.
+
+Explicit UI items customize only the fields they place or own. Fields that are
+not mentioned continue to render automatically from JSON Schema.
+
+[//]: # (Screenshot suggestion: Plugin form showing a connection item, a section, an advanced-options switch, and inline information text.)
+
+## Add A Plugin To The Plugins Page
+
+The entry point controls runtime discovery. The curated manifest controls what
+appears on Studio's **Plugins** page and what the UI is allowed to install.
+
+Add a reviewed entry to
+`application/backend/src/plugins/manifest.json`:
+
+```json
+{
+  "id": "physicalai-my-robot-plugin",
+  "name": "My Robot Plugin",
+  "description": "Integration for My Robot.",
+  "repo_url": "https://github.com/example/physicalai-my-robot-plugin",
+  "install_source": "physicalai-my-robot-plugin>=0.1.0",
+  "robots": [
+    {
+      "type": "MyRobot_Follower",
+      "display_name": "My Robot Follower",
+      "role": "follower"
+    }
+  ]
+}
+```
+
+The `id` must match the Python distribution name. `install_source` is the
+requirement passed to `uv`; it must be a valid and reviewed package, Git, or
+path source. The manifest's robot list supplies user-facing information before
+installation. A plugin such as LeRobot can discover additional definitions at
+runtime, so its manifest list may be empty.
+
+After changing the manifest, restart the backend so the updated curated list is
+loaded.
+
+## Troubleshooting
+
+### The plugin is installed but its robots are missing
+
+Restart Studio. Entry points and the catalog are loaded at backend startup.
+If the robots are still missing, verify the entry-point group, import path, and
+that `register_physicalai_studio_plugin` calls `registry.register_robot(...)`.
+
+### The plugin is missing from the Plugins page
+
+Manual `uv add` installation does not add a plugin to the curated UI. Add a
+reviewed entry to `application/backend/src/plugins/manifest.json`.
+
+### The form has missing or duplicated fields
+
+Check the Pydantic model's JSON Schema metadata and the names used by
+`robot_payload_ui(...)`. Connection items own their bound fields, and nested
+models must define bindings relative to themselves.
+
+### Registration fails with a duplicate robot type
+
+Choose a globally unique and stable `RobotCatalogDefinition.type`. Do not reuse
+an identifier from another plugin or rename an identifier already persisted in
+project data.
+
+### Local plugin changes do not appear
+
+Run `uv sync` if the dependency source changed, then restart Studio. Changes to
+`studio_catalog.py`, payload models, and entry points are not reliably picked up
+by a running backend.
+
+### A robot cannot connect
+
+Check the payload values, driver dependencies, serial permissions, probe
+implementation, and `CatalogRobotFactory` connection resolution. A successful
+catalog registration does not guarantee that the physical device is reachable.
+
+### The URDF preview fails
+
+Check the `RobotAsset` URDF path, package map, joint map, and root resolver. An
+asset is optional: a plugin without one can still be configured and used, but
+Studio cannot show a 3D preview.
+
+### The plugin disappears after a Docker rebuild
+
+Packages installed into a running container are not persistent. Build them into
+a custom image or use a development setup with the plugin source available.
