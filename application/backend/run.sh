@@ -15,4 +15,9 @@ set -euo pipefail
 #   ./run.sh [serve]
 # -----------------------------------------------------------------------------
 export PYTHONUNBUFFERED=1
+
+if [[ "${1:-serve}" == "serve" ]]; then
+    uv run --no-sync physicalai-studio plugins restore
+fi
+
 exec uv run --no-sync physicalai-studio "${1:-serve}" "${@:2}"

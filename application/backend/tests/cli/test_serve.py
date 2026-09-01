@@ -2,7 +2,6 @@ import importlib
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -111,7 +110,6 @@ def test_start_server_reconciles_settings_host_with_the_actual_bind_argument(mon
     monkeypatch.setattr(serve_module, "_configure_packaged_runtime", lambda: None)
     monkeypatch.setattr(serve_module, "_sync_missing_robot_assets", lambda: None)
     monkeypatch.setattr(serve_module, "_run_migrations", lambda: None)
-    monkeypatch.setattr(serve_module, "_restore_recorded_plugins", lambda: None)
 
     import uvicorn
 
@@ -121,45 +119,3 @@ def test_start_server_reconciles_settings_host_with_the_actual_bind_argument(mon
 
     assert settings_module.get_settings().host == "0.0.0.0"
     assert settings_module.get_settings().port == 9999
-
-
-def test_start_server_restores_plugins_before_importing_uvicorn(monkeypatch) -> None:
-    calls: list[str] = []
-    monkeypatch.setattr(serve_module, "_configure_packaged_runtime", lambda: calls.append("configure"))
-    monkeypatch.setattr(serve_module, "_restore_recorded_plugins", lambda: calls.append("restore"))
-    monkeypatch.setattr(serve_module, "_sync_missing_robot_assets", lambda: calls.append("assets"))
-    monkeypatch.setattr(serve_module, "_run_migrations", lambda: calls.append("migrations"))
-
-    import uvicorn
-
-    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: calls.append("uvicorn"))
-
-    serve_module.start_server("127.0.0.1", 7860)
-
-    assert calls.index("restore") < calls.index("uvicorn")
-
-
-def test_restore_recorded_plugins_uses_persistent_storage(monkeypatch, tmp_path) -> None:
-    plugin_manager = MagicMock()
-    plugin_manager.restore_installed = AsyncMock()
-    settings = MagicMock()
-    settings.storage_dir = tmp_path
-    monkeypatch.setattr(serve_module, "get_settings", lambda: settings)
-    monkeypatch.setattr(serve_module, "PluginManager", lambda **_kwargs: plugin_manager)
-
-    serve_module._restore_recorded_plugins()
-
-    plugin_manager.restore_installed.assert_awaited_once_with()
-
-
-def test_restore_recorded_plugins_continues_when_restore_fails(monkeypatch, capsys) -> None:
-    plugin_manager = MagicMock()
-    plugin_manager.restore_installed = AsyncMock(side_effect=RuntimeError("offline"))
-    settings = MagicMock()
-    settings.storage_dir = Path("/tmp/storage")
-    monkeypatch.setattr(serve_module, "get_settings", lambda: settings)
-    monkeypatch.setattr(serve_module, "PluginManager", lambda **_kwargs: plugin_manager)
-
-    serve_module._restore_recorded_plugins()
-
-    assert "Could not restore all recorded plugins" in capsys.readouterr().out
