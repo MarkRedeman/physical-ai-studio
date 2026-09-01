@@ -1,103 +1,29 @@
-import { useState } from 'react';
+import { Button, Flex, Heading, Text, View } from '@geti-ui/ui';
 
-import { Badge, Button, Flex, Heading, Link, Text, View } from '@geti-ui/ui';
-import { clsx } from 'clsx';
-
-import { SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
+import { SchemaPluginResponse } from '../../api/openapi-spec';
 import { Table, TableColumn } from '../../components/table/table';
 import { usePluginActions, usePluginsQuery } from './plugins.hooks';
 
 import classes from './plugins.module.css';
 
 const PLUGIN_COLUMNS: TableColumn[] = [
-    { width: 'max-content' },
     { width: 'minmax(0, 2fr)', header: 'Plugin' },
-    { width: 'max-content', header: 'Robots' },
     { width: 'auto', align: 'end' },
 ];
-
-const ROLE_CLASS_NAMES = {
-    follower: classes.roleFollower,
-    leader: classes.roleLeader,
-} as const;
-
-const RoleBadge = ({ role }: { role: SchemaPluginRobotResponse['role'] }) => (
-    <Badge variant='neutral' UNSAFE_className={clsx(classes.roleBadge, ROLE_CLASS_NAMES[role])}>
-        {role}
-    </Badge>
-);
-
-const PluginRobots = ({ robots }: { robots: SchemaPluginRobotResponse[] }) => {
-    if (robots.length === 0) {
-        return <Text>Robots are discovered after installation.</Text>;
-    }
-    return (
-        <Flex gap='size-200' wrap>
-            {robots.map((robot) => (
-                <View key={robot.type} padding='size-50' UNSAFE_className={classes.robotChip}>
-                    <Flex alignItems='center' gap='size-100'>
-                        <RoleBadge role={robot.role} />
-                        <Text UNSAFE_className={classes.robotName}>{robot.display_name}</Text>
-                    </Flex>
-                </View>
-            ))}
-        </Flex>
-    );
-};
-
-const PluginDetail = ({ plugin }: { plugin: SchemaPluginResponse }) => {
-    return (
-        <View backgroundColor='gray-75' padding='size-300' borderColor='gray-300' borderWidth='thin'>
-            <Flex direction='column' gap='size-200'>
-                {plugin.installed && plugin.in_use_robot_count > 0 ? (
-                    <Text UNSAFE_className={classes.inUse}>
-                        In use by {plugin.in_use_robot_count} robot{plugin.in_use_robot_count === 1 ? '' : 's'}
-                    </Text>
-                ) : null}
-                <Flex direction='column' gap='size-100'>
-                    <Heading level={4}>Robots</Heading>
-                    <PluginRobots robots={plugin.robots} />
-                </Flex>
-                {plugin.repo_url ? (
-                    <Link href={plugin.repo_url} target='_blank' rel='noreferrer'>
-                        GitHub
-                    </Link>
-                ) : null}
-            </Flex>
-        </View>
-    );
-};
 
 type PluginRowProps = {
     plugin: SchemaPluginResponse;
     isBusy: boolean;
     busyId: string | undefined;
-    isExpanded: boolean;
-    onExpandedChange: (isExpanded: boolean) => void;
     onInstall: (pluginId: string) => void;
     onUninstall: (pluginId: string) => void;
 };
 
-const PluginRow = ({
-    plugin,
-    isBusy,
-    busyId,
-    isExpanded,
-    onExpandedChange,
-    onInstall,
-    onUninstall,
-}: PluginRowProps) => {
+const PluginRow = ({ plugin, isBusy, busyId, onInstall, onUninstall }: PluginRowProps) => {
     const isInstalled = plugin.installed;
-    const isInUse = plugin.in_use_robot_count > 0;
     const isInstalling = busyId === plugin.id && isBusy;
     return (
-        <Table.ExpandableRow
-            id={`plugin-row-${plugin.id}`}
-            label={plugin.name}
-            isExpanded={isExpanded}
-            onExpandedChange={onExpandedChange}
-            detail={<PluginDetail plugin={plugin} />}
-        >
+        <Table.Row id={`plugin-row-${plugin.id}`}>
             <Flex direction='column' gap='size-50'>
                 <Heading level={4} margin={0}>
                     {plugin.name}
@@ -105,18 +31,10 @@ const PluginRow = ({
                 <Text UNSAFE_className={classes.pluginDescription}>{plugin.description}</Text>
             </Flex>
 
-            <Text UNSAFE_className={classes.robotCount}>
-                {plugin.robots.length} robot{plugin.robots.length === 1 ? '' : 's'}
-            </Text>
-
             <div onClick={(event) => event.stopPropagation()}>
                 <Flex gap='size-100' alignItems='center' wrap>
                     {isInstalled ? (
-                        <Button
-                            variant='secondary'
-                            isDisabled={isInUse || isBusy}
-                            onPress={() => onUninstall(plugin.id)}
-                        >
+                        <Button variant='secondary' isDisabled={isBusy} onPress={() => onUninstall(plugin.id)}>
                             Uninstall
                         </Button>
                     ) : (
@@ -126,7 +44,7 @@ const PluginRow = ({
                     )}
                 </Flex>
             </div>
-        </Table.ExpandableRow>
+        </Table.Row>
     );
 };
 
@@ -139,8 +57,6 @@ type PluginsTableProps = {
 };
 
 export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }: PluginsTableProps) => {
-    const [expandedPluginId, setExpandedPluginId] = useState<string | undefined>(undefined);
-
     return (
         <Table columns={PLUGIN_COLUMNS} isEmphasized>
             {plugins.map((plugin) => (
@@ -149,8 +65,6 @@ export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }
                     plugin={plugin}
                     isBusy={isBusy}
                     busyId={busyId}
-                    isExpanded={expandedPluginId === plugin.id}
-                    onExpandedChange={(isExpanded) => setExpandedPluginId(isExpanded ? plugin.id : undefined)}
                     onInstall={onInstall}
                     onUninstall={onUninstall}
                 />

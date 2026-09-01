@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { toast } from '@geti-ui/ui';
 
 import { $api } from '../../api/client';
-import { getApiErrorMessage, isResourceInUseError } from '../../api/errors';
+import { getApiErrorMessage } from '../../api/errors';
 import { useRestartState } from '../system/restart-state';
 
 export const usePluginsQuery = () => {
@@ -52,10 +52,6 @@ export const usePluginActions = () => {
             triggerRestartRequired();
             openRestartPrompt();
         } catch (error) {
-            if (isResourceInUseError(error)) {
-                toast.info(getApiErrorMessage(error) ?? 'This plugin is in use and cannot be uninstalled.');
-                return;
-            }
             toast.negative(getApiErrorMessage(error) ?? 'Failed to uninstall the plugin.');
         } finally {
             setBusyId(undefined);

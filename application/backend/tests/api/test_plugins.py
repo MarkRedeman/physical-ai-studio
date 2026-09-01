@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
-import api.plugins as plugins_api
 from api.dependencies import get_health_service
-from api.plugins import PluginInfo, PluginManager, PluginRobot, get_plugin_manager
+from api.plugins import get_plugin_manager
 from main import app
+from plugins.plugin_manager import PluginInfo, PluginManager, PluginRobot
 from services.health_service import HealthService
 
 
@@ -28,23 +28,17 @@ def _plugin_info(
     )
 
 
-def _stub_manager(*, info: PluginInfo, robot_types: list[str] | None = None) -> AsyncMock:
+def _stub_manager(*, info: PluginInfo) -> AsyncMock:
     manager = AsyncMock(spec=PluginManager)
     manager.list_plugins.return_value = [info]
-    manager.get.return_value = info
-    manager.robot_types.return_value = robot_types if robot_types is not None else [r.type for r in info.robots]
     manager.install.return_value = None
     manager.uninstall.return_value = None
     return manager
 
 
-def _override(manager: Mock, in_use: list[str]) -> None:
-    async def _fake_in_use(_session, robot_types: list[str]) -> list[str]:
-        return [type_ for type_ in in_use if type_ in robot_types]
-
+def _override(manager: AsyncMock) -> None:
     app.dependency_overrides[get_plugin_manager] = lambda: manager
     app.dependency_overrides[get_health_service] = lambda: HealthService()
-    plugins_api.find_robot_types_in_use_async = _fake_in_use
 
 
 def test_health_reports_server_instance_and_restart_state() -> None:
@@ -71,7 +65,7 @@ def test_list_plugins_returns_manifest_plugins() -> None:
     manager = _stub_manager(
         info=_plugin_info(robots=[PluginRobot("Demo_Follower", "Demo Follower", "follower", False)]),
     )
-    _override(manager, in_use=[])
+    _override(manager)
 
     try:
         client = TestClient(app)
@@ -86,20 +80,17 @@ def test_list_plugins_returns_manifest_plugins() -> None:
     assert plugin["id"] == "demo-plugin"
     assert plugin["installed"] is False
     assert plugin["installed_version"] is None
-    assert plugin["in_use_robot_count"] == 0
-    assert plugin["robots"][0]["type"] == "Demo_Follower"
-    assert plugin["robots"][0]["installed"] is False
+    assert plugin["robot_count"] == 1
 
 
-def test_list_plugins_reports_installed_and_in_use() -> None:
+def test_list_plugins_reports_installed_and_robot_count() -> None:
     manager = _stub_manager(
         info=_plugin_info(
             installed=True,
             robots=[PluginRobot("Demo_Follower", "Demo Follower", "follower", True)],
         ),
-        robot_types=["Demo_Follower"],
     )
-    _override(manager, in_use=["Demo_Follower"])
+    _override(manager)
 
     try:
         client = TestClient(app)
@@ -111,12 +102,12 @@ def test_list_plugins_reports_installed_and_in_use() -> None:
     plugin = response.json()[0]
     assert plugin["installed"] is True
     assert plugin["installed_version"] == "1.2.3"
-    assert plugin["in_use_robot_count"] == 1
+    assert plugin["robot_count"] == 1
 
 
 def test_install_plugin_returns_restart_required() -> None:
     manager = _stub_manager(info=_plugin_info())
-    _override(manager, in_use=[])
+    _override(manager)
 
     try:
         client = TestClient(app)
@@ -131,7 +122,7 @@ def test_install_plugin_returns_restart_required() -> None:
 
 def test_uninstall_plugin_returns_restart_required() -> None:
     manager = _stub_manager(info=_plugin_info(installed=True))
-    _override(manager, in_use=[])
+    _override(manager)
 
     try:
         client = TestClient(app)
@@ -147,9 +138,8 @@ def test_uninstall_plugin_returns_restart_required() -> None:
 def test_uninstall_plugin_blocked_when_robots_in_use() -> None:
     manager = _stub_manager(
         info=_plugin_info(installed=True, robots=[PluginRobot("Demo_Follower", "Demo Follower", "follower", True)]),
-        robot_types=["Demo_Follower"],
     )
-    _override(manager, in_use=["Demo_Follower"])
+    _override(manager)
 
     try:
         client = TestClient(app)
@@ -157,6 +147,6 @@ def test_uninstall_plugin_blocked_when_robots_in_use() -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 409
-    assert "Demo_Follower" in response.json()["message"]
-    manager.uninstall.assert_not_called()
+    assert response.status_code == 200
+    assert response.json() == {"restart_required": True}
+    manager.uninstall.assert_called_once_with("demo-plugin")

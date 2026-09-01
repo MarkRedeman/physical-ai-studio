@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -15,15 +15,7 @@ const installedPlugin = {
     repo_url: 'https://github.com/example/rebot',
     installed: true,
     installed_version: '0.1.0',
-    in_use_robot_count: 0,
-    robots: [
-        {
-            type: 'ReBot_B601_DM_Follower',
-            display_name: 'ReBot B601 DM Follower',
-            role: 'follower' as const,
-            installed: true,
-        },
-    ],
+    robot_count: 1,
 };
 
 const availablePlugin = {
@@ -33,15 +25,7 @@ const availablePlugin = {
     repo_url: 'https://github.com/example/mujoco',
     installed: false,
     installed_version: null,
-    in_use_robot_count: 0,
-    robots: [
-        {
-            type: 'MuJoCo_SO101_Follower',
-            display_name: 'MuJoCo SO101 Follower',
-            role: 'follower' as const,
-            installed: false,
-        },
-    ],
+    robot_count: 1,
 };
 
 const lerobotPlugin = {
@@ -51,8 +35,7 @@ const lerobotPlugin = {
     repo_url: 'https://github.com/example/lerobot',
     installed: true,
     installed_version: '0.1.0',
-    in_use_robot_count: 0,
-    robots: [],
+    robot_count: 0,
 };
 
 describe('PluginsView', () => {
@@ -60,21 +43,15 @@ describe('PluginsView', () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([installedPlugin, availablePlugin, lerobotPlugin]))
         );
-        const user = userEvent.setup();
 
         render(<PluginsView />, { route: '/plugins', path: '/plugins' });
 
-        const rebotRow = await screen.findByTestId('plugin-row-physicalai-rebot-b601-plugin');
-        await user.click(within(rebotRow).getByText('ReBot Plugin'));
+        await screen.findByTestId('plugin-row-physicalai-rebot-b601-plugin');
 
         expect(await screen.findByRole('heading', { name: 'Plugins' })).toBeVisible();
         expect(screen.getByText('Plugin')).toBeVisible();
-        expect(screen.getAllByText('Robots')).toHaveLength(2);
         expect(screen.getByText('ReBot Plugin')).toBeVisible();
         expect(screen.getByText('MuJoCo Plugin')).toBeVisible();
-        expect(screen.getByRole('heading', { name: 'Robots' })).toBeVisible();
-        expect(screen.getByText('ReBot B601 DM Follower')).toBeVisible();
-        expect(screen.getAllByText('1 robot')).toHaveLength(2);
     });
 
     it('opens a restart prompt after installing a plugin', async () => {
@@ -126,18 +103,18 @@ describe('PluginsView', () => {
         expect(await screen.findByText('Waiting for server restart…')).toBeVisible();
     });
 
-    it('disables uninstall for plugins with robots in use', async () => {
-        server.use(http.get('/api/plugins', () => HttpResponse.json([{ ...installedPlugin, in_use_robot_count: 2 }])));
+    it('allows uninstall for plugins with robots in use', async () => {
+        server.use(
+            http.get('/api/plugins', () => HttpResponse.json([{ ...installedPlugin, robot_count: 1 }])),
+            http.delete('/api/plugins/{plugin_id}', () => HttpResponse.json({ restart_required: true })),
+            http.get('/api/jobs', () => HttpResponse.json([]))
+        );
         const user = userEvent.setup();
 
         render(<PluginsView />, { route: '/plugins', path: '/plugins' });
 
-        const rebotRow = await screen.findByTestId('plugin-row-physicalai-rebot-b601-plugin');
-        await user.click(within(rebotRow).getByText('ReBot Plugin'));
-
-        const uninstallButton = await screen.findByRole('button', { name: 'Uninstall' });
-        expect(uninstallButton).toBeDisabled();
-        expect(screen.getByText(/In use by 2 robots/)).toBeVisible();
+        await user.click(await screen.findByRole('button', { name: 'Uninstall' }));
+        expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
     });
 
     it('opens the restart prompt after uninstalling a plugin', async () => {

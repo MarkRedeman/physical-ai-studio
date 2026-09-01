@@ -17,9 +17,6 @@ from .manifest import PluginManifestEntry, load_plugin_manifest
 if TYPE_CHECKING:
     from importlib.metadata import Distribution
 
-    from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy.orm.session import Session
-
 
 @dataclass
 class PluginRobot:
@@ -185,27 +182,3 @@ class PluginManager:
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             raise PluginOperationError(f"`{command_preview}` failed: {detail}")
-
-
-def find_robot_types_in_use_sync(session: Session, robot_types: list[str]) -> list[str]:
-    """Return which of the given robot types are persisted across projects."""
-    from sqlalchemy import select
-
-    from db.schema import ProjectRobotDB
-
-    if not robot_types:
-        return []
-    rows = session.execute(select(ProjectRobotDB.type).where(ProjectRobotDB.type.in_(robot_types))).scalars().all()
-    return sorted(set(rows))
-
-
-async def find_robot_types_in_use_async(session: AsyncSession, robot_types: list[str]) -> list[str]:
-    """Return which of the given robot types are persisted across projects."""
-    from sqlalchemy import select
-
-    from db.schema import ProjectRobotDB
-
-    if not robot_types:
-        return []
-    rows = await session.execute(select(ProjectRobotDB.type).where(ProjectRobotDB.type.in_(robot_types)))
-    return sorted(set(rows.scalars().all()))
