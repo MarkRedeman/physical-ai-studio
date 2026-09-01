@@ -26,14 +26,18 @@ const isUiItems = (value: unknown): value is ModelUiOptions => Array.isArray(val
 const fieldNamesOwnedByItems = (items: RobotUiItem[]): Set<string> =>
     new Set(
         items.flatMap((item) => {
-            if (item.kind === 'field') return [item.name];
+            if (item.kind === 'field') {
+                return [item.name];
+            }
             if (item.kind === 'connection') {
                 return [
                     item.bind.connection,
                     ...(item.bind.serial_number === undefined ? [] : [item.bind.serial_number]),
                 ];
             }
-            if (item.kind === 'section') return [...fieldNamesOwnedByItems(item.items)];
+            if (item.kind === 'section') {
+                return [...fieldNamesOwnedByItems(item.items)];
+            }
             return [];
         })
     );
@@ -65,7 +69,9 @@ type SchemaFormFieldProps = Omit<SchemaFormItemsProps, 'items' | 'renderUnownedF
 };
 
 const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
-    if (item.kind === 'info') return <InfoField info={item} />;
+    if (item.kind === 'info') {
+        return <InfoField info={item} />;
+    }
     if (item.kind === 'connection') {
         return (
             <ConnectionField
@@ -80,7 +86,9 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         const field = props.properties[item.name];
         return field === undefined ? null : <SchemaFormField {...props} name={item.name} field={field} />;
     }
-    if (!props.isRenderable(item, props.properties, props.required)) return null;
+    if (!props.isRenderable(item, props.properties, props.required)) {
+        return null;
+    }
     return (
         <Flex direction='column' gap='size-150'>
             {item.title !== undefined && <Heading level={4}>{item.title}</Heading>}
@@ -118,7 +126,9 @@ const SchemaFormItems = ({ items, renderUnownedFields, ...props }: SchemaFormIte
 };
 
 const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
-    if (!props.isFieldVisible(name, field, props.required)) return null;
+    if (!props.isFieldVisible(name, field, props.required)) {
+        return null;
+    }
 
     const resolvedField = resolveReference(field, props.definitions);
     const fieldUi = resolvedField['x-physicalai-ui'];
@@ -145,7 +155,9 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
         );
     }
 
-    if (resolvedField.type === 'object') return null;
+    if (resolvedField.type === 'object') {
+        return null;
+    }
 
     return (
         <SchemaField
@@ -167,9 +179,13 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const items = isUiItems(schema['x-physicalai-ui']) ? schema['x-physicalai-ui'] : EMPTY_ITEMS;
 
     useEffect(() => {
-        if (Object.keys(payload).length !== 0) return;
+        if (Object.keys(payload).length !== 0) {
+            return;
+        }
         const defaults = schemaDefaults(properties, definitions);
-        if (Object.keys(defaults).length !== 0) setPayload(defaults);
+        if (Object.keys(defaults).length !== 0) {
+            setPayload(defaults);
+        }
     }, [definitions, payload, properties, setPayload]);
 
     const isFieldVisible: IsFieldVisible = (name, field, fieldRequired) => {
@@ -185,7 +201,9 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     };
 
     const isRenderable: IsRenderable = (item, itemProperties, itemRequired) => {
-        if (item.kind === 'info' || item.kind === 'connection') return true;
+        if (item.kind === 'info' || item.kind === 'connection') {
+            return true;
+        }
         if (item.kind === 'field') {
             const field = itemProperties[item.name];
             return field !== undefined && isFieldVisible(item.name, field, itemRequired);

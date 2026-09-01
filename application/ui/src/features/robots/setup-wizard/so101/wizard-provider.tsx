@@ -241,12 +241,16 @@ export const SetupWizardProvider = ({ children }: { children: ReactNode }) => {
 
 export const useSetupState = () => {
     const ctx = useContext(SetupStateContext);
-    if (ctx === null) throw new Error('useSetupState must be used within SetupWizardProvider');
+    if (ctx === null) {
+        throw new Error('useSetupState must be used within SetupWizardProvider');
+    }
     return ctx;
 };
 
 export const useSetupActions = () => {
     const ctx = useContext(SetupActionsContext);
-    if (ctx === null) throw new Error('useSetupActions must be used within SetupWizardProvider');
+    if (ctx === null) {
+        throw new Error('useSetupActions must be used within SetupWizardProvider');
+    }
     return ctx;
 };

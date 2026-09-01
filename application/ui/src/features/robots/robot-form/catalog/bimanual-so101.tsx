@@ -55,7 +55,9 @@ export const BimanualSO101FormFields = () => {
 
     const selectArm = (arm: 'left' | 'right', robotId: string | number | null) => {
         const robot = eligibleRobots.find(({ id }) => id === robotId);
-        if (robot === undefined || robot.payload.calibration === null) return;
+        if (robot === undefined || robot.payload.calibration === null) {
+            return;
+        }
         updatePayloadField(`${arm}_serial_number`, robot.payload.serial_number);
         updatePayloadField(`${arm}_calibration`, robot.payload.calibration);
         updatePayloadField('role', activeType === 'BimanualSO101_Leader' ? 'leader' : 'follower');

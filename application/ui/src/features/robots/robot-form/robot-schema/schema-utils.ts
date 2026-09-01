@@ -10,7 +10,9 @@ export const asRecord = (value: unknown): Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 export const resolveReference = (schema: FieldSchema, definitions: Record<string, FieldSchema>): FieldSchema => {
-    if (schema.$ref === undefined) return schema;
+    if (schema.$ref === undefined) {
+        return schema;
+    }
 
     const definitionName = schema.$ref.replace('#/$defs/', '');
     const definition = definitions[definitionName];
@@ -24,8 +26,12 @@ export const isRequiredField = (name: string, schema: FieldSchema, required: Set
 
 const schemaDefault = (schema: FieldSchema, definitions: Record<string, FieldSchema>): unknown => {
     const resolvedSchema = resolveReference(schema, definitions);
-    if (resolvedSchema.default !== undefined) return resolvedSchema.default;
-    if (resolvedSchema.properties === undefined) return undefined;
+    if (resolvedSchema.default !== undefined) {
+        return resolvedSchema.default;
+    }
+    if (resolvedSchema.properties === undefined) {
+        return undefined;
+    }
 
     const defaults = schemaDefaults(resolvedSchema.properties, definitions);
     return Object.keys(defaults).length === 0 ? undefined : defaults;

@@ -59,13 +59,17 @@ const isPayload = (value: unknown): value is RobotPayload =>
 
 export const useRobotForm = () => {
     const context = useContext(RobotFormContext);
-    if (context === null) throw new Error('useRobotForm was used outside of RobotFormProvider');
+    if (context === null) {
+        throw new Error('useRobotForm was used outside of RobotFormProvider');
+    }
     return { ...context, robotForm: { name: context.name, payload: context.payload } as RobotFormData };
 };
 
 export const useRobotFormBody = (robot_id: string): SchemaRobotInput | null => {
     const { activeType, name, payload } = useRobotForm();
-    if (activeType === undefined || name.trim() === '') return null;
+    if (activeType === undefined || name.trim() === '') {
+        return null;
+    }
 
     return { id: robot_id, name, type: activeType, payload } as unknown as SchemaRobotInput;
 };

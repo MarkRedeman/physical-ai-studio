@@ -6,7 +6,9 @@ export const buildRobotBody = (
     schemaType: string,
     robot_id: string
 ): SchemaRobotInput | null => {
-    if (formData.name.trim() === '') return null;
+    if (formData.name.trim() === '') {
+        return null;
+    }
     return {
         id: robot_id,
         name: formData.name,

@@ -43,7 +43,9 @@ const TextFieldValue = ({ name, schema, value, isRequired, onChange }: FieldProp
     const isNumeric = schema.type === 'integer' || schema.type === 'number';
 
     const parseValue = (next: string): unknown => {
-        if (!isNumeric) return next;
+        if (!isNumeric) {
+            return next;
+        }
 
         const parsed = schema.type === 'integer' ? Number.parseInt(next, 10) : Number.parseFloat(next);
         return Number.isNaN(parsed) ? undefined : parsed;
@@ -60,7 +62,11 @@ const TextFieldValue = ({ name, schema, value, isRequired, onChange }: FieldProp
 };
 
 export const SchemaField = (props: FieldProps) => {
-    if (props.schema.enum) return <EnumPickerField {...props} />;
-    if (props.schema.type === 'boolean') return <BooleanField {...props} />;
+    if (props.schema.enum) {
+        return <EnumPickerField {...props} />;
+    }
+    if (props.schema.type === 'boolean') {
+        return <BooleanField {...props} />;
+    }
     return <TextFieldValue {...props} />;
 };

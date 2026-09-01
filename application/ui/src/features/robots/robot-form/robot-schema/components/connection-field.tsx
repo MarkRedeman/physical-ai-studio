@@ -95,7 +95,9 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
             return;
         }
         onChange(connectionKey, next);
-        if (serialNumberKey !== undefined) onChange(serialNumberKey, '');
+        if (serialNumberKey !== undefined) {
+            onChange(serialNumberKey, '');
+        }
     };
 
     return (
@@ -110,10 +112,13 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
                     onInputChange={setManualValue}
                     onSelectionChange={(key) => {
                         const device = (discover.data ?? []).find((item) => deviceKey(item) === key);
-                        if (device === undefined) return;
+                        if (device === undefined) {
+                            return;
+                        }
                         onChange(connectionKey, device.connection_string ?? '');
-                        if (serialNumberKey !== undefined)
+                        if (serialNumberKey !== undefined) {
                             onChange(serialNumberKey, normalizedSerialNumber(device.serial_number));
+                        }
                     }}
                 />
                 <ActionButton onPress={() => discover.refetch()} isDisabled={discover.isFetching}>
