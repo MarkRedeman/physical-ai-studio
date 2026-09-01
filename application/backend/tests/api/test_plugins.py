@@ -120,7 +120,7 @@ def test_install_plugin_returns_restart_required() -> None:
 
     try:
         client = TestClient(app)
-        response = client.post("/api/plugins/demo-plugin/install")
+        response = client.post("/api/plugins/demo-plugin")
     finally:
         app.dependency_overrides.clear()
 
@@ -135,7 +135,7 @@ def test_uninstall_plugin_returns_restart_required() -> None:
 
     try:
         client = TestClient(app)
-        response = client.post("/api/plugins/demo-plugin/uninstall")
+        response = client.delete("/api/plugins/demo-plugin")
     finally:
         app.dependency_overrides.clear()
 
@@ -153,7 +153,7 @@ def test_uninstall_plugin_blocked_when_robots_in_use() -> None:
 
     try:
         client = TestClient(app)
-        response = client.post("/api/plugins/demo-plugin/uninstall")
+        response = client.delete("/api/plugins/demo-plugin")
     finally:
         app.dependency_overrides.clear()
 
