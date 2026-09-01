@@ -104,7 +104,7 @@ sequenceDiagram
   UV->>Env: install package and dependencies
   UV-->>Manager: output / completion
   Manager-->>API: installation complete
-  API-->>Browser: installation events
+  API-->>Browser: installation response
   Browser->>Restart: restart backend
   Restart->>Registry: discover entry points and register definitions
   Registry-->>Browser: robot types available after catalog refresh
@@ -156,8 +156,6 @@ def register_physicalai_studio_plugin(registry) -> None:
             type="MyRobot_Follower",
             display_name="My Robot Follower",
             role="follower",
-            category="My Robot",
-            source="external",
             robot_payload=MyRobotPayload,
             robot_builder=build_my_robot,
             probe=MyRobotProbe(),
@@ -170,8 +168,6 @@ The important definition fields are:
 - `type` is a stable, globally unique persisted identifier.
 - `display_name` is the user-facing robot name.
 - `role` distinguishes action-executing followers from teleoperation leaders.
-- `category` groups related catalog entries.
-- `source` identifies Studio, first-party, or external ownership.
 - `robot_payload` describes configuration data and validation.
 - `robot_builder` converts validated configuration into a driver.
 - `probe` optionally supports discovery, identification, and online checks.
@@ -244,7 +240,7 @@ For the runtime after construction, see [Runtime Session Architecture](./runtime
 - Package directories containing the URDF and meshes.
 - A mapping from observation keys to URDF joints.
 - An optional root resolver for installed or source-tree layouts.
-- An optional catalog-card thumbnail.
+- Optional asset data is used by Studio's robot visualization.
 
 An asset-less definition remains configurable and usable. It simply has no 3D
 model preview. Asset paths are resolved by the backend, not by the browser's
