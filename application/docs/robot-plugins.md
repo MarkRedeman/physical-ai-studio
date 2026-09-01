@@ -20,9 +20,8 @@ Curated plugins are listed on Studio's **Plugins** page.
 The restart is required because Python entry points and the robot catalog are
 loaded when the backend starts.
 
-[//]: # (Screenshot suggestion: Plugins page showing available and installed plugin rows with an Install button.)
-
-[//]: # (Screenshot suggestion: Plugin installation progress followed by the restart-required prompt.)
+[//]: # "Screenshot suggestion: Plugins page showing available and installed plugin rows with an Install button."
+[//]: # "Screenshot suggestion: Plugin installation progress followed by the restart-required prompt."
 
 ## Use A Plugin Robot
 
@@ -41,9 +40,8 @@ fields and connection controls.
 A **follower** executes actions during teleoperation or inference. A **leader**
 provides input for teleoperation.
 
-[//]: # (Screenshot suggestion: Robot type picker showing a newly available plugin robot after restart.)
-
-[//]: # (Screenshot suggestion: Plugin-provided robot configuration form with a connection selector and advanced options.)
+[//]: # "Screenshot suggestion: Robot type picker showing a newly available plugin robot after restart."
+[//]: # "Screenshot suggestion: Plugin-provided robot configuration form with a connection selector and advanced options."
 
 ## Install An Unofficial Plugin
 
@@ -71,7 +69,10 @@ For a local editable plugin, add a path source to
 
 ```toml
 [tool.uv.sources]
-physicalai-my-robot-plugin = { path = "../../physicalai-my-robot-plugin", editable = true }
+physicalai-my-robot-plugin = {
+    path = "../../physicalai-my-robot-plugin",
+    editable = true,
+}
 ```
 
 Then run `uv sync` and restart Studio. Direct installation still requires the
@@ -127,15 +128,14 @@ The entry-point callable receives Studio's catalog registry. Register one
 `RobotCatalogDefinition` for every robot type:
 
 ```python
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from physicalai_studio_plugin import (
-    CatalogRobotFactory,
     CatalogRobot,
+    CatalogRobotFactory,
     RobotCatalogDefinition,
-    RobotProbe,
 )
+from physicalai.robot.interface import Robot as PhysicalAIRobot
 from pydantic import BaseModel
 
 
@@ -146,7 +146,7 @@ class MyRobotPayload(BaseModel):
 async def build_my_robot(
     robot: CatalogRobot[MyRobotPayload],
     factory: CatalogRobotFactory,
-):
+) -> PhysicalAIRobot:
     # Resolve the configured connection and return a Physical AI Robot.
     raise NotImplementedError
 
@@ -161,7 +161,6 @@ def register_physicalai_studio_plugin(registry: Any) -> None:
             source="external",
             robot_payload=MyRobotPayload,
             robot_builder=build_my_robot,
-            probe=RobotProbe(),
         )
     )
 ```
@@ -252,7 +251,7 @@ dotted path such as `left_arm.connection_string`.
 Explicit UI items customize only the fields they place or own. Fields that are
 not mentioned continue to render automatically from JSON Schema.
 
-[//]: # (Screenshot suggestion: Plugin form showing a connection item, a section, an advanced-options switch, and inline information text.)
+[//]: # "Screenshot suggestion: Plugin form showing a connection item, a section, an advanced-options switch, and inline information text."
 
 ## Add A Plugin To The Plugins Page
 

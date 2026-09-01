@@ -26,7 +26,7 @@ boundaries and the reasons behind them.
 
 ```mermaid
 flowchart LR
-  plugin["Plugin package<br/>driver · probe · payload"] --> entry["Python entry point"]
+  plugin["Plugin package<br/>driver · probe"] --> entry["Python<br/>entry point"]
   entry --> registry["RobotCatalogRegistry"]
   registry --> catalog["Robot catalog API"]
   catalog --> ui["Studio UI"]
@@ -199,9 +199,10 @@ flowchart LR
   builder --> driver["Physical AI driver"]
 ```
 
-Pydantic JSON Schema is the data contract. Field titles, descriptions,
-schema form. Studio-specific metadata adds presentation behavior without
-changing the payload data model:
+Pydantic JSON Schema is the data contract. Field titles, descriptions, defaults,
+enums, required values, and nested models are rendered by the normal schema
+form. Studio-specific metadata adds presentation behavior without changing the
+payload data model:
 
 - `robot_field_ui` marks advanced configuration or applies a Studio-only
   required override.
@@ -216,7 +217,7 @@ changing the payload data model:
 This design lets a plugin provide a useful form with ordinary Pydantic fields,
 while opting into first-party controls only where needed.
 
-[//]: # (Screenshot suggestion: Robot catalog and a plugin-generated form side by side, illustrating the catalog-definition-to-form pipeline.)
+[//]: # "Screenshot suggestion: Robot catalog and a plugin-generated form side by side, illustrating the catalog-definition-to-form pipeline."
 
 ## Runtime Construction
 
@@ -263,21 +264,25 @@ filesystem.
 - A curated manifest entry does not replace entry-point registration; both are
   needed for a plugin to be installable from the UI and usable as a robot.
 
-[//]: # (Screenshot suggestion: Plugins page with a curated plugin selected, illustrating the manifest-backed installation path.)
+[//]: # "Screenshot suggestion: Plugins page with a curated plugin selected, illustrating the manifest-backed installation path."
 
 ## Failure Modes
 
 Failures can be diagnosed at the stage where they occur:
 
-| Stage | Typical failure | Check |
-| --- | --- | --- |
-| Package installation | Package cannot be resolved or built | `install_source`, Python version, package index, and dependencies |
-| Entry-point loading | Plugin is installed but not discovered | Entry-point group and import path in `pyproject.toml` |
-| Registration | Definition is rejected | Unique `type`, valid payload model, and `register_robot` call |
-| Form generation | Fields are missing or duplicated | JSON Schema titles and `robot_payload_ui` ownership/bindings |
-| Catalog refresh | New robot is not visible | Restart the backend and refresh the catalog |
-| Driver construction | Robot cannot connect | Payload values, probe, serial permissions, SDK, and builder |
-| Visualization | URDF preview fails | `RobotAsset` paths, package map, joint map, and root resolver |
+- **Package installation:** Check `install_source`, Python version, package
+  index, and dependencies when a package cannot be resolved or built.
+- **Entry-point loading:** Check the entry-point group and import path in
+  `pyproject.toml` when an installed plugin is not discovered.
+- **Registration:** Check the unique `type`, payload model, and
+  `register_robot` call when a definition is rejected.
+- **Form generation:** Check JSON Schema titles and `robot_payload_ui` field
+  ownership and bindings when fields are missing or duplicated.
+- **Catalog refresh:** Restart the backend when a new robot is not visible.
+- **Driver construction:** Check payload values, probe, serial permissions,
+  SDK, and builder when a robot cannot connect.
+- **Visualization:** Check `RobotAsset` paths, package map, joint map, and root
+  resolver when a URDF preview fails.
 
 The separation is useful operationally: a package can install successfully yet
 still fail at import or registration, and a valid catalog definition can still
