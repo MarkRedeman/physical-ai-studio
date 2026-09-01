@@ -709,6 +709,7 @@ class SshFeatureDisabledError(BaseException):
             http_status=http.HTTPStatus.SERVICE_UNAVAILABLE,
         )
 
+
 class PluginOperationError(BaseException):
     """Raised when installing or uninstalling a robot plugin fails.
 
