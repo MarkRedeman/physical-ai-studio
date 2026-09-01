@@ -48,6 +48,33 @@ class PluginInfo:
     robots: list[PluginRobot]
 
 
+@dataclass(frozen=True)
+class PluginRestoreStatus:
+    """Persisted plugin restoration state compared with the active environment."""
+
+    missing_plugin_ids: list[str]
+    unknown_plugin_ids: list[str]
+
+    @property
+    def needs_restore(self) -> bool:
+        """Whether at least one known plugin is missing from the environment."""
+        return bool(self.missing_plugin_ids)
+
+
+@dataclass(frozen=True)
+class PluginRestoreResult:
+    """Outcome of attempting to restore persisted plugins."""
+
+    restored_plugin_ids: list[str]
+    failed_plugin_ids: list[str]
+    unknown_plugin_ids: list[str]
+
+    @property
+    def restart_required(self) -> bool:
+        """Whether restoration changed the environment and requires a restart."""
+        return bool(self.restored_plugin_ids)
+
+
 class PluginManager:
     """Manage robot catalog plugins backed by the shipped manifest."""
 
@@ -124,24 +151,29 @@ class PluginManager:
             )
             self._save_record(self._load_record() - {plugin_id})
 
-    async def restore_installed(self) -> list[str]:
+    async def restore_installed(self) -> PluginRestoreResult:
         """Restore recorded plugins missing from the active environment.
 
         Restoration is best effort. A missing package, unavailable package
         index, or malformed stale record entry must not prevent Studio from
         starting; failed entries remain recorded so the next startup retries.
         """
+        status = self.get_restore_status()
         restored: list[str] = []
-        for plugin_id in self._load_record():
-            if self._installed_dist(plugin_id) is not None:
-                continue
+        failed: list[str] = []
+        for plugin_id in status.missing_plugin_ids:
             try:
                 await self.install(plugin_id)
-            except (PluginOperationError, ResourceNotFoundError):
+            except PluginOperationError:
                 logger.warning("Could not restore recorded plugin '{}'", plugin_id)
+                failed.append(plugin_id)
                 continue
             restored.append(plugin_id)
-        return restored
+        return PluginRestoreResult(
+            restored_plugin_ids=restored,
+            failed_plugin_ids=failed,
+            unknown_plugin_ids=status.unknown_plugin_ids,
+        )
 
     # ------------------------------------------------------------------
     # Internals
@@ -168,6 +200,16 @@ class PluginManager:
             logger.warning("Ignoring invalid persisted plugin record at {}", self._record_path)
             return set()
         return set(data)
+
+    def get_restore_status(self) -> PluginRestoreStatus:
+        """Return recorded plugins missing from the environment or manifest."""
+        recorded_ids = self._load_record()
+        manifest_ids = {entry.id for entry in self._manifest}
+        missing = sorted(
+            plugin_id for plugin_id in recorded_ids & manifest_ids if self._installed_dist(plugin_id) is None
+        )
+        unknown = sorted(recorded_ids - manifest_ids)
+        return PluginRestoreStatus(missing_plugin_ids=missing, unknown_plugin_ids=unknown)
 
     def _save_record(self, plugin_ids: set[str]) -> None:
         """Persist plugin IDs without making a successful operation fail."""

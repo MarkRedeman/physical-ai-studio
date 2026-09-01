@@ -5,7 +5,12 @@ import { clsx } from 'clsx';
 
 import { SchemaPluginResponse, SchemaPluginRobotResponse } from '../../api/openapi-spec';
 import { Table, TableColumn } from '../../components/table/table';
-import { usePluginActions, usePluginsQuery } from './plugins.hooks';
+import {
+    usePluginActions,
+    usePluginRestoreActions,
+    usePluginRestoreStatusQuery,
+    usePluginsQuery,
+} from './plugins.hooks';
 
 import classes from './plugins.module.css';
 
@@ -161,6 +166,8 @@ export const PluginsTable = ({ plugins, isBusy, busyId, onInstall, onUninstall }
 
 export const PluginsView = () => {
     const pluginsQuery = usePluginsQuery();
+    const restoreStatusQuery = usePluginRestoreStatusQuery();
+    const { isRestoring, restore } = usePluginRestoreActions();
     const { isBusy, busyId, install, uninstall } = usePluginActions();
 
     const plugins = pluginsQuery.data;
@@ -173,6 +180,19 @@ export const PluginsView = () => {
                     <Text>Install and manage plugins for the server.</Text>
                 </View>
             </Flex>
+            {restoreStatusQuery.data?.needs_restore ? (
+                <View marginBottom='size-250' padding='size-150' backgroundColor='gray-100'>
+                    <Flex alignItems='center' justifyContent='space-between' gap='size-200'>
+                        <Text>
+                            {restoreStatusQuery.data.missing_plugin_ids.length} previously installed plugin
+                            {restoreStatusQuery.data.missing_plugin_ids.length === 1 ? '' : 's'} need restoration.
+                        </Text>
+                        <Button variant='secondary' isDisabled={isRestoring} onPress={() => void restore()}>
+                            {isRestoring ? 'Restoring…' : 'Restore plugins'}
+                        </Button>
+                    </Flex>
+                </View>
+            ) : null}
             <View UNSAFE_className={classes.container}>
                 {plugins.length === 0 ? (
                     <Text UNSAFE_className={classes.emptyList}>No plugins are configured.</Text>

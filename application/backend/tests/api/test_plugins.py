@@ -8,7 +8,7 @@ import api.plugins as plugins_api
 from api.dependencies import get_health_service, get_plugin_manager
 from api.plugins import PluginInfo, PluginRobot
 from main import app
-from plugins.plugin_manager import PluginManager
+from plugins.plugin_manager import PluginManager, PluginRestoreResult, PluginRestoreStatus
 from services.health_service import HealthService
 
 
@@ -113,6 +113,70 @@ def test_list_plugins_reports_installed_and_in_use() -> None:
     assert plugin["installed"] is True
     assert plugin["installed_version"] == "1.2.3"
     assert plugin["in_use_robot_count"] == 1
+
+
+def test_restore_status_reports_missing_and_unknown_plugins() -> None:
+    manager = _stub_manager(info=_plugin_info())
+    manager.get_restore_status.return_value = PluginRestoreStatus(
+        missing_plugin_ids=["demo-plugin"], unknown_plugin_ids=["removed-plugin"]
+    )
+    _override(manager, in_use=[])
+
+    try:
+        response = TestClient(app).get("/api/plugins/restore-status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "needs_restore": True,
+        "missing_plugin_ids": ["demo-plugin"],
+        "unknown_plugin_ids": ["removed-plugin"],
+    }
+
+
+def test_restore_plugins_marks_restart_when_plugins_were_restored() -> None:
+    manager = _stub_manager(info=_plugin_info())
+    manager.restore_installed.return_value = PluginRestoreResult(["demo-plugin"], [], [])
+    health_service = HealthService()
+    app.dependency_overrides[get_plugin_manager] = lambda: manager
+    app.dependency_overrides[get_health_service] = lambda: health_service
+
+    try:
+        response = TestClient(app).post("/api/plugins:restore")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "restored_plugin_ids": ["demo-plugin"],
+        "failed_plugin_ids": [],
+        "unknown_plugin_ids": [],
+        "restart_required": True,
+    }
+    assert health_service.plugin_restart_required is True
+
+
+def test_restore_plugins_does_not_mark_restart_when_nothing_changed() -> None:
+    manager = _stub_manager(info=_plugin_info())
+    manager.restore_installed.return_value = PluginRestoreResult([], ["demo-plugin"], ["removed-plugin"])
+    health_service = HealthService()
+    app.dependency_overrides[get_plugin_manager] = lambda: manager
+    app.dependency_overrides[get_health_service] = lambda: health_service
+
+    try:
+        response = TestClient(app).post("/api/plugins:restore")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "restored_plugin_ids": [],
+        "failed_plugin_ids": ["demo-plugin"],
+        "unknown_plugin_ids": ["removed-plugin"],
+        "restart_required": False,
+    }
+    assert health_service.plugin_restart_required is False
 
 
 def test_install_plugin_returns_restart_required() -> None:

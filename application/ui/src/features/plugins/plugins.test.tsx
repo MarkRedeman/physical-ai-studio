@@ -94,6 +94,41 @@ describe('PluginsView', () => {
         await user.click(screen.getByRole('button', { name: 'Later' }));
     });
 
+    it('restores missing plugins and opens the restart prompt', async () => {
+        server.use(
+            http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
+            http.get('/api/plugins/restore-status', () =>
+                HttpResponse.json({
+                    needs_restore: true,
+                    missing_plugin_ids: [availablePlugin.id],
+                    unknown_plugin_ids: [],
+                })
+            ),
+            http.post('/api/plugins:restore', () =>
+                HttpResponse.json({
+                    restored_plugin_ids: [availablePlugin.id],
+                    failed_plugin_ids: [],
+                    unknown_plugin_ids: [],
+                    restart_required: true,
+                })
+            ),
+            http.get('/api/jobs', () => HttpResponse.json([]))
+        );
+        const user = userEvent.setup();
+
+        render(<PluginsView />, { route: '/plugins', path: '/plugins' });
+
+        expect(
+            await screen.findByText(
+                (_, element) => element?.textContent === '1 previously installed plugin need restoration.'
+            )
+        ).toBeVisible();
+        await user.click(screen.getByRole('button', { name: 'Restore plugins' }));
+
+        expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
+        await user.click(screen.getByRole('button', { name: 'Later' }));
+    });
+
     it('restarts after confirming the restart prompt', async () => {
         let restartCalls = 0;
         server.use(

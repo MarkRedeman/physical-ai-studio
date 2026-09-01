@@ -4,13 +4,14 @@ from unittest.mock import AsyncMock, MagicMock
 from click.testing import CliRunner
 
 from cli import cli
+from plugins.plugin_manager import PluginRestoreResult
 
 plugins_command = importlib.import_module("cli.plugins")
 
 
 def test_restore_uses_configured_storage_and_reports_restored_plugins(monkeypatch, tmp_path) -> None:
     plugin_manager = MagicMock()
-    plugin_manager.restore_installed = AsyncMock(return_value=["demo-plugin"])
+    plugin_manager.restore_installed = AsyncMock(return_value=PluginRestoreResult(["demo-plugin"], [], []))
     manager_factory = MagicMock(return_value=plugin_manager)
     settings = MagicMock(storage_dir=tmp_path)
     monkeypatch.setattr(plugins_command, "PluginManager", manager_factory)
@@ -26,7 +27,7 @@ def test_restore_uses_configured_storage_and_reports_restored_plugins(monkeypatc
 
 def test_restore_reports_when_no_plugins_need_restoring(monkeypatch, tmp_path) -> None:
     plugin_manager = MagicMock()
-    plugin_manager.restore_installed = AsyncMock(return_value=[])
+    plugin_manager.restore_installed = AsyncMock(return_value=PluginRestoreResult([], [], []))
     monkeypatch.setattr(plugins_command, "PluginManager", lambda **_kwargs: plugin_manager)
     monkeypatch.setattr(plugins_command, "get_settings", lambda: MagicMock(storage_dir=tmp_path))
 

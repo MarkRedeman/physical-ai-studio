@@ -260,7 +260,9 @@ def test_restore_installed_reinstalls_missing_plugins(monkeypatch: pytest.Monkey
 
     restored = asyncio.run(manager.restore_installed())
 
-    assert restored == ["demo-plugin"]
+    assert restored.restored_plugin_ids == ["demo-plugin"]
+    assert restored.failed_plugin_ids == []
+    assert restored.unknown_plugin_ids == []
     assert run.call_args.args[0][-1] == "demo-plugin"
 
 
@@ -274,7 +276,9 @@ def test_restore_installed_skips_present_plugins(monkeypatch: pytest.MonkeyPatch
 
     restored = asyncio.run(manager.restore_installed())
 
-    assert restored == []
+    assert restored.restored_plugin_ids == []
+    assert restored.failed_plugin_ids == []
+    assert restored.unknown_plugin_ids == []
     run.assert_not_called()
 
 
@@ -288,7 +292,9 @@ def test_restore_installed_warns_and_continues_on_failure(monkeypatch: pytest.Mo
 
     restored = asyncio.run(manager.restore_installed())
 
-    assert restored == []
+    assert restored.restored_plugin_ids == []
+    assert restored.failed_plugin_ids == ["demo-plugin"]
+    assert restored.unknown_plugin_ids == []
     assert json.loads(record_path.read_text()) == ["demo-plugin"]
 
 
@@ -297,14 +303,20 @@ def test_missing_or_invalid_record_is_empty(tmp_path) -> None:
         manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=tmp_path / "missing.json"
     )
 
-    assert asyncio.run(manager.restore_installed()) == []
+    result = asyncio.run(manager.restore_installed())
+    assert result.restored_plugin_ids == []
+    assert result.failed_plugin_ids == []
+    assert result.unknown_plugin_ids == []
 
     invalid_path = tmp_path / "invalid.json"
     invalid_path.write_text('{"plugin": "demo-plugin"}\n')
     invalid_manager = PluginManager(
         manifest=[_manifest_entry()], registry=_FakeRegistry([], {}), record_path=invalid_path
     )
-    assert asyncio.run(invalid_manager.restore_installed()) == []
+    result = asyncio.run(invalid_manager.restore_installed())
+    assert result.restored_plugin_ids == []
+    assert result.failed_plugin_ids == []
+    assert result.unknown_plugin_ids == []
 
 
 def test_manager_without_record_path_does_not_persist(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

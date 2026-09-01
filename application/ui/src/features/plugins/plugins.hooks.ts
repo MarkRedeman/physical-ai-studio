@@ -12,6 +12,23 @@ export const usePluginsQuery = () => {
     });
 };
 
+export const usePluginRestoreStatusQuery = () => {
+    return $api.useQuery('get', '/api/plugins/restore-status', {
+        staleTime: 30_000,
+    });
+};
+
+export const useRestorePluginsMutation = () => {
+    return $api.useMutation('post', '/api/plugins:restore', {
+        meta: {
+            invalidates: [
+                ['get', '/api/plugins'],
+                ['get', '/api/plugins/restore-status'],
+            ],
+        },
+    });
+};
+
 export const useInstallPluginMutation = () => {
     return $api.useMutation('post', '/api/plugins/{plugin_id}', {
         meta: { invalidates: [['get', '/api/plugins']] },
@@ -63,4 +80,28 @@ export const usePluginActions = () => {
     };
 
     return { isBusy, busyId, restartRequired, install, uninstall };
+};
+
+export const usePluginRestoreActions = () => {
+    const restoreMutation = useRestorePluginsMutation();
+    const { triggerRestartRequired, openRestartPrompt } = useRestartState();
+
+    const restore = async () => {
+        try {
+            const result = await restoreMutation.mutateAsync({});
+            if (result.restored_plugin_ids.length > 0) {
+                triggerRestartRequired();
+                openRestartPrompt();
+            }
+            if (result.failed_plugin_ids.length > 0 || result.unknown_plugin_ids.length > 0) {
+                toast.info('Some recorded plugins could not be restored.');
+            } else if (result.restored_plugin_ids.length > 0) {
+                toast.positive('Plugins restored. Restart the server to activate them.');
+            }
+        } catch (error) {
+            toast.negative(getApiErrorMessage(error) ?? 'Failed to restore plugins.');
+        }
+    };
+
+    return { isRestoring: restoreMutation.isPending, restore };
 };

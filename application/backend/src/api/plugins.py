@@ -7,7 +7,13 @@ from pydantic import BaseModel, Field
 
 from api.dependencies import AsyncSessionDep, HealthServiceDep, PluginManagerDep
 from exceptions import ResourceInUseError, ResourceType
-from plugins.plugin_manager import PluginInfo, PluginRobot, find_robot_types_in_use_async
+from plugins.plugin_manager import (
+    PluginInfo,
+    PluginRestoreResult,
+    PluginRestoreStatus,
+    PluginRobot,
+    find_robot_types_in_use_async,
+)
 
 router = APIRouter(prefix="/api/plugins", tags=["Plugins"])
 
@@ -34,6 +40,19 @@ class PluginOperationResponse(BaseModel):
     restart_required: bool = Field(default=True, description="A server restart is required to activate the change")
 
 
+class PluginRestoreStatusResponse(BaseModel):
+    needs_restore: bool = Field(..., description="Whether known recorded plugins are missing")
+    missing_plugin_ids: list[str] = Field(..., description="Known recorded plugins missing from the environment")
+    unknown_plugin_ids: list[str] = Field(..., description="Recorded plugin IDs no longer present in the manifest")
+
+
+class PluginRestoreResponse(BaseModel):
+    restored_plugin_ids: list[str] = Field(..., description="Plugins restored during this operation")
+    failed_plugin_ids: list[str] = Field(..., description="Plugins that could not be restored")
+    unknown_plugin_ids: list[str] = Field(..., description="Recorded plugin IDs no longer present in the manifest")
+    restart_required: bool = Field(..., description="Whether a server restart is required to activate the changes")
+
+
 def _to_robot_response(robot: PluginRobot) -> PluginRobotResponse:
     return PluginRobotResponse(
         type=robot.type,
@@ -56,6 +75,23 @@ def _to_response(plugin: PluginInfo, in_use_robot_count: int) -> PluginResponse:
     )
 
 
+def _to_restore_status_response(status: PluginRestoreStatus) -> PluginRestoreStatusResponse:
+    return PluginRestoreStatusResponse(
+        needs_restore=status.needs_restore,
+        missing_plugin_ids=status.missing_plugin_ids,
+        unknown_plugin_ids=status.unknown_plugin_ids,
+    )
+
+
+def _to_restore_response(result: PluginRestoreResult) -> PluginRestoreResponse:
+    return PluginRestoreResponse(
+        restored_plugin_ids=result.restored_plugin_ids,
+        failed_plugin_ids=result.failed_plugin_ids,
+        unknown_plugin_ids=result.unknown_plugin_ids,
+        restart_required=result.restart_required,
+    )
+
+
 @router.get("")
 async def list_plugins(
     plugin_manager: PluginManagerDep,
@@ -74,6 +110,24 @@ async def list_plugins(
         )
         for plugin in plugins
     ]
+
+
+@router.get("/restore-status")
+async def get_restore_status(plugin_manager: PluginManagerDep) -> PluginRestoreStatusResponse:
+    """Report whether recorded plugins are missing from the active environment."""
+    return _to_restore_status_response(plugin_manager.get_restore_status())
+
+
+@router.post(":restore")
+async def restore_plugins(
+    plugin_manager: PluginManagerDep,
+    health_service: HealthServiceDep,
+) -> PluginRestoreResponse:
+    """Restore recorded plugins and report whether a restart is required."""
+    result = await plugin_manager.restore_installed()
+    if result.restart_required:
+        health_service.mark_plugin_restart_required()
+    return _to_restore_response(result)
 
 
 @router.post("/{plugin_id}")
