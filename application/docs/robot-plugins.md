@@ -1,12 +1,11 @@
 # Robot Plugins
 
-Robot plugins add robot drivers and robot types to Physical AI Studio without
-requiring changes to Studio itself. A plugin provides a Python entry point,
-one or more catalog definitions, and the code needed to build and connect each
-robot.
+Robot plugins add robot to Physical AI Studio without requiring changes to
+Studio itself. A plugin provides a Python entry point, one or more catalog
+definitions, and the code needed to build and connect each robot.
 
-This page covers installing and using plugins, then developing a plugin. For
-the internal design and lifecycle, see [Robot Plugin Architecture](./explanation/robot-plugin-architecture.md).
+This page covers installing and using plugins, then developing a plugin. For the
+internal design and lifecycle, see [Robot Plugin Architecture](./explanation/robot-plugin-architecture.md).
 
 ## Install a Curated Plugin
 
@@ -140,7 +139,7 @@ from physicalai_studio_plugin import (
     CatalogRobotFactory,
     RobotCatalogDefinition,
 )
-from physicalai.robot.interface import Robot as PhysicalAIRobot
+from physicalai.robot.interface import Robot
 from pydantic import BaseModel
 
 
@@ -151,7 +150,7 @@ class MyRobotPayload(BaseModel):
 async def build_my_robot(
     robot: CatalogRobot[MyRobotPayload],
     factory: CatalogRobotFactory,
-) -> PhysicalAIRobot:
+) -> Robot:
     # Resolve the configured connection and return a Physical AI Robot.
     raise NotImplementedError
 
@@ -175,7 +174,7 @@ robot supports discovery, identification, or online-status checks.
 `RobotCatalogDefinition` fields have these responsibilities:
 
 - `type`: stable, globally unique identifier persisted in Studio projects.
-- `display_name`: human-readable name shown in the robot picker.
+- `display_name`: human-readable name shown in the UI.
 - `role`: `follower` or `leader`.
 - `robot_payload`: Pydantic model defining configuration data.
 - `robot_builder`: async callable that returns a Physical AI robot driver.
