@@ -86,7 +86,7 @@ async def list_plugins(
     ]
 
 
-@router.post("/{plugin_id}/install")
+@router.post("/{plugin_id}")
 async def install_plugin(
     plugin_id: str,
     plugin_manager: PluginManagerDep,
@@ -98,7 +98,7 @@ async def install_plugin(
     return PluginOperationResponse()
 
 
-@router.post("/{plugin_id}/uninstall")
+@router.delete("/{plugin_id}")
 async def uninstall_plugin(
     plugin_id: str,
     plugin_manager: PluginManagerDep,

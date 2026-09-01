@@ -13,13 +13,13 @@ export const usePluginsQuery = () => {
 };
 
 export const useInstallPluginMutation = () => {
-    return $api.useMutation('post', '/api/plugins/{plugin_id}/install', {
+    return $api.useMutation('post', '/api/plugins/{plugin_id}', {
         meta: { invalidates: [['get', '/api/plugins']] },
     });
 };
 
 export const useUninstallPluginMutation = () => {
-    return $api.useMutation('post', '/api/plugins/{plugin_id}/uninstall', {
+    return $api.useMutation('delete', '/api/plugins/{plugin_id}', {
         meta: { invalidates: [['get', '/api/plugins']] },
     });
 };

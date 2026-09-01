@@ -80,7 +80,7 @@ describe('PluginsView', () => {
     it('opens a restart prompt after installing a plugin', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
-            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true })),
+            http.post('/api/plugins/{plugin_id}', () => HttpResponse.json({ restart_required: true })),
             http.get('/api/jobs', () => HttpResponse.json([]))
         );
         const user = userEvent.setup();
@@ -98,7 +98,7 @@ describe('PluginsView', () => {
         let restartCalls = 0;
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
-            http.post('/api/plugins/{plugin_id}/install', () => HttpResponse.json({ restart_required: true })),
+            http.post('/api/plugins/{plugin_id}', () => HttpResponse.json({ restart_required: true })),
             http.get('/api/jobs', () => HttpResponse.json([])),
             http.post('/api/system/restart', () => {
                 restartCalls += 1;
@@ -143,7 +143,7 @@ describe('PluginsView', () => {
     it('opens the restart prompt after uninstalling a plugin', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([installedPlugin])),
-            http.post('/api/plugins/{plugin_id}/uninstall', () => HttpResponse.json({ restart_required: true })),
+            http.delete('/api/plugins/{plugin_id}', () => HttpResponse.json({ restart_required: true })),
             http.get('/api/jobs', () => HttpResponse.json([]))
         );
         const user = userEvent.setup();
