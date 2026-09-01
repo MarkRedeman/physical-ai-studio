@@ -64,15 +64,20 @@ cd application/backend
 uv add "physicalai-my-robot-plugin @ git+https://github.com/example/physicalai-my-robot-plugin.git"
 ```
 
-For a local editable plugin, add a path source to
-`application/backend/pyproject.toml`:
+For a local editable plugin, add it directly from the backend directory:
+
+```bash
+cd application/backend
+uv add --editable ../../physicalai-my-robot-plugin
+uv sync
+```
+
+This adds the dependency and its path source to `pyproject.toml`. You can also
+write the equivalent source override manually:
 
 ```toml
 [tool.uv.sources]
-physicalai-my-robot-plugin = {
-    path = "../../physicalai-my-robot-plugin",
-    editable = true,
-}
+physicalai-my-robot-plugin = { path = "../../physicalai-my-robot-plugin", editable = true }
 ```
 
 Then run `uv sync` and restart Studio. Direct installation still requires the
@@ -157,8 +162,6 @@ def register_physicalai_studio_plugin(registry: Any) -> None:
             type="MyRobot_Follower",
             display_name="My Robot Follower",
             role="follower",
-            category="My Robot",
-            source="external",
             robot_payload=MyRobotPayload,
             robot_builder=build_my_robot,
         )
@@ -166,19 +169,18 @@ def register_physicalai_studio_plugin(registry: Any) -> None:
 ```
 
 The example shows the important contract; a real plugin should implement the
-builder and probe rather than raise `NotImplementedError`.
+builder rather than raise `NotImplementedError`. Add a `RobotProbe` when the
+robot supports discovery, identification, or online-status checks.
 
 `RobotCatalogDefinition` fields have these responsibilities:
 
 - `type`: stable, globally unique identifier persisted in Studio projects.
 - `display_name`: human-readable name shown in the robot picker.
 - `role`: `follower` or `leader`.
-- `category`: short label used to group related robot cards.
-- `source`: `internal`, `first_party`, or `external`.
 - `robot_payload`: Pydantic model defining configuration data.
 - `robot_builder`: async callable that returns a Physical AI robot driver.
 - `probe`: optional discovery, identification, and online-status implementation.
-- `asset`: optional URDF, mesh, joint-map, and thumbnail information.
+- `asset`: optional URDF, mesh, and joint-map information.
 - `adapter_options`: optional control and effort-forwarding behavior.
 
 The `type` value must not be casually renamed. It is stored in project data and
@@ -198,7 +200,7 @@ Schema. Standard Pydantic metadata provides most of the UI:
 - Required fields and validation come from the model.
 - Nested Pydantic models render recursively.
 
-Use `robot_field_ui(...)` for Studio-specific field behavior:
+Use `robot_field_ui(...)` for the Studio-specific required-field override:
 
 ```python
 from physicalai_studio_plugin import robot_field_ui
@@ -206,7 +208,7 @@ from pydantic import Field
 
 timeout: float = Field(
     default=10.0,
-    json_schema_extra=robot_field_ui({"advanced_configuration": True}),
+    json_schema_extra=robot_field_ui({"required": True}),
 )
 ```
 
