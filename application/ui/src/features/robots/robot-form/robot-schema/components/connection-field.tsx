@@ -1,4 +1,4 @@
-import { ActionButton, ComboBox, Flex, Icon, Item, Text } from '@geti-ui/ui';
+import { ActionButton, ComboBox, Flex, Icon, Item, Text, View } from '@geti-ui/ui';
 import { Refresh } from '@geti-ui/ui/icons';
 
 import { getApiErrorMessage, isSerialPermissionDeniedError } from '../../../../../api/errors';
@@ -121,18 +121,24 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
                         }
                     }}
                 />
-                <ActionButton onPress={() => discover.refetch()} isDisabled={discover.isFetching}>
-                    <Icon>
-                        <Refresh />
-                    </Icon>
-                </ActionButton>
-                {options.identify && (
-                    <ActionButton
-                        onPress={() => identify.mutate({ params: { path: { robot_type: robotType } }, body: payload })}
-                        isDisabled={identify.isPending}
-                    >
-                        Identify
+                <View>
+                    <ActionButton onPress={() => discover.refetch()} isDisabled={discover.isFetching}>
+                        <Icon>
+                            <Refresh />
+                        </Icon>
                     </ActionButton>
+                </View>
+                {options.identify && (
+                    <View>
+                        <ActionButton
+                            onPress={() =>
+                                identify.mutate({ params: { path: { robot_type: robotType } }, body: payload })
+                            }
+                            isDisabled={identify.isPending}
+                        >
+                            Identify
+                        </ActionButton>
+                    </View>
                 )}
             </Flex>
             {identify.isError && <IdentifyError error={identify.error} />}
