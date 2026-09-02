@@ -67,11 +67,15 @@ def build_camera_config(config: Camera) -> Config:
     payload = config.payload.model_dump()
     init_args: dict[str, Any] = {k: v for k, v in payload.items() if k in allowed and v is not None}
 
-    fingerprint = _get_fingerprint_dict(config.fingerprint)
+    if config.driver == "ipcam":
+        # IP cameras are manually configured: Runtime identifies them by URL,
+        # not by the discovery payload used by locally discoverable cameras.
+        return Config(class_path, init_args)
 
+    fingerprint = _get_fingerprint_dict(config.fingerprint)
     if config.driver == "usb_camera":
         init_args["device"] = fingerprint
-    elif config.driver != "ipcam":
+    else:
         init_args["serial_number"] = fingerprint["serial"]
 
     return Config(class_path, init_args)

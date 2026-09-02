@@ -76,6 +76,24 @@ def _camera(*, name: str = "Overhead Camera") -> Any:
     )
 
 
+def _ip_camera() -> Any:
+    return CameraAdapter.validate_python(
+        {
+            "id": str(uuid4()),
+            "driver": "ipcam",
+            "name": "overview",
+            "fingerprint": "http://127.0.0.1:8080/cameras/overview/mjpeg",
+            "hardware_name": None,
+            "payload": {
+                "url": "http://127.0.0.1:8080/cameras/overview/mjpeg",
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+            },
+        }
+    )
+
+
 async def test_builder_emits_valid_runtime_recipe_and_round_trips(mocker: Any) -> None:
     _stub_device_paths(mocker)
     document = await build_runtime_config(
@@ -112,6 +130,28 @@ async def test_builder_marks_unstable_device_paths(mocker: Any) -> None:
     )
 
     assert runtime_config_change_me(document) == ["/dev/ttyACM0", "/dev/ttyACM0"]
+
+
+async def test_builder_emits_ip_camera_recipe_without_parsing_fingerprint(mocker: Any) -> None:
+    _stub_device_paths(mocker)
+    document = await build_runtime_config(
+        follower=_robot("follower"),
+        leader=_robot("leader"),
+        cameras=[_ip_camera()],
+        fps=30,
+        robot_factory=_robot_factory(),
+    )
+
+    camera = document["init_args"]["cameras"]["overview"]["init_args"]["camera"]
+    assert camera == {
+        "class_path": "physicalai.capture.IPCamera",
+        "init_args": {
+            "url": "http://127.0.0.1:8080/cameras/overview/mjpeg",
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+        },
+    }
 
 
 async def test_builder_refuses_a_robot_that_is_not_attached() -> None:
