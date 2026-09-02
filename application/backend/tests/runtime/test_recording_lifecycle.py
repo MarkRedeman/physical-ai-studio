@@ -10,7 +10,6 @@ from uuid import UUID
 import pytest
 
 from runtime.callbacks.recording import RecordingState
-<<<<<<< HEAD
 from runtime.command_thread import CommandWorker, _Job
 from runtime.contract import (
     AckData,
