@@ -54,7 +54,7 @@ describe('PluginsView', () => {
         expect(screen.getByText('MuJoCo Plugin')).toBeVisible();
     });
 
-    it('opens a restart prompt after installing a plugin', async () => {
+    it('opens and dismisses a restart prompt after installing a plugin', async () => {
         server.use(
             http.get('/api/plugins', () => HttpResponse.json([availablePlugin])),
             http.post('/api/plugins', () => HttpResponse.json({ restart_required: true })),
@@ -69,6 +69,7 @@ describe('PluginsView', () => {
         expect(await screen.findByText('Plugin changes require a server restart to become active.')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Restart now' })).toBeVisible();
         await user.click(screen.getByRole('button', { name: 'Later' }));
+        expect(screen.queryByText('Plugin changes require a server restart to become active.')).not.toBeInTheDocument();
     });
 
     it('restarts after confirming the restart prompt', async () => {
