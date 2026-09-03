@@ -79,7 +79,7 @@ class PluginManager:
         types = [robot.type for robot in entry.robots]
         if self._installed_dist(plugin_id) is not None:
             types.extend(self.registry.robot_types_for_distribution(entry.id))
-        return types
+        return list(dict.fromkeys(types))
 
     async def install(self, plugin_id: str) -> None:
         """Install a plugin distribution into the active environment.
@@ -145,11 +145,12 @@ class PluginManager:
             )
             for robot in entry.robots
         ]
+        known_robot_types = {robot.type for robot in robots}
 
         if installed:
             for robot_type in self.registry.robot_types_for_distribution(entry.id):
                 definition = definitions_by_type.get(robot_type)
-                if definition is None:
+                if definition is None or robot_type in known_robot_types:
                     continue
                 robots.append(
                     PluginRobot(
@@ -159,6 +160,7 @@ class PluginManager:
                         installed=True,
                     )
                 )
+                known_robot_types.add(robot_type)
 
         return PluginInfo(
             id=entry.id,

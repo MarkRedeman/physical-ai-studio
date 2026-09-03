@@ -115,7 +115,7 @@ def test_list_plugins_merges_catalog_types_from_distribution(monkeypatch: pytest
 
     plugin = manager.list_plugins()[0]
 
-    assert {robot.type for robot in plugin.robots} == {"Demo_Follower", "Demo_Leader"}
+    assert [robot.type for robot in plugin.robots] == ["Demo_Follower", "Demo_Leader"]
     assert all(robot.installed for robot in plugin.robots)
 
 
@@ -184,12 +184,15 @@ def test_uninstall_not_installed_raises(monkeypatch: pytest.MonkeyPatch) -> None
 def test_robot_types_combines_manifest_and_installed_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(metadata, "distribution", _fake_distribution({"demo-plugin"}))
     registry = _FakeRegistry(
-        [_FakeDefinition("Extra_Follower", "Extra Follower", "follower")],
-        {"demo-plugin": ["Extra_Follower"]},
+        [
+            _FakeDefinition("Demo_Follower", "Demo Follower", "follower"),
+            _FakeDefinition("Extra_Follower", "Extra Follower", "follower"),
+        ],
+        {"demo-plugin": ["Demo_Follower", "Extra_Follower"]},
     )
     manager = _manager(registry=registry)
 
-    assert set(manager.robot_types("demo-plugin")) == {"Demo_Follower", "Demo_Leader", "Extra_Follower"}
+    assert manager.robot_types("demo-plugin") == ["Demo_Follower", "Demo_Leader", "Extra_Follower"]
 
 
 def test_install_operations_serialize(monkeypatch: pytest.MonkeyPatch) -> None:
