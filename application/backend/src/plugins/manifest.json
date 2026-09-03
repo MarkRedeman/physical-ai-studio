@@ -38,49 +38,11 @@
     ]
   },
   {
-    "id": "physicalai-lekiwi-plugin",
-    "name": "LeKiwi Robot Plugin",
-    "description": "LeKiwi mobile manipulator integration.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
-    "install_source": "physicalai-lekiwi-plugin>=0.2.3",
-    "robots": [
-      {
-        "type": "LeKiwi_Follower",
-        "display_name": "LeKiwi Follower",
-        "role": "follower"
-      },
-      {
-        "type": "LeKiwi_Leader",
-        "display_name": "LeKiwi Leader",
-        "role": "leader"
-      }
-    ]
-  },
-  {
     "id": "physicalai-lerobot-plugin",
     "name": "LeRobot Robot Plugin",
     "description": "Robot and teleoperator configurations discovered from LeRobot.",
     "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
     "install_source": "physicalai-lerobot-plugin>=0.2.3",
     "robots": []
-  },
-  {
-    "id": "physicalai-mujoco-so101-plugin",
-    "name": "MuJoCo Robot Plugin",
-    "description": "MuJoCo-backed SO-101 simulation integration.",
-    "repo_url": "https://github.com/MarkRedeman/physicalai-plugins",
-    "install_source": "physicalai-mujoco-so101-plugin>=0.2.3",
-    "robots": [
-      {
-        "type": "MuJoCo_SO101_Follower",
-        "display_name": "MuJoCo SO101 Follower",
-        "role": "follower"
-      },
-      {
-        "type": "MuJoCo_SO101_Bimanual_Follower",
-        "display_name": "MuJoCo SO101 Bimanual Follower",
-        "role": "follower"
-      }
-    ]
   }
 ]
