@@ -64,7 +64,7 @@ type ConnectionFieldProps = {
     onChange: (field: string, value: unknown) => void;
 };
 
-const IdentifyError = ({ error }: { error: unknown }) => {
+export const IdentifyError = ({ error }: { error: unknown }) => {
     if (isSerialPermissionDeniedError(error)) {
         return (
             <InlineAlert variant='error'>

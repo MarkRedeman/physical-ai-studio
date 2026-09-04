@@ -6,6 +6,7 @@ import { SchemaRobotType } from '../../robot-types';
 import { useRobotForm } from '../provider';
 import { ConnectionField } from './components/connection-field';
 import { InfoField } from './components/info-field';
+import { IpAddressField } from './components/ip-address-field';
 import { SchemaField } from './schema-field';
 import {
     asRecord,
@@ -34,6 +35,9 @@ const fieldNamesOwnedByItems = (items: RobotUiItem[]): Set<string> =>
                     item.bind.connection,
                     ...(item.bind.serial_number === undefined ? [] : [item.bind.serial_number]),
                 ];
+            }
+            if (item.kind === 'ip_address') {
+                return [item.name];
             }
             if (item.kind === 'section') {
                 return [...fieldNamesOwnedByItems(item.items)];
@@ -75,6 +79,16 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
     if (item.kind === 'connection') {
         return (
             <ConnectionField
+                robotType={props.robotType}
+                payload={props.values}
+                options={item}
+                onChange={props.onChange}
+            />
+        );
+    }
+    if (item.kind === 'ip_address') {
+        return (
+            <IpAddressField
                 robotType={props.robotType}
                 payload={props.values}
                 options={item}
@@ -201,7 +215,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     };
 
     const isRenderable: IsRenderable = (item, itemProperties, itemRequired) => {
-        if (item.kind === 'info' || item.kind === 'connection') {
+        if (item.kind === 'info' || item.kind === 'connection' || item.kind === 'ip_address') {
             return true;
         }
         if (item.kind === 'field') {

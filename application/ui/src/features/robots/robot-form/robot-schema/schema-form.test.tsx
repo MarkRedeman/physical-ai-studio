@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -345,6 +345,112 @@ describe('SchemaForm', () => {
         await user.click(await screen.findByRole('button', { name: 'Identify' }));
 
         expect(await screen.findByText(/Permission Denied/)).toBeVisible();
+    });
+
+    it('identifies the IP address configured in an IP address field', async () => {
+        const requests: { robotType: string; payload: unknown }[] = [];
+        const ipAddressSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                connection_string: { type: 'string', title: 'Robot IP address' },
+            },
+            required: ['connection_string'],
+            'x-physicalai-ui': [
+                {
+                    kind: 'ip_address',
+                    name: 'connection_string',
+                    label: 'Robot IP address',
+                    identify: true,
+                },
+            ],
+        };
+        server.use(
+            http.post('/api/robots/catalog/{robot_type}/identify', async ({ params, request }) => {
+                requests.push({ robotType: params.robot_type, payload: await request.json() });
+                return new HttpResponse(null, { status: 200 });
+            })
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider robot={{ type: 'Trossen_WidowXAI_Follower', name: '', payload: {} }}>
+                <SchemaForm schema={ipAddressSchema} />
+            </RobotFormProvider>
+        );
+
+        const identify = screen.getByRole('button', { name: 'Identify' });
+        expect(identify).toBeDisabled();
+
+        await user.type(screen.getByRole('textbox', { name: /Robot IP address/ }), '192.168.1.100');
+        await user.click(identify);
+
+        await waitFor(() =>
+            expect(requests).toEqual([
+                {
+                    robotType: 'Trossen_WidowXAI_Follower',
+                    payload: { connection_string: '192.168.1.100' },
+                },
+            ])
+        );
+    });
+
+    it('identifies each bimanual IP address through the configured single-arm robot type', async () => {
+        const requests: { robotType: string; payload: unknown }[] = [];
+        const bimanualIpAddressSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                connection_string_left: { type: 'string', title: 'Left arm IP address' },
+                connection_string_right: { type: 'string', title: 'Right arm IP address' },
+            },
+            required: ['connection_string_left', 'connection_string_right'],
+            'x-physicalai-ui': [
+                {
+                    kind: 'ip_address',
+                    name: 'connection_string_left',
+                    label: 'Left arm IP address',
+                    identify: true,
+                    identify_robot_type: 'Trossen_WidowXAI_Follower',
+                },
+                {
+                    kind: 'ip_address',
+                    name: 'connection_string_right',
+                    label: 'Right arm IP address',
+                    identify: true,
+                    identify_robot_type: 'Trossen_WidowXAI_Follower',
+                },
+            ],
+        };
+        server.use(
+            http.post('/api/robots/catalog/{robot_type}/identify', async ({ params, request }) => {
+                requests.push({ robotType: params.robot_type, payload: await request.json() });
+                return new HttpResponse(null, { status: 200 });
+            })
+        );
+        const user = userEvent.setup();
+
+        render(
+            <RobotFormProvider robot={{ type: 'Trossen_Bimanual_WidowXAI_Follower', name: '', payload: {} }}>
+                <SchemaForm schema={bimanualIpAddressSchema} />
+            </RobotFormProvider>
+        );
+
+        await user.type(screen.getByRole('textbox', { name: /Left arm IP address/ }), '192.168.1.100');
+        await user.type(screen.getByRole('textbox', { name: /Right arm IP address/ }), '192.168.1.101');
+        await user.click(screen.getAllByRole('button', { name: 'Identify' })[0]);
+        await user.click(screen.getAllByRole('button', { name: 'Identify' })[1]);
+
+        await waitFor(() =>
+            expect(requests).toEqual([
+                {
+                    robotType: 'Trossen_WidowXAI_Follower',
+                    payload: { connection_string: '192.168.1.100' },
+                },
+                {
+                    robotType: 'Trossen_WidowXAI_Follower',
+                    payload: { connection_string: '192.168.1.101' },
+                },
+            ])
+        );
     });
 
     it('stores serial-capable device values in their respective payload fields', async () => {
