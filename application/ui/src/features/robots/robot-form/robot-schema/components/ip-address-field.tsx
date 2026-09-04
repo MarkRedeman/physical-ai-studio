@@ -3,7 +3,7 @@ import { ActionButton, Flex, TextField, View } from '@geti-ui/ui';
 import { useCatalogIdentifyMutation } from '../../../robot-catalog.hooks';
 import { SchemaRobotType } from '../../../robot-types';
 import { IpAddressItem } from '../types';
-import { IdentifyError } from './connection-field';
+import { IdentifyError } from './identify-error';
 
 type IpAddressFieldProps = {
     robotType: SchemaRobotType;
