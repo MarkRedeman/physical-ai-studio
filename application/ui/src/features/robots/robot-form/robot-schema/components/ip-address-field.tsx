@@ -9,20 +9,25 @@ type IpAddressFieldProps = {
     robotType: SchemaRobotType;
     payload: Record<string, unknown>;
     options: IpAddressItem;
+    isRequired: boolean;
     onChange: (field: string, value: unknown) => void;
 };
 
-export const IpAddressField = ({ robotType, payload, options, onChange }: IpAddressFieldProps) => {
+export const IpAddressField = ({ robotType, payload, options, isRequired, onChange }: IpAddressFieldProps) => {
     const identify = useCatalogIdentifyMutation();
     const value = String(payload[options.name] ?? '');
+    const identifyValue = value.trim();
     const identifyRobotType = options.identify_robot_type ?? robotType;
-    const identifyPayload = options.identify_robot_type === undefined ? payload : { connection_string: value };
+    const identifyPayload =
+        options.identify_robot_type === undefined
+            ? { ...payload, [options.name]: identifyValue }
+            : { connection_string: identifyValue };
 
     return (
         <Flex direction='column' gap='size-100'>
             <Flex gap='size-100' alignItems='end'>
                 <TextField
-                    isRequired
+                    isRequired={isRequired}
                     label={options.label ?? 'IP address'}
                     description={options.description}
                     width='100%'
@@ -32,7 +37,7 @@ export const IpAddressField = ({ robotType, payload, options, onChange }: IpAddr
                 {options.identify && (
                     <View>
                         <ActionButton
-                            isDisabled={value.trim() === '' || identify.isPending}
+                            isDisabled={identifyValue === '' || identify.isPending}
                             onPress={() =>
                                 identify.mutate({
                                     params: { path: { robot_type: identifyRobotType } },

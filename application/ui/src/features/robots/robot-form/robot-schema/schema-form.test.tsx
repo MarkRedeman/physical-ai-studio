@@ -381,7 +381,7 @@ describe('SchemaForm', () => {
         const identify = screen.getByRole('button', { name: 'Identify' });
         expect(identify).toBeDisabled();
 
-        await user.type(screen.getByRole('textbox', { name: /Robot IP address/ }), '192.168.1.100');
+        await user.type(screen.getByRole('textbox', { name: /Robot IP address/ }), ' 192.168.1.100 ');
         await user.click(identify);
 
         await waitFor(() =>
@@ -392,6 +392,29 @@ describe('SchemaForm', () => {
                 },
             ])
         );
+    });
+
+    it('renders an optional IP address field without required styling', () => {
+        const ipAddressSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                connection_string: { type: 'string', title: 'Robot IP address' },
+            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'ip_address',
+                    name: 'connection_string',
+                },
+            ],
+        };
+
+        render(
+            <RobotFormProvider robot={{ type: 'Trossen_WidowXAI_Follower', name: '', payload: {} }}>
+                <SchemaForm schema={ipAddressSchema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('textbox', { name: 'IP address' })).not.toBeRequired();
     });
 
     it('identifies each bimanual IP address through the configured single-arm robot type', async () => {

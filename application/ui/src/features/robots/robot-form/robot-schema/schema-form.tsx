@@ -87,11 +87,17 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         );
     }
     if (item.kind === 'ip_address') {
+        const field = props.properties[item.name];
+        if (field === undefined) {
+            return null;
+        }
+        const resolvedField = resolveReference(field, props.definitions);
         return (
             <IpAddressField
                 robotType={props.robotType}
                 payload={props.values}
                 options={item}
+                isRequired={isRequiredField(item.name, resolvedField, props.required)}
                 onChange={props.onChange}
             />
         );
