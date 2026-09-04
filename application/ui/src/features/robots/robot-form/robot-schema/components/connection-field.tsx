@@ -13,6 +13,7 @@ type ComboBoxFieldProps = {
     value: string;
     devices: Device[];
     allowsCustomValue: boolean;
+    isRequired: boolean;
     description?: string;
     onInputChange: (value: string) => void;
     onSelectionChange: (key: string | number | null) => void;
@@ -34,6 +35,7 @@ const ComboBoxField = ({
     value,
     devices,
     allowsCustomValue,
+    isRequired,
     description,
     onInputChange,
     onSelectionChange,
@@ -41,6 +43,7 @@ const ComboBoxField = ({
     <ComboBox
         label={label}
         description={description}
+        isRequired={isRequired}
         width='100%'
         allowsCustomValue={allowsCustomValue}
         inputValue={value}
@@ -60,10 +63,11 @@ type ConnectionFieldProps = {
     robotType: SchemaRobotType;
     payload: Record<string, unknown>;
     options: ConnectionItem;
+    isRequired: boolean;
     onChange: (field: string, value: unknown) => void;
 };
 
-export const ConnectionField = ({ robotType, payload, options, onChange }: ConnectionFieldProps) => {
+export const ConnectionField = ({ robotType, payload, options, isRequired, onChange }: ConnectionFieldProps) => {
     const discover = useDiscoverRobotsQuery(robotType);
     const identify = useCatalogIdentifyMutation();
     const connectionKey = options.bind.connection;
@@ -89,6 +93,7 @@ export const ConnectionField = ({ robotType, payload, options, onChange }: Conne
                     value={value}
                     devices={discover.data ?? []}
                     allowsCustomValue={options.manual_entry !== false}
+                    isRequired={isRequired}
                     onInputChange={setManualValue}
                     onSelectionChange={(key) => {
                         const device = (discover.data ?? []).find((item) => deviceKey(item) === key);

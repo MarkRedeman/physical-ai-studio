@@ -77,11 +77,17 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         return <InfoField info={item} />;
     }
     if (item.kind === 'connection') {
+        const field = props.properties[item.bind.connection];
+        if (field === undefined) {
+            return null;
+        }
+        const resolvedField = resolveReference(field, props.definitions);
         return (
             <ConnectionField
                 robotType={props.robotType}
                 payload={props.values}
                 options={item}
+                isRequired={isRequiredField(item.bind.connection, resolvedField, props.required)}
                 onChange={props.onChange}
             />
         );

@@ -276,6 +276,56 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('textbox', { name: /Robot ID/ })).toBeRequired();
     });
 
+    it('renders a required connection field with required styling', async () => {
+        const requiredConnectionSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                port: { type: 'string', title: 'Required connection' },
+            },
+            required: ['port'],
+            'x-physicalai-ui': [
+                {
+                    kind: 'connection',
+                    label: 'Required connection',
+                    bind: { connection: 'port' },
+                },
+            ],
+        };
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={requiredConnectionSchema} />
+            </RobotFormProvider>
+        );
+
+        await screen.findByRole('button', { name: /Required connection/ });
+        expect(screen.getByRole('img', { name: '(required)' })).toBeVisible();
+    });
+
+    it('renders an optional connection field without required styling', async () => {
+        const optionalConnectionSchema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                port: { type: 'string', title: 'Optional connection' },
+            },
+            'x-physicalai-ui': [
+                {
+                    kind: 'connection',
+                    label: 'Optional connection',
+                    bind: { connection: 'port' },
+                },
+            ],
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={optionalConnectionSchema} />
+            </RobotFormProvider>
+        );
+
+        await screen.findByRole('button', { name: /Optional connection/ });
+        expect(screen.queryByRole('img', { name: '(required)' })).not.toBeInTheDocument();
+    });
+
     it('renders an error when identify fails', async () => {
         const identifySchema: Parameters<typeof SchemaForm>[0]['schema'] = {
             type: 'object',
@@ -491,7 +541,7 @@ describe('SchemaForm', () => {
             </RobotFormProvider>
         );
 
-        await user.click(await screen.findByRole('button', { name: 'Select robot' }));
+        await user.click(await screen.findByRole('button', { name: /Select robot/ }));
         await user.click(screen.getByRole('option', { name: '00000000050C' }));
         await user.keyboard('{Escape}');
 
@@ -515,7 +565,7 @@ describe('SchemaForm', () => {
             </RobotFormProvider>
         );
 
-        await user.click(await screen.findByRole('button', { name: 'Select robot' }));
+        await user.click(await screen.findByRole('button', { name: /Select robot/ }));
         await user.click(screen.getByRole('option', { name: 'No serial number' }));
 
         expect(await screen.findByRole('status')).toHaveTextContent(
@@ -538,8 +588,8 @@ describe('SchemaForm', () => {
             </RobotFormProvider>
         );
 
-        await user.click(await screen.findByRole('button', { name: 'Select robot' }));
-        await user.type(screen.getByRole('searchbox', { name: 'Select robot' }), '/dev/ttyUSB0');
+        await user.click(await screen.findByRole('button', { name: /Select robot/ }));
+        await user.type(screen.getByRole('searchbox', { name: /Select robot/ }), '/dev/ttyUSB0');
         await user.keyboard('{Escape}');
 
         expect(screen.getByRole('status')).toHaveTextContent(JSON.stringify({ cameras: {}, port: '/dev/ttyUSB0' }));
@@ -573,7 +623,7 @@ describe('SchemaForm', () => {
             </RobotFormProvider>
         );
 
-        expect(screen.getByRole('button', { name: 'Select robot' })).toBeVisible();
+        expect(screen.getByRole('button', { name: /Select robot/ })).toBeVisible();
         expect(screen.queryByRole('heading', { name: 'Cameras' })).not.toBeInTheDocument();
         expect(screen.queryByRole('textbox', { name: 'Cameras' })).not.toBeInTheDocument();
     });
@@ -590,7 +640,7 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('heading', { name: 'Right Arm Config' })).toBeVisible();
         expect(screen.queryByRole('switch', { name: 'Show advanced options' })).not.toBeInTheDocument();
         expect(screen.queryAllByRole('textbox', { name: 'Can Adapter' })).toHaveLength(0);
-        expect(screen.getAllByRole('button', { name: 'Select robot' })).toHaveLength(2);
+        expect(screen.getAllByRole('button', { name: /Select robot/ })).toHaveLength(2);
     });
 
     it('hides a section when all of its fields are advanced configuration fields', () => {
