@@ -72,38 +72,41 @@ type SchemaFormFieldProps = Omit<SchemaFormItemsProps, 'items' | 'renderUnownedF
     field: FieldSchema;
 };
 
+const getResolvedField = ({ properties, definitions }: SchemaFormItemsProps, name: string) => {
+    const field = properties[name];
+    return field === undefined ? undefined : resolveReference(field, definitions);
+};
+
 const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
     if (item.kind === 'info') {
         return <InfoField info={item} />;
     }
     if (item.kind === 'connection') {
-        const field = props.properties[item.bind.connection];
+        const field = getResolvedField(props, item.bind.connection);
         if (field === undefined) {
             return null;
         }
-        const resolvedField = resolveReference(field, props.definitions);
         return (
             <ConnectionField
                 robotType={props.robotType}
                 payload={props.values}
                 options={item}
-                isRequired={isRequiredField(item.bind.connection, resolvedField, props.required)}
+                isRequired={isRequiredField(item.bind.connection, field, props.required)}
                 onChange={props.onChange}
             />
         );
     }
     if (item.kind === 'ip_address') {
-        const field = props.properties[item.name];
+        const field = getResolvedField(props, item.name);
         if (field === undefined) {
             return null;
         }
-        const resolvedField = resolveReference(field, props.definitions);
         return (
             <IpAddressField
                 robotType={props.robotType}
                 payload={props.values}
                 options={item}
-                isRequired={isRequiredField(item.name, resolvedField, props.required)}
+                isRequired={isRequiredField(item.name, field, props.required)}
                 onChange={props.onChange}
             />
         );
