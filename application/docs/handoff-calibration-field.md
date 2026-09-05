@@ -52,6 +52,15 @@ No plugin-side changes are required if payload fields already exist as:
 
 Studio will now show upload controls and persist parsed JSON into those fields.
 
+You can add contextual help beside calibration controls (or any other field)
+using `info` metadata via either `robot_field_ui(...)` or payload UI items.
+
+Example:
+
+```python
+{"kind": "calibration", "name": "calibration", "info": {"description": "Upload exported calibration JSON."}}
+```
+
 ### LeKiwi (or other plugins)
 
 If you want the same upload UX, add a `{"kind": "calibration", "name": "..."}` item to `robot_payload_ui(...)` for the payload field that should receive uploaded calibration JSON.

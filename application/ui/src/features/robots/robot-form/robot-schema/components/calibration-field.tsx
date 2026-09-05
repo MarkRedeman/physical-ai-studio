@@ -4,11 +4,13 @@ import { Button, FileTrigger, Flex, Text, View } from '@geti-ui/ui';
 
 import { InlineAlert } from '../../../setup-wizard/shared/inline-alert';
 import { asRecord, resolveReference } from '../schema-utils';
-import { FieldSchema } from '../types';
+import { ContextualInfo, FieldSchema } from '../types';
+import { FieldContextualHelp } from './field-contextual-help';
 
 type CalibrationFieldProps = {
     label: string;
     description?: string;
+    info?: ContextualInfo;
     value: unknown;
     isRequired: boolean;
     onChange: (value: unknown) => void;
@@ -134,6 +136,7 @@ const validateCalibrationPayload = (
 export const CalibrationField = ({
     label,
     description,
+    info,
     value,
     isRequired,
     onChange,
@@ -183,6 +186,11 @@ export const CalibrationField = ({
                 {label}
                 {isRequired ? ' *' : ' (optional)'}
             </Text>
+            {info !== undefined && (
+                <View>
+                    <FieldContextualHelp info={info} />
+                </View>
+            )}
             {description !== undefined && description !== '' && (
                 <Text
                     UNSAFE_style={{
