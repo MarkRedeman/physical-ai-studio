@@ -4,8 +4,8 @@ import { Flex, Heading, Switch, Text, View } from '@geti-ui/ui';
 
 import { SchemaRobotType } from '../../robot-types';
 import { useRobotForm } from '../provider';
-import { ConnectionField } from './components/connection-field';
 import { CalibrationField } from './components/calibration-field';
+import { ConnectionField } from './components/connection-field';
 import { InfoField } from './components/info-field';
 import { IpAddressField } from './components/ip-address-field';
 import { SchemaField } from './schema-field';
@@ -22,7 +22,6 @@ import {
 import { FieldSchema, JsonSchema, ModelUiOptions, RobotUiItem } from './types';
 
 const EMPTY_ITEMS: RobotUiItem[] = [];
-const SO101_CALIBRATION_KEYS = ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'] as const;
 
 const isUiItems = (value: unknown): value is ModelUiOptions => Array.isArray(value);
 
@@ -39,6 +38,9 @@ const fieldNamesOwnedByItems = (items: RobotUiItem[]): Set<string> =>
                 ];
             }
             if (item.kind === 'ip_address') {
+                return [item.name];
+            }
+            if (item.kind === 'calibration') {
                 return [item.name];
             }
             if (item.kind === 'section') {
@@ -79,31 +81,6 @@ const getResolvedField = ({ properties, definitions }: SchemaFormItemsProps, nam
     return field === undefined ? undefined : resolveReference(field, definitions);
 };
 
-const isCalibrationMapField = (name: string, field: FieldSchema, definitions: Record<string, FieldSchema>) => {
-    const resolved = resolveReference(field, definitions);
-    if (resolved.type !== 'object' || resolved.additionalProperties === undefined || resolved.additionalProperties === false) {
-        return false;
-    }
-
-    const entrySchema =
-        resolved.additionalProperties === true
-            ? undefined
-            : resolveReference(resolved.additionalProperties, definitions);
-
-    if (!name.toLowerCase().includes('calibration')) {
-        return false;
-    }
-    if (entrySchema === undefined) {
-        return true;
-    }
-
-    const entryProperties = entrySchema.properties ?? EMPTY_PROPERTIES;
-    return SO101_CALIBRATION_KEYS.every((key) => {
-        const property = entryProperties[key];
-        return property !== undefined && resolveReference(property, definitions).type === 'integer';
-    });
-};
-
 const asFieldSchema = (value: FieldSchema | boolean | undefined): FieldSchema | undefined =>
     typeof value === 'object' && value !== null && !Array.isArray(value) ? value : undefined;
 
@@ -138,6 +115,24 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
                 options={item}
                 isRequired={isRequiredField(item.name, field, props.required)}
                 onChange={props.onChange}
+            />
+        );
+    }
+    if (item.kind === 'calibration') {
+        const field = getResolvedField(props, item.name);
+        if (field === undefined) {
+            return null;
+        }
+
+        return (
+            <CalibrationField
+                label={item.label ?? fieldLabel(item.name, field)}
+                description={item.description ?? field.description}
+                isRequired={isRequiredField(item.name, field, props.required)}
+                value={props.values[item.name]}
+                valueSchema={asFieldSchema(field.additionalProperties)}
+                definitions={props.definitions}
+                onChange={(value) => props.onChange(item.name, value)}
             />
         );
     }
@@ -215,20 +210,6 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
     }
 
     if (resolvedField.type === 'object') {
-        if (isCalibrationMapField(name, resolvedField, props.definitions)) {
-            const entrySchema = asFieldSchema(resolvedField.additionalProperties);
-            return (
-                <CalibrationField
-                    label={fieldLabel(name, resolvedField)}
-                    description={resolvedField.description}
-                    isRequired={isRequired}
-                    value={props.values[name]}
-                    valueSchema={entrySchema}
-                    definitions={props.definitions}
-                    onChange={(value) => props.onChange(name, value)}
-                />
-            );
-        }
         return null;
     }
 
@@ -264,20 +245,22 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const isFieldVisible: IsFieldVisible = (name, field, fieldRequired) => {
         const resolvedField = resolveReference(field, definitions);
         const fieldUi = resolvedField['x-physicalai-ui'];
-        if (isCalibrationMapField(name, resolvedField, definitions)) {
-            return true;
-        }
 
         const isRequired = isRequiredField(name, resolvedField, fieldRequired);
         if (!isRequired && !isUiItems(fieldUi) && fieldUi?.advanced_configuration === true && !showAdvanced) {
-            return false;
+            //return false;
         }
 
         return resolvedField.type !== 'object' || resolvedField.properties !== undefined;
     };
 
     const isRenderable: IsRenderable = (item, itemProperties, itemRequired) => {
-        if (item.kind === 'info' || item.kind === 'connection' || item.kind === 'ip_address') {
+        if (
+            item.kind === 'info' ||
+            item.kind === 'connection' ||
+            item.kind === 'ip_address' ||
+            item.kind === 'calibration'
+        ) {
             return true;
         }
         if (item.kind === 'field') {

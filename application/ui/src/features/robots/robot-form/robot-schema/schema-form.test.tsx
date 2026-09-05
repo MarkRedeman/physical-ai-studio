@@ -699,7 +699,7 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('switch', { name: 'Torque Enabled' })).toBeChecked();
     });
 
-    it('renders calibration object maps as a calibration upload control', () => {
+    it('renders a calibration upload control from x-physicalai-ui calibration items', () => {
         const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
             $defs: {
                 SO101JointCalibration: {
@@ -722,6 +722,7 @@ describe('SchemaForm', () => {
                     additionalProperties: { $ref: '#/$defs/SO101JointCalibration' },
                 },
             },
+            'x-physicalai-ui': [{ kind: 'calibration', name: 'calibration' }],
         };
 
         render(
@@ -757,6 +758,7 @@ describe('SchemaForm', () => {
                     additionalProperties: { $ref: '#/$defs/SO101JointCalibration' },
                 },
             },
+            'x-physicalai-ui': [{ kind: 'calibration', name: 'calibration' }],
         };
         const calibrationPayload = {
             shoulder_pan: { id: 1, drive_mode: 0, homing_offset: 10, range_min: -100, range_max: 100 },
@@ -792,6 +794,7 @@ describe('SchemaForm', () => {
                     additionalProperties: true,
                 },
             },
+            'x-physicalai-ui': [{ kind: 'calibration', name: 'calibration' }],
         };
         const user = userEvent.setup();
         const { container } = render(
