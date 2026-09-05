@@ -52,6 +52,7 @@ const fieldNamesOwnedByItems = (items: RobotUiItem[]): Set<string> =>
 
 type OnChange = (name: string, value: unknown) => void;
 type IsFieldVisible = (name: string, field: FieldSchema, required: Set<string>) => boolean;
+type IsFieldEnabled = (name: string, field: FieldSchema, required: Set<string>) => boolean;
 type IsRenderable = (item: RobotUiItem, properties: Record<string, FieldSchema>, required: Set<string>) => boolean;
 
 type SchemaFormItemProps = SchemaFormItemsProps & {
@@ -67,6 +68,7 @@ type SchemaFormItemsProps = {
     robotType: SchemaRobotType;
     definitions: Record<string, FieldSchema>;
     isFieldVisible: IsFieldVisible;
+    isFieldEnabled: IsFieldEnabled;
     isRenderable: IsRenderable;
     renderUnownedFields: boolean;
 };
@@ -121,6 +123,9 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
     if (item.kind === 'calibration') {
         const field = getResolvedField(props, item.name);
         if (field === undefined) {
+            return null;
+        }
+        if (!props.isFieldEnabled(item.name, field, props.required)) {
             return null;
         }
 
@@ -244,24 +249,28 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
 
     const isFieldVisible: IsFieldVisible = (name, field, fieldRequired) => {
         const resolvedField = resolveReference(field, definitions);
-        const fieldUi = resolvedField['x-physicalai-ui'];
-
-        const isRequired = isRequiredField(name, resolvedField, fieldRequired);
-        if (!isRequired && !isUiItems(fieldUi) && fieldUi?.advanced_configuration === true && !showAdvanced) {
-            //return false;
+        if (!isFieldEnabled(name, resolvedField, fieldRequired)) {
+            return false;
         }
 
         return resolvedField.type !== 'object' || resolvedField.properties !== undefined;
     };
 
+    const isFieldEnabled: IsFieldEnabled = (name, field, fieldRequired) => {
+        const resolvedField = resolveReference(field, definitions);
+        const fieldUi = resolvedField['x-physicalai-ui'];
+        const isRequired = isRequiredField(name, resolvedField, fieldRequired);
+
+        return isRequired || isUiItems(fieldUi) || fieldUi?.advanced_configuration !== true || showAdvanced;
+    };
+
     const isRenderable: IsRenderable = (item, itemProperties, itemRequired) => {
-        if (
-            item.kind === 'info' ||
-            item.kind === 'connection' ||
-            item.kind === 'ip_address' ||
-            item.kind === 'calibration'
-        ) {
+        if (item.kind === 'info' || item.kind === 'connection' || item.kind === 'ip_address') {
             return true;
+        }
+        if (item.kind === 'calibration') {
+            const field = itemProperties[item.name];
+            return field !== undefined && isFieldEnabled(item.name, field, itemRequired);
         }
         if (item.kind === 'field') {
             const field = itemProperties[item.name];
@@ -286,6 +295,7 @@ export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
                 robotType={activeType!}
                 definitions={definitions}
                 isFieldVisible={isFieldVisible}
+                isFieldEnabled={isFieldEnabled}
                 isRenderable={isRenderable}
                 renderUnownedFields
             />
