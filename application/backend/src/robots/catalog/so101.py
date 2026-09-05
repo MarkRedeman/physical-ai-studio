@@ -46,7 +46,20 @@ class SO101RobotPayload(BaseModel):
             "When provided, Studio uses these values as-is: it does not overwrite calibration on the control board "
             "and it skips the guided manual calibration flow."
         ),
-        json_schema_extra=robot_field_ui({"advanced_configuration": True}),
+        json_schema_extra=robot_field_ui(
+            {
+                "advanced_configuration": True,
+                "info": {
+                    "title": "Calibration values",
+                    "description": (
+                        "Upload a calibration JSON exported for this SO101. If provided, Studio uses these values as-is, "
+                        "does not overwrite control-board calibration, and skips guided manual calibration."
+                    ),
+                    "link_url": "https://github.com/open-edge-platform/physical-ai-studio/tree/main/application/docs",
+                    "variant": "help",
+                },
+            }
+        ),
     )
 
     model_config = ConfigDict(
