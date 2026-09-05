@@ -203,7 +203,7 @@ payload data model:
 - `robot_field_ui` marks advanced configuration or applies a Studio-only
   required override.
 - `robot_payload_ui` orders fields and adds `section`, `field`, `connection`,
-  and `info` items.
+  `calibration`, and `info` items.
 - A `connection` item owns its bound connection and serial-number fields, so
   the raw fields are not rendered twice.
 - Bindings are relative to the model that declares them. Nested payload models

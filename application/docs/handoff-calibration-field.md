@@ -29,21 +29,17 @@ Upload JSON should match the existing SO101 export shape (joint-name keyed objec
 
 For bimanual, upload two separate files (one per arm).
 
-## How auto-detection works today
+## How rendering works
 
-SchemaForm renders `CalibrationField` when all of these are true:
+SchemaForm renders `CalibrationField` only when the payload UI metadata includes a dedicated item:
 
-1. Field type is `object`.
-2. Field name contains `calibration`.
-3. Field is a map (`additionalProperties` present).
-4. Entry schema is either untyped (`additionalProperties: true`) or SO101-like with integer fields:
-   - `id`
-   - `drive_mode`
-   - `homing_offset`
-   - `range_min`
-   - `range_max`
+```python
+robot_payload_ui([
+    {"kind": "calibration", "name": "calibration"},
+])
+```
 
-This keeps existing plugin schemas working without introducing a new UI-kind contract.
+This matches how other first-party controls are rendered (`connection`, `ip_address`) and avoids heuristic auto-detection.
 
 ## Plugin author guidance
 
@@ -58,15 +54,13 @@ Studio will now show upload controls and persist parsed JSON into those fields.
 
 ### LeKiwi (or other plugins)
 
-If you want the same upload UX right now, define calibration payload fields as object maps named with `calibration` in the field name and keep the entry values typed as integer properties where possible.
-
-If LeKiwi uses a different calibration schema (non-map or different field names/types), this first version may not auto-detect it. In that case, we should extend the detection rules or add an explicit plugin UI item kind later.
+If you want the same upload UX, add a `{"kind": "calibration", "name": "..."}` item to `robot_payload_ui(...)` for the payload field that should receive uploaded calibration JSON.
 
 ## Current limitations
 
 - Upload-only flow (no inline JSON editor yet).
 - Validation is structural and type-based; it does not perform robot-specific semantic checks.
-- Detection is heuristic-based, not an explicit schema metadata kind.
+- The control renders only for fields explicitly declared through a `calibration` UI item.
 
 ## Files changed in this implementation
 

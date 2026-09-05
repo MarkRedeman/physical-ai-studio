@@ -217,6 +217,7 @@ first-party connection control. The supported item kinds are:
 - `section`: groups items under an optional heading.
 - `field`: places a normal payload field.
 - `connection`: renders Studio's serial-device selector and owns its bindings.
+- `calibration`: renders Studio's calibration JSON upload control for an object field.
 - `info`: renders read-only guidance or warnings.
 
 ```python
