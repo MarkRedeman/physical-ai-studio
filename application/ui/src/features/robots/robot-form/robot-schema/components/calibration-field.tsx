@@ -177,20 +177,22 @@ export const CalibrationField = ({
 
     return (
         <Flex direction='column' gap='size-100'>
-            <Text
-                UNSAFE_style={{
-                    fontSize: 'var(--spectrum-global-dimension-font-size-100)',
-                    color: 'var(--spectrum-global-color-gray-800)',
-                }}
-            >
-                {label}
-                {isRequired ? ' *' : ' (optional)'}
-            </Text>
-            {info !== undefined && (
-                <View>
-                    <FieldContextualHelp info={info} />
-                </View>
-            )}
+            <Flex gap='size-100'>
+                <Text
+                    UNSAFE_style={{
+                        fontSize: 'var(--spectrum-global-dimension-font-size-100)',
+                        color: 'var(--spectrum-global-color-gray-700)',
+                    }}
+                >
+                    {label}
+                    {isRequired ? ' *' : ' (optional)'}
+                </Text>
+                {info !== undefined && (
+                    <View>
+                        <FieldContextualHelp info={info} />
+                    </View>
+                )}
+            </Flex>
             {description !== undefined && description !== '' && (
                 <Text
                     UNSAFE_style={{
