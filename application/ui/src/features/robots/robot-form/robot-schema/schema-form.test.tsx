@@ -699,6 +699,117 @@ describe('SchemaForm', () => {
         expect(screen.getByRole('switch', { name: 'Torque Enabled' })).toBeChecked();
     });
 
+    it('renders calibration object maps as a calibration upload control', () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            $defs: {
+                SO101JointCalibration: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'integer' },
+                        drive_mode: { type: 'integer' },
+                        homing_offset: { type: 'integer' },
+                        range_min: { type: 'integer' },
+                        range_max: { type: 'integer' },
+                    },
+                    required: ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'],
+                },
+            },
+            type: 'object',
+            properties: {
+                calibration: {
+                    type: 'object',
+                    title: 'Calibration',
+                    additionalProperties: { $ref: '#/$defs/SO101JointCalibration' },
+                },
+            },
+        };
+
+        render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+
+        expect(screen.getByRole('button', { name: 'Upload calibration JSON' })).toBeVisible();
+        expect(screen.queryByRole('textbox', { name: 'Calibration' })).not.toBeInTheDocument();
+    });
+
+    it('imports uploaded calibration JSON into the payload', async () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            $defs: {
+                SO101JointCalibration: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'integer' },
+                        drive_mode: { type: 'integer' },
+                        homing_offset: { type: 'integer' },
+                        range_min: { type: 'integer' },
+                        range_max: { type: 'integer' },
+                    },
+                    required: ['id', 'drive_mode', 'homing_offset', 'range_min', 'range_max'],
+                },
+            },
+            type: 'object',
+            properties: {
+                calibration: {
+                    type: 'object',
+                    title: 'Calibration',
+                    additionalProperties: { $ref: '#/$defs/SO101JointCalibration' },
+                },
+            },
+        };
+        const calibrationPayload = {
+            shoulder_pan: { id: 1, drive_mode: 0, homing_offset: 10, range_min: -100, range_max: 100 },
+        };
+        const user = userEvent.setup();
+        const { container } = render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+                <Payload />
+            </RobotFormProvider>
+        );
+        const fileInput = container.querySelector('input[type="file"]');
+
+        expect(fileInput).not.toBeNull();
+        if (fileInput === null) {
+            throw new Error('Expected calibration file input to be rendered.');
+        }
+        await user.upload(
+            fileInput as HTMLInputElement,
+            new File([JSON.stringify(calibrationPayload)], 'calibration.json', { type: 'application/json' })
+        );
+
+        expect(await screen.findByRole('status')).toHaveTextContent(JSON.stringify({ calibration: calibrationPayload }));
+    });
+
+    it('shows an error when uploaded calibration JSON is invalid', async () => {
+        const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
+            type: 'object',
+            properties: {
+                calibration: {
+                    type: 'object',
+                    title: 'Calibration',
+                    additionalProperties: true,
+                },
+            },
+        };
+        const user = userEvent.setup();
+        const { container } = render(
+            <RobotFormProvider>
+                <SchemaForm schema={schema} />
+            </RobotFormProvider>
+        );
+        const fileInput = container.querySelector('input[type="file"]');
+
+        expect(fileInput).not.toBeNull();
+        if (fileInput === null) {
+            throw new Error('Expected calibration file input to be rendered.');
+        }
+        await user.upload(fileInput as HTMLInputElement, new File(['{"bad_json":'], 'broken.json', { type: 'application/json' }));
+
+        expect(await screen.findByText('Could not parse JSON. Upload a valid calibration .json file.')).toBeVisible();
+    });
+
     it('keeps advanced configuration fields hidden when the toggle is hidden', () => {
         const schema: Parameters<typeof SchemaForm>[0]['schema'] = {
             type: 'object',
