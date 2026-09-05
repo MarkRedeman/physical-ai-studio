@@ -210,13 +210,6 @@ export const CalibrationField = ({
                     </Button>
                 )}
             </Flex>
-            <View>
-                <Text>
-                    {hasCalibration
-                        ? `Loaded ${Object.keys(calibration).length} joint calibration entries${fileName ? ` from ${fileName}` : ''}.`
-                        : 'No calibration JSON uploaded.'}
-                </Text>
-            </View>
             {hasCalibration && (
                 <View
                     borderColor='gray-300'
