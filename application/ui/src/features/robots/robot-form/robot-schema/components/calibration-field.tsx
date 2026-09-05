@@ -16,6 +16,43 @@ type CalibrationFieldProps = {
     definitions?: Record<string, FieldSchema>;
 };
 
+type CalibrationEntry = {
+    id?: unknown;
+    drive_mode?: unknown;
+    homing_offset?: unknown;
+    range_min?: unknown;
+    range_max?: unknown;
+};
+
+type CalibrationRow = {
+    joint: string;
+    value: CalibrationEntry;
+};
+
+const asCalibrationRows = (value: Record<string, unknown>): CalibrationRow[] =>
+    Object.entries(value)
+        .map(([joint, entry]) => ({ joint, value: asRecord(entry) }))
+        .sort((left, right) => {
+            const leftId = typeof left.value.id === 'number' && Number.isFinite(left.value.id) ? left.value.id : Number.POSITIVE_INFINITY;
+            const rightId =
+                typeof right.value.id === 'number' && Number.isFinite(right.value.id) ? right.value.id : Number.POSITIVE_INFINITY;
+
+            if (leftId !== rightId) {
+                return leftId - rightId;
+            }
+            return left.joint.localeCompare(right.joint);
+        });
+
+const formatCell = (value: unknown) => {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? String(value) : '-';
+    }
+    if (typeof value === 'string' && value !== '') {
+        return value;
+    }
+    return '-';
+};
+
 const isExpectedType = (value: unknown, schemaType: string | undefined) => {
     if (schemaType === undefined) {
         return true;
@@ -106,6 +143,7 @@ export const CalibrationField = ({
     const [error, setError] = useState<string | null>(null);
     const [fileName, setFileName] = useState<string | null>(null);
     const calibration = asRecord(value);
+    const rows = asCalibrationRows(calibration);
     const hasCalibration = Object.keys(calibration).length > 0;
 
     const importCalibration = async (files: FileList | null) => {
@@ -136,11 +174,25 @@ export const CalibrationField = ({
 
     return (
         <Flex direction='column' gap='size-100'>
-            <Text>
+            <Text
+                UNSAFE_style={{
+                    fontSize: 'var(--spectrum-global-dimension-font-size-100)',
+                    color: 'var(--spectrum-global-color-gray-800)',
+                }}
+            >
                 {label}
-                {isRequired ? ' *' : ''}
+                {isRequired ? ' *' : ' (optional)'}
             </Text>
-            {description !== undefined && description !== '' && <Text>{description}</Text>}
+            {description !== undefined && description !== '' && (
+                <Text
+                    UNSAFE_style={{
+                        fontSize: 'var(--spectrum-global-dimension-font-size-100)',
+                        color: 'var(--spectrum-global-color-gray-600)',
+                    }}
+                >
+                    {description}
+                </Text>
+            )}
             <Flex gap='size-100' alignItems='center'>
                 <FileTrigger acceptedFileTypes={['.json']} onSelect={importCalibration}>
                     <Button variant='secondary'>{hasCalibration ? 'Replace calibration JSON' : 'Upload calibration JSON'}</Button>
@@ -165,6 +217,45 @@ export const CalibrationField = ({
                         : 'No calibration JSON uploaded.'}
                 </Text>
             </View>
+            {hasCalibration && (
+                <View
+                    borderColor='gray-300'
+                    borderWidth='thin'
+                    backgroundColor='gray-75'
+                    padding='size-100'
+                    UNSAFE_style={{ borderRadius: 'var(--spectrum-global-dimension-size-50)', overflowX: 'auto' }}
+                >
+                    <table
+                        aria-label='Calibration preview'
+                        style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', lineHeight: '16px' }}
+                    >
+                        <thead>
+                            <tr style={{ color: 'var(--spectrum-global-color-gray-700)', textAlign: 'left' }}>
+                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Joint</th>
+                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>ID</th>
+                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Drive</th>
+                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Offset</th>
+                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Min</th>
+                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Max</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((row) => (
+                                <tr key={row.joint} style={{ borderTop: '1px solid var(--spectrum-global-color-gray-300)' }}>
+                                    <td style={{ padding: '4px 8px', color: 'var(--spectrum-global-color-gray-800)' }}>
+                                        {row.joint}
+                                    </td>
+                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.id)}</td>
+                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.drive_mode)}</td>
+                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.homing_offset)}</td>
+                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.range_min)}</td>
+                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.range_max)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </View>
+            )}
             {error !== null && <InlineAlert variant='error'>{error}</InlineAlert>}
         </Flex>
     );

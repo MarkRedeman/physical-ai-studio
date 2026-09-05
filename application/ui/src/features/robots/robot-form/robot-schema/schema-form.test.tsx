@@ -782,6 +782,8 @@ describe('SchemaForm', () => {
         );
 
         expect(await screen.findByRole('status')).toHaveTextContent(JSON.stringify({ calibration: calibrationPayload }));
+        expect(screen.getByRole('table', { name: 'Calibration preview' })).toBeVisible();
+        expect(screen.getByRole('cell', { name: 'shoulder_pan' })).toBeVisible();
     });
 
     it('shows an error when uploaded calibration JSON is invalid', async () => {
