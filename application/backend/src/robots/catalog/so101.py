@@ -42,9 +42,7 @@ class SO101RobotPayload(BaseModel):
     calibration: dict[str, SO101JointCalibration] | None = Field(  # pyrefly: ignore[no-matching-overload]
         default=None,
         description=(
-            "Optional per-joint calibration values (id, drive_mode, homing_offset, range_min, range_max). "
-            "When provided, Studio uses these values as-is: it does not overwrite calibration on the control board "
-            "and it skips the guided manual calibration flow."
+            "Provide SO101 calibration values. Studio uses these values as-is: it does not overwrite calibration on the control board and it skips the guided manual calibration flow."
         ),
         json_schema_extra=robot_field_ui(
             {
