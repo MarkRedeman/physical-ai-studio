@@ -147,7 +147,9 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
     }
     if (item.kind === 'field') {
         const field = props.properties[item.name];
-        return field === undefined ? null : <SchemaFormField {...props} name={item.name} field={field} info={item.info} />;
+        return field === undefined ? null : (
+            <SchemaFormField {...props} name={item.name} field={field} info={item.info} />
+        );
     }
     if (!props.isRenderable(item, props.properties, props.required)) {
         return null;
@@ -236,7 +238,7 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
 
 export const SchemaForm = ({ schema }: { schema: JsonSchema }) => {
     const { activeType, payload, setPayload, updatePayloadField } = useRobotForm();
-    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [showAdvanced, setShowAdvanced] = useState(true);
     const properties = schema.properties ?? EMPTY_PROPERTIES;
     const definitions = schema.$defs ?? EMPTY_DEFINITIONS;
     const required = new Set(schema.required ?? []);

@@ -35,9 +35,14 @@ const asCalibrationRows = (value: Record<string, unknown>): CalibrationRow[] =>
     Object.entries(value)
         .map(([joint, entry]) => ({ joint, value: asRecord(entry) }))
         .sort((left, right) => {
-            const leftId = typeof left.value.id === 'number' && Number.isFinite(left.value.id) ? left.value.id : Number.POSITIVE_INFINITY;
+            const leftId =
+                typeof left.value.id === 'number' && Number.isFinite(left.value.id)
+                    ? left.value.id
+                    : Number.POSITIVE_INFINITY;
             const rightId =
-                typeof right.value.id === 'number' && Number.isFinite(right.value.id) ? right.value.id : Number.POSITIVE_INFINITY;
+                typeof right.value.id === 'number' && Number.isFinite(right.value.id)
+                    ? right.value.id
+                    : Number.POSITIVE_INFINITY;
 
             if (leftId !== rightId) {
                 return leftId - rightId;
@@ -205,7 +210,9 @@ export const CalibrationField = ({
             )}
             <Flex gap='size-100' alignItems='center'>
                 <FileTrigger acceptedFileTypes={['.json']} onSelect={importCalibration}>
-                    <Button variant='secondary'>{hasCalibration ? 'Replace calibration JSON' : 'Upload calibration JSON'}</Button>
+                    <Button variant='secondary'>
+                        {hasCalibration ? 'Replace calibration JSON' : 'Upload calibration JSON'}
+                    </Button>
                 </FileTrigger>
                 {hasCalibration && (
                     <Button
@@ -244,7 +251,10 @@ export const CalibrationField = ({
                         </thead>
                         <tbody>
                             {rows.map((row) => (
-                                <tr key={row.joint} style={{ borderTop: '1px solid var(--spectrum-global-color-gray-300)' }}>
+                                <tr
+                                    key={row.joint}
+                                    style={{ borderTop: '1px solid var(--spectrum-global-color-gray-300)' }}
+                                >
                                     <td style={{ padding: '4px 8px', color: 'var(--spectrum-global-color-gray-800)' }}>
                                         {row.joint}
                                     </td>
