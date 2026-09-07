@@ -5,7 +5,6 @@ import type { SchemaSo101JointCalibration } from '../../../../api/openapi-spec';
 import { useProjectId } from '../../../projects/use-project';
 import type { SchemaRobot } from '../../robot-types';
 import { useRobotForm } from '../provider';
-import { CalibrationField } from '../robot-schema/components/calibration-field';
 
 type SourceRobot = Extract<SchemaRobot, { type: 'SO101_Follower' | 'SO101_Leader' }>;
 
@@ -80,20 +79,6 @@ export const BimanualSO101FormFields = () => {
                 robots={rightRobots}
                 selectedKey={selectedRobotId('right')}
                 onSelect={(robotId) => selectArm('right', robotId)}
-            />
-            <CalibrationField
-                label='Left calibration'
-                description='Upload a JSON calibration export for the left SO101 arm.'
-                isRequired={false}
-                value={formPayload.left_calibration}
-                onChange={(value) => updatePayloadField('left_calibration', value)}
-            />
-            <CalibrationField
-                label='Right calibration'
-                description='Upload a JSON calibration export for the right SO101 arm.'
-                isRequired={false}
-                value={formPayload.right_calibration}
-                onChange={(value) => updatePayloadField('right_calibration', value)}
             />
         </Flex>
     );
