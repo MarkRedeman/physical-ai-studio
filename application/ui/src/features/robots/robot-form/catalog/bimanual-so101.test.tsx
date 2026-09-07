@@ -170,4 +170,27 @@ describe('BimanualSO101FormFields', () => {
 
         expect(await screen.findByRole('button', { name: /Select left arm/ })).toHaveTextContent('Follower Arm B');
     });
+
+    it('imports a left arm calibration JSON file without changing the right arm calibration', async () => {
+        server.use(http.get(ROBOTS_PATH, () => HttpResponse.json([])));
+        const user = userEvent.setup();
+        const existingRightCalibration = {
+            elbow_flex: { id: 3, drive_mode: 0, homing_offset: 5, range_min: -120, range_max: 120 },
+        };
+        const leftCalibration = {
+            shoulder_pan: { id: 1, drive_mode: 0, homing_offset: 10, range_min: -100, range_max: 100 },
+        };
+        const { container } = renderFields('BimanualSO101_Follower', { right_calibration: existingRightCalibration });
+        await screen.findByRole('button', { name: /Select left arm/ });
+        const fileInputs = container.querySelectorAll('input[type="file"]');
+
+        expect(fileInputs).toHaveLength(2);
+        await user.upload(
+            fileInputs[0] as HTMLInputElement,
+            new File([JSON.stringify(leftCalibration)], 'left-calibration.json', { type: 'application/json' })
+        );
+
+        const payload = JSON.parse((await screen.findByRole('status')).textContent ?? '{}') as Record<string, unknown>;
+        expect(payload).toEqual({ left_calibration: leftCalibration, right_calibration: existingRightCalibration });
+    });
 });
