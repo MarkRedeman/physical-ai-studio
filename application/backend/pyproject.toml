@@ -39,6 +39,8 @@ dependencies = [
   "physicalai-studio-plugin",
   "asyncssh~=2.24",
   "packaging>=24.0",
+  "physicalai-rebot-b601-plugin>=0.5.0",
+  "physicalai-bimanual-so101-plugin>=0.3.0",
 ]
 
 [project.scripts]
@@ -166,7 +168,7 @@ all = [
 package = true
 default-groups = ["all"]
 exclude-newer = "7 days"
-exclude-newer-package = { pyrealsense2 = "1 days", markupsafe = false }
+exclude-newer-package = { pyrealsense2 = "1 days", markupsafe = false, physicalai-rebot-b601-plugin = false, physicalai-bimanual-so101-plugin = false}
 # The pytorch-xpu index is non-explicit (explicit = false) because
 # transitive deps like triton-xpu only exist on the XPU index.
 # unsafe-best-match is required because PyTorch indexes can host stale

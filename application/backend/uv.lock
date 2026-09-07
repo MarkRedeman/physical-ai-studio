@@ -54,12 +54,14 @@ conflicts = [[
 ]]
 
 [options]
-exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer = "2026-08-31T06:04:12.791275168Z"
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
+pyrealsense2 = { timestamp = "2026-09-06T06:04:12.791284361Z", span = "P1D" }
+physicalai-bimanual-so101-plugin = false
 markupsafe = false
-pyrealsense2 = { timestamp = "0001-01-01T00:00:00Z", span = "P1D" }
+physicalai-rebot-b601-plugin = false
 
 [manifest]
 overrides = [
@@ -1882,6 +1884,34 @@ wheels = [
 ]
 
 [[package]]
+name = "motorbridge"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/d6/a01f133579e02e11cf7ea0c1b1032008a182adf70d516e8057fb7c8e66f2/motorbridge-0.5.1.tar.gz", hash = "sha256:29b6163d4788a101d1f43ddc0c7f4731b4f2d4faca60df814eba7fb6031118ce", size = 42569, upload-time = "2026-08-06T07:45:52.316Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/3c/05ed596fdab80deb56cfbc9a53b02ba8ae17e765cd7aa0e74aa7ffa1a94e/motorbridge-0.5.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:ba6f49637d33916db242e18d33ba173e60db182039e3ab736c94ba4906f8b465", size = 1244357, upload-time = "2026-08-06T07:45:40.474Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/c7/27d99fc2b5675ed6d05d90a7975573f882002ffe272ab6533ace69d88a9a/motorbridge-0.5.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d70ad7eb7e9dd496bd9f6d7010a83736e5d6feb6637505fcd19e7ff4539877fb", size = 1333759, upload-time = "2026-08-06T07:45:41.817Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/7a/40e2ee2dbbf900ee264b0a5746140eab189b040a854127feb065fe1104c1/motorbridge-0.5.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e7602db412b2810171ee3c8927f721cbfdcc92eb8e08364bda2cb986ffe2803f", size = 1350891, upload-time = "2026-08-06T07:45:43.006Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/65/b5de8f326ff2aa1161ce13862537a59a1240d2ca34a9a9f89be47d3dcaea/motorbridge-0.5.1-cp312-cp312-win_amd64.whl", hash = "sha256:3988546b0f1247279ac46f1bbe64bd5eb8405ef5d2c5df70bad14c1c83a56fe2", size = 1038947, upload-time = "2026-08-06T07:45:44.104Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/41/2389135560f4dc9df504ddf436db0c2ddde23448acbedd155479b38192f4/motorbridge-0.5.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:888f412f0814b2275df6b2ad92352f4bc3da526646806d106f9bceab7046c086", size = 1244357, upload-time = "2026-08-06T07:45:45.684Z" },
+    { url = "https://files.pythonhosted.org/packages/94/64/f5af03160213fc86af1899c0f5bcbc74873b339983b8d4f12789a9060989/motorbridge-0.5.1-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9e937a3f6a606412d74acc802be460e1c29fb78a8d3104d430390b62a376fa95", size = 1333758, upload-time = "2026-08-06T07:45:46.949Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/35/8f0d034aee80e5055dfb5e9a55adcda449202e9ffa7bbc08043ef16e2109/motorbridge-0.5.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c007e5384dc0dbb1b67e46063252828ffe26375dbd94e9ee345cb29102358f64", size = 1350891, upload-time = "2026-08-06T07:45:48.828Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/1c/413d3d4d2f72c2dc4dad0e1112d538c0a8431217aa01e40a6d772f17d5ca/motorbridge-0.5.1-cp313-cp313-win_amd64.whl", hash = "sha256:0e2a9ea1bfb1eef67aede1f4cf23de3cbf58bb0c3e14f0cfb2281f144bddf128", size = 1038944, upload-time = "2026-08-06T07:45:49.9Z" },
+]
+
+[[package]]
+name = "motorbridge-smart-servo"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/56/45af87189dc49abbe46157b792b7c71f502a5f819f04e7485de0cfa52d9b/motorbridge_smart_servo-0.0.4.tar.gz", hash = "sha256:fb65f3f6e765e6b1915071c255caaf112fad3796fa1761aeee0132d15b8a0989", size = 20415, upload-time = "2026-05-08T09:24:57.563Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/ee/bec4b3acf55cd18e7db83a6d951caccf699533dbd038c1f0b5f2d16d5208/motorbridge_smart_servo-0.0.4-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:8bc1f034fa9f96e23229a834db6e7cfe1368dba7b9a2a6f6dbd316448c4390dc", size = 304384, upload-time = "2026-05-08T09:24:52.619Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/d2/71c87063b826433553ce8869b99df3e4f191b107710dd5c905e637512b10/motorbridge_smart_servo-0.0.4-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:348cef6a647e5c7f9cc8e8ce1f3c806af4522e1087172bac2f8a1a0daa3592b6", size = 345668, upload-time = "2026-05-08T09:24:53.735Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/6b/e65e7227a510236c6334cf054c501d3de2cbd463f4c594e42c6e965d5143/motorbridge_smart_servo-0.0.4-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8c1982643c496c9f425fa9238f9a92ba601d77f4f2279df68c6868e7b997cbe1", size = 348123, upload-time = "2026-05-08T09:24:55.191Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/fa/539ea123a5660c22c5e5cdad62d7bc5e931c816a0ffd402ae6e4623ab45b/motorbridge_smart_servo-0.0.4-cp39-abi3-win_amd64.whl", hash = "sha256:ea3baa9ba25bcec5541f3d86d73a3406ba2fcffe5dbf900c22e058638fc31ab0", size = 194130, upload-time = "2026-05-08T09:24:56.369Z" },
+]
+
+[[package]]
 name = "mpmath"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2832,6 +2862,41 @@ transport = [
 ]
 
 [[package]]
+name = "physicalai-bimanual-so101-plugin"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "feetech-servo-sdk" },
+    { name = "numpy" },
+    { name = "physicalai" },
+    { name = "physicalai-studio-plugin" },
+    { name = "pydantic" },
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/b1/65a4d5a12e593e87fabc2e61bfd93a897c096a036f34c0e24ef64a824fef/physicalai_bimanual_so101_plugin-0.3.0.tar.gz", hash = "sha256:b7b2e211561ec7b5e6ff12e3031f130e38804833dd793025d51e424f208101ca", size = 5969006, upload-time = "2026-09-04T07:10:10.786Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/bd/f7ffbe35e3a212e6855a8587a2c9d7d878b4d79ba82ec28ea08736629ade/physicalai_bimanual_so101_plugin-0.3.0-py3-none-any.whl", hash = "sha256:91e64d8fcafa26e58e7203c86780a5e75988a91a472b6046b63f69cf72ebcd89", size = 5965447, upload-time = "2026-09-04T07:10:08.719Z" },
+]
+
+[[package]]
+name = "physicalai-rebot-b601-plugin"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "loguru" },
+    { name = "motorbridge" },
+    { name = "motorbridge-smart-servo" },
+    { name = "numpy" },
+    { name = "physicalai" },
+    { name = "physicalai-studio-plugin" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/21/bf1c67bc01183b56c4460eb464e7acf5c1ae5e3c6dd5e829ebe4df104fb9/physicalai_rebot_b601_plugin-0.5.0.tar.gz", hash = "sha256:17d45ce0dc438979e7451240c3709641d63c34a1400274ebdc760de136ef6f22", size = 38077683, upload-time = "2026-09-04T07:10:21.86Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/ee/6c8f7579cd450c2b95208515c593e1332b00e2028655071bcf7fd8e9295d/physicalai_rebot_b601_plugin-0.5.0-py3-none-any.whl", hash = "sha256:4793e033498bdb7c7c5bcadaa79ac69a1caf02f8e55f5bf01510dd45720dca53", size = 38146041, upload-time = "2026-09-04T07:10:17.69Z" },
+]
+
+[[package]]
 name = "physicalai-studio"
 version = "0.1.0"
 source = { editable = "." }
@@ -2856,6 +2921,8 @@ dependencies = [
     { name = "opencv-python" },
     { name = "packaging" },
     { name = "physicalai", extra = ["capture", "robots", "transport"] },
+    { name = "physicalai-bimanual-so101-plugin" },
+    { name = "physicalai-rebot-b601-plugin" },
     { name = "physicalai-studio-plugin" },
     { name = "physicalai-train", extra = ["pi0", "rldx1", "smolvla"] },
     { name = "psutil" },
@@ -2937,6 +3004,8 @@ requires-dist = [
     { name = "opencv-python" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "physicalai", extras = ["robots", "capture", "transport"], git = "https://github.com/openvinotoolkit/physicalai.git?rev=8e4021703ef43387a835c6647b993cecc069ca85" },
+    { name = "physicalai-bimanual-so101-plugin", specifier = ">=0.3.0" },
+    { name = "physicalai-rebot-b601-plugin", specifier = ">=0.5.0" },
     { name = "physicalai-studio-plugin", editable = "../plugin" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cpu'", editable = "../../library" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cuda'", editable = "../../library" },
