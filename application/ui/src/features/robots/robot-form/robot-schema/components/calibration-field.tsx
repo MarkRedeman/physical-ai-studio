@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { Button, FileTrigger, Flex, Text, View } from '@geti-ui/ui';
 
+import { CalibrationTable } from '../../../calibration-table';
 import { InlineAlert } from '../../../setup-wizard/shared/inline-alert';
 import { asRecord, resolveReference } from '../schema-utils';
 import { FieldSchema } from '../types';
@@ -14,48 +15,6 @@ type CalibrationFieldProps = {
     onChange: (value: unknown) => void;
     valueSchema?: FieldSchema;
     definitions?: Record<string, FieldSchema>;
-};
-
-type CalibrationEntry = {
-    id?: unknown;
-    drive_mode?: unknown;
-    homing_offset?: unknown;
-    range_min?: unknown;
-    range_max?: unknown;
-};
-
-type CalibrationRow = {
-    joint: string;
-    value: CalibrationEntry;
-};
-
-export const asCalibrationRows = (value: Record<string, unknown>): CalibrationRow[] =>
-    Object.entries(value)
-        .map(([joint, entry]) => ({ joint, value: asRecord(entry) }))
-        .sort((left, right) => {
-            const leftId =
-                typeof left.value.id === 'number' && Number.isFinite(left.value.id)
-                    ? left.value.id
-                    : Number.POSITIVE_INFINITY;
-            const rightId =
-                typeof right.value.id === 'number' && Number.isFinite(right.value.id)
-                    ? right.value.id
-                    : Number.POSITIVE_INFINITY;
-
-            if (leftId !== rightId) {
-                return leftId - rightId;
-            }
-            return left.joint.localeCompare(right.joint);
-        });
-
-export const formatCell = (value: unknown) => {
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? String(value) : '-';
-    }
-    if (typeof value === 'string' && value !== '') {
-        return value;
-    }
-    return '-';
 };
 
 export const isExpectedType = (value: unknown, schemaType: string | undefined) => {
@@ -147,7 +106,6 @@ export const CalibrationField = ({
 }: CalibrationFieldProps) => {
     const [error, setError] = useState<string | null>(null);
     const calibration = asRecord(value);
-    const rows = asCalibrationRows(calibration);
     const hasCalibration = Object.keys(calibration).length > 0;
 
     const importCalibration = async (files: FileList | null) => {
@@ -222,38 +180,7 @@ export const CalibrationField = ({
                     padding='size-100'
                     UNSAFE_style={{ borderRadius: 'var(--spectrum-global-dimension-size-50)', overflowX: 'auto' }}
                 >
-                    <table
-                        aria-label='Calibration preview'
-                        style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', lineHeight: '16px' }}
-                    >
-                        <thead>
-                            <tr style={{ color: 'var(--spectrum-global-color-gray-700)', textAlign: 'left' }}>
-                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Joint</th>
-                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>ID</th>
-                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Drive</th>
-                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Offset</th>
-                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Min</th>
-                                <th style={{ padding: '4px 8px', fontWeight: 600 }}>Max</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row) => (
-                                <tr
-                                    key={row.joint}
-                                    style={{ borderTop: '1px solid var(--spectrum-global-color-gray-300)' }}
-                                >
-                                    <td style={{ padding: '4px 8px', color: 'var(--spectrum-global-color-gray-800)' }}>
-                                        {row.joint}
-                                    </td>
-                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.id)}</td>
-                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.drive_mode)}</td>
-                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.homing_offset)}</td>
-                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.range_min)}</td>
-                                    <td style={{ padding: '4px 8px' }}>{formatCell(row.value.range_max)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <CalibrationTable calibration={calibration} ariaLabel='Calibration preview' />
                 </View>
             )}
             {error !== null && <InlineAlert variant='error'>{error}</InlineAlert>}

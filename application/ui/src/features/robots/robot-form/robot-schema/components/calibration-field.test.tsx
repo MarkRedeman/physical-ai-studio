@@ -7,9 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from '../../../../../test-utils/render';
 import { FieldSchema } from '../types';
 import {
-    asCalibrationRows,
     CalibrationField,
-    formatCell,
     isExpectedType,
     validateCalibrationEntry,
     validateCalibrationPayload,
@@ -54,26 +52,6 @@ const ControlledCalibrationField = ({
 };
 
 describe('CalibrationField', () => {
-    it('sorts calibration rows by ID and joint name', () => {
-        expect(
-            asCalibrationRows({
-                wrist_flex: { id: 5 },
-                shoulder_pan: { id: 1 },
-                elbow_flex: { id: 3 },
-                gripper: {},
-                wrist_roll: {},
-            }).map(({ joint }) => joint)
-        ).toEqual(['shoulder_pan', 'elbow_flex', 'wrist_flex', 'gripper', 'wrist_roll']);
-    });
-
-    it('formats only finite numbers and non-empty strings for preview cells', () => {
-        expect(formatCell(10)).toBe('10');
-        expect(formatCell('servo')).toBe('servo');
-        expect(formatCell(Number.NaN)).toBe('-');
-        expect(formatCell('')).toBe('-');
-        expect(formatCell(null)).toBe('-');
-    });
-
     it('validates primitive and object schema value types', () => {
         expect(isExpectedType(1, 'integer')).toBe(true);
         expect(isExpectedType(1.5, 'integer')).toBe(false);
