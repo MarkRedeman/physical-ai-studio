@@ -19,7 +19,7 @@ import {
     schemaDefaults,
     updateObjectField,
 } from './schema-utils';
-import { FieldSchema, JsonSchema, ModelUiOptions, RobotUiItem } from './types';
+import { ContextualInfo, FieldSchema, JsonSchema, ModelUiOptions, RobotUiItem } from './types';
 
 const EMPTY_ITEMS: RobotUiItem[] = [];
 
@@ -76,6 +76,7 @@ type SchemaFormItemsProps = {
 type SchemaFormFieldProps = Omit<SchemaFormItemsProps, 'items' | 'renderUnownedFields'> & {
     name: string;
     field: FieldSchema;
+    info?: ContextualInfo;
 };
 
 const getResolvedField = ({ properties, definitions }: SchemaFormItemsProps, name: string) => {
@@ -95,11 +96,12 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         if (field === undefined) {
             return null;
         }
+        const fieldInfo = !isUiItems(field['x-physicalai-ui']) ? field['x-physicalai-ui']?.info : undefined;
         return (
             <ConnectionField
                 robotType={props.robotType}
                 payload={props.values}
-                options={item}
+                options={{ ...item, info: item.info ?? fieldInfo }}
                 isRequired={isRequiredField(item.bind.connection, field, props.required)}
                 onChange={props.onChange}
             />
@@ -110,11 +112,12 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         if (field === undefined) {
             return null;
         }
+        const fieldInfo = !isUiItems(field['x-physicalai-ui']) ? field['x-physicalai-ui']?.info : undefined;
         return (
             <IpAddressField
                 robotType={props.robotType}
                 payload={props.values}
-                options={item}
+                options={{ ...item, info: item.info ?? fieldInfo }}
                 isRequired={isRequiredField(item.name, field, props.required)}
                 onChange={props.onChange}
             />
@@ -133,6 +136,7 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
             <CalibrationField
                 label={item.label ?? fieldLabel(item.name, field)}
                 description={item.description ?? field.description}
+                info={item.info ?? (!isUiItems(field['x-physicalai-ui']) ? field['x-physicalai-ui']?.info : undefined)}
                 isRequired={isRequiredField(item.name, field, props.required)}
                 value={props.values[item.name]}
                 valueSchema={asFieldSchema(field.additionalProperties)}
@@ -143,7 +147,9 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
     }
     if (item.kind === 'field') {
         const field = props.properties[item.name];
-        return field === undefined ? null : <SchemaFormField {...props} name={item.name} field={field} />;
+        return field === undefined ? null : (
+            <SchemaFormField {...props} name={item.name} field={field} info={item.info} />
+        );
     }
     if (!props.isRenderable(item, props.properties, props.required)) {
         return null;
@@ -222,6 +228,7 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
         <SchemaField
             name={name}
             schema={resolvedField}
+            info={props.info ?? (!isUiItems(fieldUi) ? fieldUi?.info : undefined)}
             value={props.values[name]}
             isRequired={isRequired}
             onChange={(value) => props.onChange(name, value)}
