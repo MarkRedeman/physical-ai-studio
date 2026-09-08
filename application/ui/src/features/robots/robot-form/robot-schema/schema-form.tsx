@@ -13,6 +13,7 @@ import {
     asRecord,
     EMPTY_DEFINITIONS,
     EMPTY_PROPERTIES,
+    fieldContextualInfo,
     fieldLabel,
     isRequiredField,
     resolveReference,
@@ -96,12 +97,11 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         if (field === undefined) {
             return null;
         }
-        const fieldInfo = !isUiItems(field['x-physicalai-ui']) ? field['x-physicalai-ui']?.info : undefined;
         return (
             <ConnectionField
                 robotType={props.robotType}
                 payload={props.values}
-                options={{ ...item, info: item.info ?? fieldInfo }}
+                options={{ ...item, info: item.info ?? fieldContextualInfo(field) }}
                 isRequired={isRequiredField(item.bind.connection, field, props.required)}
                 onChange={props.onChange}
             />
@@ -112,12 +112,11 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
         if (field === undefined) {
             return null;
         }
-        const fieldInfo = !isUiItems(field['x-physicalai-ui']) ? field['x-physicalai-ui']?.info : undefined;
         return (
             <IpAddressField
                 robotType={props.robotType}
                 payload={props.values}
-                options={{ ...item, info: item.info ?? fieldInfo }}
+                options={{ ...item, info: item.info ?? fieldContextualInfo(field) }}
                 isRequired={isRequiredField(item.name, field, props.required)}
                 onChange={props.onChange}
             />
@@ -136,7 +135,7 @@ const SchemaFormItem = ({ item, ...props }: SchemaFormItemProps) => {
             <CalibrationField
                 label={item.label ?? fieldLabel(item.name, field)}
                 description={item.description ?? field.description}
-                info={item.info ?? (!isUiItems(field['x-physicalai-ui']) ? field['x-physicalai-ui']?.info : undefined)}
+                info={item.info ?? fieldContextualInfo(field)}
                 isRequired={isRequiredField(item.name, field, props.required)}
                 value={props.values[item.name]}
                 valueSchema={asFieldSchema(field.additionalProperties)}
@@ -228,7 +227,7 @@ const SchemaFormField = ({ name, field, ...props }: SchemaFormFieldProps) => {
         <SchemaField
             name={name}
             schema={resolvedField}
-            info={props.info ?? (!isUiItems(fieldUi) ? fieldUi?.info : undefined)}
+            info={props.info ?? fieldContextualInfo(resolvedField)}
             value={props.values[name]}
             isRequired={isRequired}
             onChange={(value) => props.onChange(name, value)}

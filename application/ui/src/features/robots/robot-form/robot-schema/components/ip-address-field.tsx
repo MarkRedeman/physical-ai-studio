@@ -31,7 +31,9 @@ export const IpAddressField = ({ robotType, payload, options, isRequired, onChan
                     isRequired={isRequired}
                     label={options.label ?? 'IP address'}
                     description={options.description}
-                    contextualHelp={<FieldContextualHelp info={options.info} />}
+                    contextualHelp={
+                        options.info === undefined ? undefined : <FieldContextualHelp info={options.info} />
+                    }
                     width='100%'
                     value={value}
                     onChange={(next) => onChange(options.name, next)}

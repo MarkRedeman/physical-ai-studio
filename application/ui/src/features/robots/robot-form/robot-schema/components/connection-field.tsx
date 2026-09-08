@@ -96,7 +96,9 @@ export const ConnectionField = ({ robotType, payload, options, isRequired, onCha
                 <ComboBoxField
                     label={options.label ?? 'Connection'}
                     description={options.description}
-                    contextualHelp={<FieldContextualHelp info={options.info} />}
+                    contextualHelp={
+                        options.info === undefined ? undefined : <FieldContextualHelp info={options.info} />
+                    }
                     value={value}
                     devices={discover.data ?? []}
                     allowsCustomValue={options.manual_entry !== false}

@@ -8,7 +8,7 @@ type FieldContextualHelpProps = {
 
 export const FieldContextualHelp = ({ info }: FieldContextualHelpProps) => {
     if (info === undefined) {
-        return undefined;
+        return null;
     }
 
     return (
