@@ -6,7 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { render } from '../../../../../test-utils/render';
 import { FieldSchema } from '../types';
-import { CalibrationField } from './calibration-field';
+import {
+    asCalibrationRows,
+    CalibrationField,
+    formatCell,
+    isExpectedType,
+    validateCalibrationEntry,
+    validateCalibrationPayload,
+} from './calibration-field';
 
 const jointCalibrationSchema: FieldSchema = {
     type: 'object',
@@ -47,6 +54,59 @@ const ControlledCalibrationField = ({
 };
 
 describe('CalibrationField', () => {
+    it('sorts calibration rows by ID and joint name', () => {
+        expect(
+            asCalibrationRows({
+                wrist_flex: { id: 5 },
+                shoulder_pan: { id: 1 },
+                elbow_flex: { id: 3 },
+                gripper: {},
+                wrist_roll: {},
+            }).map(({ joint }) => joint)
+        ).toEqual(['shoulder_pan', 'elbow_flex', 'wrist_flex', 'gripper', 'wrist_roll']);
+    });
+
+    it('formats only finite numbers and non-empty strings for preview cells', () => {
+        expect(formatCell(10)).toBe('10');
+        expect(formatCell('servo')).toBe('servo');
+        expect(formatCell(Number.NaN)).toBe('-');
+        expect(formatCell('')).toBe('-');
+        expect(formatCell(null)).toBe('-');
+    });
+
+    it('validates primitive and object schema value types', () => {
+        expect(isExpectedType(1, 'integer')).toBe(true);
+        expect(isExpectedType(1.5, 'integer')).toBe(false);
+        expect(isExpectedType(Number.NaN, 'number')).toBe(false);
+        expect(isExpectedType('servo', 'string')).toBe(true);
+        expect(isExpectedType(false, 'boolean')).toBe(true);
+        expect(isExpectedType({}, 'object')).toBe(true);
+        expect(isExpectedType([], 'object')).toBe(false);
+        expect(isExpectedType(null, 'object')).toBe(false);
+    });
+
+    it('validates calibration entries against the value schema', () => {
+        const validEntry = { id: 1, drive_mode: 0, homing_offset: 10, range_min: -100, range_max: 100 };
+
+        expect(validateCalibrationEntry(validEntry, jointCalibrationSchema, {})).toBeNull();
+        expect(validateCalibrationEntry([], jointCalibrationSchema, {})).toBe(
+            'Each calibration entry must be a JSON object.'
+        );
+        expect(validateCalibrationEntry({ ...validEntry, id: null }, jointCalibrationSchema, {})).toBe(
+            "Calibration entries must include 'id'."
+        );
+        expect(validateCalibrationEntry({ ...validEntry, id: '1' }, jointCalibrationSchema, {})).toBe(
+            "Calibration field 'id' has an invalid value type."
+        );
+    });
+
+    it('validates calibration payloads as joint-name keyed objects', () => {
+        expect(validateCalibrationPayload([], jointCalibrationSchema, {})).toBe(
+            'Calibration JSON must be an object keyed by joint name.'
+        );
+        expect(validateCalibrationPayload({ shoulder_pan: { id: 1 } }, undefined, {})).toBeNull();
+    });
+
     it('shows optional marker when field is not required', () => {
         render(<ControlledCalibrationField isRequired={false} />);
 
@@ -93,8 +153,22 @@ describe('CalibrationField', () => {
             throw new Error('Expected calibration file input to be rendered.');
         }
 
-        await user.upload(fileInput as HTMLInputElement, new File(['{"bad_json":'], 'broken.json'));
+        await user.upload(
+            fileInput as HTMLInputElement,
+            new File(['{"bad_json":'], 'broken.json', { type: 'application/json' })
+        );
 
         expect(await screen.findByText('Could not parse JSON. Upload a valid calibration .json file.')).toBeVisible();
+    });
+
+    it('clears calibration to an empty object', async () => {
+        const onChange = vi.fn();
+        const user = userEvent.setup();
+
+        render(<ControlledCalibrationField initialValue={{ shoulder_pan: { id: 1 } }} onChange={onChange} />);
+
+        await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+        expect(onChange).toHaveBeenCalledWith({});
     });
 });

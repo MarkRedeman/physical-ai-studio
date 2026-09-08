@@ -5,7 +5,7 @@ This note summarizes the new calibration upload flow added to Studio robot forms
 ## What was added
 
 - UI now includes a new `CalibrationField` component in `application/ui/src/features/robots/robot-form/robot-schema/components/calibration-field.tsx`.
-- The schema form renderer (`schema-form.tsx`) now detects SO101-style calibration map fields and renders an upload control instead of skipping the raw object field.
+- The schema form renderer (`schema-form.tsx`) renders an upload control for fields explicitly declared with a `{"kind": "calibration"}` item in `x-physicalai-ui` metadata.
 - Users can upload a `.json` calibration file, Studio parses it, validates basic structure, and writes it into the payload field.
 - For `BimanualSO101`, there are two independent upload controls:
   - `left_calibration`
@@ -17,13 +17,13 @@ Upload JSON should match the existing SO101 export shape (joint-name keyed objec
 
 ```json
 {
-    "shoulder_pan": {
-        "id": 1,
-        "drive_mode": 0,
-        "homing_offset": 10,
-        "range_min": -100,
-        "range_max": 100
-    }
+  "shoulder_pan": {
+    "id": 1,
+    "drive_mode": 0,
+    "homing_offset": 10,
+    "range_min": -100,
+    "range_max": 100
+  }
 }
 ```
 

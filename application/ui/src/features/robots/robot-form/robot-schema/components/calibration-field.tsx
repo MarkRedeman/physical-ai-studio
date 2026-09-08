@@ -29,7 +29,7 @@ type CalibrationRow = {
     value: CalibrationEntry;
 };
 
-const asCalibrationRows = (value: Record<string, unknown>): CalibrationRow[] =>
+export const asCalibrationRows = (value: Record<string, unknown>): CalibrationRow[] =>
     Object.entries(value)
         .map(([joint, entry]) => ({ joint, value: asRecord(entry) }))
         .sort((left, right) => {
@@ -48,7 +48,7 @@ const asCalibrationRows = (value: Record<string, unknown>): CalibrationRow[] =>
             return left.joint.localeCompare(right.joint);
         });
 
-const formatCell = (value: unknown) => {
+export const formatCell = (value: unknown) => {
     if (typeof value === 'number') {
         return Number.isFinite(value) ? String(value) : '-';
     }
@@ -58,7 +58,7 @@ const formatCell = (value: unknown) => {
     return '-';
 };
 
-const isExpectedType = (value: unknown, schemaType: string | undefined) => {
+export const isExpectedType = (value: unknown, schemaType: string | undefined) => {
     if (schemaType === undefined) {
         return true;
     }
@@ -80,7 +80,7 @@ const isExpectedType = (value: unknown, schemaType: string | undefined) => {
     return true;
 };
 
-const validateCalibrationEntry = (
+export const validateCalibrationEntry = (
     entry: unknown,
     valueSchema: FieldSchema | undefined,
     definitions: Record<string, FieldSchema>
@@ -117,7 +117,7 @@ const validateCalibrationEntry = (
     return null;
 };
 
-const validateCalibrationPayload = (
+export const validateCalibrationPayload = (
     value: unknown,
     valueSchema: FieldSchema | undefined,
     definitions: Record<string, FieldSchema>
@@ -207,7 +207,7 @@ export const CalibrationField = ({
                         variant='secondary'
                         onPress={() => {
                             setError(null);
-                            onChange(null);
+                            onChange({});
                         }}
                     >
                         Clear

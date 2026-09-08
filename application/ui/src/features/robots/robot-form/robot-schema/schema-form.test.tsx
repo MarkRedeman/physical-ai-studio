@@ -894,7 +894,10 @@ describe('SchemaForm', () => {
         if (fileInput === null) {
             throw new Error('Expected calibration file input to be rendered.');
         }
-        await user.upload(fileInput as HTMLInputElement, new File([JSON.stringify(payload)], 'calibration.json'));
+        await user.upload(
+            fileInput as HTMLInputElement,
+            new File([JSON.stringify(payload)], 'calibration.json', { type: 'application/json' })
+        );
 
         const rows = screen.getAllByRole('row');
         expect(rows[1]).toHaveTextContent('shoulder_pan');
