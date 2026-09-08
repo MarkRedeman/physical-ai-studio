@@ -1,6 +1,6 @@
 # Robot Plugins
 
-Robot plugins add robot to Physical AI Studio without requiring changes to
+Robot plugins add robots to Physical AI Studio without requiring changes to
 Studio itself. A plugin provides a Python entry point, one or more catalog
 definitions, and the code needed to build and connect each robot.
 
@@ -186,6 +186,17 @@ The `type` value must not be casually renamed. It is stored in project data and
 must remain unique across all installed plugins.
 
 The full SDK reference is in [`application/plugin/README.md`](../plugin/README.md).
+
+## Using A Robot Plugin With The Physical AI Runtime
+
+A Studio plugin builds and returns a standard `physicalai.robot.interface.Robot`
+driver. When you download an environment's runtime configuration for
+teleoperation, or download a model export with its runtime recipe, Studio
+serializes that driver into `runtime.yaml`. The resulting configuration can be
+run with `physicalai run` on a machine with the plugin package installed.
+
+Install the same plugin distribution in the Physical AI Runtime environment
+before running the downloaded configuration.
 
 ## Render The Robot Form
 

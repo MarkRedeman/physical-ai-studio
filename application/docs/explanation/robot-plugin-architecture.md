@@ -2,8 +2,10 @@
 
 Physical AI Studio uses Python packages to extend its robot catalog without
 embedding every robot driver in Studio. A plugin owns the driver and its
-connection behavior. Studio owns discovery, persistence, configuration forms,
-and runtime orchestration.
+connection behavior. Studio discovers plugin packages and owns persistence,
+configuration forms, and runtime orchestration. Each plugin builds a
+`physicalai.robot.interface.Robot` driver and is responsible for discovering
+and connecting its physical devices.
 
 For installation and plugin development instructions, see
 [Robot Plugins](../robot-plugins.md). This document explains the internal
@@ -16,6 +18,7 @@ boundaries and the reasons behind them.
 - [Installation lifecycle](#installation-lifecycle)
 - [Discovery](#discovery)
 - [Catalog contract](#catalog-contract)
+- [Physical AI framework use](#physical-ai-framework-use)
 - [Schema-driven forms](#schema-driven-forms)
 - [Runtime construction](#runtime-construction)
 - [Assets](#assets)
@@ -147,7 +150,9 @@ The manifest and entry points serve different purposes:
 
 ## Catalog Contract
 
-`studio_catalog.py` is the boundary between plugin code and Studio:
+`studio_catalog.py` is a module in the plugin package that contains the
+callable named by its `physicalai.studio.catalog_plugins` entry point. It is the
+boundary between plugin code and Studio:
 
 ```python
 def register_physicalai_studio_plugin(registry) -> None:
@@ -178,6 +183,20 @@ duplicate types, invalid payload models, or invalid form metadata prevent the
 affected definition from being usable. A stable `type` is particularly
 important because project rows store it and later use it to select the correct
 payload and builder.
+
+## Physical AI Framework Use
+
+`robot_builder` returns a standard `physicalai.robot.interface.Robot` driver.
+The plugin package can consequently also be installed and used directly with
+the Physical AI framework; Studio only adds catalog discovery, persisted
+payloads, and its configuration UI around that driver. The runtime uses the
+driver's configured class path to construct the robot, so the plugin package
+must be installed in the runtime environment. Update any `# CHANGE_ME` device
+paths in a downloaded runtime configuration for the target machine before use.
+
+Studio-specific pieces, such as the catalog entry point, payload form metadata,
+and `RobotProbe`, are used only by Studio. They do not prevent the driver from
+being used by the Physical AI Runtime.
 
 ## Schema-Driven Forms
 
