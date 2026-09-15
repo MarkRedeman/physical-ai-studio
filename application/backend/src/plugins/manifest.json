@@ -55,13 +55,5 @@
         "role": "leader"
       }
     ]
-  },
-  {
-    "id": "physicalai-lerobot-plugin",
-    "name": "LeRobot Robot Plugin",
-    "description": "Robot and teleoperator configurations discovered from LeRobot.",
-    "repo_url": "https://github.com/openvinotoolkit/physicalai",
-    "install_source": "physicalai-lerobot-plugin>=0.3.1",
-    "robots": []
   }
 ]
