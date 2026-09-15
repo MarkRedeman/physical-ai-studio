@@ -111,7 +111,6 @@ serial discovery, payload validation, URDF assets, and driver builders.
 
 
 [physicalai-packages]: https://github.com/openvinotoolkit/physicalai/tree/main/packages
-[physicalai-rebot-b601-plugin]: https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-rebot-b601-plugin
 
 Install the SDK used by a plugin with:
 
@@ -186,7 +185,7 @@ The `type` value must not be casually renamed. It is stored in project data and
 must remain unique across all installed plugins.
 
 The full SDK reference is in
-[`openvinotoolkit/physicalai/packages/physicalai-studio-plugin/README.md`](https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-studio-plugin/README.md).
+[`openvinotoolkit/physicalai/packages/physicalai-studio-plugin/README.md`](https://github.com/openvinotoolkit/physicalai/blob/main/packages/physicalai-studio-plugin/README.md).
 
 ## Using A Robot Plugin With The Physical AI Runtime
 

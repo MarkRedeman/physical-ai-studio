@@ -8,7 +8,7 @@ license: Apache-2.0
 
 Build the Physical AI robot driver independently before adding Studio support. A plugin owns its driver, device integration, Pydantic payloads, catalog definitions, and optional assets. Studio owns project persistence, generated configuration forms, runtime orchestration, and the curated Plugins page.
 
-Read `application/docs/robot-plugins.md` and the [`physicalai-studio-plugin` SDK README](https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-studio-plugin/README.md) before editing. For complete plugin examples, use the packages under [`openvinotoolkit/physicalai/packages`](https://github.com/openvinotoolkit/physicalai/tree/main/packages), including [`physicalai-rebot-b601-plugin`](https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-rebot-b601-plugin). Use Studio's built-in network robot implementation at `application/backend/src/robots/catalog/widowxai.py` as a schema example.
+Read `application/docs/robot-plugins.md` and the [`physicalai-studio-plugin` SDK README](https://github.com/openvinotoolkit/physicalai/blob/main/packages/physicalai-studio-plugin/README.md) before editing. For complete plugin examples, use the packages under [`openvinotoolkit/physicalai/packages`](https://github.com/openvinotoolkit/physicalai/tree/main/packages), including [`physicalai-rebot-b601-plugin`](https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-rebot-b601-plugin). Use Studio's built-in network robot implementation at `application/backend/src/robots/catalog/widowxai.py` as a schema example.
 
 ## Workflow
 
@@ -123,7 +123,7 @@ prek run --all-files
 ## References
 
 - `application/docs/robot-plugins.md` - installation, catalog, form, manifest, and troubleshooting contract.
-- [`openvinotoolkit/physicalai/packages/physicalai-studio-plugin/README.md`](https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-studio-plugin/README.md) - Studio plugin SDK types and examples.
+- [`openvinotoolkit/physicalai/packages/physicalai-studio-plugin/README.md`](https://github.com/openvinotoolkit/physicalai/blob/main/packages/physicalai-studio-plugin/README.md) - Studio plugin SDK types and examples.
 - `application/backend/src/api/robot_catalog.py` - live catalog, schema, probe, and asset endpoints.
 - `application/backend/src/robots/catalog/widowxai.py` - built-in single-arm and bimanual network payload example.
 - [Physical AI Runtime robot-integration skill](https://github.com/openvinotoolkit/physicalai/blob/main/skills/runtime/physicalai-runtime-adding-a-robot-integration/SKILL.md) - Runtime-only driver workflow.
