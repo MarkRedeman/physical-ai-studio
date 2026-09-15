@@ -105,13 +105,13 @@ physicalai-my-robot-plugin/
 └── tests/
 ```
 
-The [physicalai-plugins repository][physicalai-plugins] contains complete
-examples. In particular, the ReBot package demonstrates multiple robot types,
-serial discovery, payload validation, URDF assets, and driver builders. The
-bimanual SO-101, LeKiwi, LeRobot, and MuJoCo packages demonstrate other common
-patterns.
+The packages in [`openvinotoolkit/physicalai/packages`][physicalai-packages]
+contain complete examples. These packages demonstrates multiple robot types,
+serial discovery, payload validation, URDF assets, and driver builders. 
 
-[physicalai-plugins]: https://github.com/MarkRedeman/physicalai-plugins
+
+[physicalai-packages]: https://github.com/openvinotoolkit/physicalai/tree/main/packages
+[physicalai-rebot-b601-plugin]: https://github.com/openvinotoolkit/physicalai/tree/main/packages/physicalai-rebot-b601-plugin
 
 Install the SDK used by a plugin with:
 
