@@ -147,6 +147,29 @@ RUN --mount=type=cache,id=uv-xpu,target=/root/.cache/uv \
     --mount=type=bind,from=plugin,target=/app/application/plugin \
     uv sync --frozen --no-dev --no-editable --no-install-project --extra xpu
 
+# Rebuild PyAV from source against the distro FFmpeg so Intel QSV works.
+#
+# The PyPI `av` wheel bundles its own FFmpeg compiled without
+# --enable-libvpl/--enable-vaapi, so the *_qsv / *_vaapi codecs are not
+# registered even though the XPU runtime image ships the oneVPL stack.
+# PyAV v15 links the *system* FFmpeg via pkg-config when built from source;
+# Debian's packaged FFmpeg enables libvpl (QSV), so rebuilding against it
+# makes h264_qsv, hevc_qsv, av1_qsv, and the *_vaapi encoders available.
+# Keep the version pinned to match the lockfile (av 15.1.0) and avoid
+# pulling a newer, incompatible release.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libvpl-dev \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswscale-dev \
+        libswresample-dev \
+        libavdevice-dev \
+        libavfilter-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && uv pip install --python .venv/bin/python --no-binary av av==15.1.0
+
 # Remove test-only packages that executorch ships as unconditional runtime dependencies.
 RUN uv pip uninstall --python .venv/bin/python \
     pytest pluggy iniconfig \

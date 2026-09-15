@@ -23,3 +23,33 @@
 .saved {
     color: var(--spectrum-global-color-gray-700);
 }
+
+.presetDescription {
+    display: block;
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.summary {
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-75);
+    padding: var(--spectrum-global-dimension-size-200);
+}
+
+.summaryLabel {
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.summaryValue {
+    font-weight: var(--spectrum-global-font-weight-semibold);
+}
+
+.customizeHint {
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.wandbSettings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-200);
+    padding-left: var(--spectrum-global-dimension-size-400);
+}
