@@ -20,9 +20,10 @@ from uuid import UUID, uuid4
 
 import pytest
 from physicalai.config import Config, instantiate
+from physicalai_trossen_plugin import BimanualWidowXAI, WidowXAI
+from physicalai_trossen_plugin.studio_catalog import _build_trossen_bimanual_driver, _build_trossen_single_arm_driver
 
 from robots.catalog.so101 import _build_so101_driver
-from robots.catalog.widowxai import _build_trossen_bimanual_driver, _build_trossen_single_arm_driver
 from schemas.robot import RobotAdapter
 
 DISPLAY_NAME = "My SO101 Arm #1"
@@ -164,6 +165,7 @@ class TestTrossenBuilders:
 
         driver = await _build_trossen_bimanual_driver(robot, _StubFactory())
 
+        assert isinstance(driver, BimanualWidowXAI)
         # A single owner holds both arms, rather than one SharedRobot per arm.
         recipe = Config.from_instance(driver)
         assert recipe["class_path"] == "physicalai.robot.BimanualWidowXAI"

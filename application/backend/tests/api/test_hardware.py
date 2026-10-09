@@ -147,7 +147,9 @@ class TestHardwareApi:
 
         try:
             client = TestClient(app)
-            with patch("robots.catalog.widowxai.identify_trossen_robot_visually", new_callable=AsyncMock) as identify:
+            with patch(
+                "physicalai_trossen_plugin.studio_catalog.identify_trossen_robot_visually", new_callable=AsyncMock
+            ) as identify:
                 response = client.post(
                     "/api/robots/catalog/Trossen_WidowXAI_Follower/identify",
                     json={"connection_string": "192.168.1.100"},
@@ -158,5 +160,4 @@ class TestHardwareApi:
         assert response.status_code == 200, response.text
         identify.assert_awaited_once()
         (robot_arg,) = identify.await_args.args
-        assert robot_arg.type == "Trossen_WidowXAI_Follower"
-        assert robot_arg.payload.connection_string == "192.168.1.100"
+        assert robot_arg.connection_string == "192.168.1.100"

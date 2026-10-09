@@ -42,7 +42,7 @@ def gen_api(target_path: str) -> None:
     show_default=True,
 )
 def sync_robot_assets(target_dir: str) -> None:
-    """Sync SO101 and WidowX assets into backend static storage."""
+    """Sync Studio-owned SO101 assets into backend static storage."""
     try:
         sync_builtin_robot_assets(Path(target_dir))
         click.echo("✓ Robot assets synced successfully")
