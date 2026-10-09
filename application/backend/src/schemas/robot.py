@@ -3,7 +3,6 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, TypeAdapter, create_model
 
 from robots.catalog.registry import RobotCatalogRegistry
-from robots.catalog.so101 import SO101Robot
 from schemas.robot_type import BaseRobot, RobotType
 
 __all__ = [
@@ -13,7 +12,6 @@ __all__ = [
     "RobotType",
     "RobotWithConnectionState",
     "RobotWithConnectionStateAdapter",
-    "SO101Robot",
     "UnavailableRobot",
     "UnavailableRobotWithConnectionState",
 ]

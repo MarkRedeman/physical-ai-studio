@@ -37,6 +37,7 @@ dependencies = [
   "huggingface-hub>=0.27",
   "psutil~=7.2",
   "physicalai-studio-plugin~=0.3.0",
+  "physicalai-so101-plugin",
   "physicalai-trossen-plugin",
   "asyncssh~=2.24",
   "sigstore>=4.0,<5",
@@ -125,6 +126,7 @@ explicit = false
 [tool.uv.sources]
 physicalai-train = { path = "../../library", editable = true }
 physicalai = { path = "../../../physicalai", editable = true }
+physicalai-so101-plugin = { path = "../../../physicalai/packages/physicalai-so101-plugin", editable = true }
 physicalai-trossen-plugin = { path = "../../../physicalai/packages/physicalai-trossen-plugin", editable = true }
 # Keep torchao on PyPI for all extras.
 # The XPU index publishes `torchao` local-version wheels (e.g. `+xpu`) that can
