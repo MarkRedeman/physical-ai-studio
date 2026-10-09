@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import settings as settings_module
+from build_info import get_build_info
 from settings import Settings, get_default_storage_dir, load_user_settings_file, merge_user_settings
 
 
@@ -39,6 +40,18 @@ def test_application_version_comes_from_distribution_metadata(monkeypatch) -> No
     monkeypatch.setattr(settings_module, "distribution_version", lambda name: "0.3.0")
 
     assert Settings().version == "0.3.0"
+
+
+def test_build_info_uses_injected_metadata(monkeypatch) -> None:
+    monkeypatch.setenv("STUDIO_GIT_SHA", "a" * 40)
+    monkeypatch.setenv("STUDIO_GIT_COMMIT_DATE", "2026-10-09T09:46:34Z")
+    monkeypatch.setenv("STUDIO_GIT_TAG", "app/v0.3.0")
+    monkeypatch.setenv("STUDIO_GIT_DIRTY", "true")
+
+    assert get_build_info().git_sha == "a" * 40
+    assert get_build_info().git_commit_date == "2026-10-09T09:46:34Z"
+    assert get_build_info().git_tag == "app/v0.3.0"
+    assert get_build_info().git_dirty is True
 
 
 def test_data_dir_is_storage_backed_even_with_data_dir_env(monkeypatch, tmp_path: Path) -> None:
