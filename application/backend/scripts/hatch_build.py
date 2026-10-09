@@ -9,11 +9,7 @@ BRANCH = "main"
 
 _RELATIVE_URL_RE = re.compile(r"(!?)\[([^\]]*)\]\(([^)]+)\)")
 _IMG_SRC_RE = re.compile(r'(<img\s[^>]*src=")([^"]+)(")')
-_REQUIRED_ROBOT_ASSET_PATHS = (
-    Path("SO101/so101_new_calib.urdf"),
-    Path("widowx/urdf/generated/wxai/wxai_follower.urdf"),
-    Path("widowx/urdf/generated/stationary_ai.urdf"),
-)
+_REQUIRED_ROBOT_ASSET_PATHS = (Path("SO101/so101_new_calib.urdf"),)
 
 
 def _resolve_relative(url: str) -> str:

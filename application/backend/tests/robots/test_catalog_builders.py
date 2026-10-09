@@ -20,9 +20,10 @@ from uuid import UUID, uuid4
 
 import pytest
 from physicalai.config import instantiate, to_config
+from physicalai_trossen_plugin import BimanualWidowXAI, WidowXAI
+from physicalai_trossen_plugin.studio_catalog import _build_trossen_bimanual_driver, _build_trossen_single_arm_driver
 
 from robots.catalog.so101 import _build_so101_driver
-from robots.catalog.widowxai import _build_trossen_bimanual_driver, _build_trossen_single_arm_driver
 from schemas.robot import RobotAdapter
 
 DISPLAY_NAME = "My SO101 Arm #1"
@@ -144,8 +145,9 @@ class TestTrossenBuilders:
 
         driver = await _build_trossen_single_arm_driver(robot, _StubFactory())
 
+        assert isinstance(driver, WidowXAI)
         assert to_config(driver) == {
-            "class_path": "physicalai.robot.WidowXAI",
+            "class_path": "physicalai_trossen_plugin.WidowXAI",
             "init_args": {"ip": "192.168.1.2", "role": "follower"},
         }
 
@@ -164,9 +166,10 @@ class TestTrossenBuilders:
 
         driver = await _build_trossen_bimanual_driver(robot, _StubFactory())
 
+        assert isinstance(driver, BimanualWidowXAI)
         # A single owner holds both arms, rather than one SharedRobot per arm.
         recipe = to_config(driver)
-        assert recipe["class_path"] == "physicalai.robot.BimanualWidowXAI"
+        assert recipe["class_path"] == "physicalai_trossen_plugin.BimanualWidowXAI"
         assert recipe["init_args"]["left"]["init_args"]["ip"] == "192.168.1.2"
         assert recipe["init_args"]["right"]["init_args"]["ip"] == "192.168.1.3"
 

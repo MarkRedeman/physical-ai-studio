@@ -66,6 +66,22 @@ def test_registry_skips_bad_plugins_and_continues_loading_remaining_plugins() ->
     assert any(definition.type == "SO101_Follower" for definition in definitions)
 
 
+def test_trossen_types_are_discovered_from_the_installed_plugin() -> None:
+    registry = RobotCatalogRegistry()
+
+    expected_types = {
+        "Trossen_WidowXAI_Follower",
+        "Trossen_WidowXAI_Leader",
+        "Trossen_Bimanual_WidowXAI_Follower",
+        "Trossen_Bimanual_WidowXAI_Leader",
+    }
+
+    assert expected_types <= {definition.type for definition in registry.list_definitions()}
+    assert {registry.get_plugin_distribution(robot_type) for robot_type in expected_types} == {
+        "physicalai-trossen-plugin"
+    }
+
+
 # include_velocities decides whether ".vel" keys join the robot's feature list,
 # which sets the recorded dataset schema and the observation vector fed to a
 # policy. Changing it silently makes existing checkpoints incompatible with the
@@ -81,7 +97,7 @@ def test_registry_skips_bad_plugins_and_continues_loading_remaining_plugins() ->
         ("Trossen_Bimanual_WidowXAI_Leader", True, 0.1),
     ],
 )
-def test_builtin_adapter_options_are_pinned(
+def test_catalog_adapter_options_are_pinned(
     robot_type: str, include_velocities: bool, external_effort_gain: float | None
 ) -> None:
     definition = RobotCatalogRegistry().get_definition(robot_type)

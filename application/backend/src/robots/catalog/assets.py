@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
-from . import so101, widowxai
+from . import so101
 
 if TYPE_CHECKING:
     from physicalai_studio_plugin import RobotCatalogDefinition
@@ -21,7 +21,7 @@ def get_builtin_robot_assets_root() -> Path:
 def builtin_robot_assets_are_available() -> bool:
     """Return whether all built-in robot URDF assets are present locally."""
     root = get_builtin_robot_assets_root()
-    definitions = so101.get_definitions() + widowxai.get_definitions()
+    definitions = so101.get_definitions()
 
     return all(
         definition.asset is not None and (root / definition.asset.urdf_relative_path).is_file()
@@ -50,10 +50,12 @@ def resolve_robot_relative_asset_path(definition: RobotCatalogDefinition, asset_
             detail="Assets are unavailable for the requested robot type.",
         )
 
-    return _resolve_robot_path(
-        asset_path=definition.asset.urdf_relative_path.parts[0] / asset_path,
-        definition=definition,
-    )
+    # Mesh URLs are resolved from their declared URDF package root. This is
+    # usually the top-level directory named by the URDF path, but plugins can
+    # resolve package roots inside their installed distributions.
+    package_roots = iter(definition.asset.packages.values())
+    asset_root = next(package_roots, definition.asset.urdf_relative_path.parts[0])
+    return _resolve_robot_path(asset_path=asset_root / asset_path, definition=definition)
 
 
 def _resolve_robot_path(asset_path: Path, definition: RobotCatalogDefinition) -> Path:
