@@ -128,7 +128,9 @@ class TestHardwareApi:
 
         try:
             client = TestClient(app)
-            with patch("robots.catalog.so101.identify_so101_robot_visually", new_callable=Mock) as identify:
+            with patch(
+                "physicalai_so101_plugin.studio_catalog.identify_so101_robot_visually", new_callable=Mock
+            ) as identify:
                 response = client.post(
                     "/api/robots/catalog/SO101_Follower/identify",
                     json={"connection_string": "/dev/ttyUSB0", "serial_number": ""},
@@ -140,6 +142,26 @@ class TestHardwareApi:
         identify.assert_called_once()
         (connection_string,) = identify.call_args.args
         assert connection_string == "/dev/ttyUSB0"
+
+    def test_identify_so101_maps_plugin_overload_error(self):
+        robot_manager = _StubRobotManager([SerialPortInfo(connection_string="/dev/ttyUSB0", serial_number=None)])
+        app.dependency_overrides[get_robot_manager_service] = lambda: robot_manager
+
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            with patch(
+                "physicalai_so101_plugin.studio_catalog.identify_so101_robot_visually",
+                side_effect=RuntimeError("Robot identify failed: gripper overload protection tripped."),
+            ):
+                response = client.post(
+                    "/api/robots/catalog/SO101_Follower/identify",
+                    json={"connection_string": "/dev/ttyUSB0", "serial_number": ""},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 400, response.text
+        assert response.json()["error_code"] == "robot_identify_error"
 
     def test_identify_trossen_calls_trossen_identifier(self):
         robot_manager = _StubRobotManager([])
