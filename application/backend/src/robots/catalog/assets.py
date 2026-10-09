@@ -5,28 +5,12 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
-from . import so101
-
 if TYPE_CHECKING:
     from physicalai_studio_plugin import RobotCatalogDefinition
 
+# Kept as a fallback for legacy third-party catalog definitions that do not
+# provide an asset root resolver. Studio no longer ships built-in robot assets.
 BUILTIN_ROBOT_ASSETS_ROOT = Path(__file__).resolve().parents[2] / "static" / "robot-assets"
-
-
-def get_builtin_robot_assets_root() -> Path:
-    """Return the backend-owned directory for built-in robot assets."""
-    return BUILTIN_ROBOT_ASSETS_ROOT
-
-
-def builtin_robot_assets_are_available() -> bool:
-    """Return whether all built-in robot URDF assets are present locally."""
-    root = get_builtin_robot_assets_root()
-    definitions = so101.get_definitions()
-
-    return all(
-        definition.asset is not None and (root / definition.asset.urdf_relative_path).is_file()
-        for definition in definitions
-    )
 
 
 def resolve_robot_urdf_path(definition: RobotCatalogDefinition) -> Path:
@@ -66,7 +50,7 @@ def _resolve_robot_path(asset_path: Path, definition: RobotCatalogDefinition) ->
             detail="Assets are unavailable for the requested robot type.",
         )
 
-    root = get_builtin_robot_assets_root().resolve() if asset.root_resolver is None else asset.root_resolver()
+    root = BUILTIN_ROBOT_ASSETS_ROOT.resolve() if asset.root_resolver is None else asset.root_resolver()
 
     requested_path = (root / asset_path).resolve()
     if not requested_path.is_relative_to(root):
