@@ -65,6 +65,8 @@ runs:
       shell: bash
       run: |
         echo "commit-date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+        # Promoted releases retag their RC image without rebuilding it. Record the
+        # source tag that existed when this image was actually built.
         echo "tag=$(git tag --points-at HEAD | grep '^app/v' | head -n1 || true)" >> "$GITHUB_OUTPUT"
 
     - name: Build Docker image

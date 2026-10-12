@@ -3,9 +3,10 @@
 
 """Resolve the source provenance of the running Studio application."""
 
+import asyncio
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,7 +30,8 @@ def _run_git(*args: str) -> str | None:
         return None
 
     try:
-        result = subprocess.run(  # noqa: S603 - arguments are fixed literals from this module
+        # The executable is discovered locally and every argument is a fixed literal from this module.
+        result = subprocess.run(  # noqa: S603  # nosec B603
             [git_path, *args],
             cwd=_SOURCE_ROOT,
             capture_output=True,
@@ -49,6 +51,20 @@ def _environment_value(name: str) -> str | None:
     return value if value and value.lower() != "unknown" else None
 
 
+def _get_git_metadata() -> tuple[str | None, str | None, str | None]:
+    """Return the current checkout's SHA, commit date, and an exact app tag."""
+    output = _run_git("show", "-s", "--format=%H%n%cI%n%D", "HEAD")
+    if output is None:
+        return None, None, None
+
+    git_sha, git_commit_date, *decorations = output.splitlines()
+    git_tag = next(
+        (decoration.removeprefix("tag: ") for decoration in decorations if decoration.startswith("tag: app/v")),
+        None,
+    )
+    return git_sha, git_commit_date, git_tag
+
+
 def get_build_info() -> BuildInfo:
     """Return injected build metadata, falling back to an editable git checkout.
 
@@ -57,9 +73,15 @@ def get_build_info() -> BuildInfo:
     instead resolves its current revision directly so support reports remain
     useful without a separate build step.
     """
-    git_sha = _environment_value("STUDIO_GIT_SHA") or _run_git("rev-parse", "HEAD")
-    git_commit_date = _environment_value("STUDIO_GIT_COMMIT_DATE") or _run_git("show", "-s", "--format=%cI", "HEAD")
-    git_tag = _environment_value("STUDIO_GIT_TAG") or _run_git("describe", "--tags", "--exact-match", "HEAD")
+    git_sha = _environment_value("STUDIO_GIT_SHA")
+    git_commit_date = _environment_value("STUDIO_GIT_COMMIT_DATE")
+    git_tag = _environment_value("STUDIO_GIT_TAG")
+    has_injected_provenance = any((git_sha, git_commit_date, git_tag))
+    if not has_injected_provenance:
+        checkout_sha, checkout_commit_date, checkout_tag = _get_git_metadata()
+        git_sha = checkout_sha
+        git_commit_date = checkout_commit_date
+        git_tag = checkout_tag
 
     injected_dirty = _environment_value("STUDIO_GIT_DIRTY")
     if injected_dirty is not None:
@@ -75,3 +97,8 @@ def get_build_info() -> BuildInfo:
         git_tag=git_tag,
         git_dirty=git_dirty,
     )
+
+
+async def get_build_info_async() -> BuildInfo:
+    """Resolve build provenance without blocking the API event loop on Git."""
+    return await asyncio.to_thread(get_build_info)

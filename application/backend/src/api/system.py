@@ -11,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 from pydantic import BaseModel
 
 from api.dependencies import HealthServiceDep, get_system_service
-from build_info import get_build_info
+from build_info import get_build_info_async
 from schemas.hardware import InferenceDeviceInfo, TrainingDevices
 from services.system_service import SystemService
 from settings import get_settings
@@ -32,7 +32,7 @@ class SystemInfo(BaseModel):
 @system_router.get("/info")
 async def get_system_info() -> SystemInfo:
     """Return Studio version and the source revision used to build it."""
-    build_info = get_build_info()
+    build_info = await get_build_info_async()
     return SystemInfo(studio_version=get_settings().version, **build_info.__dict__)
 
 
