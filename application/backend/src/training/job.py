@@ -39,6 +39,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
+from settings import LoggerSettings
+from training.logging import build_training_logger
+
 if TYPE_CHECKING:
     from physicalai.policies.base import Policy
     from physicalai.train.callbacks import ReportFn, StopFn
@@ -86,9 +89,10 @@ support LoRA/DoRA fine-tuning."""
 
 
 class RunOptions(BaseModel):
-    """Runtime-only controls which are not part of the training payload."""
+    """Local execution controls for a training run."""
 
     resume_from: Path | str | None = None
+    logger: LoggerSettings | None = None
     hf_token: SecretStr | None = None
 
 
@@ -383,6 +387,7 @@ def run_training_job(
 
     from training.device import resolve_accelerator, resolve_devices, resolve_strategy
 
+
     with _hf_token_env(spec.run_options.hf_token):
         accelerator = resolve_accelerator(spec.device_type)
         output_dir, cache_dir = Path(output_dir), Path(cache_dir)
@@ -399,6 +404,11 @@ def run_training_job(
             image_transforms=DefaultImageAugmentations() if spec.augment_images else None,
         )
         policy = build_policy(spec, resume_from=spec.run_options.resume_from)
+        run_logger = (
+            build_training_logger(spec.run_options.logger, log_root=cache_dir.parent, run_name=cache_dir.stem)
+            if spec.run_options.logger is not None
+            else CSVLogger(cache_dir.parent, name=cache_dir.stem)
+        )
 
         checkpoint_callback = ModelCheckpoint(
             dirpath=cache_dir,
@@ -413,7 +423,7 @@ def run_training_job(
             callbacks.append(snapflow_callback)
 
         trainer = Trainer(
-            logger=CSVLogger(cache_dir.parent, name=cache_dir.stem),
+            logger=run_logger,
             callbacks=callbacks,
             accelerator=accelerator,
             strategy=resolve_strategy(spec.device_type),
