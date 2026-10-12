@@ -7,6 +7,7 @@ from .hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDevice,
 from .job import DatasetImportJob, Job, TrainJob
 from .model import BackendExportDetail, Model, ModelDetailResponse
 from .project import Project
+from .streaming import StreamingProfile, StreamingProfiles
 
 __all__ = [
     "BackendExportDetail",
@@ -31,5 +32,7 @@ __all__ = [
     "Project",
     "SerialPortInfo",
     "Snapshot",
+    "StreamingProfile",
+    "StreamingProfiles",
     "TrainJob",
 ]

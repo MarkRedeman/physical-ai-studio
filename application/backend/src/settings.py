@@ -122,15 +122,9 @@ class HotkeySettings(BaseModel):
 
 
 class StreamingSettings(BaseModel):
-    """Streaming video encoding settings for dataset recordings."""
+    """The user-selected recording profile for new dataset recordings."""
 
-    vcodec: str = Field(default="auto")
-    pix_fmt: str | None = Field(default=None)
-    crf: int | float | None = Field(default=None)
-    preset: int | str | None = Field(default=None)
-    extra_options: dict[str, Any] | None = Field(default=None)
-    encoder_threads: int | None = Field(default=None)
-    encoder_queue_maxsize: int = Field(default=60)
+    profile: str | None = Field(default=None)
 
 
 _USER_CONFIG_GROUPS: tuple[str, ...] = ("streaming", "trainer", "huggingface", "hotkeys")

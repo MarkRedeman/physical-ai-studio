@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from schemas.hardware import DeviceType, InferenceBackend
+from schemas.streaming import StreamingProfile
 from services.system_service import SystemService
 
 
@@ -132,3 +133,17 @@ def test_get_available_training_devices_returns_studio_host_devices() -> None:
     assert result.mode == "local"
     assert result.remote_available is True
     assert result.devices == local_devices
+
+
+def test_get_streaming_profiles_returns_only_usable_profiles() -> None:
+    profiles = [
+        SimpleNamespace(id="intel-qsv-h264", name="Intel GPU QSV", description="Hardware encoding"),
+        SimpleNamespace(id="cpu-h264", name="CPU H.264", description="Software encoding"),
+    ]
+    with (
+        patch("services.system_service.streaming_encoding_profiles", return_value=profiles),
+        patch("services.system_service.streaming_profile_is_usable", side_effect=[False, True]),
+    ):
+        result = SystemService.get_streaming_profiles()
+
+    assert result.profiles == [StreamingProfile(id="cpu-h264", name="CPU H.264", description="Software encoding")]

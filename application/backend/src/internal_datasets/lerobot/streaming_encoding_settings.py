@@ -1,6 +1,6 @@
 import logging
 import tempfile
-from dataclasses import field
+from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import cache
 from pathlib import Path
@@ -220,3 +220,79 @@ class StreamingEncodingSettings(BaseModel):
         if self.extra_options:
             params["extra_options"] = self.extra_options
         return StudioRGBEncoderConfig(**params)
+
+
+@dataclass(frozen=True)
+class StreamingEncodingProfile:
+    """A Studio-owned, user-selectable recording configuration."""
+
+    id: str
+    name: str
+    description: str
+    settings: StreamingEncodingSettings
+
+
+_STREAMING_PROFILES = (
+    StreamingEncodingProfile(
+        id="intel-qsv-h264",
+        name="Intel GPU QSV",
+        description="Hardware H.264 encoding using Intel Quick Sync Video.",
+        settings=StreamingEncodingSettings(vcodec="h264_qsv", pix_fmt="nv12", crf=23, preset="veryfast"),
+    ),
+    StreamingEncodingProfile(
+        id="nvidia-nvenc-h264",
+        name="NVIDIA GPU NVENC",
+        description="Hardware H.264 encoding using NVIDIA NVENC.",
+        settings=StreamingEncodingSettings(vcodec="h264_nvenc", pix_fmt="nv12", crf=23, preset="p5"),
+    ),
+    StreamingEncodingProfile(
+        id="cpu-h264",
+        name="CPU H.264",
+        description="Software H.264 encoding with broad player compatibility.",
+        settings=StreamingEncodingSettings(vcodec="libx264", crf=23, preset="veryfast"),
+    ),
+    StreamingEncodingProfile(
+        id="cpu-av1",
+        name="CPU AV1",
+        description="Software AV1 encoding with efficient compression.",
+        settings=StreamingEncodingSettings(vcodec="libsvtav1", crf=30),
+    ),
+)
+
+
+def streaming_encoding_profiles() -> tuple[StreamingEncodingProfile, ...]:
+    """Return all Studio-owned recording profiles in display order."""
+    return _STREAMING_PROFILES
+
+
+def get_streaming_encoding_profile(profile_id: str) -> StreamingEncodingProfile | None:
+    """Return a profile by stable ID."""
+    return next((profile for profile in _STREAMING_PROFILES if profile.id == profile_id), None)
+
+
+def streaming_profile_is_usable(profile: StreamingEncodingProfile) -> bool:
+    """Return whether a profile's requested encoder and options work here."""
+    if not _is_vcodec_usable(profile.settings.vcodec):
+        return False
+    try:
+        config = profile.settings._build_rgb_encoder_config()
+    except Exception as exc:
+        logging.warning("Streaming profile '%s' is unavailable: %s", profile.id, exc)
+        return False
+    return config.vcodec == profile.settings.vcodec
+
+
+def resolve_streaming_encoding_settings(profile_id: str | None) -> StreamingEncodingSettings:
+    """Resolve Default or a verified explicit profile for a recording writer.
+
+    Default retains Studio's historic ``auto`` behavior: probe the ordered
+    encoder candidates and use the first codec that can encode a real frame.
+    """
+    if profile_id is None:
+        return StreamingEncodingSettings()
+    profile = get_streaming_encoding_profile(profile_id)
+    if profile is None:
+        raise ValueError(f"Unknown streaming profile '{profile_id}'")
+    if not streaming_profile_is_usable(profile):
+        raise ValueError(f"Streaming profile '{profile.name}' is unavailable on this backend")
+    return profile.settings.model_copy(deep=True)

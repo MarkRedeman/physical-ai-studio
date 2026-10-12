@@ -11,7 +11,12 @@ from typing import Any
 import torch
 from loguru import logger
 
+from internal_datasets.lerobot.streaming_encoding_settings import (
+    streaming_encoding_profiles,
+    streaming_profile_is_usable,
+)
 from schemas.hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDeviceInfo, TrainingDevices
+from schemas.streaming import StreamingProfile, StreamingProfiles
 
 
 class SystemService:
@@ -28,6 +33,17 @@ class SystemService:
         devices = cls._get_torch_inference_devices()
         devices.extend(cls._get_openvino_inference_devices())
         return devices
+
+    @staticmethod
+    def get_streaming_profiles() -> StreamingProfiles:
+        """Return recording profiles that can encode a real frame on this backend."""
+        return StreamingProfiles(
+            profiles=[
+                StreamingProfile(id=profile.id, name=profile.name, description=profile.description)
+                for profile in streaming_encoding_profiles()
+                if streaming_profile_is_usable(profile)
+            ]
+        )
 
     @classmethod
     def _get_torch_inference_devices(cls) -> list[InferenceDeviceInfo]:

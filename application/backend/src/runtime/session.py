@@ -13,7 +13,7 @@ from physicalai.runtime import RobotRuntime
 
 from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
-from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings
+from internal_datasets.lerobot.streaming_encoding_settings import resolve_streaming_encoding_settings
 from robots.shared_robot_errors import translate_robot_error
 from runtime.action_source import StudioActionSource
 from runtime.callbacks.recording import RecordingCallback, RecordingState
@@ -296,19 +296,11 @@ class RuntimeSession:
             if previous is not None:
                 previous.teardown()
             dataset_path = self._dataset_path(command)
-            streaming = get_settings().streaming
+            streaming = resolve_streaming_encoding_settings(get_settings().streaming.profile)
             dataset = InternalLeRobotDataset(
                 dataset_path,
                 access_mode=DatasetAccessMode.RECORDING_MUTATION,
-                streaming_encoding_settings=StreamingEncodingSettings(
-                    vcodec=streaming.vcodec,
-                    pix_fmt=streaming.pix_fmt,
-                    crf=streaming.crf,
-                    preset=streaming.preset,
-                    extra_options=streaming.extra_options or {},
-                    encoder_threads=streaming.encoder_threads,
-                    encoder_queue_maxsize=streaming.encoder_queue_maxsize,
-                ),
+                streaming_encoding_settings=streaming,
             )
             if self._follower is None:
                 raise RuntimeError("Follower robot is not set up")

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from api.dependencies import HealthServiceDep, get_system_service
 from build_info import get_build_info_async
 from schemas.hardware import InferenceDeviceInfo, TrainingDevices
+from schemas.streaming import StreamingProfiles
 from services.system_service import SystemService
 from settings import get_settings
 
@@ -68,6 +69,14 @@ async def get_training_devices(
     are returned so the UI can block training instead of falling back to local CPU.
     """
     return await system_service.get_available_training_devices()
+
+
+@system_router.get("/streaming-profiles")
+async def get_streaming_profiles(
+    system_service: Annotated[SystemService, Depends(get_system_service)],
+) -> StreamingProfiles:
+    """Return recording profiles verified by this backend's video stack."""
+    return system_service.get_streaming_profiles()
 
 
 @system_router.post("/restart", status_code=status.HTTP_202_ACCEPTED)

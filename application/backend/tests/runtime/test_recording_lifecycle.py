@@ -470,25 +470,18 @@ def test_load_dataset_uses_configured_streaming_settings() -> None:
     session._follower_name = "fake"
 
     settings = MagicMock()
-    settings.streaming.vcodec = "libx264"
-    settings.streaming.pix_fmt = None
-    settings.streaming.crf = None
-    settings.streaming.preset = None
-    settings.streaming.extra_options = None
-    settings.streaming.encoder_threads = 4
-    settings.streaming.encoder_queue_maxsize = 30
+    settings.streaming.profile = "cpu-h264"
 
     dataset = MagicMock()
     dataset.start_recording_mutation.return_value = _FakeMutation()
 
     with (
         patch("runtime.session.get_settings", return_value=settings),
+        patch("runtime.session.resolve_streaming_encoding_settings") as resolve_profile,
         patch("runtime.session.InternalLeRobotDataset", return_value=dataset) as dataset_class,
         patch.object(session, "_wait_until_devices_ready"),
     ):
         session._load_dataset(LoadDatasetCommand(dataset_id=UUID("e8454e0c-f962-492e-878c-f7367f5ae73f")))
 
-    streaming = dataset_class.call_args.kwargs["streaming_encoding_settings"]
-    assert streaming.vcodec == "libx264"
-    assert streaming.encoder_threads == 4
-    assert streaming.encoder_queue_maxsize == 30
+    resolve_profile.assert_called_once_with("cpu-h264")
+    assert dataset_class.call_args.kwargs["streaming_encoding_settings"] is resolve_profile.return_value

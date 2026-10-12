@@ -3,9 +3,10 @@
 
 """User-configurable application settings API."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+from api.dependencies import SystemServiceDep
 from settings import (
     HotkeySettings,
     HuggingFaceSettings,
@@ -58,9 +59,17 @@ async def get_user_settings() -> UserSettingsResponse:
 
 
 @router.patch("")
-async def update_user_settings(update: SettingsUpdate) -> UserSettingsResponse:
+async def update_user_settings(update: SettingsUpdate, system_service: SystemServiceDep) -> UserSettingsResponse:
     """Persist the supplied fields and return effective settings."""
     patch = update.model_dump(exclude_unset=True)
+    if streaming := patch.get("streaming"):
+        profile_id = streaming.get("profile")
+        available_profile_ids = {profile.id for profile in system_service.get_streaming_profiles().profiles}
+        if profile_id is not None and profile_id not in available_profile_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Streaming profile '{profile_id}' is unavailable on this backend.",
+            )
     if "ssh" in patch:
         # The SSH knobs are grouped for the API and the UI but stored flat,
         # because the services read them off `Settings` directly and each one
