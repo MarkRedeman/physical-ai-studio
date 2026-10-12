@@ -417,13 +417,8 @@ class InternalLeRobotDataset(DatasetClient):
     def _build_thumbnail_png_bytes(
         video_path: str, start: float, width: int, height: int, _mtime_ns: int, _size: int
     ) -> bytes | None:
-        capture = cv2.VideoCapture(video_path)
-        try:
-            capture.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
-            ok, frame = capture.read()
-        finally:
-            capture.release()
-        if not ok:
+        frame = InternalLeRobotDataset._decode_thumbnail_frame(video_path, start)
+        if frame is None:
             logger.warning("Could not decode thumbnail frame from '{}' at {}s", video_path, start)
             return None
 
@@ -434,6 +429,30 @@ class InternalLeRobotDataset(DatasetClient):
             return None
 
         return imagebytes.tobytes()
+
+    @staticmethod
+    def _decode_thumbnail_frame(video_path: str, start: float) -> np.ndarray | None:
+        """Decode the first frame at or after ``start`` with PyAV.
+
+        OpenCV's bundled FFmpeg selects an AV1 decoder which requires hardware
+        acceleration and cannot fall back to software decode. PyAV can use
+        libdav1d for a reliable AV1 software fallback.
+        """
+        import av
+
+        try:
+            with av.open(video_path) as container:
+                stream = container.streams.video[0]
+                if stream.time_base is None:
+                    return None
+                container.seek(int(start / float(stream.time_base)), stream=stream, backward=True)
+                for video_frame in container.decode(stream):
+                    if video_frame.time is None or video_frame.time >= start:
+                        return video_frame.to_ndarray(format="bgr24")
+        except av.FFmpegError as exc:
+            logger.warning("Failed to read thumbnail source '{}' at {}s: {}", video_path, start, exc)
+            return None
+        return None
 
     def _get_episode_buffer_snapshot(self) -> dict | None:
         writer = self._dataset.writer
