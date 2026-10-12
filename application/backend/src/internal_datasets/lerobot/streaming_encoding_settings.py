@@ -110,11 +110,31 @@ class StudioRGBEncoderConfig(RGBEncoderConfig):
             )
         for candidate in vcodec_candidates():
             if _candidate_is_viable(candidate):
+                if candidate != self.vcodec:
+                    self._reset_codec_specific_options(candidate)
                 self.vcodec = candidate
                 self._apply_default_pix_fmt()
                 logging.info("Auto-selected vcodec '%s'", candidate)
                 return
         raise RuntimeError("No usable video encoder found for streaming encoding")
+
+    def _reset_codec_specific_options(self, fallback_vcodec: str) -> None:
+        """Discard options tied to an unavailable requested encoder.
+
+        Hardware encoders commonly need ``nv12`` and accept string presets such
+        as ``veryfast``.  Those values are not necessarily valid for a software
+        fallback (for example, libsvtav1 requires yuv420p and a numeric preset).
+        Keep codec-independent GOP and quality settings, but allow LeRobot's
+        defaults to select a compatible pixel format and preset.
+        """
+        logging.warning(
+            "Falling back from vcodec '%s' to '%s'; resetting pixel format, preset, and extra codec options",
+            self.vcodec,
+            fallback_vcodec,
+        )
+        self.pix_fmt = "yuv420p"
+        self.preset = None
+        self.extra_options = {}
 
     def _apply_default_pix_fmt(self) -> None:
         if self.pix_fmt == "yuv420p":
@@ -122,6 +142,11 @@ class StudioRGBEncoderConfig(RGBEncoderConfig):
 
     def get_codec_options(self, encoder_threads: int | None = None, as_strings: bool = False) -> dict[str, Any]:
         options = super().get_codec_options(encoder_threads, as_strings)
+        if "preset" in options:
+            preset = _normalise_preset(self.vcodec, options["preset"])
+            # PyAV validates numeric AVOptions as numbers, but its encoder API
+            # requires every option value to be a string.
+            options["preset"] = str(preset) if as_strings else preset
         if self.vcodec.endswith("_qsv") and "crf" in options:
             options["global_quality"] = options.pop("crf")
         elif self.vcodec.endswith("_vaapi") and "crf" in options:
@@ -138,6 +163,33 @@ def _candidate_is_viable(vcodec: str) -> bool:
     except Exception as exc:
         logging.warning("Skipping vcodec '%s': %s", vcodec, exc)
         return False
+
+
+@cache
+def _numeric_preset_choices(vcodec: str) -> dict[str, int | float]:
+    """Return named preset values for encoders whose AVOption is numeric."""
+    import av
+
+    try:
+        codec = av.codec.Codec(vcodec, "w")
+    except Exception:
+        return {}
+    preset = next((option for option in codec.descriptor.options if option.name == "preset"), None)
+    if preset is None or preset.type.name not in {"INT", "INT64", "UINT64", "FLOAT", "DOUBLE"}:
+        return {}
+    choices: Any = getattr(preset, "choices", ())
+    return {
+        choice.name: choice.value
+        for choice in choices or []
+        if isinstance(choice.value, int | float) and not isinstance(choice.value, bool)
+    }
+
+
+def _normalise_preset(vcodec: str, preset: Any) -> Any:
+    """Convert a named FFmpeg preset to its numeric AVOption value when needed."""
+    if not isinstance(preset, str):
+        return preset
+    return _numeric_preset_choices(vcodec).get(preset, preset)
 
 
 class StreamingEncodingSettings(BaseModel):

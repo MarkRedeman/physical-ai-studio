@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from lerobot.configs import RGBEncoderConfig
-from lerobot.configs.video import VALID_VIDEO_CODECS
 
 from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.lerobot import streaming_encoding_settings
@@ -174,6 +173,30 @@ def test_explicit_unusable_vcodec_falls_back() -> None:
 
     assert rgb_encoder.vcodec != "av1_qsv"
     assert rgb_encoder.vcodec in streaming_encoding_settings.vcodec_candidates()
+
+
+def test_hardware_fallback_resets_incompatible_encoder_options() -> None:
+    def usable(vcodec: str) -> bool:
+        return vcodec == "libsvtav1"
+
+    with patch.object(streaming_encoding_settings, "_is_vcodec_usable", side_effect=usable):
+        rgb_encoder = StreamingEncodingSettings(
+            vcodec="h264_qsv",
+            pix_fmt="nv12",
+            crf=23,
+            preset="veryfast",
+            extra_options={"look_ahead_depth": "40"},
+        ).to_lerobot_write_kwargs()["rgb_encoder"]
+
+    assert rgb_encoder.vcodec == "libsvtav1"
+    assert rgb_encoder.pix_fmt == "yuv420p"
+    assert rgb_encoder.preset == 12
+    assert rgb_encoder.extra_options == {}
+
+
+def test_named_numeric_encoder_preset_is_normalized() -> None:
+    with patch.object(streaming_encoding_settings, "_numeric_preset_choices", return_value={"veryfast": 7}):
+        assert streaming_encoding_settings._normalise_preset("h264_qsv", "veryfast") == 7
 
 
 def test_explicit_unusable_vcodec_raises_when_nothing_usable() -> None:

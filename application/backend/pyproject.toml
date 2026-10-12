@@ -39,6 +39,7 @@ dependencies = [
   "physicalai-studio-plugin~=0.3.0",
   "asyncssh~=2.24",
   "sigstore>=4.0,<5",
+  "physicalai-mujoco-so101-plugin>=0.3.1",
 ]
 
 [project.scripts]
