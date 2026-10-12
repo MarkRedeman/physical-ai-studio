@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 
 import {
     ActionButton,
@@ -12,17 +12,16 @@ import {
     Heading,
     Icon,
     Item,
+    Loading,
     Picker,
     Text,
     TextArea,
     Tooltip,
     TooltipTrigger,
-    View,
 } from '@geti-ui/ui';
 import { ExternalLinkIcon, HelpIcon } from '@geti-ui/ui/icons';
-import { useMutation } from '@tanstack/react-query';
 
-import { $api, fetchClient } from '../../api/client';
+import { $api } from '../../api/client';
 import type { SchemaSystemInfo } from '../../api/openapi-spec';
 
 const GITHUB_ISSUES_URL = 'https://github.com/open-edge-platform/physical-ai-studio/issues/new';
@@ -71,26 +70,23 @@ ${sanitizeDescription(description) || '_Please describe your feedback_'}
     return `${GITHUB_ISSUES_URL}?${params.toString()}`;
 };
 
-const submitFeedback = async ({
+const openGitHubIssue = ({
     issueType,
     description,
     systemInfo,
 }: {
     issueType: IssueType;
     description: string;
-    systemInfo: SchemaSystemInfo | undefined;
-}) => {
-    const response = systemInfo ? { data: systemInfo } : await fetchClient.GET('/api/system/info');
-    if (!response.data) throw new Error('Unable to get Studio version information. Please try again.');
-
-    window.open(createGitHubIssueUrl(response.data, issueType, description), '_blank', 'noopener,noreferrer');
+    systemInfo: SchemaSystemInfo;
+}): void => {
+    window.open(createGitHubIssueUrl(systemInfo, issueType, description), '_blank', 'noopener,noreferrer');
 };
 
 const FeedbackDialog = ({ close }: { close: () => void }) => {
     const [issueType, setIssueType] = useState<IssueType>('bug');
     const [description, setDescription] = useState('');
-    const { data: systemInfo, isPending: isSystemInfoPending } = $api.useQuery('get', '/api/system/info');
-    const submitMutation = useMutation({ mutationFn: submitFeedback, onSuccess: close });
+    const { data: systemInfo, isPending: isSystemInfoPending } = $api.useSuspenseQuery('get', '/api/system/info');
+
     const studioVersionText = systemInfo
         ? [
               `Physical AI Studio v${systemInfo.studio_version}`,
@@ -137,11 +133,6 @@ const FeedbackDialog = ({ close }: { close: () => void }) => {
                     <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-600)' }}>
                         {isSystemInfoPending ? 'Loading Studio version information…' : studioVersionText}
                     </Text>
-                    {submitMutation.error ? (
-                        <View backgroundColor='negative' padding='size-100' borderRadius='regular'>
-                            <Text>{submitMutation.error.message}</Text>
-                        </View>
-                    ) : null}
                 </Flex>
             </Content>
             <ButtonGroup>
@@ -150,8 +141,10 @@ const FeedbackDialog = ({ close }: { close: () => void }) => {
                 </Button>
                 <Button
                     variant='accent'
-                    onPress={() => submitMutation.mutate({ issueType, description, systemInfo })}
-                    isPending={submitMutation.isPending}
+                    onPress={() => {
+                        openGitHubIssue({ issueType, description, systemInfo });
+                        close();
+                    }}
                 >
                     <Icon>
                         <ExternalLinkIcon />
@@ -174,6 +167,10 @@ export const FeedbackButton = () => (
             </ActionButton>
             <Tooltip>Submit feedback</Tooltip>
         </TooltipTrigger>
-        {(close) => <FeedbackDialog close={close} />}
+        {(close) => (
+            <Suspense fallback={<Loading />}>
+                <FeedbackDialog close={close} />
+            </Suspense>
+        )}
     </DialogTrigger>
 );
