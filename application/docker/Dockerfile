@@ -69,6 +69,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Pinned source revisions for reproducible builds.
 ARG LIBVPL_REF=778a66d6c6537f08eabb91955dbbf1bce3812894
+# FFmpeg's NVDEC check requires ffnvcodec >= 12.1.14.0.
+ARG NV_CODEC_HEADERS_REF=e1ff958747e9e08247cea31b6e629d61ece824c0
 ARG FFMPEG_REF=9dd0fe0225c2c3406ca49430a74c8660b1713889
 ARG OPENH264_REF=e3f5b10438e2bacc155cf54578222bd4236c9f06
 ARG SVTAV1_REF=349f4eb9c369f68d463029d1cd37551c90b7de51
@@ -116,6 +118,15 @@ RUN git init libvpl \
     && cmake --build libvpl/build -j"$(nproc)" \
     && cmake --install libvpl/build
 
+# NVIDIA's MIT-licensed codec headers are build-time only, but required for
+# FFmpeg to compile NVENC/NVDEC support. The NVIDIA Container Toolkit mounts
+# the matching host driver libraries when the CUDA image runs.
+RUN git init nv-codec-headers \
+    && git -C nv-codec-headers remote add origin https://github.com/FFmpeg/nv-codec-headers.git \
+    && git -C nv-codec-headers fetch --depth 1 origin "${NV_CODEC_HEADERS_REF}" \
+    && git -C nv-codec-headers checkout FETCH_HEAD \
+    && make -C nv-codec-headers install PREFIX=/usr/local
+
 # Make the custom libvpl and FFmpeg visible to later build steps.
 ENV PKG_CONFIG_PATH="/opt/vpl/lib/pkgconfig:/opt/vpl/lib64/pkgconfig:/opt/ffmpeg-vpl/lib/pkgconfig:/opt/ffmpeg-vpl/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig" \
     LD_LIBRARY_PATH="/opt/vpl/lib:/opt/vpl/lib64:/opt/ffmpeg-vpl/lib:/usr/local/lib" \
@@ -141,8 +152,9 @@ RUN git init svtav1 \
     && ldconfig
 
 # FFmpeg — LGPL build: no --enable-gpl and no --enable-nonfree. Every enabled
-# external library (libvpl/MIT, libvpx/BSD, libopenh264/BSD, libsvtav1/BSD,
-# libdav1d/BSD, vaapi/MIT) is LGPL-compatible. libdav1d is the software AV1
+# external library (libvpl/MIT, nv-codec-headers/MIT, libvpx/BSD,
+# libopenh264/BSD, libsvtav1/BSD, libdav1d/BSD, vaapi/MIT) is
+# LGPL-compatible. libdav1d is the software AV1
 # decoder — FFmpeg's built-in av1 decoder is hwaccel-only and cannot decode
 # AV1 in software, which the training data loader requires.
 RUN git init ffmpeg \
@@ -158,6 +170,8 @@ RUN ./configure \
         --extra-libs="-lpthread -lm" \
         --enable-libvpl \
         --enable-vaapi \
+        --enable-nvenc \
+        --enable-nvdec \
         --enable-shared \
         --disable-static \
         --enable-libsvtav1 \
@@ -168,10 +182,11 @@ RUN ./configure \
     && make install \
     && ldconfig
 
-# Fail the build early if QSV encoders or the software AV1 decoder are missing.
+# Fail the build early if hardware encoders or the software AV1 decoder are missing.
 RUN ffmpeg -version \
     && ffmpeg -hide_banner -encoders | grep qsv \
     && ffmpeg -hide_banner -h encoder=h264_qsv > /dev/null \
+    && ffmpeg -hide_banner -h encoder=h264_nvenc > /dev/null \
     && ffmpeg -hide_banner -decoders | grep libdav1d
 
 # Compile the PyAV wheel from source against the custom FFmpeg.

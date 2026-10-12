@@ -79,6 +79,8 @@ services:
     build:
       <<: *common-build
       target: physicalai-trainer-cuda
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
     deploy:
       resources:
         reservations:

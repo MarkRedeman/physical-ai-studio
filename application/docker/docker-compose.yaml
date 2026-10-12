@@ -156,6 +156,8 @@ services:
     build:
       <<: *common-build
       target: physical-ai-studio-cuda
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
     deploy:
       resources:
         reservations:
