@@ -30,6 +30,12 @@ import { RecordingViewer } from './recording-viewer';
 
 import classes from './index.module.css';
 
+const sanitizeCameraName = (name: string): string =>
+    name
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/g, '_')
+        .replaceAll(/^_|_$/g, '');
+
 const TotalRecordedEpisodes = () => {
     const { dataset_id } = useDatasetId();
     const { state } = useRuntimeSession();
@@ -162,8 +168,19 @@ const RecordingPage = () => {
         );
     }
     const environment = environmentQuery.data;
+    const cameraKeyMapping = Object.fromEntries(
+        selectedRecordingEnvironment.camera_mappings.flatMap((mapping) => {
+            const camera = environment.cameras?.find(({ id }) => id === mapping.environment_camera_id);
+            return camera === undefined ? [] : [[sanitizeCameraName(camera.name), mapping.dataset_camera_key]];
+        })
+    );
     return (
-        <RuntimeSessionProvider environment={environment} dataset={dataset} onError={ToastQueue.negative}>
+        <RuntimeSessionProvider
+            environment={environment}
+            dataset={dataset}
+            cameraKeyMapping={cameraKeyMapping}
+            onError={ToastQueue.negative}
+        >
             <Grid
                 areas={['header', 'content', 'footer']}
                 UNSAFE_style={{

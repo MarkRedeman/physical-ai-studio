@@ -50,6 +50,7 @@ interface RuntimeSessionProviderProps {
     model?: SchemaModel;
     dataset?: SchemaDatasetOutput;
     inferenceDevice?: InferenceDevice;
+    cameraKeyMapping?: Record<string, string>;
     onError: (error: string) => void;
 }
 
@@ -195,7 +196,10 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
         meta: { skipInvalidation: true },
         mutationFn: async (datasetConfig: SchemaDatasetOutput) => {
             const result = await socket.sendJsonMessageAndWait<RuntimeApiJsonResponse>(
-                { event: 'load_dataset', data: { dataset_id: datasetConfig.id } },
+                {
+                    event: 'load_dataset',
+                    data: { dataset_id: datasetConfig.id, camera_key_mapping: props.cameraKeyMapping ?? {} },
+                },
                 ({ event, data }) => event === 'state' && data?.dataset_loaded === true
             );
             setDataset(datasetConfig);
