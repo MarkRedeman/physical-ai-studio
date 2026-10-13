@@ -85,7 +85,6 @@ const mockApi = (initialJobs: SchemaTrainJob[]) => {
                         name: 'Test dataset',
                         default_task: 'test',
                         project_id: projectId,
-                        environment_id: 'environment-1',
                     },
                 ],
             })
