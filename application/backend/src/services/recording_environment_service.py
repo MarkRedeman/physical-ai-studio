@@ -26,6 +26,7 @@ class RecordingEnvironmentService:
             dataset_id=UUID(row.dataset_id),
             environment_id=UUID(row.environment_id),
             camera_mappings=mappings.get("camera_mappings", []),
+            is_default=row.is_default,
         )
 
     async def list(self, dataset_id: UUID) -> list[RecordingEnvironment]:
@@ -50,10 +51,14 @@ class RecordingEnvironmentService:
         return self._to_model(row)
 
     async def create(self, dataset_id: UUID, environment_id: UUID, camera_mappings: list[dict]) -> RecordingEnvironment:
+        has_associations = await self.session.scalar(
+            select(DatasetRecordingEnvironmentDB.id).where(DatasetRecordingEnvironmentDB.dataset_id == str(dataset_id))
+        )
         row = DatasetRecordingEnvironmentDB(
             dataset_id=str(dataset_id),
             environment_id=str(environment_id),
             mappings={"camera_mappings": camera_mappings},
+            is_default=has_associations is None,
         )
         self.session.add(row)
         try:
@@ -66,7 +71,11 @@ class RecordingEnvironmentService:
         return self._to_model(row)
 
     async def update(
-        self, dataset_id: UUID, recording_environment_id: UUID, camera_mappings: list[dict]
+        self,
+        dataset_id: UUID,
+        recording_environment_id: UUID,
+        camera_mappings: list[dict] | None,
+        is_default: bool | None,
     ) -> RecordingEnvironment:
         row = await self.session.scalar(
             select(DatasetRecordingEnvironmentDB).where(
@@ -76,7 +85,15 @@ class RecordingEnvironmentService:
         )
         if row is None:
             raise ResourceNotFoundError(ResourceType.ENVIRONMENT, recording_environment_id)
-        row.mappings = {"camera_mappings": camera_mappings}
+        if camera_mappings is not None:
+            row.mappings = {"camera_mappings": camera_mappings}
+        if is_default:
+            await self.session.execute(
+                DatasetRecordingEnvironmentDB.__table__.update()
+                .where(DatasetRecordingEnvironmentDB.dataset_id == str(dataset_id))
+                .values(is_default=False)
+            )
+            row.is_default = True
         await self.session.commit()
         return self._to_model(row)
 
