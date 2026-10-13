@@ -246,6 +246,18 @@ _STREAMING_PROFILES = (
         settings=StreamingEncodingSettings(vcodec="h264_nvenc", pix_fmt="nv12", crf=23, preset="p5"),
     ),
     StreamingEncodingProfile(
+        id="apple-videotoolbox-h264",
+        name="Apple VideoToolbox H.264",
+        description="Hardware H.264 encoding using Apple VideoToolbox.",
+        settings=StreamingEncodingSettings(vcodec="h264_videotoolbox", crf=23),
+    ),
+    StreamingEncodingProfile(
+        id="apple-videotoolbox-hevc",
+        name="Apple VideoToolbox HEVC",
+        description="Hardware HEVC encoding using Apple VideoToolbox.",
+        settings=StreamingEncodingSettings(vcodec="hevc_videotoolbox", crf=28),
+    ),
+    StreamingEncodingProfile(
         id="cpu-h264",
         name="CPU H.264",
         description="Software H.264 encoding with broad player compatibility.",

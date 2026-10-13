@@ -7,7 +7,11 @@ from lerobot.configs import RGBEncoderConfig
 from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.lerobot import streaming_encoding_settings
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
-from internal_datasets.lerobot.streaming_encoding_settings import StreamingEncodingSettings, StudioRGBEncoderConfig
+from internal_datasets.lerobot.streaming_encoding_settings import (
+    StreamingEncodingSettings,
+    StudioRGBEncoderConfig,
+    streaming_encoding_profiles,
+)
 
 
 def test_streaming_settings_translate_to_lerobot_kwargs() -> None:
@@ -197,6 +201,13 @@ def test_hardware_fallback_resets_incompatible_encoder_options() -> None:
 def test_named_numeric_encoder_preset_is_normalized() -> None:
     with patch.object(streaming_encoding_settings, "_numeric_preset_choices", return_value={"veryfast": 7}):
         assert streaming_encoding_settings._normalise_preset("h264_qsv", "veryfast") == 7
+
+
+def test_streaming_profiles_include_apple_videotoolbox() -> None:
+    profiles = {profile.id: profile for profile in streaming_encoding_profiles()}
+
+    assert profiles["apple-videotoolbox-h264"].settings.vcodec == "h264_videotoolbox"
+    assert profiles["apple-videotoolbox-hevc"].settings.vcodec == "hevc_videotoolbox"
 
 
 def test_explicit_unusable_vcodec_raises_when_nothing_usable() -> None:
