@@ -21,6 +21,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Move legacy dataset environment assignments into recording associations."""
     connection = op.get_bind()
+    # This must happen before any SELECT/INSERT opens SQLite's implicit
+    # transaction; SQLite ignores PRAGMA foreign_keys changes within one.
+    if connection.dialect.name == "sqlite":
+        connection.execute(sa.text("PRAGMA foreign_keys = OFF"))
     inspector = sa.inspect(connection)
     if inspector.has_table("dataset_recording_environments"):
         # SQLite executes DDL outside transactions. A prior interrupted upgrade
@@ -48,6 +52,8 @@ def upgrade() -> None:
 
     dataset_columns = {column["name"] for column in inspector.get_columns("datasets")}
     if "environment_id" not in dataset_columns:
+        if connection.dialect.name == "sqlite":
+            connection.execute(sa.text("PRAGMA foreign_keys = ON"))
         return
 
     legacy_assignments = connection.execute(sa.text("SELECT id, environment_id FROM datasets")).mappings().all()
@@ -69,13 +75,12 @@ def upgrade() -> None:
     # table already references datasets, so temporarily disable FK checks while
     # Alembic replaces the legacy table (matching the earlier dataset migration
     # strategy in aa0f562acb23).
-    if connection.dialect.name == "sqlite":
-        connection.execute(sa.text("PRAGMA foreign_keys = OFF"))
     try:
         with op.batch_alter_table("datasets") as batch_op:
             batch_op.drop_column("environment_id")
     finally:
         if connection.dialect.name == "sqlite":
+            connection.commit()
             connection.execute(sa.text("PRAGMA foreign_keys = ON"))
 
 
