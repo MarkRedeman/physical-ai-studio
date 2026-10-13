@@ -148,6 +148,10 @@ class RecordingCallback:
         self._recording = recording
         self._follower_source = follower_source
         self._joint_names: list[str] = []
+        self._camera_key_mapping: dict[str, str] = {}
+
+    def set_camera_key_mapping(self, mapping: dict[str, str]) -> None:
+        self._camera_key_mapping = mapping
 
     def on_lifecycle(self, event: RuntimeLifecycleEvent) -> None:
         if event.event == "start":
@@ -166,7 +170,7 @@ class RecordingCallback:
             )
         )
         for key, frame in event.camera_frames.items():
-            observation[key] = np.array(frame.data, copy=True)
+            observation[self._camera_key_mapping.get(key, key)] = np.array(frame.data, copy=True)
         action = action_to_dict(self._joint_names, event.action_sent)
         try:
             self._recording.add_frame(observation, action)

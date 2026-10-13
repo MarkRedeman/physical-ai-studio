@@ -295,6 +295,11 @@ class RuntimeSession:
             if previous is not None:
                 previous.teardown()
             dataset_path = self._dataset_path(command)
+            camera_key_mapping = command.camera_key_mapping
+            if len(set(camera_key_mapping.values())) != len(camera_key_mapping.values()):
+                raise ValueError("Camera mapping cannot map multiple sources to the same dataset camera key")
+            if self._recording_callback is not None:
+                self._recording_callback.set_camera_key_mapping(camera_key_mapping)
             dataset = InternalLeRobotDataset(dataset_path, access_mode=DatasetAccessMode.RECORDING_MUTATION)
             if self._follower is None:
                 raise RuntimeError("Follower robot is not set up")
@@ -302,7 +307,7 @@ class RuntimeSession:
                 fps=int(self._document["init_args"]["fps"]),
                 features=build_lerobot_dataset_features(
                     joint_names=list(self._follower.joint_names),
-                    camera_specs=self._camera_specs_from_frames(),
+                    camera_specs=self._camera_specs_from_frames(camera_key_mapping),
                 ),
                 robot_type=self._follower_name or "unknown",
             )
@@ -353,12 +358,12 @@ class RuntimeSession:
         root = self._datasets_dir if self._datasets_dir is not None else get_settings().datasets_dir
         return root / str(command.dataset_id)
 
-    def _camera_specs_from_frames(self) -> dict[str, tuple[int, int, int]]:
+    def _camera_specs_from_frames(self, camera_key_mapping: dict[str, str]) -> dict[str, tuple[int, int, int]]:
         specs: dict[str, tuple[int, int, int]] = {}
         for key, camera in self._cameras.items():
             frame = camera.read_latest()
             height, width, channels = frame.data.shape
-            specs[key] = (int(height), int(width), int(channels))
+            specs[camera_key_mapping.get(key, key)] = (int(height), int(width), int(channels))
         return specs
 
     def _wait_until_devices_ready(self) -> None:
