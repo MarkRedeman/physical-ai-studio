@@ -20,29 +20,47 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Move legacy dataset environment assignments into recording associations."""
-    recording_environments = op.create_table(
-        "dataset_recording_environments",
-        sa.Column("id", sa.Text(), nullable=False),
-        sa.Column("dataset_id", sa.Text(), nullable=False),
-        sa.Column("environment_id", sa.Text(), nullable=False),
-        sa.Column("mappings", sa.JSON(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
-        sa.ForeignKeyConstraint(["dataset_id"], ["datasets.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["environment_id"], ["project_environments.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "dataset_id",
-            "environment_id",
-            name="uq_dataset_recording_environments_dataset_environment",
-        ),
-    )
-
     connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    if inspector.has_table("dataset_recording_environments"):
+        # SQLite executes DDL outside transactions. A prior interrupted upgrade
+        # can therefore leave this table behind without recording the Alembic
+        # revision. Resume safely from that partially-applied state.
+        recording_environments = sa.Table("dataset_recording_environments", sa.MetaData(), autoload_with=connection)
+    else:
+        recording_environments = op.create_table(
+            "dataset_recording_environments",
+            sa.Column("id", sa.Text(), nullable=False),
+            sa.Column("dataset_id", sa.Text(), nullable=False),
+            sa.Column("environment_id", sa.Text(), nullable=False),
+            sa.Column("mappings", sa.JSON(), nullable=True),
+            sa.Column("created_at", sa.DateTime(), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+            sa.Column("updated_at", sa.DateTime(), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+            sa.ForeignKeyConstraint(["dataset_id"], ["datasets.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["environment_id"], ["project_environments.id"], ondelete="CASCADE"),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint(
+                "dataset_id",
+                "environment_id",
+                name="uq_dataset_recording_environments_dataset_environment",
+            ),
+        )
+
+    dataset_columns = {column["name"] for column in inspector.get_columns("datasets")}
+    if "environment_id" not in dataset_columns:
+        return
+
     legacy_assignments = connection.execute(sa.text("SELECT id, environment_id FROM datasets")).mappings().all()
+    existing_associations = {
+        (row["dataset_id"], row["environment_id"])
+        for row in connection.execute(
+            sa.text("SELECT dataset_id, environment_id FROM dataset_recording_environments")
+        ).mappings()
+    }
     association_rows = [
         {"id": str(uuid4()), "dataset_id": assignment["id"], "environment_id": assignment["environment_id"]}
         for assignment in legacy_assignments
+        if (assignment["id"], assignment["environment_id"]) not in existing_associations
     ]
     if association_rows:
         connection.execute(recording_environments.insert(), association_rows)
