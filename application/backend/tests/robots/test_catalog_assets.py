@@ -19,5 +19,6 @@ def test_resolve_so101_plugin_assets_uses_plugin_root_resolver(monkeypatch) -> N
     assert not urdf_path.is_relative_to(builtin_root)
 
     mesh_path = assets.resolve_robot_relative_asset_path(definition, Path("assets/base_so101_v2.stl"))
-    assert mesh_path == definition.asset.root_resolver() / "assets/base_so101_v2.stl"
+    package_root = next(iter(definition.asset.packages.values()))
+    assert mesh_path == definition.asset.root_resolver() / package_root / "assets/base_so101_v2.stl"
     assert not mesh_path.is_relative_to(builtin_root)

@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from main import app
+from robots.catalog.assets import resolve_robot_relative_asset_path
 from robots.catalog.registry import RobotCatalogRegistry
 
 
@@ -163,8 +166,7 @@ def test_get_robot_catalog_asset_returns_plugin_file() -> None:
     definition = RobotCatalogRegistry().get_definition("SO101_Follower")
     assert definition is not None
     assert definition.asset is not None
-    assert definition.asset.root_resolver is not None
-    asset_path = definition.asset.root_resolver() / "assets/base_so101_v2.stl"
+    asset_path = resolve_robot_relative_asset_path(definition, Path("assets/base_so101_v2.stl"))
 
     client = TestClient(app)
 
