@@ -65,8 +65,18 @@ def upgrade() -> None:
     if association_rows:
         connection.execute(recording_environments.insert(), association_rows)
 
-    with op.batch_alter_table("datasets") as batch_op:
-        batch_op.drop_column("environment_id")
+    # SQLite implements DROP COLUMN by rebuilding the table. The association
+    # table already references datasets, so temporarily disable FK checks while
+    # Alembic replaces the legacy table (matching the earlier dataset migration
+    # strategy in aa0f562acb23).
+    if connection.dialect.name == "sqlite":
+        connection.execute(sa.text("PRAGMA foreign_keys = OFF"))
+    try:
+        with op.batch_alter_table("datasets") as batch_op:
+            batch_op.drop_column("environment_id")
+    finally:
+        if connection.dialect.name == "sqlite":
+            connection.execute(sa.text("PRAGMA foreign_keys = ON"))
 
 
 def downgrade() -> None:
