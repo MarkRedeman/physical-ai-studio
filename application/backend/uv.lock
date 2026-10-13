@@ -61,8 +61,9 @@ exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
 openvino-tokenizers = false
-pynokhwa = false
+physicalai-trossen-plugin = false
 physicalai-bimanual-so101-plugin = false
+pynokhwa = false
 markupsafe = false
 openvino = false
 lightning = false
@@ -70,6 +71,7 @@ physicalai-rebot-b601-plugin = false
 pyrealsense2 = { timestamp = "0001-01-01T00:00:00Z", span = "P1D" }
 physicalai-lerobot-plugin = false
 physicalai-studio-plugin = false
+physicalai-so101-plugin = false
 physicalai-stararm-plugin = false
 
 [manifest]
@@ -2990,8 +2992,8 @@ wheels = [
 
 [[package]]
 name = "physicalai"
-version = "0.3.1.dev10+gb6a518a"
-source = { git = "https://github.com/openvinotoolkit/physicalai.git?rev=b6a518ad59b79a53c1d38b4b5ebcb020e31884cb#b6a518ad59b79a53c1d38b4b5ebcb020e31884cb" }
+version = "0.3.0"
+source = { git = "https://github.com/openvinotoolkit/physicalai.git?rev=f90b3767cfa99e243fc7b277b9faa242c87db213#f90b3767cfa99e243fc7b277b9faa242c87db213" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "jsonargparse", extra = ["shtab", "signatures"] },
@@ -3022,8 +3024,8 @@ capture = [
     { name = "pyrealsense2-macosx", marker = "sys_platform == 'darwin' or (extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu')" },
 ]
 robots = [
-    { name = "physicalai-so101-plugin" },
-    { name = "physicalai-trossen-plugin" },
+    { name = "feetech-servo-sdk" },
+    { name = "trossen-arm" },
 ]
 transport = [
     { name = "eclipse-zenoh" },
@@ -3033,8 +3035,8 @@ transport = [
 
 [[package]]
 name = "physicalai-so101-plugin"
-version = "0.1.dev214+gb6a518ad5"
-source = { git = "https://github.com/openvinotoolkit/physicalai.git?subdirectory=packages%2Fphysicalai-so101-plugin&rev=b6a518ad59b79a53c1d38b4b5ebcb020e31884cb#b6a518ad59b79a53c1d38b4b5ebcb020e31884cb" }
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "feetech-servo-sdk" },
     { name = "loguru" },
@@ -3042,6 +3044,10 @@ dependencies = [
     { name = "physicalai-studio-plugin" },
     { name = "pydantic" },
     { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/c0/035014c7cdfea2398ea68aaa5db9e5d12f17ca781df0bdb316c745315bf4/physicalai_so101_plugin-0.1.0.tar.gz", hash = "sha256:c5871ab97dc7519c2a358a1b0767d6ff41da24607b91fada32466f31afacf06c", size = 11345000, upload-time = "2026-10-13T08:40:34.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/57/ddd0fa0ce7fd0eb9bb97f039f762da34c36398220ba32de25be7dcec5a7e/physicalai_so101_plugin-0.1.0-py3-none-any.whl", hash = "sha256:07a117f453bef724d00d4dca5eb89c02cae79536e7f71c468722169192355cb4", size = 11353237, upload-time = "2026-10-13T08:40:23.72Z" },
 ]
 
 [[package]]
@@ -3150,7 +3156,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "opencv-python" },
-    { name = "physicalai", extras = ["robots", "capture", "transport"], git = "https://github.com/openvinotoolkit/physicalai.git?rev=b6a518ad59b79a53c1d38b4b5ebcb020e31884cb" },
+    { name = "physicalai", extras = ["robots", "capture", "transport"], git = "https://github.com/openvinotoolkit/physicalai.git?rev=f90b3767cfa99e243fc7b277b9faa242c87db213" },
     { name = "physicalai-so101-plugin" },
     { name = "physicalai-studio-plugin", specifier = "~=0.3.0" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cpu'", editable = "../../library" },
@@ -3202,11 +3208,15 @@ lint = [
 
 [[package]]
 name = "physicalai-studio-plugin"
-version = "0.3.1.dev17+gb6a518a"
-source = { git = "https://github.com/openvinotoolkit/physicalai.git?subdirectory=packages%2Fphysicalai-studio-plugin&rev=b6a518ad59b79a53c1d38b4b5ebcb020e31884cb#b6a518ad59b79a53c1d38b4b5ebcb020e31884cb" }
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "physicalai" },
     { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/dc/01a61bf7b696fe0d646b016d35178d94567671ac0220556c87df6cc9c890/physicalai_studio_plugin-0.3.0.tar.gz", hash = "sha256:d4492c3a53e453a2fcccce46439ae382b5e6a8897878d7f0187e75d6a35e277f", size = 15207, upload-time = "2026-10-06T09:28:26.354Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/51/7a1d0d2f8a1c0f0885d26177611a0682a3a893c02f7d9dde01dc02fb1266/physicalai_studio_plugin-0.3.0-py3-none-any.whl", hash = "sha256:1f7524900d81d57c164a32fb670154b6c343d4b08cf4deabfe1e8699dfa5043f", size = 10921, upload-time = "2026-10-06T09:28:25.135Z" },
 ]
 
 [[package]]
@@ -3282,7 +3292,7 @@ requires-dist = [
     { name = "peft", marker = "extra == 'cosmos3'", specifier = ">=0.13.0,<1.0.0" },
     { name = "peft", marker = "extra == 'molmoact2'", specifier = ">=0.13.0,<1.0.0" },
     { name = "peft", marker = "extra == 'rldx1'", specifier = ">=0.13.0,<1.0.0" },
-    { name = "physicalai", git = "https://github.com/openvinotoolkit/physicalai.git?rev=b6a518ad59b79a53c1d38b4b5ebcb020e31884cb" },
+    { name = "physicalai", git = "https://github.com/openvinotoolkit/physicalai.git?rev=f90b3767cfa99e243fc7b277b9faa242c87db213" },
     { name = "physicalai-train", extras = ["cosmos3"], marker = "extra == 'policies'" },
     { name = "physicalai-train", extras = ["diffusion"], marker = "extra == 'policies'" },
     { name = "physicalai-train", extras = ["libero"], marker = "extra == 'all'" },
@@ -3340,8 +3350,8 @@ dev = [
 
 [[package]]
 name = "physicalai-trossen-plugin"
-version = "0.1.dev214+gb6a518ad5"
-source = { git = "https://github.com/openvinotoolkit/physicalai.git?subdirectory=packages%2Fphysicalai-trossen-plugin&rev=b6a518ad59b79a53c1d38b4b5ebcb020e31884cb#b6a518ad59b79a53c1d38b4b5ebcb020e31884cb" }
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "loguru" },
     { name = "numpy" },
@@ -3349,6 +3359,9 @@ dependencies = [
     { name = "physicalai-studio-plugin" },
     { name = "pydantic" },
     { name = "trossen-arm" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/13/4a9328c5cea3a98177e3cb51273d31f3deb58feef629213f5d7c0bac3af2/physicalai_trossen_plugin-0.1.0-py3-none-any.whl", hash = "sha256:3092603a67e9f4dde156d30d55b6e8bde136303615941380527f5e0e59762767", size = 2517752, upload-time = "2026-10-13T08:36:31.652Z" },
 ]
 
 [[package]]
