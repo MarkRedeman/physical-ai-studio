@@ -45,7 +45,6 @@ class Dataset(BaseIDModel):
     name: str = "Default Name"
     default_task: str
     project_id: Annotated[UUID, Field(description="Unique identifier")]
-    environment_id: Annotated[UUID, Field(description="Unique identifier")]
 
     @property
     def path(self) -> str:
@@ -59,7 +58,6 @@ class Dataset(BaseIDModel):
                 "name": "Collect blocks",
                 "default_task": "Collect block",
                 "project_id": "7b073838-99d3-42ff-9018-4e901eb047fc",
-                "environment_id": "e7d4bef8-158d-6c1g-c435-20ffb2chc675",
             }
         }
     }
