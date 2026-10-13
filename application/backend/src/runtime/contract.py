@@ -52,6 +52,7 @@ class LoadDatasetCommand(CommandBase):
     # ``datasets_dir / <dataset_id>`` is already the only definition of a
     # dataset's location; see the Dataset schema.
     dataset_id: UUID
+    camera_key_mapping: dict[str, str] = Field(default_factory=dict)
 
 
 class StartTaskCommand(CommandBase):
