@@ -3,18 +3,7 @@
 
 import { Suspense, useMemo, useState } from 'react';
 
-import {
-    Button,
-    ButtonGroup,
-    Content,
-    Dialog,
-    Divider,
-    Flex,
-    Heading,
-    IllustratedMessage,
-    Loading,
-    Text,
-} from '@geti-ui/ui';
+import { Button, ButtonGroup, Content, Dialog, Divider, Flex, Heading, IllustratedMessage, Loading } from '@geti-ui/ui';
 import { AlertCircle } from '@geti-ui/ui/icons';
 import { experimental_streamedQuery as streamedQuery, useQuery } from '@tanstack/react-query';
 
@@ -111,10 +100,10 @@ export const LogsDialog = ({ close, initialSourceId }: { close: () => void; init
     const [selectedSourceId, setSelectedSourceId] = useState<string>(initialSourceId ?? 'application');
 
     return (
-        <Dialog onDismiss={close}>
+        <Dialog aria-label='Logs' onDismiss={close}>
             <Heading>
                 <Flex alignItems='center' gap='size-300'>
-                    <Text>Logs</Text>
+                    <span>Logs</span>
                     <ErrorBoundary fallback={() => null}>
                         <Suspense>
                             <SourcesPicker
