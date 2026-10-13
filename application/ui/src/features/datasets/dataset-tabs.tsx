@@ -20,7 +20,7 @@ import styles from './dataset-tabs.module.css';
 type Dataset = SchemaDatasetOutput;
 
 const ACTIONS = [
-    { key: 'rename', label: 'Edit dataset name' },
+    { key: 'rename', label: 'Edit dataset' },
     { key: 'export', label: 'Export dataset' },
     { key: 'delete', label: 'Delete dataset' },
 ] satisfies ManagedTabAction[];
