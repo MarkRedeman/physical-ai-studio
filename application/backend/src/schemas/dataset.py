@@ -72,6 +72,7 @@ class RecordingEnvironment(BaseIDModel):
     dataset_id: UUID
     environment_id: UUID
     camera_mappings: list[CameraMapping] = []
+    is_default: bool = False
 
 
 class RecordingEnvironmentCreate(BaseModel):
@@ -80,7 +81,8 @@ class RecordingEnvironmentCreate(BaseModel):
 
 
 class RecordingEnvironmentUpdate(BaseModel):
-    camera_mappings: list[CameraMapping]
+    camera_mappings: list[CameraMapping] | None = None
+    is_default: bool | None = None
 
 
 class Snapshot(BaseIDModel):

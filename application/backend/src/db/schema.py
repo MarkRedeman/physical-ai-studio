@@ -212,6 +212,7 @@ class DatasetRecordingEnvironmentDB(Base):
         ForeignKey("project_environments.id", ondelete="CASCADE"), nullable=False
     )
     mappings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    is_default: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 

@@ -79,7 +79,14 @@ async def update_recording_environment(
     """Update the mappings used by a recording environment."""
     await dataset_service.get_dataset_by_id(dataset_id)
     return await recording_environment_service.update(
-        dataset_id, recording_environment_id, [mapping.model_dump(mode="json") for mapping in payload.camera_mappings]
+        dataset_id,
+        recording_environment_id,
+        (
+            None
+            if payload.camera_mappings is None
+            else [mapping.model_dump(mode="json") for mapping in payload.camera_mappings]
+        ),
+        payload.is_default,
     )
 
 
