@@ -42,7 +42,7 @@ def test_create_uses_rgb_encoder_and_not_vcodec(tmp_path: Path) -> None:
     )
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
-    dataset._video_encoding_settings = settings
+    dataset._recording_video_encoding_settings = settings
     dataset._access_mode = DatasetAccessMode.READ_ONLY
 
     with (
@@ -72,7 +72,7 @@ def test_load_dataset_is_read_only_and_does_not_pass_write_kwargs(tmp_path: Path
     )
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
-    dataset._video_encoding_settings = settings
+    dataset._recording_video_encoding_settings = settings
     dataset._access_mode = DatasetAccessMode.READ_ONLY
 
     with (
@@ -101,7 +101,7 @@ def test_resume_dataset_uses_write_kwargs_and_not_vcodec(tmp_path: Path) -> None
     )
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
-    dataset._video_encoding_settings = settings
+    dataset._recording_video_encoding_settings = settings
     dataset._access_mode = DatasetAccessMode.RECORDING_MUTATION
 
     with (
@@ -132,7 +132,7 @@ def test_resume_dataset_raises_in_read_only_mode(tmp_path: Path) -> None:
     )
     dataset = InternalLeRobotDataset.__new__(InternalLeRobotDataset)
     dataset.path = tmp_path / "dataset"
-    dataset._video_encoding_settings = settings
+    dataset._recording_video_encoding_settings = settings
     dataset._access_mode = DatasetAccessMode.READ_ONLY
 
     with patch.object(InternalLeRobotDataset, "_resume_for_writing") as resume_mock:
