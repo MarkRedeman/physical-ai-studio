@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.settings import SettingsUpdate, update_user_settings
 from main import app
+from services.system_service import SystemService
 from settings import SshProvisioningSettings, get_settings, write_user_settings
 
 
@@ -47,6 +48,17 @@ def test_patch_settings_clears_huggingface_token(monkeypatch, tmp_path: Path) ->
 
     assert response.status_code == 200
     assert get_settings().huggingface.hf_token is None
+
+
+def test_patch_video_recording_settings(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"video_recording": {"preset": None}})
+
+    assert response.status_code == 200
+    assert response.json()["video_recording"]["preset"] is None
+    assert get_settings().video_recording.preset is None
 
 
 def test_patch_empty_huggingface_token_clears_setting(monkeypatch, tmp_path: Path) -> None:
@@ -198,7 +210,9 @@ async def test_patch_ssh_settings_updates_a_timeout(monkeypatch, tmp_path: Path)
     """There is no master switch anymore - patching SSH settings is a plain save."""
     monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
 
-    response = await update_user_settings(SettingsUpdate(ssh=SshProvisioningSettings(connect_timeout_s=42.0)))
+    response = await update_user_settings(
+        SettingsUpdate(ssh=SshProvisioningSettings(connect_timeout_s=42.0)), SystemService()
+    )
 
     assert response.ssh.connect_timeout_s == 42.0
     assert get_settings().ssh_connect_timeout_s == 42.0
