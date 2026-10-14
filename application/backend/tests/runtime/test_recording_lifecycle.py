@@ -484,4 +484,4 @@ def test_load_dataset_uses_configured_video_recording_settings() -> None:
         session._load_dataset(LoadDatasetCommand(dataset_id=UUID("e8454e0c-f962-492e-878c-f7367f5ae73f")))
 
     resolve_preset.assert_called_once_with("cpu-h264")
-    assert dataset_class.call_args.kwargs["video_encoding_settings"] is resolve_preset.return_value
+    assert dataset_class.call_args.kwargs["recording_video_encoding_settings"] is resolve_preset.return_value

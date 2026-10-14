@@ -34,18 +34,18 @@ class InternalLeRobotDataset(DatasetClient):
     _teleop_action_processor: RobotProcessorPipeline
     _robot_action_processor: RobotProcessorPipeline
     _robot_observation_processor: RobotProcessorPipeline
-    _video_encoding_settings: VideoEncodingSettings
+    _recording_video_encoding_settings: VideoEncodingSettings
     _access_mode: DatasetAccessMode
 
     def __init__(
         self,
         dataset_path: Path,
         *,
-        video_encoding_settings: VideoEncodingSettings = VideoEncodingSettings(),
+        recording_video_encoding_settings: VideoEncodingSettings = VideoEncodingSettings(),
         access_mode: DatasetAccessMode = DatasetAccessMode.READ_ONLY,
     ):
         self.path = dataset_path
-        self._video_encoding_settings = video_encoding_settings
+        self._recording_video_encoding_settings = recording_video_encoding_settings
         self._access_mode = access_mode
         self.load_dataset()
 
@@ -60,7 +60,7 @@ class InternalLeRobotDataset(DatasetClient):
                 self._dataset = LeRobotDataset.resume(
                     repo_id=str(uuid4()),
                     root=self.path,
-                    **self._resolved_video_encoding_settings_write(),
+                    **self._resolved_recording_video_encoding_settings_write(),
                 )
             else:
                 self._dataset = LeRobotDataset(
@@ -69,8 +69,8 @@ class InternalLeRobotDataset(DatasetClient):
                 )
             self.has_episodes = self._dataset.num_episodes > 0
 
-    def _resolved_video_encoding_settings_write(self) -> dict:
-        return self._video_encoding_settings.to_lerobot_write_kwargs()
+    def _resolved_recording_video_encoding_settings_write(self) -> dict:
+        return self._recording_video_encoding_settings.to_lerobot_write_kwargs()
 
     def _resume_for_writing(self, repo_id: str | None = None) -> None:
         if not self._check_repository_exists(self.path):
@@ -80,7 +80,7 @@ class InternalLeRobotDataset(DatasetClient):
         self._dataset = LeRobotDataset.resume(
             repo_id=resolved_repo_id,
             root=self.path,
-            **self._resolved_video_encoding_settings_write(),
+            **self._resolved_recording_video_encoding_settings_write(),
         )
         self.has_episodes = self._dataset.num_episodes > 0
 
@@ -106,14 +106,16 @@ class InternalLeRobotDataset(DatasetClient):
             features=features,
             robot_type=robot_type,
             use_videos=True,
-            **self._resolved_video_encoding_settings_write(),
+            **self._resolved_recording_video_encoding_settings_write(),
         )
         self.has_episodes = False
 
     def delete_episodes(self, episode_indices: list[int], output_path: Path) -> DatasetClient:
         """Copy over repo without given episode_indices to output_path."""
         lerobot_delete_episodes(dataset=self._dataset, episode_indices=episode_indices, output_dir=output_path)
-        return InternalLeRobotDataset(output_path, video_encoding_settings=self._video_encoding_settings)
+        return InternalLeRobotDataset(
+            output_path, recording_video_encoding_settings=self._recording_video_encoding_settings
+        )
 
     def get_tasks(self) -> list[str]:
         """Get Tasks in dataset."""
@@ -274,7 +276,7 @@ class InternalLeRobotDataset(DatasetClient):
     def start_recording_mutation(self, fps: int, features: dict, robot_type: str) -> RecordingMutation:
         """Start recording mutation."""
         # Fail before copying the dataset if PyAV has no usable video encoder.
-        self._resolved_video_encoding_settings_write()
+        self._resolved_recording_video_encoding_settings_write()
 
         settings = get_settings()
         cache_dir = settings.cache_dir / str(uuid4())
@@ -282,7 +284,7 @@ class InternalLeRobotDataset(DatasetClient):
         logger.info(f"Creating cache dataset {cache_dir}")
         cache_dataset = InternalLeRobotDataset(
             cache_dir,
-            video_encoding_settings=self._video_encoding_settings,
+            recording_video_encoding_settings=self._recording_video_encoding_settings,
         )
         if self.exists_on_disk:
             shutil.copytree(self.path, cache_dir)

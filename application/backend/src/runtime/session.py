@@ -300,7 +300,7 @@ class RuntimeSession:
             dataset = InternalLeRobotDataset(
                 dataset_path,
                 access_mode=DatasetAccessMode.RECORDING_MUTATION,
-                video_encoding_settings=video_encoding_settings,
+                recording_video_encoding_settings=video_encoding_settings,
             )
             if self._follower is None:
                 raise RuntimeError("Follower robot is not set up")
