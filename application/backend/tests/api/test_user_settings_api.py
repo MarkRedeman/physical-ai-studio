@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.settings import SettingsUpdate, update_user_settings
 from main import app
+from schemas.video_recording import VideoRecordingPreset, VideoRecordingPresets
 from services.system_service import SystemService
 from settings import SshProvisioningSettings, get_settings, write_user_settings
 
@@ -59,6 +60,49 @@ def test_patch_video_recording_settings(monkeypatch, tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.json()["video_recording"]["preset"] is None
     assert get_settings().video_recording.preset is None
+
+
+def test_patch_video_recording_settings_persists_available_preset(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+    monkeypatch.setattr(
+        SystemService,
+        "get_video_recording_presets",
+        staticmethod(
+            lambda: VideoRecordingPresets(
+                presets=[
+                    VideoRecordingPreset(
+                        id="cpu-h264",
+                        name="CPU H.264",
+                        description="Software H.264 encoding.",
+                    )
+                ]
+            )
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"video_recording": {"preset": "cpu-h264"}})
+
+    assert response.status_code == 200
+    assert response.json()["video_recording"]["preset"] == "cpu-h264"
+    assert get_settings().video_recording.preset == "cpu-h264"
+
+
+def test_patch_video_recording_settings_rejects_unavailable_preset(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
+    write_user_settings({"video_recording": {"preset": "cpu-h264"}})
+    monkeypatch.setattr(
+        SystemService,
+        "get_video_recording_presets",
+        staticmethod(lambda: VideoRecordingPresets(presets=[])),
+    )
+
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"video_recording": {"preset": "intel-qsv-h264"}})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Video recording preset 'intel-qsv-h264' is unavailable on this backend."
+    assert get_settings().video_recording.preset == "cpu-h264"
 
 
 def test_patch_empty_huggingface_token_clears_setting(monkeypatch, tmp_path: Path) -> None:

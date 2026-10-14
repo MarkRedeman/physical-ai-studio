@@ -3,6 +3,7 @@
 
 """System information endpoints for hardware discovery."""
 
+import asyncio
 import os
 import signal
 from typing import Annotated
@@ -76,7 +77,7 @@ async def get_video_recording_presets(
     system_service: Annotated[SystemService, Depends(get_system_service)],
 ) -> VideoRecordingPresets:
     """Return recording presets verified by this backend's video stack."""
-    return system_service.get_video_recording_presets()
+    return await asyncio.to_thread(system_service.get_video_recording_presets)
 
 
 @system_router.post("/restart", status_code=status.HTTP_202_ACCEPTED)

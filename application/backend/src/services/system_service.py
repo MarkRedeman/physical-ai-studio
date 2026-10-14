@@ -11,7 +11,7 @@ from typing import Any
 import torch
 from loguru import logger
 
-from internal_datasets.lerobot.video_encoding_settings import video_encoding_preset_is_usable, video_encoding_presets
+from internal_datasets.lerobot.video_encoding_settings import available_video_encoding_presets
 from schemas.hardware import DeviceInfo, DeviceType, InferenceBackend, InferenceDeviceInfo, TrainingDevices
 from schemas.video_recording import VideoRecordingPreset, VideoRecordingPresets
 
@@ -37,8 +37,7 @@ class SystemService:
         return VideoRecordingPresets(
             presets=[
                 VideoRecordingPreset(id=preset.id, name=preset.name, description=preset.description)
-                for preset in video_encoding_presets()
-                if video_encoding_preset_is_usable(preset)
+                for preset in available_video_encoding_presets()
             ]
         )
 
