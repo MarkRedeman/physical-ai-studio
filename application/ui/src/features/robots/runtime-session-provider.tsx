@@ -72,6 +72,7 @@ type RuntimeSessionContextValue = {
     startEpisode: MutationResult<string>;
     saveEpisode: MutationResult;
     discardEpisode: MutationResult;
+    disconnect: MutationResult;
     readyForInference: boolean;
     readyForRecording: boolean;
     isConnected: boolean;
@@ -123,6 +124,7 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
     const [dataset, setDataset] = useState<SchemaDatasetOutput | undefined>(props.dataset);
     const devices = handshakeDevices(props.environment);
     const invalidateEpisodesQuery = useRefreshEpisodes(dataset?.id);
+    const disconnectResolver = useRef<(() => void) | null>(null);
 
     const onOpen = () => {
         socket.sendJsonMessage({
@@ -169,6 +171,8 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
         onError: console.error,
         onClose: () => {
             setState(createRuntimeSessionState());
+            disconnectResolver.current?.();
+            disconnectResolver.current = null;
         },
         onOpen,
     });
@@ -264,6 +268,26 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
             }),
     });
 
+    const disconnect = useMutation({
+        meta: { skipInvalidation: true },
+        mutationFn: async () => {
+            if (socket.readyState !== 1) {
+                return;
+            }
+            await new Promise<void>((resolve, reject) => {
+                disconnectResolver.current = resolve;
+                socket.sendJsonMessage({ event: 'disconnect', data: {} });
+                setTimeout(() => {
+                    if (disconnectResolver.current === resolve) {
+                        disconnectResolver.current = null;
+                        reject(new Error('Runtime session did not disconnect in time.'));
+                    }
+                }, 30_000);
+            });
+            return { event: 'disconnect' };
+        },
+    });
+
     return (
         <RuntimeSessionContext.Provider
             value={{
@@ -282,6 +306,7 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
                 startEpisode,
                 saveEpisode,
                 discardEpisode,
+                disconnect,
                 readyForInference: state.connected && state.model_loaded,
                 readyForRecording: state.connected && state.dataset_loaded,
                 isConnected: socket.readyState === 1,

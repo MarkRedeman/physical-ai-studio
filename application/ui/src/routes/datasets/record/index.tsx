@@ -76,6 +76,43 @@ const TotalRecordedEpisodes = () => {
     );
 };
 
+const RecordingEnvironmentPicker = ({
+    recordingEnvironments,
+    environments,
+    selectedId,
+    onSelect,
+}: {
+    recordingEnvironments: Array<{ id?: string; environment_id: string }>;
+    environments: Array<{ id: string; name: string }>;
+    selectedId: string;
+    onSelect: (id: string) => void;
+}) => {
+    const { disconnect, state } = useRuntimeSession();
+
+    const switchEnvironment = async (id: string | undefined) => {
+        if (id === undefined || id === selectedId) {
+            return;
+        }
+        await disconnect.mutateAsync();
+        onSelect(id);
+    };
+
+    return (
+        <Picker
+            aria-label='Recording environment'
+            items={recordingEnvironments}
+            selectedKey={selectedId}
+            isDisabled={state.is_recording || disconnect.isPending}
+            onSelectionChange={(id) => switchEnvironment(id?.toString())}
+        >
+            {(recordingEnvironment) => {
+                const environment = environments.find(({ id }) => id === recordingEnvironment.environment_id);
+                return <Item key={recordingEnvironment.id}>{environment?.name ?? 'Unavailable environment'}</Item>;
+            }}
+        </Picker>
+    );
+};
+
 const RecordingPage = () => {
     const { project_id, dataset_id } = useDatasetId();
     const [selectedRecordingEnvironmentId, setSelectedRecordingEnvironmentId] = useState<string>();
@@ -97,8 +134,11 @@ const RecordingPage = () => {
     const { data: environments } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/environments', {
         params: { path: { project_id } },
     });
+    const defaultRecordingEnvironment = recordingEnvironments.find(({ is_default }) => is_default);
     const selectedRecordingEnvironment =
-        recordingEnvironments.find(({ id }) => id === selectedRecordingEnvironmentId) ?? recordingEnvironments[0];
+        recordingEnvironments.find(({ id }) => id === selectedRecordingEnvironmentId) ??
+        defaultRecordingEnvironment ??
+        recordingEnvironments[0];
     const environmentId = selectedRecordingEnvironment?.environment_id;
     const environmentQuery = $api.useQuery(
         'get',
@@ -176,6 +216,7 @@ const RecordingPage = () => {
     );
     return (
         <RuntimeSessionProvider
+            key={selectedRecordingEnvironment.id}
             environment={environment}
             dataset={dataset}
             cameraKeyMapping={cameraKeyMapping}
@@ -217,6 +258,12 @@ const RecordingPage = () => {
                                 </Flex>
                             </Flex>
                         </Link>
+                        <RecordingEnvironmentPicker
+                            recordingEnvironments={recordingEnvironments}
+                            environments={environments}
+                            selectedId={selectedRecordingEnvironment.id!}
+                            onSelect={setSelectedRecordingEnvironmentId}
+                        />
                         <TotalRecordedEpisodes />
                     </Flex>
                 </View>
