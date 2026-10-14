@@ -18,6 +18,7 @@ export const RenameDatasetDialog = ({
     const [name, setName] = useState(dataset.name);
     const [defaultTask, setDefaultTask] = useState(dataset.default_task);
     const [defaultRecordingEnvironmentId, setDefaultRecordingEnvironmentId] = useState<string>();
+    const [environmentToAddId, setEnvironmentToAddId] = useState<string>();
     const renameMutation = $api.useMutation('put', '/api/dataset/{dataset_id}', {
         meta: {
             invalidates: [
@@ -41,6 +42,16 @@ export const RenameDatasetDialog = ({
     const defaultMutation = $api.useMutation(
         'patch',
         '/api/dataset/{dataset_id}/recording-environments/{recording_environment_id}'
+    );
+    const addRecordingEnvironmentMutation = $api.useMutation('post', '/api/dataset/{dataset_id}/recording-environments', {
+        meta: {
+            invalidates: [
+                ['get', '/api/dataset/{dataset_id}/recording-environments', { params: { path: { dataset_id: dataset.id! } } }],
+            ],
+        },
+    });
+    const availableEnvironments = environments.filter(
+        ({ id }) => !recordingEnvironments.some(({ environment_id }) => environment_id === id)
     );
 
     const isSaveDisabled =
@@ -77,6 +88,20 @@ export const RenameDatasetDialog = ({
         onDone(updated);
     };
 
+    const addRecordingEnvironment = async () => {
+        if (dataset.id === undefined || environmentToAddId === undefined) {
+            return;
+        }
+        const recordingEnvironment = await addRecordingEnvironmentMutation.mutateAsync({
+            params: { path: { dataset_id: dataset.id } },
+            body: { environment_id: environmentToAddId, camera_mappings: [] },
+        });
+        setEnvironmentToAddId(undefined);
+        if (defaultAssociation === undefined) {
+            setDefaultRecordingEnvironmentId(recordingEnvironment.id);
+        }
+    };
+
     return (
         <form onSubmit={onSubmit}>
             <Dialog width='size-6000'>
@@ -104,6 +129,23 @@ export const RenameDatasetDialog = ({
                             return <Item key={association.id}>{environment?.name ?? 'Unavailable environment'}</Item>;
                         }}
                     </Picker>
+                    <Picker
+                        label='Add recording environment'
+                        items={availableEnvironments}
+                        selectedKey={environmentToAddId}
+                        onSelectionChange={(id) => setEnvironmentToAddId(id?.toString())}
+                    >
+                        {(environment) => <Item key={environment.id}>{environment.name}</Item>}
+                    </Picker>
+                    <Button
+                        type='button'
+                        variant='secondary'
+                        onPress={addRecordingEnvironment}
+                        isDisabled={environmentToAddId === undefined}
+                        isPending={addRecordingEnvironmentMutation.isPending}
+                    >
+                        Add environment
+                    </Button>
                 </Content>
                 <ButtonGroup>
                     <Button variant='secondary' onPress={() => onDone(undefined)}>

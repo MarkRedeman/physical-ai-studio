@@ -61,7 +61,7 @@ describe('RenameDatasetDialog', () => {
 
         await waitFor(() => expect(onDone).toHaveBeenCalledWith(updatedDataset));
 
-        expect(receivedBody).toEqual({ name: 'renamed' });
+        expect(receivedBody).toEqual({ name: 'renamed', default_task: dataset.default_task });
         expect(receivedDatasetId).toBe(DATASET_ID);
     });
 
