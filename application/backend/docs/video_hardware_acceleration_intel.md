@@ -223,6 +223,21 @@ python -c "import av; print('h264_qsv' in av.codecs_available)"
 
 ---
 
+## Docker images
+
+Studio Docker images build PyAV from source against Studio's custom LGPL FFmpeg.
+The image includes Intel oneVPL/QSV and NVIDIA NVENC support, and the supplied
+Compose configuration requests the NVIDIA `video` driver capability for CUDA
+containers.
+
+- **Intel:** use the XPU image and make `/dev/dri` available to the container.
+  The image includes the oneVPL and Intel media-driver runtime stack.
+- **NVIDIA:** use the CUDA image with the NVIDIA Container Toolkit and GPU
+  passthrough. The host NVIDIA driver remains responsible for the encoder.
+
+No PyAV rebuild is needed inside Studio Docker images.
+
+
 ## Recording and training
 
 These steps configure the encoder used when **recording new datasets**. They
