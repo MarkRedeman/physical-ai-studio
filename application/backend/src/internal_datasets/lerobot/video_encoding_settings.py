@@ -65,19 +65,18 @@ def _encode_probe(vcodec: str, pix_fmt: str, options: dict[str, str]) -> bool:
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as probe_file:
         probe_path = Path(probe_file.name)
     try:
-        container = av.open(str(probe_path), "w")
-        stream = container.add_stream(vcodec, 30, options=options)
-        if not isinstance(stream, av.VideoStream):
-            raise ValueError(f"Codec {vcodec!r} did not create a video stream")
-        stream.pix_fmt = pix_fmt
-        stream.width, stream.height, stream.time_base = 320, 240, Fraction(1, 30)
-        frame = av.VideoFrame.from_ndarray(np.zeros((240, 320, 3), dtype=np.uint8), format="rgb24")
-        frame.pts, frame.time_base = 0, Fraction(1, 30)
-        for packet in stream.encode(frame):
-            container.mux(packet)
-        for packet in stream.encode():
-            container.mux(packet)
-        container.close()
+        with av.open(str(probe_path), "w") as container:
+            stream = container.add_stream(vcodec, 30, options=options)
+            if not isinstance(stream, av.VideoStream):
+                raise ValueError(f"Codec {vcodec!r} did not create a video stream")
+            stream.pix_fmt = pix_fmt
+            stream.width, stream.height, stream.time_base = 320, 240, Fraction(1, 30)
+            frame = av.VideoFrame.from_ndarray(np.zeros((240, 320, 3), dtype=np.uint8), format="rgb24")
+            frame.pts, frame.time_base = 0, Fraction(1, 30)
+            for packet in stream.encode(frame):
+                container.mux(packet)
+            for packet in stream.encode():
+                container.mux(packet)
         return True
     except Exception as exc:
         logging.warning("Skipping unavailable video encoder '%s': %s", vcodec, exc)
@@ -291,6 +290,12 @@ def video_encoding_preset_is_usable(preset: VideoEncodingPreset) -> bool:
     except Exception as exc:
         logging.warning("Video recording preset '%s' is unavailable: %s", preset.id, exc)
         return False
+
+
+@cache
+def available_video_encoding_presets() -> tuple[VideoEncodingPreset, ...]:
+    """Discover usable recording presets once for the lifetime of this process."""
+    return tuple(preset for preset in video_encoding_presets() if video_encoding_preset_is_usable(preset))
 
 
 def resolve_video_encoding_settings(preset_id: str | None) -> VideoEncodingSettings:

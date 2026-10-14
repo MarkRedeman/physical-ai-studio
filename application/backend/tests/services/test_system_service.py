@@ -135,15 +135,15 @@ def test_get_available_training_devices_returns_studio_host_devices() -> None:
     assert result.devices == local_devices
 
 
-def test_get_video_recording_presets_returns_only_usable_presets() -> None:
+def test_get_video_recording_presets_returns_discovered_presets() -> None:
     presets = [
         SimpleNamespace(id="intel-qsv-h264", name="Intel GPU QSV", description="Hardware encoding"),
         SimpleNamespace(id="cpu-h264", name="CPU H.264", description="Software encoding"),
     ]
-    with (
-        patch("services.system_service.video_encoding_presets", return_value=presets),
-        patch("services.system_service.video_encoding_preset_is_usable", side_effect=[False, True]),
-    ):
+    with patch("services.system_service.available_video_encoding_presets", return_value=presets):
         result = SystemService.get_video_recording_presets()
 
-    assert result.presets == [VideoRecordingPreset(id="cpu-h264", name="CPU H.264", description="Software encoding")]
+    assert result.presets == [
+        VideoRecordingPreset(id="intel-qsv-h264", name="Intel GPU QSV", description="Hardware encoding"),
+        VideoRecordingPreset(id="cpu-h264", name="CPU H.264", description="Software encoding"),
+    ]

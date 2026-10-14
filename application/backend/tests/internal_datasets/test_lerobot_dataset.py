@@ -192,4 +192,4 @@ def test_explicit_unusable_vcodec_raises_when_nothing_usable() -> None:
         patch.object(video_encoding_settings, "_is_vcodec_usable", return_value=False),
         pytest.raises(RuntimeError, match="No usable video encoder"),
     ):
-        StudioRGBEncoderConfig(vcodec="av1_qsv").resolve_vcodec()
+        StudioRGBEncoderConfig(vcodec="auto").resolve_vcodec()

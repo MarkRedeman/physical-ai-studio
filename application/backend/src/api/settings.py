@@ -3,6 +3,8 @@
 
 """User-configurable application settings API."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
@@ -64,7 +66,9 @@ async def update_user_settings(update: SettingsUpdate, system_service: SystemSer
     patch = update.model_dump(exclude_unset=True)
     if video_recording := patch.get("video_recording"):
         preset_id = video_recording.get("preset")
-        available_preset_ids = {preset.id for preset in system_service.get_video_recording_presets().presets}
+        available_preset_ids = {
+            preset.id for preset in (await asyncio.to_thread(system_service.get_video_recording_presets)).presets
+        }
         if preset_id is not None and preset_id not in available_preset_ids:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
