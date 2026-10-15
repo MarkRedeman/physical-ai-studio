@@ -28,8 +28,7 @@ if TYPE_CHECKING:
 
 STATE = "state"
 ACTION = "action"
-LEADER_STATE = "leader_state"
-VECTOR_KEYS = (STATE, ACTION, LEADER_STATE)
+VECTOR_KEYS = (STATE, ACTION)
 """Joint vectors the store always holds; they share the spec's joint names."""
 
 BLOCK_PREFIX = "pai-"
@@ -182,7 +181,7 @@ class Store:
         return self._block.name
 
     def write(self, key: str, values: ArrayLike, *, timestamp: float) -> None:
-        """Set the joint vector ``key`` (``state``, ``action`` or ``leader_state``)."""
+        """Set the joint vector ``key`` (``state`` or ``action``)."""
         self._write(self._vectors[key], self._views[key], values, timestamp)
 
     def read(self, key: str) -> Sample | None:

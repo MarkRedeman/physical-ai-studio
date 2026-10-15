@@ -8,7 +8,6 @@ import pytest
 
 from runtime_session.store import (
     ACTION,
-    LEADER_STATE,
     STATE,
     FeatureSpec,
     FeatureSpecMismatchError,
@@ -29,7 +28,7 @@ def store():
 
 
 def test_every_feature_starts_unwritten(store: Store) -> None:
-    for key in (STATE, ACTION, LEADER_STATE):
+    for key in (STATE, ACTION):
         assert store.read(key) is None
     assert store.read_observation("wrist") is None
 
@@ -45,7 +44,7 @@ def test_vectors_round_trip_with_names_and_timestamp(store: Store) -> None:
     # A zero position is a real value, not "unwritten".
     store.write(STATE, [0.0, 0.0, 0.0], timestamp=1.0)
     assert store.read(STATE) is not None
-    assert store.read(LEADER_STATE) is None
+    assert store.read(ACTION) is not None
 
 
 def test_frames_round_trip_per_camera(store: Store) -> None:
