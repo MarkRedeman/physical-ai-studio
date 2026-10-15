@@ -342,6 +342,12 @@ JPEG encoding runs off the event loop (`asyncio.to_thread`). One sampler task pe
      - Record and inference pages: put a work-in-progress empty state behind a single `RUNTIME_WIP` flag; their buttons (record, run model, teleop) are disabled.
      - Regenerate the OpenAPI types.
    - The rest of the app has to keep working: robots, cameras, environments CRUD, datasets, training and export. `prek` and the backend and UI tests must pass.
+   - **Done.** Deviations from the steps above:
+     - `RuntimeSessionBusyError` (backend) and `isRuntimeSessionBusyError` (UI) were removed too; Phase 5 adds the claim errors back.
+     - `RUNTIME_IDLE_TIMEOUT_S` was removed from settings.
+     - `useSynchronizeModelJoints` moved out of `use-joint-state.ts` into `use-synchronize-model-joints.ts`.
+     - The record and inference viewers (`recording-viewer.tsx`, `inference-viewer.tsx`) and `features/robots/robot-control/` were deleted rather than kept, because they only worked through the old provider. Phases 7 and 8 rebuild them on the new provider; the old layout is in git history.
+     - `RUNTIME_WIP` lives in `components/runtime-wip/runtime-wip.tsx`, together with `RuntimeWipNotice`. It disables "Start recording", "Add Episode" and "Run model". The environment preview shows the robot model at rest with an info note.
 1. **Worker foundations:** generic `BaseThreadWorker[C]` and `BaseProcessWorker[C]`, readiness and failure propagation, stop, join, then kill. Tests use fake workers that crash during setup, crash mid-run, and hang.
 2. **Store:** `FeatureSpec`, `Sample`, the seqlock scalars, the image triple buffer, create and attach, compatibility checks with detailed mismatches, and the stale-block sweep. Includes a cross-process test and a torn-read stress test.
 3. **Event bus:** a typed zenoh wrapper with pub/sub and an RPC with ack and timeout. Tests run against a local-only zenoh config.
