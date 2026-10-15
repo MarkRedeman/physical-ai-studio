@@ -179,15 +179,14 @@ What we have today and what we keep from it:
 
 ```
 FeatureSpec
-  joint_names:  tuple[str, ...]          (state and action share them)
-  leader:       bool                     (whether leader_state exists)
+  joint_names:  tuple[str, ...]          (state, action and leader_state share them)
   observations: {camera_key: ImageSpec(h, w, c, dtype=uint8)}
   task:         str  (not in shm, see below)
 
 Store (shm, one block per session, name = f"pai-{session_id}")
   state            -> Sample(values, names, timestamp)
   action           -> Sample(values, names, timestamp)
-  leader_state     -> Sample(values, names, timestamp)   (only with a leader)
+  leader_state     -> Sample(values, names, timestamp)   (always allocated; unwritten without a leader)
   observation[cam] -> Sample(frame,  name,  timestamp)
 ```
 
@@ -205,7 +204,7 @@ The joint names come namespaced the way the dataset stores them (e.g. `shoulder_
   - a dataset supplies the state/action names and camera shapes;
   - a model supplies its input features.
 
-  Every later load is checked against the spec with `spec.check_compatible(other) -> list[Mismatch]`. A mismatch raises `FeatureSpecMismatchError` listing each difference, for example "camera `wrist`: dataset 480x640x3, environment 720x1280x3" or "joint names differ at index 3". Once every shape-defining component is unloaded, the store is dropped and the next load creates a fresh one.
+  Every later load is checked against the spec with `spec.check_compatible(other) -> list[Mismatch]`. Compatible means everything the newcomer needs exists: joint names equal and in order, and each of its cameras present with the same shape. Extra cameras in the store are fine. A mismatch raises `FeatureSpecMismatchError` listing each difference, for example "camera `wrist`: dataset 480x640x3, environment 720x1280x3" or "joint names differ at index 3". Once every shape-defining component is unloaded, the store is dropped and the next load creates a fresh one.
 
 ## Event bus (zenoh)
 
