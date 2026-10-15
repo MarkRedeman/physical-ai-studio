@@ -141,7 +141,7 @@ What we have today and what we keep from it:
     - A Studio-only setting with no runtime equivalent (e.g. HIL) is left out of the export with a `# NOT EXPORTED:` comment, the same way `CHANGE_ME` paths are flagged today.
   - **Test:** a round-trip test exports an environment + model and runs `Config.from_dict(...).instantiate()` against `physicalai.runtime` with fake devices. This catches drift when either side changes.
 - The `rhecker/flexible-runtime` prototype (`runtimev2/`) already works through most of this design. We port from it instead of rewriting:
-  - `shared_store.py` (seqlock shm store) becomes the base of the Store.
+  - `shared_store.py` (shm layout, create and attach by name) becomes the base of the Store, minus its seqlock.
   - `workers/process.py` and `workers/base.py` (ready/failure propagation, kill a wedged child) become the base of the workers.
   - `environment.py`, `features.py` and `dataset_layout.py` become the feature spec, derived from an environment or a dataset.
   - `control/*` gives us the Control shape.
@@ -193,8 +193,10 @@ Store (shm, one block per session, name = f"pai-{session_id}")
 
 The joint names come namespaced the way the dataset stores them (e.g. `shoulder_pan.pos`). Then a dataset's `observation.state` and `action` names compare directly against the spec without a mapping step.
 
-- **Scalars:** use the seqlock from `shared_store.py` as-is.
-- **Images:** a seqlock on a ~1 MB copy tears too often, so use a **triple buffer** per camera. The writer fills a free slot and then publishes its index and seq atomically. Readers copy from the published slot and check seq. That is one extra memcpy per frame per camera on top of iceoryx2, which is negligible.
+- **No locking.** Every feature (joint vector or camera frame) is a single buffer plus a timestamp, and readers copy it out without coordinating with the writer. A read that overlaps a write can be torn: some joints or rows from the previous sample, the rest from the next. We accept that because consecutive samples are only one tick apart and the world moves continuously, so a torn sample is still physically plausible.
+  - **No garbage values:** aligned 8-byte stores are atomic on x86-64 and arm64. A torn joint vector mixes two real readings and never contains half-written floats.
+  - **Write order:** the writer stores the values first and the timestamp last. A reader that sees a timestamp therefore never gets the zeros of a feature that has not been written yet; NaN still means "not written yet".
+  - **Fallback:** if tearing turns out to matter somewhere (for example in recorded frames), add a seqlock or extra slots for that feature only. Readers don't need to change for that.
 - **Timestamps:** `time.monotonic()`, which is system-wide on Linux and comparable across processes. NaN means "not written yet".
 - **Task:** too awkward to keep in shm, since it is a variable-length string. Put it in session state and broadcast changes over zenoh; the dataset and model workers cache the latest value.
 - **Lifetime:** `RuntimeSession` creates and unlinks the block, and children attach by name plus spec. At backend startup, sweep `/dev/shm/pai-*` blocks whose session no longer exists, because a SIGKILLed session leaves its block behind.
@@ -342,8 +344,14 @@ JPEG encoding runs off the event loop (`asyncio.to_thread`). One sampler task pe
      - Record and inference pages: put a work-in-progress empty state behind a single `RUNTIME_WIP` flag; their buttons (record, run model, teleop) are disabled.
      - Regenerate the OpenAPI types.
    - The rest of the app has to keep working: robots, cameras, environments CRUD, datasets, training and export. `prek` and the backend and UI tests must pass.
+   - **Done.** Deviations from the steps above:
+     - `RuntimeSessionBusyError` (backend) and `isRuntimeSessionBusyError` (UI) were removed too; Phase 5 adds the claim errors back.
+     - `RUNTIME_IDLE_TIMEOUT_S` was removed from settings.
+     - `useSynchronizeModelJoints` moved out of `use-joint-state.ts` into `use-synchronize-model-joints.ts`.
+     - The record and inference viewers (`recording-viewer.tsx`, `inference-viewer.tsx`) and `features/robots/robot-control/` were deleted rather than kept, because they only worked through the old provider. Phases 7 and 8 rebuild them on the new provider; the old layout is in git history.
+     - `RUNTIME_WIP` lives in `components/runtime-wip/runtime-wip.tsx`, together with `RuntimeWipNotice`. It disables "Start recording", "Add Episode" and "Run model". The environment preview shows the robot model at rest with an info note.
 1. **Worker foundations:** generic `BaseThreadWorker[C]` and `BaseProcessWorker[C]`, readiness and failure propagation, stop, join, then kill. Tests use fake workers that crash during setup, crash mid-run, and hang.
-2. **Store:** `FeatureSpec`, `Sample`, the seqlock scalars, the image triple buffer, create and attach, compatibility checks with detailed mismatches, and the stale-block sweep. Includes a cross-process test and a torn-read stress test.
+2. **Store:** `FeatureSpec`, `Sample`, lock-free scalar and image buffers (values first, timestamp last), create and attach, compatibility checks with detailed mismatches, and the stale-block sweep. Includes a cross-process read/write test.
 3. **Event bus:** a typed zenoh wrapper with pub/sub and an RPC with ack and timeout. Tests run against a local-only zenoh config.
 4. **Robot and camera workers, plus the environment:** spec from the environment, ported from `runtimev2/environment.py`, and observe-only mode for `RobotWorker`. Move `/api/cameras/ws` and `/robots/{id}/observations/ws` onto the new workers (UI levels 1 and 2). The frontend gets the dumb `CameraView` and `RobotJointsView` plus the standalone hooks. Tested with a fake robot driver, then once on a real SO-101 through `scratch.py`.
 5. **RuntimeSession, registry and session websocket:** load and unload the environment, store lifetime, claims (`device_in_use` for levels 1 and 2, the busy check in `api/robots.py`). Includes the new ws protocol at `/runtime/ws` (commands with acks, `state`, 20 Hz `observation`, binary frames), the new `RuntimeSessionProvider`, and the runtime-sessions footer and list on the registry. The **environment form preview** comes back: its placeholder is removed and its cells read from the provider.
