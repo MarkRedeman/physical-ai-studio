@@ -13,7 +13,7 @@ from schemas import InferenceDevice
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-FollowerSource = Literal["hold", "teleop", "policy"]
+FollowerSource = Literal["hold", "teleop", "policy", "replay"]
 
 
 class CommandBase(BaseModel):
@@ -68,6 +68,13 @@ class StartRecordingCommand(CommandBase):
     task: str
 
 
+class StartReverseReplayCommand(CommandBase):
+    """Record a new episode while replaying the newest accepted one backwards."""
+
+    command: Literal["start_reverse_replay"] = "start_reverse_replay"
+    task: str
+
+
 class SaveEpisodeCommand(BaseModel):
     command: Literal["save_episode"] = "save_episode"
     request_id: str
@@ -86,6 +93,7 @@ Command = Annotated[
     | StartTaskCommand
     | StopTaskCommand
     | StartRecordingCommand
+    | StartReverseReplayCommand
     | SaveEpisodeCommand
     | DiscardEpisodeCommand,
     Field(discriminator="command"),

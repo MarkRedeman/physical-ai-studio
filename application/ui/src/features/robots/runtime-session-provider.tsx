@@ -69,6 +69,7 @@ type RuntimeSessionContextValue = {
     stopTask: MutationResult;
     setFollowerSource: MutationResult<FollowerSource>;
     startEpisode: MutationResult<string>;
+    startReverseReplay: MutationResult<string>;
     saveEpisode: MutationResult;
     discardEpisode: MutationResult;
     readyForInference: boolean;
@@ -239,6 +240,15 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
             ),
     });
 
+    const startReverseReplay = useMutation({
+        meta: { skipInvalidation: true },
+        mutationFn: async (task: string) =>
+            socket.sendJsonMessageAndWait<RuntimeApiJsonResponse>(
+                { event: 'start_reverse_replay', data: { task } },
+                ({ event, data }) => event === 'state' && data?.follower_source === 'replay'
+            ),
+    });
+
     const saveEpisode = useMutation({
         meta: { skipInvalidation: true },
         mutationFn: async () => {
@@ -276,6 +286,7 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
                 stopTask,
                 setFollowerSource,
                 startEpisode,
+                startReverseReplay,
                 saveEpisode,
                 discardEpisode,
                 readyForInference: state.connected && state.model_loaded,

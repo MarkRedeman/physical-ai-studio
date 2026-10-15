@@ -32,6 +32,10 @@ class RecordingState:
         self._episodes_recorded = 0
         self._task: str | None = None
         self._mutation: RecordingMutation | None = None
+        self._episode_actions: list[list[float]] = []
+        self._episode_action_keys: list[str] = []
+        self._last_recorded_actions: list[list[float]] = []
+        self._last_recorded_action_keys: list[str] = []
         self._closed = False
 
     @property
@@ -55,6 +59,8 @@ class RecordingState:
             if self._mutation is None or self._closed:
                 return False
             self._task = task
+            self._episode_actions = []
+            self._episode_action_keys = []
             self._is_recording = True
             return True
 
@@ -67,11 +73,17 @@ class RecordingState:
     def mark_saved(self) -> None:
         with self._lock:
             self._is_recording = False
+            self._episode_actions = []
+            self._episode_action_keys = []
             self._episodes_recorded += 1
 
     def mark_discarded(self) -> None:
         with self._lock:
             self._is_recording = False
+            self._episode_actions = []
+            self._episode_action_keys = []
+            self._last_recorded_actions = []
+            self._last_recorded_action_keys = []
 
     def add_frame(self, observation: dict[str, Any], action: dict[str, float]) -> None:
         """Write one tick under the state lock so save/discard cannot interleave."""
@@ -79,6 +91,10 @@ class RecordingState:
             if self._closed or not self._is_recording or self._mutation is None or self._task is None:
                 return
             self._mutation.add_frame(observation, action, self._task)
+            action_keys = list(action)
+            if not self._episode_action_keys:
+                self._episode_action_keys = action_keys
+            self._episode_actions.append([action[key] for key in self._episode_action_keys])
 
     def stop_episode(self) -> RecordingMutation:
         """Clear the recording flag so ticks skip, then return the mutation.
@@ -91,6 +107,8 @@ class RecordingState:
             if not self._is_recording or self._mutation is None:
                 raise RuntimeError("No episode is being recorded.")
             self._is_recording = False
+            self._last_recorded_actions = self._episode_actions
+            self._last_recorded_action_keys = self._episode_action_keys
             return self._mutation
 
     def current_mutation(self) -> RecordingMutation | None:
@@ -103,6 +121,32 @@ class RecordingState:
         with self._lock:
             self._is_recording = False
             return self._mutation
+
+    def latest_recorded_actions(self) -> tuple[list[list[float]], list[str]] | None:
+        """Return a copy of the newest recorded episode's sent actions.
+
+        LeRobot defers its in-memory episode metadata update until finalization.
+        Keeping this small action-only snapshot lets the newest episode be
+        reversed immediately, whether or not it has reached disk yet.
+        """
+        with self._lock:
+            if self._last_recorded_actions:
+                return list(self._last_recorded_actions), list(self._last_recorded_action_keys)
+            mutation = self._mutation
+        if mutation is None:
+            return None
+        # A new session has no in-memory action snapshot. The source dataset is
+        # finalized in that case and provides the most recent historical episode.
+        try:
+            episodes = mutation.source_dataset.get_episode_infos()
+        except TypeError:
+            return None
+        if not episodes:
+            return None
+        episode = mutation.source_dataset.find_episode(max(item.episode_index for item in episodes))
+        if episode is None:
+            return None
+        return episode.actions, episode.action_keys
 
     def take_mutation(self) -> RecordingMutation | None:
         """Detach the mutation so teardown can finalize it once.
@@ -118,6 +162,10 @@ class RecordingState:
             self._is_recording = False
             self._dataset_loaded = False
             self._task = None
+            self._episode_actions = []
+            self._episode_action_keys = []
+            self._last_recorded_actions = []
+            self._last_recorded_action_keys = []
             self._episodes_recorded = 0
             return mutation
 

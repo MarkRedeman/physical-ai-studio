@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from physicalai.robot.interface import Robot
     from physicalai.runtime import StopSignal
 
+    from internal_datasets.mutations.recording_mutation import RecordingMutation
     from runtime.contract import Command, EventSink
 
 # Bounds a ``copytree`` of a dataset that may be gigabytes. The alternative
@@ -111,6 +112,10 @@ class RuntimeSession:
             camera_keys=tuple(self._cameras),
         )
         self._action_source.bind_recording(self._recording)
+        self._action_source.bind_reverse_replay(
+            loader=self._recording.latest_recorded_actions,
+            on_complete=self._save_reverse_replay,
+        )
         action_source = self._action_source
         self._stream_callback = StreamCallback(
             event_sink=self._event_sink,
@@ -329,6 +334,22 @@ class RuntimeSession:
             # The buffer stays attached: discard is what clears it. Do not
             # reopen recording -- that would append frames to a buffer whose
             # write just failed.
+            self._emit_state()
+            raise
+        self._recording.mark_saved()
+        self._emit_state()
+
+    def _save_reverse_replay(self, mutation: RecordingMutation) -> None:
+        """Persist a completed reverse replay after its final action was recorded."""
+        try:
+            self._command_worker.submit("save_reverse_replay", lambda: self._save_stopped_episode(mutation))
+        except RuntimeError:
+            logger.warning("Could not save completed reverse replay because the session is shutting down")
+
+    def _save_stopped_episode(self, mutation: RecordingMutation) -> None:
+        try:
+            mutation.save_episode()
+        except Exception:
             self._emit_state()
             raise
         self._recording.mark_saved()

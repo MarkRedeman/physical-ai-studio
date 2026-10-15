@@ -82,6 +82,19 @@ def test_the_recorded_action_is_the_action_sent() -> None:
     assert task == "pick"
 
 
+def test_latest_recorded_actions_are_available_before_lerobot_finalization() -> None:
+    mutation = MagicMock()
+    recording = RecordingState()
+    recording.attach_mutation(mutation)
+    recording.start("assembly")
+    callback = _callback(recording)
+
+    callback.on_tick(_tick(positions=[1.0], action=[7.0]))
+    recording.stop_episode()
+
+    assert recording.latest_recorded_actions() == ([[7.0]], ["joint.pos"])
+
+
 def test_recorded_frames_are_rgb() -> None:
     mutation = MagicMock()
     recording = RecordingState()
