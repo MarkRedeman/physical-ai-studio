@@ -1,5 +1,13 @@
 # Runtime Inhousing Plan
 
+## Why?
+
+The current physicalai runtime does not allow for the same flexibility that is needed in the studio. The studio needs to be able to switch models, datasets, run human-in-the-loop. Reimplementing a flexible version of the Runtime session into physicalai would be possible, but it might be too complicated for the use case in physicalai, where the main goal is to run a model on the robot.
+
+Specifically the planned "Control" feature will be extremely handy for many of the issues that we are facing when implementing new stuff in the robot.
+
+## Plan
+
 Since this will be a rather big refactor we will work on it in steps using a feature branch, only merging said feature branch at the end.
 The current implementation of runtime is first removed and the endpoints made into placeholders, or buttons disabled. After that reimplementation is gradually added.
 This is done because a gradual change is very hard and the feature-branch approach allows for incomplete or broken states of the feature branch.
