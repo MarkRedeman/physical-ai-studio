@@ -14,6 +14,8 @@ import { useSynchronizeModelJoints } from '../../use-synchronize-model-joints';
 
 // How often the leader is read; each reading is one command to the follower.
 const TELEOP_HZ = 100;
+// How long the follower takes to reach the leader when teleop starts, instead of jumping to it.
+const TELEOP_GRACE_S = 3;
 
 /** Drive the follower from the leader, or hold it where it is. */
 const TeleopSwitch = () => {
@@ -24,7 +26,7 @@ const TeleopSwitch = () => {
         setIsPending(true);
         const ack = await send({
             command: 'set_control',
-            control: teleoperate ? { type: 'teleop', hz: TELEOP_HZ } : null,
+            control: teleoperate ? { type: 'teleop', hz: TELEOP_HZ, grace_s: TELEOP_GRACE_S } : null,
         });
         setIsPending(false);
         if (!ack.ok) {

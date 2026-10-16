@@ -170,7 +170,7 @@ def test_set_control_is_acked_and_reported_in_state(client: TestClient) -> None:
         websocket.send_json({"command": "set_control", "request_id": "2", "control": {"type": "teleop", "hz": 50}})
         assert _receive_until(websocket, lambda m: m["type"] == "ack")["ok"]
         state = _receive_until(websocket, lambda m: m["type"] == "state" and m["data"]["control"] is not None)
-        assert state["data"]["control"] == {"type": "teleop", "hz": 50.0}
+        assert state["data"]["control"] == {"type": "teleop", "hz": 50.0, "grace_s": 3.0}  # the default grace
 
         websocket.send_json({"command": "set_control", "request_id": "3", "control": None})
         assert _receive_until(websocket, lambda m: m["type"] == "ack")["ok"]

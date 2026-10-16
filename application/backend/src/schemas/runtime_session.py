@@ -31,6 +31,12 @@ class TeleopControlConfig(BaseModel):
 
     type: Literal["teleop"] = "teleop"
     hz: float = Field(100, gt=0, le=500, description="How often the leader is read; each reading is one command")
+    grace_s: float = Field(
+        3,
+        ge=0,
+        le=30,
+        description="On every start, the follower closes the gap to the leader over this long instead of jumping",
+    )
 
 
 class MoveControlConfig(BaseModel):

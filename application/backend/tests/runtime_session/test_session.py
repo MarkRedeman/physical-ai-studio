@@ -139,8 +139,8 @@ async def test_teleop_drives_the_follower_and_none_holds_it(new_session, robot_f
     await session.load_environment(make_environment(cameras=0))
     store = session.store
     try:
-        await session.set_control(TeleopControlConfig(hz=50))
-        assert session.state().control == TeleopControlConfig(hz=50)
+        await session.set_control(TeleopControlConfig(hz=50, grace_s=0.2))
+        assert session.state().control == TeleopControlConfig(hz=50, grace_s=0.2)
         await _until(lambda: store.read(STATE).value.tolist() == [5.0, 6.0])
 
         await session.set_control(None)

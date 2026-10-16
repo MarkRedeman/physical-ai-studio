@@ -388,7 +388,9 @@ JPEG encoding runs off the event loop (`asyncio.to_thread`, one call per new fra
    - Done:
      - `runtime_session/controls.py`:
        - `Control` is a `ThreadWorker` whose `tick()` runs at its own `hz`.
+       - `Control` calls `on_start()` once on its own thread inside `lifecycle` (so a failure there fails the start), then `on_tick()` at `hz`. Each control is its own module in `runtime_session/controls/`.
        - `TeleopControl` borrows the leader and writes its measured position with the leader's capture time. It refuses a leader whose joints differ from the follower's.
+       - Every time teleop starts there is a grace period (`grace_s`, default 3 s; `0` turns it off). The command blends from where the follower was to the leader's live position, so the follower closes the gap instead of jumping.
        - `MoveControl` interpolates from the measured state to a target by joint name over `duration_s`, then holds. Joints left out stay put.
      - Configs are pydantic (`TeleopControlConfig`, `MoveControlConfig`, the `ControlConfig` union) and show up in `state.control`.
      - `set_control {control: ... | null}`: the session stops and joins the old control, re-seeds `action` from the measured state (hold), then starts the new one. `null` is hold. Unloading the environment stops the control first.
