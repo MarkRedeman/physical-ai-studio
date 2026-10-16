@@ -28,8 +28,8 @@ def log(tmp_path: Path) -> Path:
     return tmp_path / "actions.jsonl"
 
 
-def _recipe(log: Path, **kwargs: object) -> RobotRecipe:
-    return RobotRecipe.from_driver(uuid.uuid4(), FakeRobot(str(log), JOINTS, [1.0, 2.0], **kwargs))
+def _recipe(log: Path, *, fail_connect: bool = False) -> RobotRecipe:
+    return RobotRecipe.from_driver(uuid.uuid4(), FakeRobot(str(log), JOINTS, [1.0, 2.0], fail_connect=fail_connect))
 
 
 @pytest.fixture
