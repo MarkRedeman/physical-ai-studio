@@ -82,10 +82,12 @@ class StudioActionSource:
             models_dir=models_dir,
         )
         self._recording: RecordingState | None = None
-        self._replay_loader: Callable[[], tuple[list[list[float]], list[str]] | None] | None = None
+        self._replay_loader: Callable[[], tuple[list[list[float]], list[str], float] | None] | None = None
         self._on_replay_complete: Callable[[RecordingMutation], None] | None = None
         self._replay_actions: list[np.ndarray] = []
         self._replay_index = 0
+        self._replay_elapsed_s = 0.0
+        self._replay_fps = 0.0
         self._replay_approach: list[np.ndarray] = []
         self._replay_approach_index = 0
         self._replay_task: str | None = None
@@ -105,7 +107,7 @@ class StudioActionSource:
     def bind_reverse_replay(
         self,
         *,
-        loader: Callable[[], tuple[list[list[float]], list[str]] | None],
+        loader: Callable[[], tuple[list[list[float]], list[str], float] | None],
         on_complete: Callable[[RecordingMutation], None],
     ) -> None:
         """Attach session-owned trajectory storage and persistence callbacks."""
@@ -169,8 +171,9 @@ class StudioActionSource:
                 self._complete_replay(robot_state)
                 return self._hold_target.copy()
             action = self._replay_actions[self._replay_index]
-            self._replay_index += 1
-            self._replay_complete = self._replay_index == len(self._replay_actions)
+            self._replay_elapsed_s += 1 / self._fps
+            self._replay_index = min(int(self._replay_elapsed_s * self._replay_fps), len(self._replay_actions) - 1)
+            self._replay_complete = self._replay_elapsed_s >= len(self._replay_actions) / self._replay_fps
             return action.copy()
 
         leader_action = self._read_leader(robot_state) if self._leader_reads_enabled else self._last_leader_action
@@ -356,6 +359,7 @@ class StudioActionSource:
         self._cancel_arming()
         self._replay_actions = actions
         self._replay_index = 0
+        self._replay_elapsed_s = 0.0
         self._replay_approach = self._interpolate_replay_approach(robot_state, actions[0])
         self._replay_approach_index = 0
         self._replay_task = command.task
@@ -363,7 +367,7 @@ class StudioActionSource:
         self._follower_source = "replay"
         self._emit_state()
 
-    def _load_reverse_actions(self, robot_state: RobotObservation) -> list[np.ndarray] | None:
+    def _load_reverse_actions(self, robot_state: RobotObservation) -> list[np.ndarray] | None:  # noqa: PLR0911
         if self._replay_loader is None:
             self._emit_replay_error("Load a dataset before starting reverse replay.")
             return None
@@ -376,9 +380,12 @@ class StudioActionSource:
         if replay is None:
             self._emit_replay_error("Record and accept an episode before starting reverse replay.")
             return None
-        recorded_actions, action_keys = replay
+        recorded_actions, action_keys, replay_fps = replay
         if not recorded_actions:
             self._emit_replay_error("Record and accept an episode before starting reverse replay.")
+            return None
+        if replay_fps <= 0:
+            self._emit_replay_error("The latest episode has an invalid recording FPS.")
             return None
         expected_action_keys = [f"{name}.pos" for name in self._follower.joint_names]
         if action_keys != expected_action_keys:
@@ -393,6 +400,7 @@ class StudioActionSource:
         ):
             self._emit_replay_error("The latest episode contains invalid actions for the connected follower robot.")
             return None
+        self._replay_fps = replay_fps
         return actions
 
     def _interpolate_replay_approach(self, robot_state: RobotObservation, target: np.ndarray) -> list[np.ndarray]:
@@ -415,6 +423,8 @@ class StudioActionSource:
             return
         self._replay_actions = []
         self._replay_index = 0
+        self._replay_elapsed_s = 0.0
+        self._replay_fps = 0.0
         self._replay_approach = []
         self._replay_approach_index = 0
         self._replay_task = None
@@ -435,6 +445,8 @@ class StudioActionSource:
         self._replay_actions = []
         self._replay_approach = []
         self._replay_index = 0
+        self._replay_elapsed_s = 0.0
+        self._replay_fps = 0.0
         self._replay_approach_index = 0
         self._replay_task = None
         self._return_to_teleop = []

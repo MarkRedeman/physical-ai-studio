@@ -56,7 +56,7 @@ def test_reverse_replay_sends_actions_backwards_then_saves() -> None:
     recording = RecordingState()
     recording.attach_mutation(object())  # type: ignore[arg-type]
     completed: list[bool] = []
-    replay = ([[1, 2], [3, 4]], ["joint_0.pos", "joint_1.pos"])
+    replay = ([[1, 2], [3, 4]], ["joint_0.pos", "joint_1.pos"], 1.0)
     source = StudioActionSource(
         follower=follower,
         leader=leader,
@@ -81,6 +81,35 @@ def test_reverse_replay_sends_actions_backwards_then_saves() -> None:
 
     assert source.follower_source == "teleop"
     assert completed == [True]
+
+
+def test_reverse_replay_holds_30_fps_actions_for_two_60_hz_updates() -> None:
+    follower = FakeRobot([_observation([0], 1)])
+    mailbox = InMemoryCommandMailbox()
+    recording = RecordingState(recording_fps=30)
+    recording.attach_mutation(object())  # type: ignore[arg-type]
+    source = StudioActionSource(
+        follower=follower,
+        leader=None,
+        mailbox=mailbox,
+        event_sink=QueueEventSink(),
+        fps=60,
+    )
+    source._REPLAY_APPROACH_DURATION_S = 0
+    source.bind_recording(recording)
+    source.bind_reverse_replay(
+        loader=lambda: ([[1], [3]], ["joint_0.pos"], 30.0),
+        on_complete=lambda _: None,
+    )
+    source.connect(bus=object(), session_id="test")
+    mailbox.apply(StartReverseReplayCommand(task="disassembly"))
+    state = follower.get_observation()
+
+    source.update(state, {}, 0)  # Single approach target.
+    np.testing.assert_array_equal(source.update(state, {}, 1), [3])
+    np.testing.assert_array_equal(source.update(state, {}, 2), [3])
+    np.testing.assert_array_equal(source.update(state, {}, 3), [1])
+    np.testing.assert_array_equal(source.update(state, {}, 4), [1])
 
 
 def test_connect_rejects_mismatched_joint_names() -> None:

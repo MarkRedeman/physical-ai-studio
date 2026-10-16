@@ -18,6 +18,7 @@ from runtime.action_source import StudioActionSource
 from runtime.callbacks.recording import RecordingCallback, RecordingState
 from runtime.callbacks.stream import StreamCallback
 from runtime.command_thread import CommandWorker
+from runtime.config_builder import RECORDING_FPS
 from runtime.contract import (
     DiscardEpisodeCommand,
     DisconnectCommand,
@@ -81,7 +82,7 @@ class RuntimeSession:
         self._cameras: dict[str, Camera] = {}
         self._action_source: StudioActionSource | None = None
         self._stream_callback: StreamCallback | None = None
-        self._recording = RecordingState()
+        self._recording = RecordingState(recording_fps=RECORDING_FPS)
         self._recording_callback: RecordingCallback | None = None
         self._command_worker = CommandWorker()
         self._runtime: RobotRuntime | None = None
@@ -304,7 +305,7 @@ class RuntimeSession:
             if self._follower is None:
                 raise RuntimeError("Follower robot is not set up")
             mutation = dataset.start_recording_mutation(
-                fps=int(self._document["init_args"]["fps"]),
+                fps=int(RECORDING_FPS),
                 features=build_lerobot_dataset_features(
                     joint_names=list(self._follower.joint_names),
                     camera_specs=self._camera_specs_from_frames(),

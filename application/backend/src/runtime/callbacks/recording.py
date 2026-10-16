@@ -25,8 +25,12 @@ class RecordingState:
     episode opened before a reconnect is the same episode after it.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, recording_fps: float = 30.0) -> None:
+        if recording_fps <= 0:
+            raise ValueError("Recording FPS must be positive")
         self._lock = threading.Lock()
+        self._recording_fps = recording_fps
+        self._recording_generation = 0
         self._dataset_loaded = False
         self._is_recording = False
         self._episodes_recorded = 0
@@ -53,6 +57,15 @@ class RecordingState:
         with self._lock:
             return self._episodes_recorded
 
+    @property
+    def recording_fps(self) -> float:
+        return self._recording_fps
+
+    @property
+    def recording_generation(self) -> int:
+        with self._lock:
+            return self._recording_generation
+
     def start(self, task: str) -> bool:
         """Begin an episode. Return False when no dataset is loaded."""
         with self._lock:
@@ -61,6 +74,7 @@ class RecordingState:
             self._task = task
             self._episode_actions = []
             self._episode_action_keys = []
+            self._recording_generation += 1
             self._is_recording = True
             return True
 
@@ -122,7 +136,7 @@ class RecordingState:
             self._is_recording = False
             return self._mutation
 
-    def latest_recorded_actions(self) -> tuple[list[list[float]], list[str]] | None:
+    def latest_recorded_actions(self) -> tuple[list[list[float]], list[str], float] | None:
         """Return a copy of the newest recorded episode's sent actions.
 
         LeRobot defers its in-memory episode metadata update until finalization.
@@ -131,7 +145,7 @@ class RecordingState:
         """
         with self._lock:
             if self._last_recorded_actions:
-                return list(self._last_recorded_actions), list(self._last_recorded_action_keys)
+                return list(self._last_recorded_actions), list(self._last_recorded_action_keys), self._recording_fps
             mutation = self._mutation
         if mutation is None:
             return None
@@ -146,7 +160,7 @@ class RecordingState:
         episode = mutation.source_dataset.find_episode(max(item.episode_index for item in episodes))
         if episode is None:
             return None
-        return episode.actions, episode.action_keys
+        return episode.actions, episode.action_keys, float(episode.fps)
 
     def take_mutation(self) -> RecordingMutation | None:
         """Detach the mutation so teardown can finalize it once.
@@ -196,6 +210,8 @@ class RecordingCallback:
         self._recording = recording
         self._follower_source = follower_source
         self._joint_names: list[str] = []
+        self._last_recorded_timestamp: float | None = None
+        self._recording_generation = -1
 
     def on_lifecycle(self, event: RuntimeLifecycleEvent) -> None:
         if event.event == "start":
@@ -205,6 +221,17 @@ class RecordingCallback:
         if self._follower_source() == "hold":
             return
         if event.action_sent is None or not self._joint_names:
+            return
+        generation = self._recording.recording_generation
+        if generation != self._recording_generation:
+            self._recording_generation = generation
+            self._last_recorded_timestamp = None
+        if not self._recording.is_recording:
+            return
+        if (
+            self._last_recorded_timestamp is not None
+            and event.timestamp - self._last_recorded_timestamp < 1 / self._recording.recording_fps
+        ):
             return
         observation: dict[str, Any] = dict(
             observation_to_dict(
@@ -218,6 +245,7 @@ class RecordingCallback:
         action = action_to_dict(self._joint_names, event.action_sent)
         try:
             self._recording.add_frame(observation, action)
+            self._last_recorded_timestamp = event.timestamp
         except Exception:
             logger.exception("Failed to write a recording frame")
 
