@@ -197,7 +197,7 @@ The joint names come namespaced the way the dataset stores them (e.g. `shoulder_
   - **Fallback:** if tearing turns out to matter somewhere (for example in recorded frames), add a seqlock or extra slots for that feature only. Readers don't need to change for that.
 - **Timestamps:** `time.monotonic()`, which is system-wide on Linux and comparable across processes. NaN means "not written yet".
 - **Task:** too awkward to keep in shm, since it is a variable-length string. Put it in session state and broadcast changes over zenoh; the dataset and model workers cache the latest value.
-- **Lifetime:** `RuntimeSession` creates and unlinks the block, and children attach by name plus spec. At backend startup, sweep `/dev/shm/pai-*` blocks whose session no longer exists, because a SIGKILLed session leaves its block behind.
+- **Lifetime:** `RuntimeSession` creates and unlinks the block, and children attach by name plus spec. A block is named `pai-<creator pid>-<session id>`. At backend startup, sweep `/dev/shm/pai-*` blocks whose creating process is gone, because a SIGKILLed backend leaves its blocks behind. Blocks of a live process are left alone: an earlier sweep removed every block on the host, so the backend test suite deleted a running dev server's live session store.
 - **First loaded defines the shape:**
   - an environment supplies the robot and cameras;
   - a dataset supplies the state/action names and camera shapes;
