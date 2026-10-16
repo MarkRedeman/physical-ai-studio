@@ -93,10 +93,28 @@ export const RecordingViewer = () => {
     const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
     const bindings = getEffectiveBindings(settings.hotkeys.bindings);
 
+    const onStartReverseReplay = () => {
+        previousTask.current = task;
+        setTask(REVERSE_REPLAY_TASK);
+        startReverseReplay.mutate(REVERSE_REPLAY_TASK, {
+            onSuccess: () => {
+                setReverseReplayStarted(true);
+            },
+            onError: () => {
+                setTask(previousTask.current);
+            },
+        });
+    };
+
     useHotkey(
         bindings['recording.start_episode'],
         () => startEpisode.mutate(task),
         !state.is_recording && !startEpisode.isPending && task !== ''
+    );
+    useHotkey(
+        bindings['recording.start_reverse_replay'],
+        onStartReverseReplay,
+        !state.is_recording && !reverseReplayStarted && !startReverseReplay.isPending
     );
     useHotkey(
         bindings['recording.accept_episode'],
@@ -114,19 +132,6 @@ export const RecordingViewer = () => {
         if (task !== '') {
             startEpisode.mutate(task);
         }
-    };
-
-    const onStartReverseReplay = () => {
-        previousTask.current = task;
-        setTask(REVERSE_REPLAY_TASK);
-        startReverseReplay.mutate(REVERSE_REPLAY_TASK, {
-            onSuccess: () => {
-                setReverseReplayStarted(true);
-            },
-            onError: () => {
-                setTask(previousTask.current);
-            },
-        });
     };
 
     if (!readyForRecording) {
@@ -209,6 +214,9 @@ export const RecordingViewer = () => {
                                     onPress={onStartReverseReplay}
                                 >
                                     <Text>Record reverse replay</Text>
+                                    <Keyboard UNSAFE_className={classes.hotkey}>
+                                        {formatKeyCombo(bindings['recording.start_reverse_replay'])}
+                                    </Keyboard>
                                 </Button>
                             </ButtonGroup>
                         )}
