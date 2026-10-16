@@ -242,7 +242,10 @@ class RecordingCallback:
         )
         for key, frame in event.camera_frames.items():
             observation[key] = np.array(frame.data, copy=True)
-        action = action_to_dict(self._joint_names, event.action_sent)
+        # Reverse replay needs the path the follower actually achieved, not the
+        # leader-derived target it was asked to reach. The measured positions
+        # retain contact, compliance and tracking effects from the demonstration.
+        action = action_to_dict(self._joint_names, event.robot_state.joint_positions)
         try:
             self._recording.add_frame(observation, action)
             self._last_recorded_timestamp = event.timestamp
