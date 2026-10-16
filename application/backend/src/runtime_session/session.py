@@ -30,7 +30,7 @@ import anyio
 from loguru import logger
 
 from exceptions import BaseException as AppBaseException
-from exceptions import RuntimeSessionCommandError
+from exceptions import IncompatiblePartsError, RuntimeSessionCommandError
 from runtime_session.bus import Bus, NoResponderError, Subscription, command_key
 from runtime_session.controls import build_control
 from runtime_session.dataset import dataset_fps, dataset_spec
@@ -67,7 +67,7 @@ if TYPE_CHECKING:
     from runtime_session.controls import Control
     from runtime_session.environment import ConnectedEnvironment, EnvironmentDescription
     from runtime_session.registry import RuntimeSessionRegistry
-    from runtime_session.store import Store
+    from runtime_session.store import FeatureSpec, Mismatch, Store
     from schemas.dataset import Dataset
     from schemas.environment import EnvironmentWithRelations
     from schemas.runtime_session import ControlConfig, EnvironmentDraft
@@ -185,7 +185,10 @@ class RuntimeSession:
     def _serve_commands(self, bus: Bus) -> None:
         """Serve the commands that change what the session holds; workers serve their own."""
         commands: dict[str, tuple[type[BaseModel], Callable[[Any], Awaitable[None]]]] = {
-            "load_environment": (LoadEnvironmentCommand, lambda command: self._load_draft(command.environment)),
+            "load_environment": (
+                LoadEnvironmentCommand,
+                lambda command: self._load_draft(command.environment, unload_incompatible=command.unload_incompatible),
+            ),
             "unload_environment": (UnloadEnvironmentCommand, lambda _command: self.unload_environment()),
             "set_control": (SetControlCommand, lambda command: self.set_control(command.control)),
             "load_dataset": (LoadDatasetCommand, lambda command: self._load_dataset_by_id(command.dataset_id)),
@@ -194,8 +197,8 @@ class RuntimeSession:
         for name, (model, run) in commands.items():
             bus.serve(command_key(name), model, _as_command(run))
 
-    async def _load_draft(self, draft: EnvironmentDraft) -> None:
-        await self.load_environment(await self._resolve.environment(draft))
+    async def _load_draft(self, draft: EnvironmentDraft, *, unload_incompatible: bool) -> None:
+        await self.load_environment(await self._resolve.environment(draft), unload_incompatible=unload_incompatible)
 
     async def _load_dataset_by_id(self, dataset_id: UUID) -> None:
         await self.load_dataset(await self._resolve.dataset(dataset_id))
@@ -253,11 +256,17 @@ class RuntimeSession:
             camera_ids=[camera.camera_id for camera in environment.cameras] if environment else [],
         )
 
-    async def load_environment(self, environment: EnvironmentWithRelations) -> None:
-        """Connect the environment's robot, leader and cameras, or fail with nothing held.
+    async def load_environment(
+        self, environment: EnvironmentWithRelations, *, unload_incompatible: bool = False
+    ) -> None:
+        """Connect the environment's robot, leader and cameras, replacing a loaded one.
+
+        A loaded dataset is loaded again on the new environment when it still fits it.
 
         Raises:
-            RuntimeSessionCommandError: The session is closed, or an environment is already loaded.
+            RuntimeSessionCommandError: The session is closed.
+            IncompatiblePartsError: A loaded dataset does not fit the new environment and
+                ``unload_incompatible`` is not set; nothing changed.
             DeviceInUseError: Another session holds one of its robots.
             CameraSettingsConflictError: Another session uses a camera at other settings.
             WorkerStartupError: A device failed to connect.
@@ -265,14 +274,54 @@ class RuntimeSession:
         async with self._lock:
             if self.closed.is_set():
                 raise RuntimeSessionCommandError("The session is closed.", error_code="session_closed")
-            await self._environment.load(self._loaded_environment(environment))
+            # Described before anything is unloaded: building drivers touches no device, and a
+            # refusal must leave the session as it was.
+            description = await describe_environment(environment, self._robot_factory)
+            dataset = self._dataset.value
+            keep = dataset.dataset if dataset is not None else None
+            if dataset is not None and (mismatches := self._dataset_mismatches(dataset, description.spec)):
+                if not unload_incompatible:
+                    reasons = [str(mismatch) for mismatch in mismatches]
+                    raise IncompatiblePartsError(
+                        [{"part": "dataset", "name": dataset.dataset.name, "reasons": reasons}]
+                    )
+                keep = None
+            await self._unload_environment()
+            await self._environment.load(self._loaded_environment(environment, description))
             logger.info("Session {} loaded environment {!r}", self.id, environment.name)
+            if keep is not None:
+                await self._reload_dataset(keep)
         self._emit(StateMessage(data=self.state()))
 
+    def _dataset_mismatches(self, loaded: LoadedDataset, spec: FeatureSpec) -> list[Mismatch]:
+        """What ``spec`` lacks that the dataset needs, counting what this session recorded but has not copied back."""
+        recorded = dataset_spec(loaded.dataset)
+        if recorded is None and loaded.status.episodes_recorded and self.store is not None:
+            # A new dataset gets its shape from the episodes this session recorded into it.
+            recorded = self.store.spec
+        return spec.check_compatible(recorded) if recorded is not None else []
+
+    async def _reload_dataset(self, dataset: Dataset) -> None:
+        """Hold the lock. Load ``dataset`` again after an environment swap; a failure is reported, not raised."""
+        environment = self._environment.require("Load an environment first.")
+        try:
+            await self._dataset.load(self._loaded_dataset(dataset, environment))
+        except Exception as error:
+            logger.opt(exception=error).error("Session {} could not load dataset {!r} again", self.id, dataset.name)
+            self._emit(
+                ErrorMessage(
+                    component="dataset",
+                    message=f"Dataset {dataset.name!r} could not be loaded again: {error}",
+                    error_code="dataset_reload_failed",
+                    session_alive=True,
+                )
+            )
+
     @asynccontextmanager
-    async def _loaded_environment(self, environment: EnvironmentWithRelations) -> AsyncIterator[LoadedEnvironment]:
+    async def _loaded_environment(
+        self, environment: EnvironmentWithRelations, description: EnvironmentDescription
+    ) -> AsyncIterator[LoadedEnvironment]:
         """Claim, connect and watch the environment for as long as it is loaded."""
-        description = await describe_environment(environment, self._robot_factory)
         with self._claim(description):
             async with connect_environment(description, self.id) as connected:
                 watch = asyncio.create_task(self._watch(connected))
@@ -344,24 +393,32 @@ class RuntimeSession:
     async def unload_environment(self) -> None:
         """Disconnect the environment. A no-op when none is loaded."""
         async with self._lock:
-            if (environment := self.environment) is None:
-                return
-            await self._control.unload()
-            await self._dataset.unload()
-            await self._environment.unload()
-            logger.info("Session {} unloaded environment {!r}", self.id, environment.name)
-        self._emit(StateMessage(data=self.state()))
+            unloaded = await self._unload_environment()
+        if unloaded:
+            self._emit(StateMessage(data=self.state()))
+
+    async def _unload_environment(self) -> bool:
+        """Hold the lock. Unload what uses the environment's store, then the environment; ``False`` if none was."""
+        if (environment := self.environment) is None:
+            return False
+        await self._control.unload()
+        await self._dataset.unload()
+        await self._environment.unload()
+        logger.info("Session {} unloaded environment {!r}", self.id, environment.name)
+        return True
 
     async def load_dataset(self, dataset: Dataset) -> None:
         """Start recording into ``dataset`` from the environment's store.
 
         Raises:
-            RuntimeSessionCommandError: No environment is loaded, or a dataset already is.
+            RuntimeSessionCommandError: No environment is loaded.
             FeatureSpecMismatchError: The dataset was recorded with joints or cameras this environment lacks.
             WorkerStartupError: The dataset could not be opened for recording.
         """
         async with self._lock:
             environment = self._environment.require("Load an environment first.")
+            # Swapping: the loaded one is finished (copied back) first.
+            await self._dataset.unload()
             await self._dataset.load(self._loaded_dataset(dataset, environment))
             logger.info("Session {} records into dataset {!r}", self.id, dataset.name)
         self._emit(StateMessage(data=self.state()))

@@ -23,7 +23,10 @@ export interface SessionPart {
 }
 
 const components = {
-    follower: (props: IDockviewPanelProps<{ robot_id: string }>) => <RobotCell follower_id={props.params.robot_id} />,
+    // The workspace's side bar has the Teleoperate switch.
+    follower: (props: IDockviewPanelProps<{ robot_id: string }>) => (
+        <RobotCell follower_id={props.params.robot_id} showTeleop={false} />
+    ),
     camera: (props: IDockviewPanelProps<{ camera_id: string }>) => <CameraCell camera_id={props.params.camera_id} />,
 } satisfies IDockviewReactProps['components'];
 
@@ -106,17 +109,17 @@ const Initializing = ({ parts, cancelHref }: { parts: SessionPart[]; cancelHref:
 };
 
 /**
- * A session's robot and cameras in a dock, under the page's own toolbar.
+ * A session's robot and cameras in a dock, under an optional toolbar.
  *
- * Shared by the pages that run a session on a robot (recording, and inference). Until the
- * environment and every one of ``parts`` is loaded it shows what it is waiting for instead.
+ * The middle of the session workspace. Until the environment and every one of ``parts`` is
+ * loaded it shows what it is waiting for instead.
  */
 export const SessionViewer = ({
     toolbar,
     parts,
     cancelHref,
 }: {
-    toolbar: ReactNode;
+    toolbar?: ReactNode;
     parts: SessionPart[];
     cancelHref: string;
 }) => {

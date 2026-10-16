@@ -29,14 +29,17 @@ import {
     RuntimeSessionProvider,
     useRuntimeSession,
 } from '../../../features/runtime-session/runtime-session-provider';
-import { SessionViewer } from '../../../features/runtime-session/session-viewer';
+import { RecordMode } from '../../../features/runtime-session/workspace/record-mode';
+import { SessionWorkspace } from '../../../features/runtime-session/workspace/session-workspace';
 import { paths } from '../../../paths';
-import { RecordingToolbar } from './recording-toolbar';
 
 import classes from './index.module.css';
 
 const TotalRecordedEpisodes = () => {
-    const { dataset_id } = useDatasetId();
+    const { dataset_id: opened } = useDatasetId();
+    const { state } = useRuntimeSession();
+    // The loaded dataset, which the side bar can swap; the one the page was opened with until then.
+    const dataset_id = state?.dataset?.dataset_id ?? opened;
 
     const episodeQuery = $api.useSuspenseQuery('get', '/api/dataset/{dataset_id}/episodes', {
         params: {
@@ -46,7 +49,6 @@ const TotalRecordedEpisodes = () => {
         },
     });
     // Episodes saved in this session land in the dataset only when the recording is finished.
-    const { state } = useRuntimeSession();
     const totalEpisodes = Number(episodeQuery.data?.length) + (state?.dataset?.episodes_recorded ?? 0);
 
     if (totalEpisodes === 0 || isNaN(totalEpisodes)) {
@@ -99,7 +101,7 @@ const FinishRecordingLink = ({ subtitle }: { subtitle: string }) => {
         } finally {
             setIsFinishing(false);
         }
-        navigate(paths.project.datasets.show({ project_id, dataset_id }));
+        navigate(paths.project.datasets.show({ project_id, dataset_id: state?.dataset?.dataset_id ?? dataset_id }));
     };
 
     return (
@@ -127,9 +129,15 @@ const RecordingSession = ({ dataset }: { dataset: SchemaDatasetOutput }) => {
     const { state } = useRuntimeSession();
 
     return (
-        <SessionViewer
-            toolbar={<RecordingToolbar dataset={dataset} />}
-            parts={[{ label: 'Dataset', isLoaded: state?.dataset != null }]}
+        <SessionWorkspace
+            modes={[
+                {
+                    key: 'record',
+                    label: 'Record',
+                    parts: [{ label: 'Dataset', isLoaded: state?.dataset != null }],
+                    panel: <RecordMode />,
+                },
+            ]}
             cancelHref={paths.project.datasets.show({ project_id: dataset.project_id, dataset_id: dataset.id! })}
         />
     );

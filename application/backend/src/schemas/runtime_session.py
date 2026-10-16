@@ -21,6 +21,8 @@ from schemas.environment import CameraEnvironmentConfiguration, RobotEnvironment
 class EnvironmentDraft(BaseModel):
     """An environment to load, saved or still being edited in the form."""
 
+    id: UUID | None = None
+    """The saved environment this is, if it is one; the session reports it back."""
     name: str = "Unsaved environment"
     robots: list[RobotEnvironmentConfiguration]
     cameras: list[CameraEnvironmentConfiguration] = Field(default_factory=list)
@@ -55,6 +57,11 @@ class LoadEnvironmentCommand(BaseModel):
     command: Literal["load_environment"] = "load_environment"
     request_id: str
     environment: EnvironmentDraft
+    unload_incompatible: bool = False
+    """Replace a loaded environment even if a loaded part no longer fits it; that part is unloaded.
+
+    Without it such a load fails with ``incompatible_parts`` and changes nothing.
+    """
 
 
 class UnloadEnvironmentCommand(BaseModel):
@@ -114,9 +121,17 @@ RuntimeSessionCommand = Annotated[
 ]
 
 
+class IncompatiblePart(BaseModel):
+    part: Literal["dataset", "model"]
+    name: str
+    reasons: list[str]
+
+
 class SessionError(BaseModel):
     message: str
     error_code: str
+    parts: list[IncompatiblePart] | None = None
+    """With ``incompatible_parts``: what the command would unload, and why."""
 
 
 class AckMessage(BaseModel):
@@ -137,6 +152,8 @@ class SessionCamera(BaseModel):
 
 
 class SessionEnvironment(BaseModel):
+    environment_id: UUID | None
+    """The saved environment, or ``None`` for an unsaved one from the form."""
     name: str
     robot_id: UUID
     leader_id: UUID | None

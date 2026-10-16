@@ -58,14 +58,15 @@ async def test_unloading_releases_everything(new_session, registry, camera_claim
     assert registry.get(session.id) is None
 
 
-async def test_one_environment_at_a_time(new_session, fake_cameras) -> None:
+async def test_loading_another_environment_replaces_the_first(new_session, fake_cameras) -> None:
     session = await new_session()
-    await session.load_environment(make_environment())
-    try:
-        with pytest.raises(RuntimeSessionCommandError):
-            await session.load_environment(make_environment())
-    finally:
-        await session.stop()
+    await session.load_environment(make_environment(cameras=1))
+    first_store = session.store
+    await session.load_environment(make_environment(cameras=0))
+    environment = session.environment
+    assert environment is not None and environment.cameras == []
+    assert session.store is not first_store
+    await session.stop()
 
 
 async def test_another_session_cannot_take_the_robot(new_session, fake_cameras) -> None:

@@ -17,6 +17,7 @@ import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
+from uuid import UUID
 
 import anyio
 
@@ -29,7 +30,6 @@ from workers.robot_worker import DEFAULT_ROBOT_HZ, RobotRecipe, RobotWorker, cla
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping, Sequence
     from contextlib import AbstractAsyncContextManager
-    from uuid import UUID
 
     from physicalai.robot import Robot
 
@@ -39,8 +39,13 @@ if TYPE_CHECKING:
     from workers.base import ProcessWorker, ThreadWorker
 
 
+UNSAVED_ENVIRONMENT_ID = UUID(int=0)
+"""The id an environment from the form carries, which is not saved yet."""
+
+
 @dataclass(frozen=True, slots=True)
 class EnvironmentDescription:
+    environment_id: UUID | None
     name: str
     robot_names: Mapping[UUID, str]
     """Display names of the follower and leader, for claim errors."""
@@ -54,6 +59,7 @@ class EnvironmentDescription:
     def session_environment(self) -> SessionEnvironment:
         """What the session's ``state`` message says about this environment."""
         return SessionEnvironment(
+            environment_id=self.environment_id,
             name=self.name,
             robot_id=self.follower.robot_id,
             leader_id=self.leader.robot_id if self.leader is not None else None,
@@ -103,6 +109,7 @@ async def describe_environment(
         cameras[key] = camera
     spec = FeatureSpec(follower.joint_names, {key: camera_image_spec(camera) for key, camera in cameras.items()})
     return EnvironmentDescription(
+        environment_id=None if environment.id == UNSAVED_ENVIRONMENT_ID else environment.id,
         name=environment.name,
         robot_names=robot_names,
         spec=spec,

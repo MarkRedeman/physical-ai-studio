@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from exceptions import RuntimeSessionCommandError
+from exceptions import IncompatiblePartsError, RuntimeSessionCommandError
 from runtime_session.bus import BusRequestError, NoResponderError, command_key
 from runtime_session.dataset import DEFAULT_RECORDING_FPS, dataset_fps, dataset_spec
 from runtime_session.session import RuntimeSession
@@ -196,3 +196,62 @@ async def test_a_real_recording_lands_in_the_dataset(new_session, fake_cameras) 
     await _save(session)
     await session.unload_dataset()
     assert json.loads((Path(dataset.path) / "meta" / "info.json").read_text())["total_episodes"] == 3
+
+
+async def test_swapping_the_environment_keeps_a_dataset_that_fits(new_session, fake_cameras, fake_worker) -> None:
+    dataset = _dataset()
+    session = await new_session()
+    await session.load_environment(make_environment())
+    await session.load_dataset(dataset)
+    await session.load_environment(make_environment())  # the same rig again: the dataset still fits
+    assert session.state().dataset is not None
+    events = [event["event"] for event in recording_log(Path(dataset.path) / "recording.jsonl")]
+    assert events == ["teardown"]  # finished (copied back) once, before the reload
+
+
+async def test_swapping_to_an_environment_a_dataset_does_not_fit_asks_first(
+    new_session, fake_cameras, fake_worker
+) -> None:
+    dataset = _dataset()
+    _write_info(dataset, ["shoulder_pan.pos", "gripper.pos"], {"cam 0": [120, 160, 3]})
+    session = await new_session()
+    await session.load_environment(make_environment())
+    await session.load_dataset(dataset)
+
+    with pytest.raises(IncompatiblePartsError) as refused:
+        await session.load_environment(make_environment(cameras=0))
+    assert refused.value.error_code == "incompatible_parts"
+    [part] = refused.value.data["parts"]
+    assert part["part"] == "dataset" and part["name"] == "Blocks"
+    assert any("cam 0" in reason for reason in part["reasons"])
+    # Nothing changed.
+    assert session.environment is not None and len(session.environment.cameras) == 1
+    assert session.state().dataset is not None
+
+    await session.load_environment(make_environment(cameras=0), unload_incompatible=True)
+    assert session.environment is not None and session.environment.cameras == []
+    assert session.state().dataset is None
+
+
+async def test_episodes_recorded_this_session_give_a_new_dataset_its_shape(
+    new_session, fake_cameras, fake_worker
+) -> None:
+    session = await new_session()
+    await session.load_environment(make_environment())
+    await session.load_dataset(_dataset())
+    await _start(session, "pick")
+    await _save(session)
+    await _until(lambda: session.state().dataset.episodes_recorded == 1)
+    # Nothing is on disk yet, but the saved episode has this environment's camera.
+    with pytest.raises(IncompatiblePartsError):
+        await session.load_environment(make_environment(cameras=0))
+
+
+async def test_loading_another_dataset_finishes_the_first(new_session, fake_cameras, fake_worker) -> None:
+    first, second = _dataset(), _dataset()
+    session = await new_session()
+    await session.load_environment(make_environment())
+    await session.load_dataset(first)
+    await session.load_dataset(second)
+    assert session.state().dataset.dataset_id == second.id
+    assert recording_log(Path(first.path) / "recording.jsonl")[-1]["event"] == "teardown"

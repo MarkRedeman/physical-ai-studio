@@ -142,7 +142,12 @@ async def _request(bus: Bus, raw: str) -> AckMessage:
             command_key(header.command), raw, dict[str, Any], timeout=_COMMAND_TIMEOUT_S
         )
     except BusRequestError as error:
-        return failed(error.message, error.error_code)
+        # The handler's details (``parts`` for ``incompatible_parts``, say) go to the client as they are.
+        return AckMessage(
+            request_id=header.request_id,
+            ok=False,
+            error=SessionError(message=error.message, error_code=error.error_code, **error.data),
+        )
     except NoResponderError:
         # Nothing serves it now: an unknown command, or one for a part that is not loaded (a dataset, say).
         return failed(f"Nothing can {header.command} right now; load what it needs first.", "command_unavailable")

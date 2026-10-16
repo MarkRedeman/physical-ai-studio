@@ -458,9 +458,19 @@ The record and inference pages become one session workspace: the dock (the follo
      - Leaving the page finishes the recording first: the back link sends `unload_dataset`, which copies the episodes into the dataset, waits for the ack, then refreshes the episodes and navigates. The episode total adds the session's `episodes_recorded` to what the dataset holds, because saved episodes reach the dataset only on that copy.
      - `RUNTIME_WIP` is off "Start recording" and "Add Episode"; it stays on the inference page until Phase 8.
    - Known gap: closing the tab or navigating away another way still saves the recording (the session's teardown copies it back), but the dataset page can then load before the copy finishes and briefly show the old episode count.
-   - 7b-2 (next): the session workspace's side bar (see "Session workspace").
-     - The mode switcher, the parts panel for the environment and dataset (status, reload, swap with the `incompatible_parts` prompt, unload) and record mode. The record page moves onto it, and `RecordingToolbar` becomes record mode's panel.
-     - Backend: `unload_incompatible` on the load commands, the `incompatible_parts` error with its details, and swapping a loaded environment or dataset instead of refusing with `*_already_loaded`.
+   - 7b-2 done: the session workspace's side bar (see "Session workspace").
+     - `SessionWorkspace` (`features/runtime-session/workspace/`) puts `SessionViewer` (the dock) next to a side bar: the session's state (the parts panel, headed "State"), a mode dropdown and the selected mode's panel. Switching mode holds the follower first. The record page uses it with one mode, record.
+     - `PartsPanel` shows the environment and dataset with their status, and a menu with reload, swap (a picker of the project's environments or datasets) and unload. Reloading a dataset loads it again, which finishes the recording (copies it back) and reopens it.
+     - `usePartCommand` turns an `incompatible_parts` refusal into a confirmation dialog that lists what would be unloaded and why. Confirming sends the load again with `unload_incompatible`.
+     - `RecordMode` is the record panel: the Teleoperate switch (taken off the dock's robot cell, which keeps it in the environment preview), the task (a text area), and start / accept / discard with the hotkeys and the timer. The task box takes the loaded dataset's default task, which follows a swap. The page header's episode total and back link follow the loaded dataset too.
+     - Backend:
+       - `load_environment` swaps a loaded environment instead of refusing. The new environment is described before anything is unloaded, so a refusal changes nothing.
+       - A loaded dataset that no longer fits raises `IncompatiblePartsError` (`incompatible_parts`, with `parts` in the error) unless `unload_incompatible` is set. One that still fits is loaded again on the new environment.
+       - A new dataset with episodes recorded this session counts as having the current environment's shape.
+       - `load_dataset` swaps by finishing the loaded one first.
+       - An error's `data` crosses the bus and is spread into the ack's error, so the socket still knows nothing about it.
+       - `state.environment.environment_id` names the saved environment.
+     - Not done: a reconnect reloads what the page opened with, not what was swapped in since.
    - 7c (after 7b-2): replay.
      - First check that the dataset worker can read an episode's actions back while recording.
      - Then `rpc/episode_actions` on the worker, `ReplayControl` with a grace move to the first frame, and replay mode with an episode dropdown or index field.

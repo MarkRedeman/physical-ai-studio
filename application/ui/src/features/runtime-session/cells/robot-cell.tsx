@@ -20,7 +20,7 @@ import { useRuntimeSession, useSessionJoints } from '../runtime-session-provider
 export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 3 } as const satisfies SchemaTeleopControlConfig;
 
 /** Drive the follower from the leader, or hold it where it is. */
-const TeleopSwitch = () => {
+export const TeleopSwitch = () => {
     const { state, send } = useRuntimeSession();
     const [isPending, setIsPending] = useState(false);
 
@@ -55,7 +55,8 @@ const LiveRobot = ({ robot }: { robot: AvailableSchemaRobot }) => {
     return <RobotViewer robot={robot} />;
 };
 
-export const RobotCell = ({ follower_id }: { follower_id: string }) => {
+/** The session's follower. ``showTeleop`` puts the Teleoperate switch on it, for pages without a side bar. */
+export const RobotCell = ({ follower_id, showTeleop = true }: { follower_id: string; showTeleop?: boolean }) => {
     const { project_id } = useProjectId();
     const { state, error, isLoading } = useRuntimeSession();
 
@@ -97,7 +98,7 @@ export const RobotCell = ({ follower_id }: { follower_id: string }) => {
                 position={'relative'}
             >
                 <LiveRobot robot={robot} />
-                {state.environment.leader_id !== null && (
+                {showTeleop && state.environment.leader_id !== null && (
                     <View position={'absolute'} right={0} top={0} padding='size-100'>
                         <TeleopSwitch />
                     </View>

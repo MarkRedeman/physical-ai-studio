@@ -221,7 +221,7 @@ export const RuntimeSessionProvider = ({
             // Unloading the environment unloads the dataset too.
             await send({ command: 'unload_environment' });
             if (draft !== null && draft.robots.length > 0 && !cancelled) {
-                let ack = await send({ command: 'load_environment', environment: draft });
+                let ack = await send({ command: 'load_environment', environment: draft, unload_incompatible: false });
                 if (ack.ok && dataset_id !== undefined && !cancelled) {
                     ack = await send({ command: 'load_dataset', dataset_id });
                 }

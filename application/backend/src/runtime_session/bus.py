@@ -41,10 +41,12 @@ def command_key(command: str) -> str:
 class BusRequestError(RuntimeError):
     """The handler of a request raised; carries its message and error code."""
 
-    def __init__(self, message: str, error_code: str) -> None:
+    def __init__(self, message: str, error_code: str, data: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.error_code = error_code
+        self.data = data or {}
+        """Whatever the handler's exception carried as ``data``, for the client."""
 
 
 class NoResponderError(LookupError):
@@ -171,7 +173,9 @@ class Bus:
         reply = answered[0]
         if reply.ok is None:
             error = json.loads(reply.err.payload.to_string()) if reply.err else {}
-            raise BusRequestError(error.get("message", ""), error.get("error_code", "command_failed"))
+            raise BusRequestError(
+                error.get("message", ""), error.get("error_code", "command_failed"), error.get("data")
+            )
         adapter: TypeAdapter[R] = TypeAdapter(response)
         return adapter.validate_json(reply.ok.payload.to_bytes())
 
@@ -198,7 +202,13 @@ class Bus:
                 query.reply(query.key_expr, result.model_dump_json())
             except Exception as error:  # every failure goes back to the requester
                 logger.opt(exception=error).debug("Request on {} failed", key)
-                query.reply_err(json.dumps({"message": str(error), "error_code": _error_code(error)}))
+                data = getattr(error, "data", None)
+                reply = {
+                    "message": str(error),
+                    "error_code": _error_code(error),
+                    "data": data if isinstance(data, dict) else None,
+                }
+                query.reply_err(json.dumps(reply))
             finally:
                 query.drop()
 
