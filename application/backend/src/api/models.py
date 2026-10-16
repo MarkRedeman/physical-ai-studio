@@ -29,7 +29,7 @@ from exceptions import ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_read_dataset
 from robots.robot_client_factory import RobotClientFactory
 from runtime.config_builder import (
-    CONTROL_FPS,
+    RUNTIME_FPS,
     build_runtime_config,
     policy_source_fragment,
     runtime_config_change_me,
@@ -79,7 +79,7 @@ async def _runtime_recipe_texts(
             leader=None,
             cameras=environment.cameras,
             robot_factory=robot_client_factory,
-            fps=CONTROL_FPS,
+            fps=RUNTIME_FPS,
             allow_stored_port=True,
             action_source=fragment,
         )

@@ -13,14 +13,12 @@ from tests.runtime.fakes import FakeObservation
 from tests.runtime.test_session import _document
 
 
-def _tick(
-    *, positions: list[float], action: list[float], frames: dict | None = None, step: int = 0, timestamp: float = 1.0
-) -> TickEvent:
+def _tick(*, positions: list[float], action: list[float], frames: dict | None = None, step: int = 0) -> TickEvent:
     return TickEvent(
         session_id="test",
         step=step,
-        timestamp=timestamp,
-        robot_state=FakeObservation(np.array(positions, dtype=np.float32), timestamp),
+        timestamp=1.0,
+        robot_state=FakeObservation(np.array(positions, dtype=np.float32), 1.0),
         camera_frames=frames or {},
         action_sent=np.array(action, dtype=np.float32),
         loop_duration_s=0.0,
@@ -84,21 +82,6 @@ def test_the_recorded_action_is_the_observed_follower_position() -> None:
     assert task == "pick"
 
 
-def test_recording_is_sampled_at_its_configured_fps() -> None:
-    mutation = MagicMock()
-    recording = RecordingState(recording_fps=30)
-    recording.attach_mutation(mutation)
-    recording.start("pick")
-    callback = _callback(recording)
-
-    callback.on_tick(_tick(positions=[1.0], action=[1.0], timestamp=0.0))
-    callback.on_tick(_tick(positions=[1.0], action=[2.0], timestamp=1 / 60))
-    callback.on_tick(_tick(positions=[3.0], action=[3.0], timestamp=1 / 30))
-
-    assert mutation.add_frame.call_count == 2
-    assert mutation.add_frame.call_args_list[-1].args[1] == {"joint.pos": 3.0}
-
-
 def test_latest_recorded_actions_are_available_before_lerobot_finalization() -> None:
     mutation = MagicMock()
     recording = RecordingState()
@@ -109,7 +92,7 @@ def test_latest_recorded_actions_are_available_before_lerobot_finalization() -> 
     callback.on_tick(_tick(positions=[1.0], action=[7.0]))
     recording.stop_episode()
 
-    assert recording.latest_recorded_actions() == ([[1.0]], ["joint.pos"], 30.0)
+    assert recording.latest_recorded_actions() == ([[7.0]], ["joint.pos"])
 
 
 def test_recorded_frames_are_rgb() -> None:

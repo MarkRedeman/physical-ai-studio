@@ -20,15 +20,7 @@ if TYPE_CHECKING:
     from schemas.project_camera import Camera
     from schemas.robot import Robot
 
-CONTROL_FPS = 60.0
-"""Runtime action-source and follower command cadence."""
-
-RECORDING_FPS = 30.0
-"""Dataset observation/action cadence, independent of control cadence."""
-
-# Kept as a compatibility alias for callers that only need a Runtime control
-# cadence. New recording code must use ``RECORDING_FPS`` explicitly.
-RUNTIME_FPS = CONTROL_FPS
+RUNTIME_FPS = 30.0
 POLICY_REQUEST_THRESHOLD = 0.5
 
 
@@ -175,7 +167,7 @@ async def build_runtime_config(
     leader: Robot | None,
     cameras: list[Camera],
     robot_factory: RobotClientFactory,
-    fps: float = CONTROL_FPS,
+    fps: float = RUNTIME_FPS,
     allow_stored_port: bool = False,
     action_source: dict[str, Any] | None = None,
 ) -> dict[str, Any]:

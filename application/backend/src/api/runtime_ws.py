@@ -23,7 +23,7 @@ from api.dependencies import (
 )
 from exceptions import BaseException as AppBaseException
 from exceptions import RobotPluginUnavailableError
-from runtime.config_builder import CONTROL_FPS, build_runtime_config
+from runtime.config_builder import RUNTIME_FPS, build_runtime_config
 from runtime.contract import CommandAdapter, DisconnectCommand
 from runtime.owner import RuntimeSessionOwner
 from runtime.session import RECORDING_TEARDOWN_TIMEOUT_S
@@ -260,7 +260,7 @@ async def runtime_websocket(  # noqa: PLR0913, PLR0915, PLR0912
             follower=follower,
             leader=leader,
             cameras=cameras,
-            fps=CONTROL_FPS,
+            fps=RUNTIME_FPS,
             robot_factory=robot_client_factory,
         )
         name = runtime_session_name(follower.id)
