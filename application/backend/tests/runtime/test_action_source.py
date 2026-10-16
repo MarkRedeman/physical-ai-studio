@@ -75,6 +75,9 @@ def test_reverse_replay_sends_actions_backwards_then_saves() -> None:
     np.testing.assert_array_equal(source.update(state, {}, 2), [3, 4])
     np.testing.assert_array_equal(source.update(state, {}, 3), [1, 2])
     source.update(state, {}, 4)
+    source.update(state, {}, 5)
+    source.update(state, {}, 6)
+    source.update(state, {}, 7)
 
     assert source.follower_source == "teleop"
     assert completed == [True]
