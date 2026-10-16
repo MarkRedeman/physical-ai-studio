@@ -95,6 +95,7 @@ _RUNTIME_PUBLICATIONS = frozenset(
         "stop_task",
         "load_dataset",
         "start_recording",
+        "start_reverse_replay",
     }
 )
 _RUNTIME_REQUESTS = frozenset({"save_episode", "discard_episode"})

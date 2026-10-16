@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
-from runtime.action_source import StudioActionSource
-from runtime.contract import InMemoryCommandMailbox, QueueEventSink, SetFollowerSourceCommand
+from runtime.action_source import StudioActionSource, stararm_hd_to_widowx_action, teleop_action_transform
+from runtime.callbacks.recording import RecordingState
+from runtime.contract import InMemoryCommandMailbox, QueueEventSink, SetFollowerSourceCommand, StartReverseReplayCommand
 
 from .fakes import FakeObservation, FakeRobot
 
@@ -46,6 +47,59 @@ def test_teleop_forwards_leader_positions_on_next_tick() -> None:
     action = source.update(follower.get_observation(), {}, 0)
 
     np.testing.assert_array_equal(action, [4, 5])
+
+
+def test_stararm_hd_to_widowx_transform_inverts_elbow_and_scales_gripper() -> None:
+    observation = _observation([1, 2, 3, 4, 5, 6, 55], 1)
+
+    action = stararm_hd_to_widowx_action(observation)
+
+    np.testing.assert_allclose(action, [-1, 2, -3, -4, 5, -6, 0.05])
+
+
+def test_stararm_hd_to_widowx_transform_is_selected_from_driver_recipes() -> None:
+    follower = {"init_args": {"robot": {"class_path": "physicalai.robot.WidowXAI"}}}
+    leader = {
+        "init_args": {
+            "robot": {"class_path": "physicalai_stararm_plugin.stararm102hd.StarArm102HDLeader"}
+        }
+    }
+
+    assert teleop_action_transform(follower, leader) is stararm_hd_to_widowx_action
+
+
+def test_reverse_replay_sends_actions_backwards_then_saves() -> None:
+    follower = FakeRobot([_observation([0, 0], 1)])
+    leader = FakeRobot([_observation([0, 0], 1)])
+    mailbox = InMemoryCommandMailbox()
+    recording = RecordingState()
+    recording.attach_mutation(object())  # type: ignore[arg-type]
+    completed: list[bool] = []
+    replay = ([[1, 2], [3, 4]], ["joint_0.pos", "joint_1.pos"])
+    source = StudioActionSource(
+        follower=follower,
+        leader=leader,
+        mailbox=mailbox,
+        event_sink=QueueEventSink(),
+        fps=1,
+    )
+    source.bind_recording(recording)
+    source.bind_reverse_replay(loader=lambda: replay, on_complete=lambda _: completed.append(True))
+    source.connect(bus=object(), session_id="test")
+    mailbox.apply(StartReverseReplayCommand(task="disassembly"))
+    state = follower.get_observation()
+
+    np.testing.assert_array_equal(source.update(state, {}, 0), [1.5, 2])
+    np.testing.assert_array_equal(source.update(state, {}, 1), [3, 4])
+    np.testing.assert_array_equal(source.update(state, {}, 2), [3, 4])
+    np.testing.assert_array_equal(source.update(state, {}, 3), [1, 2])
+    source.update(state, {}, 4)
+    source.update(state, {}, 5)
+    source.update(state, {}, 6)
+    source.update(state, {}, 7)
+
+    assert source.follower_source == "teleop"
+    assert completed == [True]
 
 
 def test_connect_rejects_mismatched_joint_names() -> None:

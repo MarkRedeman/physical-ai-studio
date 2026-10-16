@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 import {
     Button,
@@ -23,6 +23,8 @@ import { useRuntimeSession } from '../../../features/robots/runtime-session-prov
 import { paths } from '../../../paths';
 
 import classes from './recording-viewer.module.css';
+
+const REVERSE_REPLAY_TASK = 'disassembly';
 
 const RecordingTimer = () => {
     const [seconds, setSeconds] = useState(0);
@@ -64,6 +66,7 @@ export const RecordingViewer = () => {
         dataset,
         state,
         startEpisode,
+        startReverseReplay,
         discardEpisode,
         saveEpisode,
         readyForRecording,
@@ -76,14 +79,42 @@ export const RecordingViewer = () => {
         throw 'Cannot load recording viewer without dataset.';
     }
     const [task, setTask] = useState<string>(dataset.default_task);
+    const previousTask = useRef(task);
+    const [reverseReplayStarted, setReverseReplayStarted] = useState(false);
+
+    useEffect(() => {
+        if (!reverseReplayStarted || state.is_recording || state.follower_source === 'replay') {
+            return;
+        }
+        setTask(previousTask.current);
+        setReverseReplayStarted(false);
+    }, [reverseReplayStarted, state.follower_source, state.is_recording]);
 
     const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
     const bindings = getEffectiveBindings(settings.hotkeys.bindings);
+
+    const onStartReverseReplay = () => {
+        previousTask.current = task;
+        setTask(REVERSE_REPLAY_TASK);
+        startReverseReplay.mutate(REVERSE_REPLAY_TASK, {
+            onSuccess: () => {
+                setReverseReplayStarted(true);
+            },
+            onError: () => {
+                setTask(previousTask.current);
+            },
+        });
+    };
 
     useHotkey(
         bindings['recording.start_episode'],
         () => startEpisode.mutate(task),
         !state.is_recording && !startEpisode.isPending && task !== ''
+    );
+    useHotkey(
+        bindings['recording.start_reverse_replay'],
+        onStartReverseReplay,
+        !state.is_recording && !reverseReplayStarted && !startReverseReplay.isPending
     );
     useHotkey(
         bindings['recording.accept_episode'],
@@ -145,7 +176,12 @@ export const RecordingViewer = () => {
                             <Item key={dataset.default_task}>{dataset.default_task}</Item>
                         </ComboBox>
                         {state.is_recording && <ToolbarRecordingStatus />}
-                        {state.is_recording ? (
+                        {reverseReplayStarted ? (
+                            <Text>
+                                Replaying reverse trajectory as {REVERSE_REPLAY_TASK}. Saving automatically when
+                                complete.
+                            </Text>
+                        ) : state.is_recording ? (
                             <ButtonGroup>
                                 <Button
                                     isDisabled={saveEpisode.isPending}
@@ -165,12 +201,24 @@ export const RecordingViewer = () => {
                                 </Button>
                             </ButtonGroup>
                         ) : (
-                            <Button type={'submit'} isPending={startEpisode.isPending}>
-                                <Text>Start episode</Text>
-                                <Keyboard UNSAFE_className={classes.hotkey}>
-                                    {formatKeyCombo(bindings['recording.start_episode'])}
-                                </Keyboard>
-                            </Button>
+                            <ButtonGroup>
+                                <Button type={'submit'} isPending={startEpisode.isPending}>
+                                    <Text>Start episode</Text>
+                                    <Keyboard UNSAFE_className={classes.hotkey}>
+                                        {formatKeyCombo(bindings['recording.start_episode'])}
+                                    </Keyboard>
+                                </Button>
+                                <Button
+                                    variant='secondary'
+                                    isPending={startReverseReplay.isPending}
+                                    onPress={onStartReverseReplay}
+                                >
+                                    <Text>Record reverse replay</Text>
+                                    <Keyboard UNSAFE_className={classes.hotkey}>
+                                        {formatKeyCombo(bindings['recording.start_reverse_replay'])}
+                                    </Keyboard>
+                                </Button>
+                            </ButtonGroup>
                         )}
                     </Flex>
                 </Form>

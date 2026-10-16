@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 from physicalai.capture import ColorMode, SharedCamera
-from physicalai.config import Config, validate_config
+from physicalai.config import Config, to_config, validate_config
 from physicalai_studio_plugin import shared_robot_name
 
 from robots.robot_client_factory import RobotClientFactory
@@ -49,7 +49,7 @@ async def _shared_robot_config(
         "physicalai.robot.SharedRobot",
         {
             "name": shared_robot_name(robot.id),
-            "robot": Config.from_instance(driver).to_dict(),
+            "robot": to_config(driver).to_dict(),
         },
     ).to_dict()
 
@@ -63,7 +63,7 @@ def _shared_camera_config(camera: Camera) -> dict[str, Any]:
         validate_on_connect=True,
         overwrite_settings=False,
     )
-    return Config.from_instance(shared_camera).to_dict()
+    return to_config(shared_camera).to_dict()
 
 
 def policy_source_fragment(
@@ -206,6 +206,9 @@ async def build_runtime_config(
     if action_source is not None:
         init_args["action_source"] = action_source
     elif leader_config is not None:
+        # ``TeleopSource.to_action`` is a callable, which cannot be represented
+        # in a portable Config document. Studio applies any required live
+        # transforms (such as StarArm HD -> WidowX) in ``StudioActionSource``.
         init_args["action_source"] = {
             "class_path": "physicalai.runtime.TeleopSource",
             "init_args": {"leader": leader_config},
