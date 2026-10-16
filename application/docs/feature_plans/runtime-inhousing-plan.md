@@ -312,6 +312,24 @@ Server → client:
 
 JPEG encoding runs off the event loop (`asyncio.to_thread`, one call per new frame, in parallel). One sampler task per session reads the store and sends one observation per tick.
 
+### Session workspace
+
+The record and inference pages become one session workspace: the dock (the follower and the cameras, `SessionViewer`) in the middle, and a side bar on the right whose content depends on the mode.
+
+- **Entry points stay as routes.** "Add episode" on a dataset opens the workspace with its environment and dataset, in record mode. "Run model" (Phase 8) opens it with the environment and the model, in inference mode. An entry point only decides what is loaded first and which mode is selected. The environment form keeps its own preview.
+- **Modes, not free-standing sections.** Each mode is a deliberate combination: the parts it needs, the control it drives the follower with, and its own panel.
+  - **Record:** needs an environment and a dataset. The control is hold or teleop (the Teleoperate switch moves here from the robot cell). The panel has the task, start / accept / discard with the hotkeys, the timer, and the episodes recorded this session.
+  - **Replay (7c):** needs an environment and a dataset. The control is `ReplayControl`. The panel has the episode selection (a dropdown or index field showing each episode's length; no thumbnails), play / stop and progress.
+  - **Inference (Phase 8):** needs an environment and a model. The control is `ModelControl`. The panel has the device, the task prompt, play / stop and the runtime export.
+  - Switching mode returns the follower to hold first.
+  - Combinations get their own mode when they are designed. Human in the loop (recording while a model runs, a human taking over) needs more than two panels side by side to be smooth, so it will be a mode of its own, not record plus inference.
+- **Parts panel**, at the top of the side bar in every mode. The environment, dataset and model are each shown with their status (loading, loaded, error), with **reload**, **swap** (a picker of the project's environments, datasets or models) and **unload**.
+  - **Swapping can change the feature spec.** A load that would conflict with what is loaded fails with `incompatible_parts`, listing each conflicting part and why (the `Mismatch` reasons), and changes nothing. The UI shows that as a confirm dialog ("Unload dataset *X*, recorded with other cameras?") and sends the load again with `unload_incompatible: true`.
+  - **Swapping the environment** unloads the old one with its control and dataset, loads the new one, and loads the dataset again if it is compatible with the new environment. A dataset is tied to its environment, so this can be confusing, but that is left to the user.
+- **Episodes recorded this session can be replayed** without finishing the recording: the dataset worker's cache holds the dataset copied in at load plus every episode saved since. The worker serves `rpc/episode_actions {episode_index}` (that episode's action trajectory and fps), and `ReplayControl` plays it in the session process. It uses the same grace move to the first frame as teleop.
+  - **Risk to check first:** that lerobot can read an episode's actions back from a dataset still open for writing, after `save_episode`. Only the parquet is needed, not the video.
+  - **Fallback:** replay only the episodes already in the dataset, plus a "Finish recording" action that copies the cache back.
+
 ### Frontend
 
 - **One `RuntimeSessionProvider`, rewritten.**
@@ -440,7 +458,14 @@ JPEG encoding runs off the event loop (`asyncio.to_thread`, one call per new fra
      - Leaving the page finishes the recording first: the back link sends `unload_dataset`, which copies the episodes into the dataset, waits for the ack, then refreshes the episodes and navigates. The episode total adds the session's `episodes_recorded` to what the dataset holds, because saved episodes reach the dataset only on that copy.
      - `RUNTIME_WIP` is off "Start recording" and "Add Episode"; it stays on the inference page until Phase 8.
    - Known gap: closing the tab or navigating away another way still saves the recording (the session's teardown copies it back), but the dataset page can then load before the copy finishes and briefly show the old episode count.
+   - 7b-2 (next): the session workspace's side bar (see "Session workspace").
+     - The mode switcher, the parts panel for the environment and dataset (status, reload, swap with the `incompatible_parts` prompt, unload) and record mode. The record page moves onto it, and `RecordingToolbar` becomes record mode's panel.
+     - Backend: `unload_incompatible` on the load commands, the `incompatible_parts` error with its details, and swapping a loaded environment or dataset instead of refusing with `*_already_loaded`.
+   - 7c (after 7b-2): replay.
+     - First check that the dataset worker can read an episode's actions back while recording.
+     - Then `rpc/episode_actions` on the worker, `ReplayControl` with a grace move to the first frame, and replay mode with an episode dropdown or index field.
 8. **ModelControl:** port the policy execution off `physicalai.runtime` (sync, async with the time-based chunk queue, smoothing). Introduce `ModelControlConfig` and switch `services/runtime_export.py` over to it, along with the export round-trip test. The **inference page** comes back on the new provider, and the `RUNTIME_WIP` flag is deleted. Measure with the oracle model: `actions[i] = f(t0 + i)`.
+   - The inference page comes back as the session workspace's inference mode, with the model in the parts panel.
 9. **Finish:**
    - Check that no `physicalai.runtime` import is left outside `services/runtime_export.py`.
    - Rewrite `docs/explanation/runtime-session-architecture.md`.
