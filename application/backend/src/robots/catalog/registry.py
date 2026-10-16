@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, TypeAdapter, create_model
 
 from schemas.robot_type import BaseRobot
 
-from . import so101, widowxai
+from . import bimanual_stararm_hd, so101, widowxai
 
 CATALOG_PLUGIN_ENTRYPOINT_GROUP = "physicalai.studio.catalog_plugins"
 
@@ -37,7 +37,7 @@ class RobotCatalogRegistry(RobotCatalogRegistryProtocol):
         self._robot_adapter: TypeAdapter | None = None
         self._plugin_distributions: dict[str, str] = {}
 
-        for definition in so101.get_definitions() + widowxai.get_definitions():
+        for definition in so101.get_definitions() + widowxai.get_definitions() + bimanual_stararm_hd.get_definitions():
             self.register_robot(definition)
 
         self._load_external_plugins()

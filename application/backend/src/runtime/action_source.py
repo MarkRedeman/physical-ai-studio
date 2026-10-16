@@ -54,7 +54,10 @@ def stararm_hd_to_widowx_action(observation: RobotObservation) -> np.ndarray:
     if action.shape != (7,):
         msg = f"Expected a seven-joint StarArm HD observation, got {action.shape}"
         raise ValueError(msg)
+    action[0] *= -1
     action[2] *= -1
+    action[3] *= -1
+    action[5] *= -1
     action[6] = np.clip(action[6] / 55.0 * 0.05, 0.0, 0.05)
     return action
 

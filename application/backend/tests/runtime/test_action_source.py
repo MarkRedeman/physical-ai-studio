@@ -54,7 +54,7 @@ def test_stararm_hd_to_widowx_transform_inverts_elbow_and_scales_gripper() -> No
 
     action = stararm_hd_to_widowx_action(observation)
 
-    np.testing.assert_allclose(action, [1, 2, -3, 4, 5, 6, 0.05])
+    np.testing.assert_allclose(action, [-1, 2, -3, -4, 5, -6, 0.05])
 
 
 def test_stararm_hd_to_widowx_transform_is_selected_from_driver_recipes() -> None:
