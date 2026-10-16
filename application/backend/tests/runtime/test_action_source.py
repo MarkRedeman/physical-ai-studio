@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from runtime.action_source import StudioActionSource
+from runtime.action_source import StudioActionSource, stararm_hd_to_widowx_action, teleop_action_transform
 from runtime.callbacks.recording import RecordingState
 from runtime.contract import InMemoryCommandMailbox, QueueEventSink, SetFollowerSourceCommand, StartReverseReplayCommand
 
@@ -47,6 +47,25 @@ def test_teleop_forwards_leader_positions_on_next_tick() -> None:
     action = source.update(follower.get_observation(), {}, 0)
 
     np.testing.assert_array_equal(action, [4, 5])
+
+
+def test_stararm_hd_to_widowx_transform_inverts_elbow_and_scales_gripper() -> None:
+    observation = _observation([1, 2, 3, 4, 5, 6, 55], 1)
+
+    action = stararm_hd_to_widowx_action(observation)
+
+    np.testing.assert_allclose(action, [1, 2, -3, 4, 5, 6, 0.05])
+
+
+def test_stararm_hd_to_widowx_transform_is_selected_from_driver_recipes() -> None:
+    follower = {"init_args": {"robot": {"class_path": "physicalai.robot.WidowXAI"}}}
+    leader = {
+        "init_args": {
+            "robot": {"class_path": "physicalai_stararm_plugin.stararm102hd.StarArm102HDLeader"}
+        }
+    }
+
+    assert teleop_action_transform(follower, leader) is stararm_hd_to_widowx_action
 
 
 def test_reverse_replay_sends_actions_backwards_then_saves() -> None:

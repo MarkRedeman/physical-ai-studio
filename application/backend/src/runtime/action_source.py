@@ -34,12 +34,52 @@ if TYPE_CHECKING:
     from runtime.policy_loader import ModelIdentity, ObservationSnapshot
 
 
+_STARARM_HD_CLASS_PATHS = frozenset(
+    {
+        "physicalai_stararm_plugin.StarArm102HDLeader",
+        "physicalai_stararm_plugin.stararm102hd.StarArm102HDLeader",
+    }
+)
+_WIDOWX_CLASS_PATHS = frozenset({"physicalai.robot.WidowXAI", "physicalai.robot.trossen.widowxai.WidowXAI"})
+
+
+def stararm_hd_to_widowx_action(observation: RobotObservation) -> np.ndarray:
+    """Map a StarArm 102-HD leader observation to a WidowX AI action.
+
+    Both arms use the same seven-joint ordering. Their elbow directions are
+    opposite, and the StarArm's 0--55 degree gripper range maps to WidowX's
+    0--0.05 native gripper range.
+    """
+    action = np.array(observation.joint_positions, dtype=np.float32, copy=True)
+    if action.shape != (7,):
+        msg = f"Expected a seven-joint StarArm HD observation, got {action.shape}"
+        raise ValueError(msg)
+    action[2] *= -1
+    action[6] = np.clip(action[6] / 55.0 * 0.05, 0.0, 0.05)
+    return action
+
+
+def teleop_action_transform(
+    follower_config: object, leader_config: object | None
+) -> Callable[[RobotObservation], np.ndarray] | None:
+    """Return the supported cross-embodiment transform for two driver recipes."""
+    if not isinstance(follower_config, dict) or not isinstance(leader_config, dict):
+        return None
+    follower = follower_config.get("init_args", {}).get("robot")
+    leader = leader_config.get("init_args", {}).get("robot")
+    if not isinstance(follower, dict) or not isinstance(leader, dict):
+        return None
+    if follower.get("class_path") in _WIDOWX_CLASS_PATHS and leader.get("class_path") in _STARARM_HD_CLASS_PATHS:
+        return stararm_hd_to_widowx_action
+    return None
+
+
 class StudioActionSource:
     """Select the action sent by RobotRuntime from Studio's current mode."""
 
     _REPLAY_APPROACH_DURATION_S = 2.0
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         follower: Robot,
@@ -49,6 +89,7 @@ class StudioActionSource:
         fps: float,
         camera_keys: Sequence[str] = (),
         models_dir: Path | None = None,
+        to_action: Callable[[RobotObservation], np.ndarray] | None = None,
     ) -> None:
         self._follower = follower
         self._leader = leader
@@ -93,6 +134,7 @@ class StudioActionSource:
         self._return_to_teleop_index = 0
         self._replay_complete = False
         self._fps = fps
+        self._to_action = to_action
 
     @property
     def follower_source(self) -> FollowerSource:
@@ -589,7 +631,11 @@ class StudioActionSource:
             observation = self._leader.get_observation()
             if self._last_leader_timestamp is not None and observation.timestamp <= self._last_leader_timestamp:
                 raise ConnectionError("Leader observation did not advance")
-            action = np.array(observation.joint_positions, dtype=np.float32, copy=True)
+            action = (
+                np.array(observation.joint_positions, dtype=np.float32, copy=True)
+                if self._to_action is None
+                else self._to_action(observation)
+            )
             if action.shape != robot_state.joint_positions.shape:
                 raise ValueError(
                     f"Leader action shape {action.shape} does not match "

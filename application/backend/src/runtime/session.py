@@ -14,7 +14,7 @@ from physicalai.runtime import RobotRuntime
 from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from robots.shared_robot_errors import translate_robot_error
-from runtime.action_source import StudioActionSource
+from runtime.action_source import StudioActionSource, teleop_action_transform
 from runtime.callbacks.recording import RecordingCallback, RecordingState
 from runtime.callbacks.stream import StreamCallback
 from runtime.command_thread import CommandWorker
@@ -92,9 +92,11 @@ class RuntimeSession:
         init_args = self._document["init_args"]
         self._follower = cast("Robot", Config.from_dict(init_args["robot"]).instantiate())
         action_source = init_args.get("action_source")
+        leader_config: dict[str, Any] | None = None
         if isinstance(action_source, dict):
             source_args = action_source.get("init_args", {})
-            leader_config = source_args.get("leader") if isinstance(source_args, dict) else None
+            candidate = source_args.get("leader") if isinstance(source_args, dict) else None
+            leader_config = candidate if isinstance(candidate, dict) else None
             if isinstance(leader_config, dict):
                 self._leader = cast("Robot", Config.from_dict(leader_config).instantiate())
 
@@ -110,6 +112,7 @@ class RuntimeSession:
             event_sink=self._event_sink,
             fps=float(init_args["fps"]),
             camera_keys=tuple(self._cameras),
+            to_action=teleop_action_transform(init_args["robot"], leader_config),
         )
         self._action_source.bind_recording(self._recording)
         self._action_source.bind_reverse_replay(
