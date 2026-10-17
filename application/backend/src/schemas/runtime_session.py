@@ -69,6 +69,17 @@ class UnloadEnvironmentCommand(BaseModel):
     request_id: str
 
 
+class ReloadEnvironmentCommand(BaseModel):
+    """Connect the loaded environment's devices again, after one failed; the store and dataset stay."""
+
+    command: Literal["reload_environment"] = "reload_environment"
+    request_id: str
+
+
+class ReloadEnvironment(BaseModel):
+    """What the session asks the environment, on ``rpc/environment/reload``."""
+
+
 class LoadDatasetCommand(BaseModel):
     """Record into this dataset. Needs an environment whose joints and cameras fit it."""
 
@@ -111,6 +122,7 @@ class SetControlCommand(BaseModel):
 RuntimeSessionCommand = Annotated[
     LoadEnvironmentCommand
     | UnloadEnvironmentCommand
+    | ReloadEnvironmentCommand
     | SetControlCommand
     | LoadDatasetCommand
     | UnloadDatasetCommand
@@ -192,6 +204,26 @@ class ErrorMessage(BaseModel):
     """False when the session has ended; the socket closes after this message."""
 
 
+ComponentState = Literal["starting", "running", "failed", "stopped"]
+
+
+class StatusMessage(BaseModel):
+    """A part of the session or one of its devices saying how it is, on ``evt/status/<component>``.
+
+    ``component`` is a path: ``environment``, ``control`` and ``dataset`` are the
+    session's parts, ``environment/follower``, ``environment/leader`` and
+    ``environment/<camera key>`` the environment's devices. Devices report only
+    ``starting``, ``running`` and ``failed``: a part that starts or stops takes its
+    devices with it, so their earlier statuses no longer apply.
+    """
+
+    type: Literal["status"] = "status"
+    component: str
+    state: ComponentState
+    error: str | None = None
+    """Why it failed."""
+
+
 SessionEvent = Annotated[StateMessage | ErrorMessage, Field(discriminator="type")]
 """What the session publishes on ``evt/session`` for its socket to forward."""
 
@@ -218,7 +250,7 @@ class ObservationMessage(BaseModel):
 
 
 RuntimeSessionServerMessage = Annotated[
-    AckMessage | StateMessage | ErrorMessage | ObservationMessage,
+    AckMessage | StateMessage | ErrorMessage | StatusMessage | ObservationMessage,
     Field(discriminator="type"),
 ]
 

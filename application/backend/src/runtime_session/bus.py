@@ -1,6 +1,6 @@
 """Commands, events and requests between the processes of one session, over zenoh.
 
-The session process :meth:`Bus.host`\\ s a zenoh peer listening on a Unix
+The session process :meth:`Bus.host`\\ s a zenoh router listening on a Unix
 socket; its worker processes :meth:`Bus.join` by connecting to that socket.
 Nothing listens on the network and sessions cannot hear each other. Keys are
 relative to ``pai/<session_id>/``: ``cmd/<component>`` and ``evt/<component>``
@@ -23,10 +23,29 @@ import zenoh
 from loguru import logger
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from schemas.runtime_session import ComponentState, StatusMessage
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 _ROOT = "pai"
+
+EVENTS = "evt/session"
+"""The session's general channel, which its socket forwards: ``SessionEvent`` messages from the session."""
+
+
+STATUSES = "evt/status/**"
+"""Every part's and device's ``StatusMessage``, which the socket forwards."""
+
+
+def status_key(component: str) -> str:
+    """Where ``component`` publishes its ``StatusMessage``."""
+    return f"evt/status/{component}"
+
+
+def publish_status(bus: Bus, component: str, state: ComponentState, error: str | None = None) -> None:
+    """Say how ``component`` is, on its status key."""
+    bus.publish(status_key(component), StatusMessage(component=component, state=state, error=error))
 
 
 def command_key(command: str) -> str:
@@ -147,6 +166,36 @@ class Bus:
         subscription._entity = self._session.declare_subscriber(self._prefix + key, subscription._on_sample)
         return subscription
 
+    def listen[M](self, key: str, model: type[M] | Any, handler: Callable[[M], Awaitable[None] | None]) -> Declaration:
+        """Call ``handler`` with each message on ``key``; call from the event loop it runs on.
+
+        Each message gets its own call, started in the order they arrive. A handler that
+        raises is logged. Like :meth:`subscribe`, it misses what was published before the
+        subscription reached the publisher.
+        """
+        loop = asyncio.get_running_loop()
+        adapter: TypeAdapter[M] = TypeAdapter(model)
+
+        async def handle(message: M) -> None:
+            try:
+                result = handler(message)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.exception("Handling a message on {} failed", key)
+
+        def on_sample(sample: zenoh.Sample) -> None:  # zenoh thread
+            try:
+                message = adapter.validate_json(sample.payload.to_bytes())
+            except ValueError:
+                logger.exception("Dropped a malformed message on {}", sample.key_expr)
+                return
+            asyncio.run_coroutine_threadsafe(handle(message), loop)
+
+        listened = Declaration(self._declared)
+        listened._entity = self._session.declare_subscriber(self._prefix + key, on_sample)
+        return listened
+
     async def request[R](
         self,
         key: str,
@@ -240,7 +289,8 @@ def _error_code(error: Exception) -> str:
 
 def _config(*, listen: Path | None = None, connect: Path | None = None) -> zenoh.Config:
     config = zenoh.Config()
-    config.insert_json5("mode", '"peer"')
+    # The host routes, so workers that joined hear each other and not only the host.
+    config.insert_json5("mode", '"router"' if listen else '"client"')
     config.insert_json5("scouting/multicast/enabled", "false")
     config.insert_json5("listen/endpoints", json.dumps([f"unixsock-stream/{listen}"] if listen else []))
     config.insert_json5("connect/endpoints", json.dumps([f"unixsock-stream/{connect}"] if connect else []))

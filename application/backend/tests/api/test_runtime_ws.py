@@ -228,7 +228,7 @@ def test_recording_commands_over_the_socket(client: TestClient) -> None:
     )
 
     with (
-        patch("runtime_session.session.DatasetWorker", FakeDatasetWorker),
+        patch("runtime_session.dataset.DatasetWorker", FakeDatasetWorker),
         client.websocket_connect(_url()) as websocket,
     ):
         websocket.receive_json()

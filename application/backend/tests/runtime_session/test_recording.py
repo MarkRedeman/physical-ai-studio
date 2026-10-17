@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import signal
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -19,7 +21,7 @@ from schemas.runtime_session import DiscardEpisodeCommand, SaveEpisodeCommand, S
 from tests.workers.fake_dataset import FakeDatasetWorker, recording_log
 from workers.dataset_worker import RecordingStatus
 
-from .fixtures import make_environment
+from .fixtures import make_environment, next_status, subscribe_statuses
 
 
 def _dataset() -> Dataset:
@@ -47,7 +49,7 @@ def _write_info(dataset: Dataset, joints: list[str], cameras: dict[str, list[int
 
 @pytest.fixture
 def fake_worker():
-    with patch("runtime_session.session.DatasetWorker", FakeDatasetWorker):
+    with patch("runtime_session.dataset.DatasetWorker", FakeDatasetWorker):
         yield
 
 
@@ -130,14 +132,19 @@ async def test_record_save_and_discard_episodes(new_session, fake_cameras, fake_
     ]
 
 
-async def test_unloading_the_environment_finalizes_the_recording(new_session, fake_cameras, fake_worker) -> None:
+async def test_unloading_the_environment_keeps_the_dataset_until_the_session_closes(
+    new_session, fake_cameras, fake_worker
+) -> None:
     dataset = _dataset()
     session = await new_session()
     await session.load_environment(make_environment())
     await session.load_dataset(dataset)
     await session.unload_environment()
-    assert session.state().dataset is None
-    assert recording_log(Path(dataset.path) / "recording.jsonl")[-1]["event"] == "teardown"
+    assert session.state().dataset is not None
+    log = Path(dataset.path) / "recording.jsonl"
+    assert "teardown" not in [event["event"] for event in recording_log(log)]
+    await session.stop()
+    assert recording_log(log)[-1]["event"] == "teardown"
 
 
 async def test_recording_commands_are_refused_out_of_order(new_session, fake_cameras, fake_worker) -> None:
@@ -203,7 +210,8 @@ async def test_swapping_the_environment_keeps_a_dataset_that_fits(new_session, f
     session = await new_session()
     await session.load_environment(make_environment())
     await session.load_dataset(dataset)
-    await session.load_environment(make_environment())  # the same rig again: the dataset still fits
+    # Fewer cameras: another store, so the dataset is finished and loaded again on it.
+    await session.load_environment(make_environment(cameras=0))  # the same rig again: the dataset still fits
     assert session.state().dataset is not None
     events = [event["event"] for event in recording_log(Path(dataset.path) / "recording.jsonl")]
     assert events == ["teardown"]  # finished (copied back) once, before the reload
@@ -255,3 +263,43 @@ async def test_loading_another_dataset_finishes_the_first(new_session, fake_came
     await session.load_dataset(second)
     assert session.state().dataset.dataset_id == second.id
     assert recording_log(Path(first.path) / "recording.jsonl")[-1]["event"] == "teardown"
+
+
+async def test_a_failed_environment_keeps_its_dataset_loaded_but_not_recording(
+    new_session, fake_cameras, fake_worker
+) -> None:
+    dataset = _dataset()
+    session = await new_session()
+    environment = make_environment()
+    await session.load_environment(environment)
+    await session.load_dataset(dataset)
+    store = session.store
+    await _start(session, "pick")
+    await _until(lambda: session.state().dataset.is_recording)
+    fake_cameras.return_value.read_latest.side_effect = RuntimeError("camera unplugged")
+
+    # Failed: the open episode is discarded; the environment and the dataset stay loaded.
+    await _until(lambda: not session.state().dataset.is_recording, within=15)
+    assert session.environment is not None
+    assert session.state().dataset.dataset_id == dataset.id
+    assert session.store is store
+
+    fake_cameras.return_value.read_latest.side_effect = None
+    await session.load_environment(environment)
+    # The same spec: the store and the dataset carry on.
+    assert session.store is store
+    assert session.state().dataset.dataset_id == dataset.id
+    await _start(session, "pick")
+
+
+async def test_a_dead_dataset_worker_unloads_the_dataset(new_session, fake_cameras, fake_worker) -> None:
+    session = await new_session()
+    statuses = subscribe_statuses(session)
+    await session.load_environment(make_environment())
+    await session.load_dataset(_dataset())
+    os.kill(session._dataset.value._worker.pid, signal.SIGKILL)
+
+    status = await next_status(statuses, "dataset")
+    assert status.state == "failed"
+    await _until(lambda: session.state().dataset is None)
+    assert session.environment is not None  # the environment stays loaded
