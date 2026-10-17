@@ -106,21 +106,24 @@ const FinishRecordingLink = ({ subtitle }: { subtitle: string }) => {
 
     return (
         <Link onPress={() => void finish()} isQuiet variant='overBackground'>
-            <Flex marginEnd='size-200' direction='row' gap='size-200' alignItems={'center'}>
-                {isFinishing ? (
-                    <ProgressCircle size='S' isIndeterminate aria-label='Saving the recording' />
-                ) : (
-                    <Icon>
-                        <ChevronLeft />
-                    </Icon>
-                )}
-                <Flex direction={'column'}>
-                    <Text UNSAFE_className={classes.headerText}>
-                        {isFinishing ? 'Saving recording…' : 'Adding Episode'}
-                    </Text>
-                    <Text UNSAFE_className={classes.subHeaderText}>{subtitle}</Text>
+            {/* Without an href, Link puts its press handlers on its child, and Flex drops them. */}
+            <div>
+                <Flex marginEnd='size-200' direction='row' gap='size-200' alignItems={'center'}>
+                    {isFinishing ? (
+                        <ProgressCircle size='S' isIndeterminate aria-label='Saving the recording' />
+                    ) : (
+                        <Icon>
+                            <ChevronLeft />
+                        </Icon>
+                    )}
+                    <Flex direction={'column'}>
+                        <Text UNSAFE_className={classes.headerText}>
+                            {isFinishing ? 'Saving recording…' : 'Adding Episode'}
+                        </Text>
+                        <Text UNSAFE_className={classes.subHeaderText}>{subtitle}</Text>
+                    </Flex>
                 </Flex>
-            </Flex>
+            </div>
         </Link>
     );
 };
