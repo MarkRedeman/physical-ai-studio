@@ -6,7 +6,7 @@ import { $api } from '../../../api/client';
 import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
 import { useHotkey } from '../../hotkeys/use-hotkey';
 import { TeleopSwitch } from '../cells/robot-cell';
-import { failureOf, useRuntimeSession } from '../runtime-session-provider';
+import { ERROR_TOAST, failureOf, useRuntimeSession } from '../runtime-session-provider';
 
 import classes from './record-mode.module.css';
 
@@ -53,7 +53,7 @@ const useRecordingCommand = () => {
         try {
             const ack = await send(command);
             if (!ack.ok) {
-                toast.negative(ack.error?.message ?? 'The recording command failed.');
+                toast.negative(ack.error?.message ?? 'The recording command failed.', ERROR_TOAST);
             }
         } finally {
             setIsPending(false);

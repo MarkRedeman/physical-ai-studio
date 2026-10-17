@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { toast } from '@geti-ui/ui';
 
 import { SchemaIncompatiblePart } from '../../../api/openapi-spec';
-import { useRuntimeSession } from '../runtime-session-provider';
+import { ERROR_TOAST, useRuntimeSession } from '../runtime-session-provider';
 
 type Send = ReturnType<typeof useRuntimeSession>['send'];
 export type SessionCommand = Parameters<Send>[0];
@@ -44,7 +44,7 @@ export const usePartCommand = () => {
                 });
                 return false;
             }
-            toast.negative(ack.error?.message ?? 'The command failed.');
+            toast.negative(ack.error?.message ?? 'The command failed.', ERROR_TOAST);
             return false;
         } finally {
             setIsPending(false);

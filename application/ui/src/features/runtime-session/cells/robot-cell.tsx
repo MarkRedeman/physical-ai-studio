@@ -11,7 +11,7 @@ import { RobotModelsProvider } from '../../robots/robot-models-context';
 import { AvailableSchemaRobot, isUnavailableRobot } from '../../robots/robot-types';
 import { InlineAlert } from '../../robots/setup-wizard/shared/inline-alert';
 import { useSynchronizeModelJoints } from '../../robots/use-synchronize-model-joints';
-import { failureOf, useRuntimeSession, useSessionJoints } from '../runtime-session-provider';
+import { ERROR_TOAST, failureOf, useRuntimeSession, useSessionJoints } from '../runtime-session-provider';
 
 /**
  * Teleoperation as the UI starts it. The leader is read at 100 Hz, each reading one command, and on every
@@ -32,7 +32,7 @@ export const TeleopSwitch = () => {
         });
         setIsPending(false);
         if (!ack.ok) {
-            toast.negative(ack.error?.message ?? 'Could not switch teleoperation.');
+            toast.negative(ack.error?.message ?? 'Could not switch teleoperation.', ERROR_TOAST);
         }
     };
 

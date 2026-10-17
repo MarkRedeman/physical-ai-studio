@@ -37,6 +37,9 @@ import {
 import { FrameSource } from '../cameras/camera-view';
 import { JointsState } from '../robots/use-robot-observations';
 
+/** Session errors go away by themselves; the parts panel keeps showing what is still failed. */
+export const ERROR_TOAST = { timeout: 10_000 };
+
 type JsonServerMessage = SchemaAckMessage | SchemaStateMessage | SchemaErrorMessage | SchemaStatusMessage;
 /** The last status of each part and device, by component: ``environment``, ``environment/cam 0``, ``control``. */
 export type Statuses = Record<string, SchemaStatusMessage>;
@@ -223,7 +226,7 @@ export const RuntimeSessionProvider = ({
                     setStatuses((previous) => withStatus(previous, message));
                     if (message.component === 'control' && message.state === 'failed') {
                         // The follower holds; nothing else shows a control.
-                        toast.negative(`Control stopped: ${message.error ?? 'it failed'}`);
+                        toast.negative(`Control stopped: ${message.error ?? 'it failed'}`, ERROR_TOAST);
                     }
                     break;
                 case 'ack':
