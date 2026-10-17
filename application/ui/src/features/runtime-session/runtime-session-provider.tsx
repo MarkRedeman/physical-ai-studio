@@ -167,6 +167,8 @@ export const RuntimeSessionProvider = ({
     const frames = useRef(new Map<string, Channel<Blob>>()).current;
     const pending = useRef(new Map<string, (ack: SchemaAckMessage) => void>()).current;
     const sessionClosed = useRef(false);
+    // The latest state, for the load effect to read without rerunning on every state.
+    const latestState = useRef<SchemaSessionState | null>(null);
     const frame = useCallback(
         (key: string) => {
             let channel = frames.get(key);
@@ -186,6 +188,7 @@ export const RuntimeSessionProvider = ({
         reconnectAttempts: 5,
         reconnectInterval: 3000,
         onClose: () => {
+            latestState.current = null;
             setState(null);
             setStatuses({});
             pending.forEach((resolve, request_id) =>
@@ -209,6 +212,7 @@ export const RuntimeSessionProvider = ({
             const message = JSON.parse(event.data) as JsonServerMessage;
             switch (message.type) {
                 case 'state':
+                    latestState.current = message.data;
                     setState(message.data);
                     break;
                 case 'error':
@@ -249,12 +253,15 @@ export const RuntimeSessionProvider = ({
         }
         let cancelled = false;
         const draft = JSON.parse(environmentKey) as SchemaEnvironmentDraft | null;
+        // A load that replaces the environment keeps a dataset that still fits, and refuses
+        // otherwise; loading it again would finish and reopen it.
+        const loadDataset = dataset_id !== undefined && latestState.current?.dataset?.dataset_id !== dataset_id;
         const reload = async () => {
             setIsLoading(true);
             await send({ command: 'unload_environment' });
             if (draft !== null && draft.robots.length > 0 && !cancelled) {
                 let ack = await send({ command: 'load_environment', environment: draft, unload_incompatible: false });
-                if (ack.ok && dataset_id !== undefined && !cancelled) {
+                if (ack.ok && loadDataset && dataset_id !== undefined && !cancelled) {
                     ack = await send({ command: 'load_dataset', dataset_id });
                 }
                 if (!cancelled) {
