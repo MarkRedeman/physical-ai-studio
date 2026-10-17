@@ -11,7 +11,7 @@ import { RobotModelsProvider } from '../../robots/robot-models-context';
 import { AvailableSchemaRobot, isUnavailableRobot } from '../../robots/robot-types';
 import { InlineAlert } from '../../robots/setup-wizard/shared/inline-alert';
 import { useSynchronizeModelJoints } from '../../robots/use-synchronize-model-joints';
-import { useRuntimeSession, useSessionJoints } from '../runtime-session-provider';
+import { failureOf, useRuntimeSession, useSessionJoints } from '../runtime-session-provider';
 
 /**
  * Teleoperation as the UI starts it. The leader is read at 100 Hz, each reading one command, and on every
@@ -21,7 +21,7 @@ export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 3 } as const s
 
 /** Drive the follower from the leader, or hold it where it is. */
 export const TeleopSwitch = () => {
-    const { state, send } = useRuntimeSession();
+    const { state, statuses, send } = useRuntimeSession();
     const [isPending, setIsPending] = useState(false);
 
     const setTeleop = async (teleoperate: boolean) => {
@@ -40,7 +40,8 @@ export const TeleopSwitch = () => {
         <Switch
             isEmphasized
             isSelected={state?.control?.type === 'teleop'}
-            isDisabled={isPending}
+            // A failed environment stays loaded until it is loaded again, with nothing to drive.
+            isDisabled={isPending || failureOf(statuses, 'environment') !== null}
             onChange={(teleoperate) => void setTeleop(teleoperate)}
         >
             Teleoperate

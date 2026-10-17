@@ -1,12 +1,12 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 import { Button, Flex, Form, Keyboard, Text, TextArea, toast } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
 import { useHotkey } from '../../hotkeys/use-hotkey';
-import { TELEOP_CONTROL, TeleopSwitch } from '../cells/robot-cell';
-import { useRuntimeSession } from '../runtime-session-provider';
+import { TeleopSwitch } from '../cells/robot-cell';
+import { failureOf, useRuntimeSession } from '../runtime-session-provider';
 
 import classes from './record-mode.module.css';
 
@@ -63,21 +63,6 @@ const useRecordingCommand = () => {
     return { run, isPending };
 };
 
-/** Teleoperation is how an episode is recorded, so it starts once, when record mode has what it needs. */
-const useTeleopOnceReady = () => {
-    const { state, send } = useRuntimeSession();
-    const started = useRef(false);
-    const ready = state?.dataset != null && state.environment?.leader_id != null;
-
-    useEffect(() => {
-        if (!ready || started.current) {
-            return;
-        }
-        started.current = true;
-        void send({ command: 'set_control', control: TELEOP_CONTROL });
-    }, [ready, send]);
-};
-
 /** The dataset's default task, as the task box starts with it; refetched when the dataset is swapped. */
 const useDefaultTask = (dataset_id: string | undefined) => {
     const { data } = $api.useQuery(
@@ -91,12 +76,11 @@ const useDefaultTask = (dataset_id: string | undefined) => {
 
 /** Record mode's side bar: teleoperation, the task, and start / accept / discard with their hotkeys. */
 export const RecordMode = () => {
-    const { state } = useRuntimeSession();
+    const { state, statuses } = useRuntimeSession();
     const dataset = state?.dataset ?? undefined;
     const defaultTask = useDefaultTask(dataset?.dataset_id);
     const [task, setTask] = useState(defaultTask);
     const { run, isPending } = useRecordingCommand();
-    useTeleopOnceReady();
 
     useEffect(() => setTask(defaultTask), [defaultTask]);
 
@@ -104,7 +88,12 @@ export const RecordMode = () => {
     const bindings = getEffectiveBindings(settings.hotkeys.bindings);
 
     const isRecording = dataset?.is_recording ?? false;
-    const canRecord = dataset !== undefined && !isPending;
+    // The dataset stays loaded without a working environment, with nothing to record from.
+    const canRecord =
+        dataset !== undefined &&
+        !isPending &&
+        state?.environment != null &&
+        failureOf(statuses, 'environment') === null;
 
     const start = () => void run({ command: 'start_episode', task });
     const save = () => void run({ command: 'save_episode' });
