@@ -483,8 +483,12 @@ The record and inference pages become one session workspace: the dock (the follo
      - `services/runtime_export.py` builds the export's execution from the same `ExecutionConfig`.
      - A failed model is unloaded, and a model control holds the follower first.
      - Tested with an oracle model (`state + 1 .. state + chunk`), sync and async. Smoke-tested with a real ACT OpenVINO export: about 60 ms per chunk, round trip included.
-   - 8b, UI: the inference mode in the workspace, with the model in the parts panel (backend and device), the task, the execution mode and threshold, play / stop and the runtime export.
-   - Open: OpenVINO wants its own device names (`CPU`, `GPU`), so the device choices have to follow the backend.
+   - 8b, UI:
+     - "Run model" picks the backend and its device as before (`/api/system/devices/inference` names devices per backend) and opens the workspace on the environment of the dataset the model was trained on, with the model loaded. A model without a dataset starts with no environment.
+     - The parts panel shows the model instead of the dataset, with its backend and device; swapping keeps the backend and device when the new model has that export.
+     - Inference mode: the task (the dataset's default task), the execution mode and request threshold, and play / stop. The control runs at 30 Hz, the rate the runtime export uses.
+     - `RUNTIME_WIP` and `RuntimeWipNotice` are deleted.
+     - Not done: the runtime export still uses the default execution; it can pass the session's once the download dialog takes it.
 9. **Finish:**
    - Check that `physicalai.runtime` is only imported by `services/runtime_export.py` and `ModelControl`.
    - Rewrite `docs/explanation/runtime-session-architecture.md`.
