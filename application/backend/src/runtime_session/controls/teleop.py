@@ -3,12 +3,13 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from robots.features import feature_names
 from runtime_session.controls.base import Control
 from runtime_session.store import ACTION, STATE
 
 if TYPE_CHECKING:
-    import numpy as np
     from physicalai.robot import Robot
 
     from runtime_session.store import Store
@@ -22,6 +23,12 @@ class TeleopControl(Control):
     the command blends from where the follower was to where the leader is now,
     rather than jumping there. It tracks the leader the whole time, so the
     follower is on it when the grace period ends.
+
+    With ``slowdown`` set it is relative instead: the follower moves by how
+    far the leader moved since the start, divided by ``slowdown``. It
+    starts where the follower is, so it needs no grace period; going back to
+    absolute teleop afterwards closes the gap with one. Grippers stay absolute,
+    so grasping works as usual while the arm moves slowly.
     """
 
     def __init__(self, store: Store, leader: Robot, config: TeleopControlConfig) -> None:
@@ -33,7 +40,11 @@ class TeleopControl(Control):
         super().__init__(store, config, name="TeleopControl", hz=config.hz)
         self.leader = leader
         self.grace_s = config.grace_s
+        self.slowdown = config.slowdown
+        # shortcut: a gripper is found by name, upgrade to the catalog declaring them when a robot names it otherwise.
+        self.relative = np.array(["gripper" not in name for name in store.spec.joint_names])
         self.start_position: np.ndarray | None = None
+        self.leader_start: np.ndarray | None = None
         self.started_at = 0.0
 
     def on_start(self) -> None:
@@ -42,11 +53,18 @@ class TeleopControl(Control):
         # Without a measured follower there is nothing to blend from; follow the leader directly.
         self.start_position = state.value if state is not None else None
         self.started_at = time.monotonic()
+        if self.slowdown is not None:
+            if self.start_position is None:
+                raise RuntimeError("Relative teleop needs the follower's position to move from")
+            self.leader_start = self.leader.get_observation().joint_positions
 
     def on_tick(self) -> None:
         observation = self.leader.get_observation()
         target = observation.joint_positions
         elapsed = observation.timestamp - self.started_at
-        if self.start_position is not None and elapsed < self.grace_s:
+        if self.leader_start is not None and self.start_position is not None:
+            relative = self.start_position + (target - self.leader_start) / self.slowdown
+            target = np.where(self.relative, relative, target)
+        elif self.start_position is not None and elapsed < self.grace_s:
             target = self.start_position + (target - self.start_position) * (elapsed / self.grace_s)
         self.store.write(ACTION, target, timestamp=observation.timestamp)

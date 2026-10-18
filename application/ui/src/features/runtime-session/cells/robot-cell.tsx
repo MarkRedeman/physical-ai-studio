@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
-import { Flex, ProgressCircle, Switch, toast, View } from '@geti-ui/ui';
+import { Button, Flex, Keyboard, ProgressCircle, Slider, Switch, Text, toast, View } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { getRobotConnectionErrorTitle } from '../../../api/errors';
 import { SchemaTeleopControlConfig } from '../../../api/openapi-spec';
+import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
+import { useHeldHotkey } from '../../hotkeys/use-hotkey';
 import { useProjectId } from '../../projects/use-project';
 import { RobotViewer, UnavailableRobotViewer } from '../../robots/controller/robot-viewer';
 import { RobotModelsProvider } from '../../robots/robot-models-context';
@@ -46,6 +48,69 @@ export const TeleopSwitch = () => {
         >
             Teleoperate
         </Switch>
+    );
+};
+
+/**
+ * While held, the follower moves by the leader's movement divided by the slowdown, from where it is.
+ * On letting go it is back on absolute teleop, whose grace period closes the gap to the leader.
+ */
+export const RelativeTeleop = () => {
+    const { state, statuses, send } = useRuntimeSession();
+    const [slowdown, setSlowdown] = useState(2);
+    const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
+    const combo = getEffectiveBindings(settings.hotkeys.bindings)['relative_teleop'];
+    // Whether this hold switched to relative, so letting go only switches back what it switched.
+    const active = useRef(false);
+
+    const isTeleop = state?.control?.type === 'teleop';
+    const isRelative = state?.control?.type === 'teleop' && state.control.slowdown != null;
+
+    const switchTo = async (control: SchemaTeleopControlConfig) => {
+        const ack = await send({ command: 'set_control', control });
+        if (!ack.ok) {
+            toast.negative(ack.error?.message ?? 'Could not switch teleoperation.', ERROR_TOAST);
+        }
+    };
+    const press = () => {
+        if (isTeleop && !active.current) {
+            active.current = true;
+            void switchTo({ ...TELEOP_CONTROL, slowdown });
+        }
+    };
+    const release = () => {
+        if (active.current) {
+            active.current = false;
+            void switchTo(TELEOP_CONTROL);
+        }
+    };
+
+    useHeldHotkey(combo, press, release, failureOf(statuses, 'environment') === null);
+
+    return (
+        <Flex direction='column' gap='size-100'>
+            <Slider
+                label='Slowdown'
+                value={slowdown}
+                onChange={setSlowdown}
+                minValue={1}
+                maxValue={4}
+                step={0.25}
+                getValueLabel={(value) => `1/${value}`}
+                isDisabled={isRelative}
+                width='100%'
+            />
+            <Button
+                variant={isRelative ? 'accent' : 'secondary'}
+                // Never disabled mid-hold: the control is briefly none while it switches, and the release must land.
+                isDisabled={!isTeleop && !active.current}
+                onPressStart={press}
+                onPressEnd={release}
+            >
+                <Text>Hold for relative</Text>
+                <Keyboard>{formatKeyCombo(combo)}</Keyboard>
+            </Button>
+        </Flex>
     );
 };
 

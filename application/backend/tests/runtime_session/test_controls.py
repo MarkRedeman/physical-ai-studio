@@ -71,6 +71,31 @@ async def test_every_start_of_teleop_has_its_own_grace_period(store: Store, tmp_
         assert store.read(ACTION).value[0] < 1.0
 
 
+def test_relative_teleop_slows_the_arm_down_from_where_it_is_and_leaves_the_gripper_absolute(
+    store: Store, tmp_path: Path
+) -> None:
+    leader = _leader(tmp_path)
+    control = TeleopControl(store, leader, TeleopControlConfig(slowdown=2.0))
+    control.on_start()
+    control.on_tick()
+    # The arm starts where the follower is; the gripper follows the leader.
+    assert store.read(ACTION).value.tolist() == [0.0, 6.0]
+
+    leader._position = np.array([7.0, 4.0])  # moved by [2, -2]
+    control.on_tick()
+    assert store.read(ACTION).value.tolist() == [1.0, 4.0]
+
+
+def test_relative_teleop_needs_the_followers_position(tmp_path: Path) -> None:
+    store = Store.create(FeatureSpec(JOINTS), uuid.uuid4().hex)
+    try:
+        control = TeleopControl(store, _leader(tmp_path), TeleopControlConfig(slowdown=2.0))
+        with pytest.raises(RuntimeError, match="follower's position"):
+            control.on_start()
+    finally:
+        store.unlink()
+
+
 def test_teleop_refuses_a_leader_with_other_joints(store: Store, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="do not match"):
         TeleopControl(store, _leader(tmp_path, ["elbow", "gripper"]), TeleopControlConfig())

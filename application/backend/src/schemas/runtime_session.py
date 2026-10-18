@@ -39,6 +39,12 @@ class TeleopControlConfig(BaseModel):
         le=30,
         description="On every start, the follower closes the gap to the leader over this long instead of jumping",
     )
+    slowdown: float | None = Field(
+        None,
+        ge=1,
+        le=10,
+        description="Relative mode: the follower moves by the leader's movement since the start, divided by this",
+    )
 
 
 class MoveControlConfig(BaseModel):
