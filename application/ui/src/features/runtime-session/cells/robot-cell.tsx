@@ -19,7 +19,7 @@ import { ERROR_TOAST, failureOf, useRuntimeSession, useSessionJoints } from '../
  * Teleoperation as the UI starts it. The leader is read at 100 Hz, each reading one command, and on every
  * start the follower takes 3 s to reach the leader instead of jumping to it.
  */
-export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 3 } as const satisfies SchemaTeleopControlConfig;
+export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 2 } as const satisfies SchemaTeleopControlConfig;
 
 /** Drive the follower from the leader, or hold it where it is. */
 export const TeleopSwitch = () => {
@@ -53,7 +53,8 @@ export const TeleopSwitch = () => {
 
 /**
  * While held, the follower moves by the leader's movement divided by the slowdown, from where it is.
- * On letting go it is back on absolute teleop, whose grace period closes the gap to the leader.
+ * On letting go it is back on absolute teleop, whose grace period closes the gap to the leader. The
+ * teleop control keeps running throughout, so the follower is never left undriven by the switch.
  */
 export const RelativeTeleop = () => {
     const { state, statuses, send } = useRuntimeSession();
@@ -66,8 +67,8 @@ export const RelativeTeleop = () => {
     const isTeleop = state?.control?.type === 'teleop';
     const isRelative = state?.control?.type === 'teleop' && state.control.slowdown != null;
 
-    const switchTo = async (control: SchemaTeleopControlConfig) => {
-        const ack = await send({ command: 'set_control', control });
+    const switchTo = async (to: number | null) => {
+        const ack = await send({ command: 'set_teleop_slowdown', slowdown: to });
         if (!ack.ok) {
             toast.negative(ack.error?.message ?? 'Could not switch teleoperation.', ERROR_TOAST);
         }
@@ -75,13 +76,13 @@ export const RelativeTeleop = () => {
     const press = () => {
         if (isTeleop && !active.current) {
             active.current = true;
-            void switchTo({ ...TELEOP_CONTROL, slowdown });
+            void switchTo(slowdown);
         }
     };
     const release = () => {
         if (active.current) {
             active.current = false;
-            void switchTo(TELEOP_CONTROL);
+            void switchTo(null);
         }
     };
 
@@ -102,8 +103,7 @@ export const RelativeTeleop = () => {
             />
             <Button
                 variant={isRelative ? 'accent' : 'secondary'}
-                // Never disabled mid-hold: the control is briefly none while it switches, and the release must land.
-                isDisabled={!isTeleop && !active.current}
+                isDisabled={!isTeleop}
                 onPressStart={press}
                 onPressEnd={release}
             >
