@@ -498,7 +498,7 @@ The record and inference pages become one session workspace: the dock (the follo
    - Done, over the session websocket on an SO-101: preview, reload, teleop, record with save and discard, replay of an episode recorded in the same session, and ACT inference (torch, CUDA) in sync and async. It found two things, fixed in the improvements PR:
      - `ModelControl` had no grace move, so a model commanding its rest pose swung the arm about 150° at once.
      - A page that opens a session lost the race for the devices with the session it had just closed.
-   - Not done: a pass through the UI in a browser.
+   - Done: a pass through the UI in a browser.
 10. **Merge** the feature branch into `main`.
 
 ## Decisions

@@ -26,7 +26,7 @@ Studio used to run on `physicalai.runtime.RobotRuntime`: one loop at one fps, wi
 
 - **Different rates at once.** The follower runs at 100 Hz, cameras at their own fps, a dataset records at 30 Hz and a model is asked for chunks when its queue runs low. One loop at one fps forces all of them onto the slowest.
 - **Parts that come and go.** A page swaps the dataset or the model, or reloads the environment, while the session keeps running. The old runtime fixed its devices and callbacks at construction and had to be rebuilt around them.
-- **Controls that can be anything.** Teleop, a move to a pose, a replay, a policy, and later a human in the loop. Each is a small class that writes the next action, not a mode inside one action source.
+- **Controls that can be anything.** Teleop, a move to a pose, a replay, a policy, and later a human in the loop. Each is a small class that can act on many things, not a mode inside one action source.
 
 Studio still uses `physicalai` for everything below the loop: `physicalai.robot` drivers, `SharedCamera`, `InferenceModel`, and `physicalai.runtime`'s policy execution (`PolicySource`, the executors, `ChunkedActionQueue`, `LerpSmoother`), so a policy runs in Studio exactly as an export runs it.
 
