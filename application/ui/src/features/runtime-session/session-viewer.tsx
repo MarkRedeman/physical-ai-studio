@@ -79,7 +79,7 @@ const SessionDock = ({ environment }: { environment: SchemaSessionEnvironment })
 
 /** Until the environment is up: what it is doing, or a way to load one when the session has none. */
 const Initializing = ({ cancelHref }: { cancelHref: string }) => {
-    const { state, error, statuses, loading } = useRuntimeSession();
+    const { state, error, statuses, loading, retry } = useRuntimeSession();
     const { pendingPart, act } = usePartControls();
     const failure = failureOf(statuses, 'environment');
     const isIdle = state !== null && state.environment == null && loading === null && pendingPart === null;
@@ -100,8 +100,16 @@ const Initializing = ({ cancelHref }: { cancelHref: string }) => {
                 <Button variant={'secondary'} href={cancelHref}>
                     Cancel
                 </Button>
+                {isIdle && error !== null && (
+                    <Button variant='accent' onPress={retry}>
+                        Try again
+                    </Button>
+                )}
                 {isIdle && (
-                    <Button variant='accent' onPress={() => act('environment', 'swap')}>
+                    <Button
+                        variant={error !== null ? 'secondary' : 'accent'}
+                        onPress={() => act('environment', 'swap')}
+                    >
                         Load environment…
                     </Button>
                 )}

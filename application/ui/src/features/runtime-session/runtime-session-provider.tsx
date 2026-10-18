@@ -124,6 +124,8 @@ interface RuntimeSessionContextValue {
     observations: Channel<SchemaObservationMessage>;
     frame: (key: string) => Channel<Blob>;
     send: (command: Command) => Promise<SchemaAckMessage>;
+    /** Load what the page asked for again, after it was refused (a device a closing session still held, say). */
+    retry: () => void;
 }
 
 const RuntimeSessionContext = createContext<RuntimeSessionContextValue | null>(null);
@@ -181,6 +183,8 @@ export const RuntimeSessionProvider = ({
     const [error, setError] = useState<SchemaErrorMessage | null>(null);
     const [statuses, setStatuses] = useState<Statuses>({});
     const [loading, setLoading] = useState<SessionPartName | null>(null);
+    const [attempt, setAttempt] = useState(0);
+    const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
     const observations = useRef(new Channel<SchemaObservationMessage>()).current;
     const frames = useRef(new Map<string, Channel<Blob>>()).current;
     const pending = useRef(new Map<string, (ack: SchemaAckMessage) => void>()).current;
@@ -308,11 +312,11 @@ export const RuntimeSessionProvider = ({
         return () => {
             cancelled = true;
         };
-    }, [environmentKey, dataset_id, modelKey, hasSession, send]);
+    }, [environmentKey, dataset_id, modelKey, hasSession, send, attempt]);
 
     const value = useMemo(
-        () => ({ state, error, statuses, loading, isLoading: loading !== null, observations, frame, send }),
-        [state, error, statuses, loading, observations, frame, send]
+        () => ({ state, error, statuses, loading, isLoading: loading !== null, observations, frame, send, retry }),
+        [state, error, statuses, loading, observations, frame, send, retry]
     );
 
     return <RuntimeSessionContext.Provider value={value}>{children}</RuntimeSessionContext.Provider>;

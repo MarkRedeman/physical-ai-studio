@@ -60,7 +60,14 @@ export const InferenceMode = () => {
     };
 
     const play = () =>
-        void setControl({ type: 'model', task, hz: 30, execution: { mode, request_threshold: threshold } });
+        void setControl({
+            type: 'model',
+            task,
+            hz: 30,
+            execution: { mode, request_threshold: threshold },
+            // The follower eases onto the model's actions, which may start far from where it is.
+            grace_s: 3,
+        });
 
     return (
         <Flex direction='column' gap='size-200'>
