@@ -145,7 +145,7 @@ class TestTrossenBuilders:
         driver = await _build_trossen_single_arm_driver(robot, _StubFactory())
 
         assert Config.from_instance(driver) == {
-            "class_path": "physicalai.robot.WidowXAI",
+            "class_path": "physicalai_trossen_plugin.WidowXAI",
             "init_args": {"ip": "192.168.1.2", "role": "follower"},
         }
 
@@ -167,7 +167,7 @@ class TestTrossenBuilders:
         assert isinstance(driver, BimanualWidowXAI)
         # A single owner holds both arms, rather than one SharedRobot per arm.
         recipe = Config.from_instance(driver)
-        assert recipe["class_path"] == "physicalai.robot.BimanualWidowXAI"
+        assert recipe["class_path"] == "physicalai_trossen_plugin.BimanualWidowXAI"
         assert recipe["init_args"]["left"]["init_args"]["ip"] == "192.168.1.2"
         assert recipe["init_args"]["right"]["init_args"]["ip"] == "192.168.1.3"
 

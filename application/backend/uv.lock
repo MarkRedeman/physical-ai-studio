@@ -3043,7 +3043,7 @@ transport = [
 
 [[package]]
 name = "physicalai-so101-plugin"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "feetech-servo-sdk" },
@@ -3053,9 +3053,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyserial" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/c0/035014c7cdfea2398ea68aaa5db9e5d12f17ca781df0bdb316c745315bf4/physicalai_so101_plugin-0.1.0.tar.gz", hash = "sha256:c5871ab97dc7519c2a358a1b0767d6ff41da24607b91fada32466f31afacf06c", size = 11345000, upload-time = "2026-10-13T08:40:34.757Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/ef/214746fe1450ec271b6ef250f40641eac821177afeffeb56a6269d8f0fed/physicalai_so101_plugin-0.2.0.tar.gz", hash = "sha256:379327928778665806975ba26599f8d4e272208a75728447d2ecf489e992158c", size = 11345169, upload-time = "2026-10-19T09:05:18.536Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ba/57/ddd0fa0ce7fd0eb9bb97f039f762da34c36398220ba32de25be7dcec5a7e/physicalai_so101_plugin-0.1.0-py3-none-any.whl", hash = "sha256:07a117f453bef724d00d4dca5eb89c02cae79536e7f71c468722169192355cb4", size = 11353237, upload-time = "2026-10-13T08:40:23.72Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/64/2cf9bcbbb7aa5f7777221e613f93a72e48cd6051e38eba5cef673d144a42/physicalai_so101_plugin-0.2.0-py3-none-any.whl", hash = "sha256:b3b1dd943fac1c6158f65857ff20ccac918d11eb330194f7445a2b8e309a625c", size = 11353408, upload-time = "2026-10-19T09:05:15.709Z" },
 ]
 
 [[package]]
@@ -3165,12 +3165,12 @@ requires-dist = [
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "opencv-python" },
     { name = "physicalai", extras = ["capture", "transport"], git = "https://github.com/openvinotoolkit/physicalai.git?rev=1cc910b451508ce40cd7319ece2a29283fadfcfb" },
-    { name = "physicalai-so101-plugin" },
+    { name = "physicalai-so101-plugin", specifier = "~=0.2.0" },
     { name = "physicalai-studio-plugin", specifier = "~=0.3.0" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cpu'", editable = "../../library" },
     { name = "physicalai-train", extras = ["executorch"], marker = "extra == 'cuda'", editable = "../../library" },
     { name = "physicalai-train", extras = ["molmoact2", "pi05", "rldx1", "smolvla", "xr0"], editable = "../../library" },
-    { name = "physicalai-trossen-plugin", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "physicalai-trossen-plugin", marker = "sys_platform == 'darwin' or sys_platform == 'linux'", specifier = "~=0.2.0" },
     { name = "psutil", specifier = "~=7.2" },
     { name = "pydantic", specifier = ">=2.12,<2.13" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
@@ -3368,7 +3368,7 @@ dev = [
 
 [[package]]
 name = "physicalai-trossen-plugin"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "loguru", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu')" },
@@ -3378,8 +3378,9 @@ dependencies = [
     { name = "pydantic", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu')" },
     { name = "trossen-arm", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'emscripten' and extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-cuda') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cpu' and extra == 'extra-17-physicalai-studio-xpu') or (sys_platform == 'win32' and extra == 'extra-17-physicalai-studio-cuda' and extra == 'extra-17-physicalai-studio-xpu')" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/a7/2f/5d1b2cb598b6454493b2efcb95cef523e869187a628b173f99ab1c5b9b88/physicalai_trossen_plugin-0.2.0.tar.gz", hash = "sha256:ab680926699efdb28b655d9393fb87ce7851e8f000afc9e055aee77c96e58c96", size = 2526445, upload-time = "2026-10-19T08:57:13.664Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/13/4a9328c5cea3a98177e3cb51273d31f3deb58feef629213f5d7c0bac3af2/physicalai_trossen_plugin-0.1.0-py3-none-any.whl", hash = "sha256:3092603a67e9f4dde156d30d55b6e8bde136303615941380527f5e0e59762767", size = 2517752, upload-time = "2026-10-13T08:36:31.652Z" },
+    { url = "https://files.pythonhosted.org/packages/56/c1/9e85ff7cebde2c688599308d986ceadf01cf1ed587fc89a599f1af2d8e82/physicalai_trossen_plugin-0.2.0-py3-none-any.whl", hash = "sha256:ee29f139be07f1739a1491ab958fcaf6e3a84bf0e6aa4572c0659ba1b6849766", size = 2517751, upload-time = "2026-10-19T08:57:11.911Z" },
 ]
 
 [[package]]
