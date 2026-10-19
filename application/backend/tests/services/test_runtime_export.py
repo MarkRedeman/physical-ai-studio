@@ -90,6 +90,7 @@ async def test_builder_emits_valid_runtime_recipe_and_round_trips(mocker: Any) -
     assert camera_device == {"serial": "test-camera"}
     calibration = document["init_args"]["robot"]["init_args"]["robot"]["init_args"]["calibration"]
     assert isinstance(calibration, dict)
+    assert "to_action" not in document["init_args"]["action_source"]["init_args"]
 
     with NamedTemporaryFile(mode="w", suffix=".yaml") as config_file:
         config_file.write(Config.from_dict(document).to_yaml())
