@@ -80,6 +80,11 @@ ProbePayloadDep = Annotated[BaseModel | dict[str, Any], Depends(_validate_probe_
 router = APIRouter(prefix="/api/robots/catalog", tags=["Robot Catalog"])
 
 
+def _is_so101_overload_protection_error(error: RuntimeError) -> bool:
+    """Return whether a plugin error represents the SO101 identify recovery action."""
+    return "stopped responding during motion" in str(error) and "overload protection" in str(error)
+
+
 @router.get("")
 async def list_robot_catalog(catalog_service: RobotCatalogServiceDep) -> list[RobotCatalogDefinitionResponse]:
     """List robot catalog definitions exposed to the UI."""
@@ -114,7 +119,7 @@ async def identify_robot(
     try:
         await definition.probe.identify(payload, robot_manager, joint)
     except RuntimeError as error:
-        if definition.type in {"SO101_Follower", "SO101_Leader"}:
+        if _is_so101_overload_protection_error(error):
             raise RobotIdentifyError(str(error)) from error
         raise
 

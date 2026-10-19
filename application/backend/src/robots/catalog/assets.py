@@ -37,8 +37,13 @@ def resolve_robot_relative_asset_path(definition: RobotCatalogDefinition, asset_
     # Mesh URLs are resolved from their declared URDF package root. This is
     # usually the top-level directory named by the URDF path, but plugins can
     # resolve package roots inside their installed distributions.
-    package_roots = iter(definition.asset.packages.values())
-    asset_root = next(package_roots, definition.asset.urdf_relative_path.parts[0])
+    package_roots = tuple(definition.asset.packages.values())
+    if len(package_roots) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Robot assets declare multiple package roots, which this endpoint does not support.",
+        )
+    asset_root = package_roots[0] if package_roots else definition.asset.urdf_relative_path.parts[0]
     return _resolve_robot_path(asset_path=asset_root / asset_path, definition=definition)
 
 

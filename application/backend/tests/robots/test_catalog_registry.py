@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from physicalai_studio_plugin import RobotCatalogDefinition
 
 from robots.catalog.registry import RobotCatalogRegistry
@@ -74,6 +76,7 @@ def test_so101_types_are_discovered_from_the_installed_plugin() -> None:
     assert distributions == {"physicalai-so101-plugin"}
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="The Trossen plugin is not supported on Windows.")
 def test_trossen_types_are_discovered_from_the_installed_plugin() -> None:
     registry = RobotCatalogRegistry()
 
