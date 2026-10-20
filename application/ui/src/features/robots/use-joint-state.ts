@@ -37,7 +37,7 @@ export const useSynchronizeModelJoints = (joints: JointsState, robotType: Schema
 };
 
 // Mirrors runtime.contract.FollowerSource. Inference uses 'policy'.
-export type FollowerSource = 'hold' | 'teleop' | 'policy';
+export type FollowerSource = 'hold' | 'teleop' | 'policy' | 'replay';
 
 const RECOVERABLE_ERROR_CODES = new Set(['leader_connection_lost']);
 const EMPTY_CAMERA_IDS: string[] = [];

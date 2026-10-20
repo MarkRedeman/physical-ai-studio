@@ -206,6 +206,9 @@ async def build_runtime_config(
     if action_source is not None:
         init_args["action_source"] = action_source
     elif leader_config is not None:
+        # ``TeleopSource.to_action`` is a callable, which cannot be represented
+        # in a portable Config document. Studio applies any required live
+        # transforms (such as StarArm HD -> WidowX) in ``StudioActionSource``.
         init_args["action_source"] = {
             "class_path": "physicalai.runtime.TeleopSource",
             "init_args": {"leader": leader_config},

@@ -14,7 +14,7 @@ from physicalai.runtime import RobotRuntime
 from internal_datasets.access_mode import DatasetAccessMode
 from internal_datasets.lerobot.lerobot_dataset import InternalLeRobotDataset
 from robots.shared_robot_errors import translate_robot_error
-from runtime.action_source import StudioActionSource
+from runtime.action_source import StudioActionSource, teleop_action_transform
 from runtime.callbacks.recording import RecordingCallback, RecordingState
 from runtime.callbacks.stream import StreamCallback
 from runtime.command_thread import CommandWorker
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from physicalai.robot.interface import Robot
     from physicalai.runtime import StopSignal
 
+    from internal_datasets.mutations.recording_mutation import RecordingMutation
     from runtime.contract import Command, EventSink
 
 # Bounds a ``copytree`` of a dataset that may be gigabytes. The alternative
@@ -91,9 +92,11 @@ class RuntimeSession:
         init_args = self._document["init_args"]
         self._follower = cast("Robot", Config.from_dict(init_args["robot"]).instantiate())
         action_source = init_args.get("action_source")
+        leader_config: dict[str, Any] | None = None
         if isinstance(action_source, dict):
             source_args = action_source.get("init_args", {})
-            leader_config = source_args.get("leader") if isinstance(source_args, dict) else None
+            candidate = source_args.get("leader") if isinstance(source_args, dict) else None
+            leader_config = candidate if isinstance(candidate, dict) else None
             if isinstance(leader_config, dict):
                 self._leader = cast("Robot", Config.from_dict(leader_config).instantiate())
 
@@ -109,8 +112,13 @@ class RuntimeSession:
             event_sink=self._event_sink,
             fps=float(init_args["fps"]),
             camera_keys=tuple(self._cameras),
+            to_action=teleop_action_transform(init_args["robot"], leader_config),
         )
         self._action_source.bind_recording(self._recording)
+        self._action_source.bind_reverse_replay(
+            loader=self._recording.latest_recorded_actions,
+            on_complete=self._save_reverse_replay,
+        )
         action_source = self._action_source
         self._stream_callback = StreamCallback(
             event_sink=self._event_sink,
@@ -329,6 +337,22 @@ class RuntimeSession:
             # The buffer stays attached: discard is what clears it. Do not
             # reopen recording -- that would append frames to a buffer whose
             # write just failed.
+            self._emit_state()
+            raise
+        self._recording.mark_saved()
+        self._emit_state()
+
+    def _save_reverse_replay(self, mutation: RecordingMutation) -> None:
+        """Persist a completed reverse replay after its final action was recorded."""
+        try:
+            self._command_worker.submit("save_reverse_replay", lambda: self._save_stopped_episode(mutation))
+        except RuntimeError:
+            logger.warning("Could not save completed reverse replay because the session is shutting down")
+
+    def _save_stopped_episode(self, mutation: RecordingMutation) -> None:
+        try:
+            mutation.save_episode()
+        except Exception:
             self._emit_state()
             raise
         self._recording.mark_saved()

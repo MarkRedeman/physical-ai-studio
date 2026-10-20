@@ -34,18 +34,18 @@ class InternalLeRobotDataset(DatasetClient):
     _teleop_action_processor: RobotProcessorPipeline
     _robot_action_processor: RobotProcessorPipeline
     _robot_observation_processor: RobotProcessorPipeline
-    _streaming_encoding_settings: StreamingEncodingSettings
+    _recording_video_encoding_settings: StreamingEncodingSettings
     _access_mode: DatasetAccessMode
 
     def __init__(
         self,
         dataset_path: Path,
         *,
-        streaming_encoding_settings: StreamingEncodingSettings = StreamingEncodingSettings(),
+        recording_video_encoding_settings: StreamingEncodingSettings = StreamingEncodingSettings(),
         access_mode: DatasetAccessMode = DatasetAccessMode.READ_ONLY,
     ):
         self.path = dataset_path
-        self._streaming_encoding_settings = streaming_encoding_settings
+        self._recording_video_encoding_settings = recording_video_encoding_settings
         self._access_mode = access_mode
         self.load_dataset()
 
@@ -60,7 +60,7 @@ class InternalLeRobotDataset(DatasetClient):
                 self._dataset = LeRobotDataset.resume(
                     repo_id=str(uuid4()),
                     root=self.path,
-                    **self._resolved_streaming_encoding_settings_write(),
+                    **self._resolved_recording_video_encoding_settings_write(),
                 )
             else:
                 self._dataset = LeRobotDataset(
@@ -69,9 +69,8 @@ class InternalLeRobotDataset(DatasetClient):
                 )
             self.has_episodes = self._dataset.num_episodes > 0
 
-    def _resolved_streaming_encoding_settings_write(self) -> dict:
-        settings = self._streaming_encoding_settings.with_resolved_vcodec()
-        return settings.to_lerobot_write_kwargs()
+    def _resolved_recording_video_encoding_settings_write(self) -> dict:
+        return self._recording_video_encoding_settings.to_lerobot_write_kwargs()
 
     def _resume_for_writing(self, repo_id: str | None = None) -> None:
         if not self._check_repository_exists(self.path):
@@ -81,7 +80,7 @@ class InternalLeRobotDataset(DatasetClient):
         self._dataset = LeRobotDataset.resume(
             repo_id=resolved_repo_id,
             root=self.path,
-            **self._resolved_streaming_encoding_settings_write(),
+            **self._resolved_recording_video_encoding_settings_write(),
         )
         self.has_episodes = self._dataset.num_episodes > 0
 
@@ -107,14 +106,16 @@ class InternalLeRobotDataset(DatasetClient):
             features=features,
             robot_type=robot_type,
             use_videos=True,
-            **self._resolved_streaming_encoding_settings_write(),
+            **self._resolved_recording_video_encoding_settings_write(),
         )
         self.has_episodes = False
 
     def delete_episodes(self, episode_indices: list[int], output_path: Path) -> DatasetClient:
         """Copy over repo without given episode_indices to output_path."""
         lerobot_delete_episodes(dataset=self._dataset, episode_indices=episode_indices, output_dir=output_path)
-        return InternalLeRobotDataset(output_path, streaming_encoding_settings=self._streaming_encoding_settings)
+        return InternalLeRobotDataset(
+            output_path, recording_video_encoding_settings=self._recording_video_encoding_settings
+        )
 
     def get_tasks(self) -> list[str]:
         """Get Tasks in dataset."""
@@ -275,7 +276,7 @@ class InternalLeRobotDataset(DatasetClient):
     def start_recording_mutation(self, fps: int, features: dict, robot_type: str) -> RecordingMutation:
         """Start recording mutation."""
         # Fail before copying the dataset if PyAV has no usable video encoder.
-        self._resolved_streaming_encoding_settings_write()
+        self._resolved_recording_video_encoding_settings_write()
 
         settings = get_settings()
         cache_dir = settings.cache_dir / str(uuid4())
@@ -283,7 +284,7 @@ class InternalLeRobotDataset(DatasetClient):
         logger.info(f"Creating cache dataset {cache_dir}")
         cache_dataset = InternalLeRobotDataset(
             cache_dir,
-            streaming_encoding_settings=self._streaming_encoding_settings,
+            recording_video_encoding_settings=self._recording_video_encoding_settings,
         )
         if self.exists_on_disk:
             shutil.copytree(self.path, cache_dir)
@@ -418,13 +419,8 @@ class InternalLeRobotDataset(DatasetClient):
     def _build_thumbnail_png_bytes(
         video_path: str, start: float, width: int, height: int, _mtime_ns: int, _size: int
     ) -> bytes | None:
-        capture = cv2.VideoCapture(video_path)
-        try:
-            capture.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
-            ok, frame = capture.read()
-        finally:
-            capture.release()
-        if not ok:
+        frame = InternalLeRobotDataset._decode_thumbnail_frame(video_path, start)
+        if frame is None:
             logger.warning("Could not decode thumbnail frame from '{}' at {}s", video_path, start)
             return None
 
@@ -435,6 +431,30 @@ class InternalLeRobotDataset(DatasetClient):
             return None
 
         return imagebytes.tobytes()
+
+    @staticmethod
+    def _decode_thumbnail_frame(video_path: str, start: float) -> np.ndarray | None:
+        """Decode the first frame at or after ``start`` with PyAV.
+
+        OpenCV's bundled FFmpeg selects an AV1 decoder which requires hardware
+        acceleration and cannot fall back to software decode. PyAV can use
+        libdav1d for a reliable AV1 software fallback.
+        """
+        import av
+
+        try:
+            with av.open(video_path) as container:
+                stream = next(iter(container.streams.video), None)
+                if stream is None or stream.time_base is None:
+                    return None
+                container.seek(int(start / float(stream.time_base)), stream=stream, backward=True)
+                for video_frame in container.decode(stream):
+                    if video_frame.time is None or video_frame.time >= start:
+                        return video_frame.to_ndarray(format="bgr24")
+        except (av.FFmpegError, OSError) as exc:
+            logger.warning("Failed to read thumbnail source '{}' at {}s: {}", video_path, start, exc)
+            return None
+        return None
 
     def _get_episode_buffer_snapshot(self) -> dict | None:
         writer = self._dataset.writer

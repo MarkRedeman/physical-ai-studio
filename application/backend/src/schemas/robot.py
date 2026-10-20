@@ -2,12 +2,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, TypeAdapter, create_model
 
+from robots.catalog.bimanual_stararm_hd import BimanualStarArmHDRobot
 from robots.catalog.registry import RobotCatalogRegistry
 from robots.catalog.so101 import SO101Robot
 from robots.catalog.widowxai import TrossenBimanualRobot, TrossenSingleArmRobot
 from schemas.robot_type import BaseRobot, RobotType
 
 __all__ = [
+    "BimanualStarArmHDRobot",
     "ReadableRobot",
     "Robot",
     "RobotAdapter",
