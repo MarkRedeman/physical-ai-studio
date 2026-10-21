@@ -60,9 +60,27 @@ async def create_recording_environment(
     recording_environment_service: Annotated[RecordingEnvironmentService, Depends(get_recording_environment_service)],
 ) -> RecordingEnvironment:
     """Associate a project environment with a dataset for recording."""
-    await _validate_recording_environment_project(
+    dataset = await _validate_recording_environment_project(
         dataset_id, payload.environment_id, dataset_service, environment_service
     )
+    environment = await environment_service.get_environment_by_id(dataset.project_id, payload.environment_id)
+    dataset_camera_keys = {
+        key.removeprefix("observation.images.")
+        for key in get_internal_read_dataset(dataset).get_video_keys()
+    }
+    if dataset_camera_keys:
+        mapped_camera_ids = {mapping.environment_camera_id for mapping in payload.camera_mappings}
+        environment_camera_ids = {camera.id for camera in environment.cameras}
+        mapped_dataset_keys = {mapping.dataset_camera_key for mapping in payload.camera_mappings}
+        if (
+            mapped_camera_ids != environment_camera_ids
+            or mapped_dataset_keys != dataset_camera_keys
+            or len(payload.camera_mappings) != len(mapped_camera_ids)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Map every environment camera to exactly one existing dataset camera key.",
+            )
     return await recording_environment_service.create(
         dataset_id, payload.environment_id, [mapping.model_dump(mode="json") for mapping in payload.camera_mappings]
     )
