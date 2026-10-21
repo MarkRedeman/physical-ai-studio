@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 
-import { Button, ButtonGroup, Content, Dialog, Divider, Heading, Item, Picker, TextField } from '@geti-ui/ui';
+import { Button, ButtonGroup, Content, Dialog, Divider, Heading, Item, Picker, Text, TextField } from '@geti-ui/ui';
 import { isEmpty } from 'lodash-es';
 
 import { $api } from '../../api/client';
@@ -19,6 +19,7 @@ export const RenameDatasetDialog = ({
     const [defaultTask, setDefaultTask] = useState(dataset.default_task);
     const [defaultRecordingEnvironmentId, setDefaultRecordingEnvironmentId] = useState<string>();
     const [environmentToAddId, setEnvironmentToAddId] = useState<string>();
+    const [cameraMappings, setCameraMappings] = useState<Record<string, string>>({});
     const renameMutation = $api.useMutation('put', '/api/dataset/{dataset_id}', {
         meta: {
             invalidates: [
@@ -37,22 +38,49 @@ export const RenameDatasetDialog = ({
     const { data: environments = [] } = $api.useQuery('get', '/api/projects/{project_id}/environments', {
         params: { path: { project_id: dataset.project_id } },
     });
+    const { data: datasetCameraKeys = [] } = $api.useQuery(
+        'get',
+        '/api/dataset/{dataset_id}/recording-camera-keys',
+        { params: { path: { dataset_id: dataset.id ?? '' } } },
+        { enabled: dataset.id !== undefined }
+    );
+    const { data: environmentToAdd } = $api.useQuery(
+        'get',
+        '/api/projects/{project_id}/environments/{environment_id}',
+        { params: { path: { project_id: dataset.project_id, environment_id: environmentToAddId ?? '' } } },
+        { enabled: environmentToAddId !== undefined }
+    );
     const defaultAssociation = recordingEnvironments.find(({ is_default }) => is_default);
     const selectedDefaultId = defaultRecordingEnvironmentId ?? defaultAssociation?.id;
     const defaultMutation = $api.useMutation(
         'patch',
         '/api/dataset/{dataset_id}/recording-environments/{recording_environment_id}'
     );
-    const addRecordingEnvironmentMutation = $api.useMutation('post', '/api/dataset/{dataset_id}/recording-environments', {
-        meta: {
-            invalidates: [
-                ['get', '/api/dataset/{dataset_id}/recording-environments', { params: { path: { dataset_id: dataset.id! } } }],
-            ],
-        },
-    });
+    const addRecordingEnvironmentMutation = $api.useMutation(
+        'post',
+        '/api/dataset/{dataset_id}/recording-environments',
+        {
+            meta: {
+                invalidates: [
+                    [
+                        'get',
+                        '/api/dataset/{dataset_id}/recording-environments',
+                        { params: { path: { dataset_id: dataset.id! } } },
+                    ],
+                ],
+            },
+        }
+    );
     const availableEnvironments = environments.filter(
         ({ id }) => !recordingEnvironments.some(({ environment_id }) => environment_id === id)
     );
+    const camerasToMap = environmentToAdd?.cameras ?? [];
+    const requiresCameraMappings = datasetCameraKeys.length > 0;
+    const hasCompleteCameraMappings =
+        !requiresCameraMappings ||
+        (camerasToMap.length > 0 &&
+            camerasToMap.every((camera) => camera.id !== undefined && cameraMappings[camera.id] !== undefined) &&
+            new Set(Object.values(cameraMappings)).size === camerasToMap.length);
 
     const isSaveDisabled =
         isEmpty(name.trim()) ||
@@ -94,9 +122,19 @@ export const RenameDatasetDialog = ({
         }
         const recordingEnvironment = await addRecordingEnvironmentMutation.mutateAsync({
             params: { path: { dataset_id: dataset.id } },
-            body: { environment_id: environmentToAddId, camera_mappings: [] },
+            body: {
+                environment_id: environmentToAddId,
+                camera_mappings: camerasToMap.flatMap((camera) => {
+                    if (camera.id === undefined) return [];
+                    const datasetCameraKey = cameraMappings[camera.id];
+                    return datasetCameraKey === undefined
+                        ? []
+                        : [{ environment_camera_id: camera.id, dataset_camera_key: datasetCameraKey }];
+                }),
+            },
         });
         setEnvironmentToAddId(undefined);
+        setCameraMappings({});
         if (defaultAssociation === undefined) {
             setDefaultRecordingEnvironmentId(recordingEnvironment.id);
         }
@@ -133,15 +171,57 @@ export const RenameDatasetDialog = ({
                         label='Add recording environment'
                         items={availableEnvironments}
                         selectedKey={environmentToAddId}
-                        onSelectionChange={(id) => setEnvironmentToAddId(id?.toString())}
+                        onSelectionChange={(id) => {
+                            setEnvironmentToAddId(id?.toString());
+                            setCameraMappings({});
+                        }}
                     >
                         {(environment) => <Item key={environment.id}>{environment.name}</Item>}
                     </Picker>
+                    {requiresCameraMappings && environmentToAddId !== undefined && (
+                        <>
+                            <Text>Map every environment camera to the camera key already used by this dataset.</Text>
+                            {camerasToMap.map((camera) => {
+                                if (camera.id === undefined) return null;
+                                const selectedCameraKey = cameraMappings[camera.id];
+                                const availableCameraKeys = datasetCameraKeys
+                                    .filter(
+                                        (cameraKey) =>
+                                            cameraKey === selectedCameraKey ||
+                                            !Object.entries(cameraMappings).some(
+                                                ([cameraId, mappedKey]) =>
+                                                    cameraId !== camera.id && mappedKey === cameraKey
+                                            )
+                                    )
+                                    .map((cameraKey) => ({ id: cameraKey, name: cameraKey }));
+                                return (
+                                    <Picker
+                                        key={camera.id}
+                                        label={`Camera mapping for ${camera.name}`}
+                                        items={availableCameraKeys}
+                                        selectedKey={selectedCameraKey}
+                                        onSelectionChange={(cameraKey) =>
+                                            setCameraMappings((current) => {
+                                                if (cameraKey === null) {
+                                                    const next = { ...current };
+                                                    delete next[camera.id!];
+                                                    return next;
+                                                }
+                                                return { ...current, [camera.id!]: cameraKey.toString() };
+                                            })
+                                        }
+                                    >
+                                        {(cameraKey) => <Item key={cameraKey.id}>{cameraKey.name}</Item>}
+                                    </Picker>
+                                );
+                            })}
+                        </>
+                    )}
                     <Button
                         type='button'
                         variant='secondary'
                         onPress={addRecordingEnvironment}
-                        isDisabled={environmentToAddId === undefined}
+                        isDisabled={environmentToAddId === undefined || !hasCompleteCameraMappings}
                         isPending={addRecordingEnvironmentMutation.isPending}
                     >
                         Add environment

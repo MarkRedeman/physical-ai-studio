@@ -270,9 +270,9 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
 
     const disconnect = useMutation({
         meta: { skipInvalidation: true },
-        mutationFn: async () => {
+        mutationFn: async (): Promise<RuntimeApiJsonResponse> => {
             if (socket.readyState !== 1) {
-                return;
+                return { event: 'disconnect' };
             }
             await new Promise<void>((resolve, reject) => {
                 disconnectResolver.current = resolve;

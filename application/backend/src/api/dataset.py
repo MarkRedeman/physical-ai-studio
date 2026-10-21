@@ -113,6 +113,17 @@ async def get_dataset(
     return await dataset_service.get_dataset_by_id(dataset_id)
 
 
+@router.get("/{dataset_id}/recording-camera-keys")
+async def get_recording_camera_keys(
+    dataset_id: UUID,
+    dataset_service: Annotated[DatasetService, Depends(get_dataset_service)],
+) -> list[str]:
+    """Return the dataset camera keys available for recording-environment mappings."""
+    dataset = await dataset_service.get_dataset_by_id(dataset_id)
+    internal_dataset = get_internal_read_dataset(dataset)
+    return [key.removeprefix("observation.images.") for key in internal_dataset.get_video_keys()]
+
+
 @router.get("/{dataset_id}/episodes")
 async def get_episodes_of_dataset(
     dataset_id: UUID,
