@@ -10,7 +10,7 @@ import {
 } from '../../api/openapi-spec';
 import useWebSocketWithResponse from '../../components/websockets/use-websocket-with-response';
 import { getEpisodesQueryKey } from '../datasets/episodes/episodes-query-key';
-import { setPendingRecordedEpisodes } from '../datasets/pending-recorded-episodes';
+import { getPendingRecordedEpisodes, setPendingRecordedEpisodes } from '../datasets/pending-recorded-episodes';
 import { useProjectId } from '../projects/use-project';
 import { FollowerSource, runtimeSocketUrl } from './use-joint-state';
 
@@ -99,21 +99,35 @@ const useRecordExpectedEpisodes = (dataset_id?: string) => {
     const queryClient = useQueryClient();
     const lastRecordedEpisodes = useRef<{ dataset_id: string; count: number } | undefined>(undefined);
 
-    return (episodes_recorded: number) => {
+    const reset = () => {
+        if (dataset_id !== undefined) {
+            lastRecordedEpisodes.current = { dataset_id, count: 0 };
+        }
+    };
+
+    const record = (episodes_recorded: number) => {
         if (dataset_id === undefined || episodes_recorded === 0) {
             return;
         }
         const lastRecorded = lastRecordedEpisodes.current;
-        if (lastRecorded?.dataset_id === dataset_id && episodes_recorded <= lastRecorded.count) {
+        const previousCount = lastRecorded?.dataset_id === dataset_id ? lastRecorded.count : 0;
+        if (episodes_recorded <= previousCount) {
             return;
         }
         const episodes = queryClient.getQueryData<unknown[]>(getEpisodesQueryKey(dataset_id));
         if (!Array.isArray(episodes)) {
             return;
         }
-        setPendingRecordedEpisodes(dataset_id, episodes.length + episodes_recorded);
+        const pendingRecordedEpisodes = getPendingRecordedEpisodes(dataset_id);
+        const expectedEpisodeCount =
+            pendingRecordedEpisodes === undefined
+                ? episodes.length + episodes_recorded
+                : pendingRecordedEpisodes.expectedEpisodeCount + episodes_recorded - previousCount;
+        setPendingRecordedEpisodes(dataset_id, expectedEpisodeCount);
         lastRecordedEpisodes.current = { dataset_id, count: episodes_recorded };
     };
+
+    return { record, reset };
 };
 
 export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
@@ -125,7 +139,7 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
     const [inferenceDevice, setInferenceDevice] = useState<InferenceDevice | undefined>(props.inferenceDevice);
     const [dataset, setDataset] = useState<SchemaDatasetOutput | undefined>(props.dataset);
     const devices = handshakeDevices(props.environment);
-    const recordExpectedEpisodes = useRecordExpectedEpisodes(dataset?.id);
+    const expectedEpisodes = useRecordExpectedEpisodes(dataset?.id);
 
     const onOpen = () => {
         socket.sendJsonMessage({
@@ -164,7 +178,7 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
                     is_recording: next.is_recording ?? false,
                     episodes_recorded: next.episodes_recorded ?? 0,
                 });
-                recordExpectedEpisodes(next.episodes_recorded ?? 0);
+                expectedEpisodes.record(next.episodes_recorded ?? 0);
             }
             if (message.event === 'error') {
                 props.onError(typeof message.message === 'string' ? message.message : 'An unexpected error occurred.');
@@ -204,6 +218,7 @@ export const RuntimeSessionProvider = (props: RuntimeSessionProviderProps) => {
                 ({ event, data }) => event === 'state' && data?.dataset_loaded === true
             );
             setDataset(datasetConfig);
+            expectedEpisodes.reset();
             return result;
         },
     });
