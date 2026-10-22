@@ -21,6 +21,11 @@ type DatasetContextValue = null | {
 const DatasetContext = createContext<DatasetContextValue>(null);
 
 const EPISODES_REFETCH_INTERVAL_MS = 1000;
+const EPISODES_POLLING_TIMEOUT_MS = 60_000;
+
+type PendingEpisodesPolling = PendingRecordedEpisodes & {
+    expiresAt: number;
+};
 
 interface DatasetProviderProps {
     dataset_id: string;
@@ -28,12 +33,13 @@ interface DatasetProviderProps {
 }
 export const DatasetProvider = ({ dataset_id, children }: DatasetProviderProps) => {
     const [selectedEpisodes, setSelectedEpisodes] = useState<number[]>([]);
-    const [pendingRecordedEpisodes, setPendingRecordedEpisodes] = useState<PendingRecordedEpisodes | undefined>(() =>
-        getPendingRecordedEpisodes(dataset_id)
-    );
+    const [pendingRecordedEpisodes, setPendingRecordedEpisodes] = useState<PendingEpisodesPolling | undefined>();
 
     useEffect(() => {
-        setPendingRecordedEpisodes(getPendingRecordedEpisodes(dataset_id));
+        const pending = getPendingRecordedEpisodes(dataset_id);
+        setPendingRecordedEpisodes(
+            pending === undefined ? undefined : { ...pending, expiresAt: Date.now() + EPISODES_POLLING_TIMEOUT_MS }
+        );
         setSelectedEpisodes([]);
     }, [dataset_id]);
 

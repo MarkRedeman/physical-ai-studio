@@ -77,7 +77,11 @@ describe('DatasetProvider', () => {
             http.get('/api/dataset/{dataset_id}/episodes', () => {
                 episodesRequests += 1;
                 return HttpResponse.json(
-                    getMockedEpisodes(episodesRequests === 1 ? [{ episode_index: 0 }] : undefined)
+                    getMockedEpisodes(
+                        episodesRequests === 1
+                            ? [{ episode_index: 0 }]
+                            : [{ episode_index: 0 }, { episode_index: 1 }, { episode_index: 2 }]
+                    )
                 );
             })
         );
@@ -88,7 +92,9 @@ describe('DatasetProvider', () => {
             </DatasetProvider>
         );
 
-        await waitFor(() => expect(episodesRequests).toBeGreaterThanOrEqual(2), { timeout: 2000 });
+        await waitFor(() => expect(episodesRequests).toBe(2), { timeout: 2000 });
+        await new Promise((resolve) => window.setTimeout(resolve, 1100));
+        expect(episodesRequests).toBe(2);
     });
 
     it('clears selected episodes when the dataset changes', async () => {
