@@ -76,3 +76,52 @@ def import_dir(
     except Exception as e:
         click.echo(f"Model import failed: {e}")
         sys.exit(1)
+
+
+@models.command("export")
+@click.argument("model_id", type=click.UUID)
+@click.option(
+    "--backend",
+    "backends",
+    multiple=True,
+    type=click.Choice(("torch", "openvino", "onnx", "executorch"), case_sensitive=False),
+    default=("torch", "openvino"),
+    show_default=True,
+    help="Export backend to produce. Specify the option more than once to select multiple backends.",
+)
+def export(model_id: UUID, backends: tuple[str, ...]) -> None:
+    """Export a persisted model checkpoint to one or more deployment backends.
+
+    By default this produces PyTorch and OpenVINO artifacts under the model's
+    ``exports/`` directory. Existing artifacts are handled by the policy export
+    implementation in the same way as exports performed after training.
+    """
+    from db import get_async_db_session_ctx
+    from schemas import Model
+    from services.model_service import ModelService
+    from training.job import TrainingJobSpec, _export, _load_policy_from_checkpoint, resolve_checkpoint
+
+    async def get_model() -> Model:
+        async with get_async_db_session_ctx() as session:
+            return await ModelService(session).get_model_by_id(model_id)
+
+    def report(_progress: int, message: str | None, _extra_info: dict) -> None:
+        if message is not None:
+            click.echo(message)
+
+    try:
+        model = asyncio.run(get_model())
+        model_dir = Path(model.path)
+        checkpoint = resolve_checkpoint(model_dir)
+        if not checkpoint.is_file():
+            raise click.ClickException(f"Model checkpoint not found: {checkpoint}")
+
+        requested = [backend.lower() for backend in backends]
+        click.echo(f"Loading model {model.id} from {checkpoint}")
+        policy = _load_policy_from_checkpoint(TrainingJobSpec(policy=model.policy), checkpoint)
+        _export(policy, model_dir, report, requested=requested)
+        click.echo(f"Export finished for model {model.id}")
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f"Model export failed: {exc}") from exc
