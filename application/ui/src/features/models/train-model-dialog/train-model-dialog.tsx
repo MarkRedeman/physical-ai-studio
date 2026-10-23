@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Button, ButtonGroup, Content, Dialog, Divider, Flex, Heading, Key, Text, View } from '@geti-ui/ui';
 
@@ -56,7 +56,7 @@ const DEFAULT_SNAPFLOW_DISTILL_EPOCHS = 3;
 /** Strip the `trainer:` prefix off a training-target option id. */
 const targetRawId = (id: string): string => id.split(':', 2)[1] ?? id;
 
-export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: TrainModelDialogProps) => {
+export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 30 }: TrainModelDialogProps) => {
     const bestDevice = useBestTrainingDevice();
     const { data: remoteTrainers = [] } = $api.useQuery('get', '/api/remote-trainers');
     const { data: jobs = [] } = $api.useQuery('get', '/api/jobs');
@@ -149,8 +149,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
         { enabled: selectedDataset !== null }
     );
     const [maxEpochs, setMaxEpochs] = useState<number>(defaultMaxEpochs);
-    const [batchSize, setBatchSize] = useState<number>(8);
     const [numWorkers, setNumWorkers] = useState<Key | null>('auto');
+    const [batchSize, setBatchSize] = useState<number>(64);
     const [autoScaleBatchSize, setAutoScaleBatchSize] = useState<boolean>(false);
     const [precision, setPrecision] = useState<Key | null>(bestDevice?.type === 'cuda' ? 'bf16-mixed' : '32-true');
     const [compileModel, setCompileModel] = useState<boolean>(false);

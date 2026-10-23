@@ -82,7 +82,7 @@ class TrainingDevice(BaseModel):
         return self
 
 
-_DEFAULT_MAX_EPOCHS = 5
+_DEFAULT_MAX_EPOCHS = 30
 _DEFAULT_SNAPFLOW_DISTILL_EPOCHS = 3
 
 
@@ -113,7 +113,7 @@ class TrainJobPayloadBase(BaseModel):
         le=100_000,
         description="Number of training steps (legacy; ignored when max_epochs is provided)",
     )
-    batch_size: int = Field(default=8, ge=1, le=256, description="Training batch size")
+    batch_size: int = Field(default=64, ge=1, le=256, description="Training batch size")
 
     @field_validator("image_key_reorder_map")
     @classmethod

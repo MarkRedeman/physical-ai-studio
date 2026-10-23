@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_NAME = "model.ckpt"
 """Filename of the ordinary (flow-matching) checkpoint."""
 
+_ACT_OPTIMIZER_LR = 3e-5
+"""ACT learning rate used by Studio's baseline training configuration."""
+
 SNAPFLOW_CHECKPOINT_PREFIX = "snapflow-"
 """Prefix :class:`~physicalai.train.callbacks.SnapFlowPhaseCallback` applies to
 ``ModelCheckpoint`` filenames once distillation starts, so phase-2 checkpoints
@@ -102,7 +105,7 @@ class TrainingJobSpec(BaseModel):
     arguments to :func:`run_training_job`.
 
     Example:
-        >>> spec = TrainingJobSpec(policy="act", max_epochs=5)
+        >>> spec = TrainingJobSpec(policy="act", max_epochs=30)
         >>> spec.precision
         'bf16-mixed'
     """
@@ -115,15 +118,15 @@ class TrainingJobSpec(BaseModel):
         description="Which implementation of the policy to train.",
     )
     max_epochs: int = Field(
-        default=5,
+        default=30,
         ge=1,
         description=(
             "Total training epoch budget. When SnapFlow distillation is enabled this already "
             "includes the distillation phase (see snapflow_start_epoch)."
         ),
     )
-    batch_size: int = Field(default=8, ge=1, description="Training batch size.")
     num_workers: int | Literal["auto"] = Field(default="auto", description="Dataloader worker count.")
+    batch_size: int = Field(default=64, ge=1, description="Training batch size.")
     val_split: float = Field(default=0.1, ge=0.0, lt=1.0, description="Fraction of episodes held out for validation.")
     precision: str = Field(default="bf16-mixed", description="Lightning precision, e.g. '32-true' or 'bf16-mixed'.")
     compile_model: bool = Field(default=False, description="Whether to torch.compile the policy forward pass.")
@@ -256,6 +259,11 @@ def build_policy(spec: TrainingJobSpec, *, resume_from: Path | str | None = None
         pretrained = PRETRAINED_BASE_CHECKPOINTS.get(spec.policy.lower())
         if pretrained is not None:
             kwargs["pretrained_name_or_path"] = pretrained
+        if spec.policy.lower() == "act":
+            kwargs.update(
+                optimizer_lr=_ACT_OPTIMIZER_LR,
+                optimizer_lr_backbone=_ACT_OPTIMIZER_LR,
+            )
     kwargs.update(_camera_layout_kwargs(spec))
     if spec.lora_enabled:
         kwargs.update(
@@ -377,7 +385,7 @@ def run_training_job(
     from lightning.pytorch.callbacks import ModelCheckpoint
     from lightning.pytorch.loggers import CSVLogger
     from physicalai.data import LeRobotDataModule
-    from physicalai.train.callbacks import ProgressReportingCallback
+    from physicalai.train.callbacks import IterationTimer, ProgressReportingCallback
     from physicalai.train.trainer import Trainer
     from physicalai.transforms import DefaultImageAugmentations
 
@@ -402,12 +410,18 @@ def run_training_job(
 
         checkpoint_callback = ModelCheckpoint(
             dirpath=cache_dir,
-            filename=Path(CHECKPOINT_NAME).stem,
-            save_top_k=1,
+            filename="epoch-{epoch:03d}",
+            save_top_k=5,
             monitor="val/loss",
             mode="min",
+            save_last=True,
+            save_weights_only=True,
         )
-        callbacks: list[Any] = [checkpoint_callback, ProgressReportingCallback(report=report, should_stop=should_stop)]
+        callbacks: list[Any] = [
+            checkpoint_callback,
+            ProgressReportingCallback(report=report, should_stop=should_stop),
+            IterationTimer(),
+        ]
         snapflow_callback = _build_snapflow_callback(spec)
         if snapflow_callback is not None:
             callbacks.append(snapflow_callback)
@@ -422,6 +436,7 @@ def run_training_job(
             auto_scale_batch_size=spec.auto_scale_batch_size,
             precision=spec.precision,
             check_val_every_n_epoch=1,
+            log_every_n_steps=20,
         )
 
         report(0, "Training model", {})
@@ -430,7 +445,12 @@ def run_training_job(
             logger.info("Training canceled; skipping checkpoint and export")
             return
 
-        _finalize_checkpoints(trainer, cache_dir, snapflow_callback=snapflow_callback)
+        _finalize_checkpoints(
+            trainer,
+            cache_dir,
+            checkpoint_callback=checkpoint_callback,
+            snapflow_callback=snapflow_callback,
+        )
         _publish(cache_dir, output_dir)
 
         export_policy = _export_policy(spec, policy, output_dir)
@@ -485,23 +505,36 @@ def _load_policy_from_checkpoint(spec: TrainingJobSpec, checkpoint: Path) -> Pol
     return policy
 
 
-def _ensure_checkpoint_exists(trainer: Any, cache_dir: Path) -> None:
-    """Save a final checkpoint only if the ``ModelCheckpoint`` callback did not already write one.
+def _ensure_checkpoint_exists(trainer: Any, checkpoint: Path, selected_path: str | Path | None) -> None:
+    """Publish a selected checkpoint, falling back to the final model when absent.
 
-    The callback is the preferred source of :data:`CHECKPOINT_NAME`: it tracks
-    the best monitored epoch, not just the last one. But it only saves when
-    its monitored metric was actually logged (e.g. a run with no validation
-    split never logs ``val/loss``), so this is a fallback for that case —
-    saving the trainer's current (final-epoch) weights — rather than a second
-    source of truth that could overwrite the callback's best checkpoint.
+    ``ModelCheckpoint`` retains the five best validation epochs under
+    descriptive filenames.  Studio also publishes its selected best checkpoint
+    at a stable path for resume, download, and export.  When no monitored
+    checkpoint was written (for example, without validation), save the final
+    weights to that stable path instead.
     """
-    checkpoint = cache_dir / CHECKPOINT_NAME
-    if not checkpoint.is_file():
-        logger.warning("ModelCheckpoint callback did not write a checkpoint; saving final weights instead")
-        trainer.save_checkpoint(checkpoint)
+    if isinstance(selected_path, (str, Path)):
+        selected_checkpoint = Path(selected_path)
+        if selected_checkpoint.is_file():
+            if selected_checkpoint != checkpoint:
+                shutil.copy2(selected_checkpoint, checkpoint)
+            return
+
+    if checkpoint.is_file():
+        return
+
+    logger.warning("ModelCheckpoint callback did not write a checkpoint; saving final weights instead")
+    trainer.save_checkpoint(checkpoint)
 
 
-def _finalize_checkpoints(trainer: Any, cache_dir: Path, *, snapflow_callback: Any) -> None:
+def _finalize_checkpoints(
+    trainer: Any,
+    cache_dir: Path,
+    *,
+    checkpoint_callback: Any,
+    snapflow_callback: Any,
+) -> None:
     """Make sure every checkpoint this run should ship actually exists on disk.
 
     :data:`CHECKPOINT_NAME` is always ensured (see
@@ -517,15 +550,15 @@ def _finalize_checkpoints(trainer: Any, cache_dir: Path, *, snapflow_callback: A
         snapflow_callback: The ``SnapFlowPhaseCallback`` for this run, or
             ``None`` if the run was ordinary flow matching.
     """
-    _ensure_checkpoint_exists(trainer, cache_dir)
-
-    if snapflow_callback is None or not snapflow_callback.state_dict().get("activated"):
+    snapflow_activated = snapflow_callback is not None and snapflow_callback.state_dict().get("activated")
+    if not snapflow_activated:
+        _ensure_checkpoint_exists(trainer, cache_dir / CHECKPOINT_NAME, checkpoint_callback.best_model_path)
         return
 
     snapflow_checkpoint = cache_dir / SNAPFLOW_CHECKPOINT_NAME
-    if not snapflow_checkpoint.is_file():
-        logger.warning("SnapFlow phase saved no checkpoint; saving final distilled weights instead")
-        trainer.save_checkpoint(snapflow_checkpoint)
+    teacher_path = snapflow_callback.state_dict().get("restored_teacher_path")
+    _ensure_checkpoint_exists(trainer, cache_dir / CHECKPOINT_NAME, teacher_path)
+    _ensure_checkpoint_exists(trainer, snapflow_checkpoint, checkpoint_callback.best_model_path)
 
 
 def _publish(cache_dir: Path, output_dir: Path) -> None:

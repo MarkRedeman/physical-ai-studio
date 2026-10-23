@@ -185,7 +185,7 @@ export const TrainingParameters = ({
                         <Content>
                             <Text>
                                 Total number of training epochs. Training will stop after this many full passes through
-                                the dataset. We recommend training for 5 to 10 epochs.
+                                the dataset. The default ACT baseline trains for 30 epochs.
                             </Text>
                         </Content>
                     </ContextualHelp>

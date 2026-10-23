@@ -48,8 +48,8 @@ class TestTrainingJobSpec:
     def test_only_the_policy_is_required(self) -> None:
         spec = TrainingJobSpec(policy="act")
 
-        assert (spec.policy_source, spec.max_epochs, spec.batch_size) == ("physicalai", 5, 8)
-        assert (spec.num_workers, spec.val_split, spec.precision) == ("auto", 0.1, "bf16-mixed")
+        assert (spec.policy_source, spec.max_epochs, spec.batch_size) == ("physicalai", 30, 64)
+        assert (spec.num_workers, spec.val_split, spec.precision) == (8, 0.1, "32-true")
         assert (spec.compile_model, spec.auto_scale_batch_size) == (False, False)
         assert spec.augment_images is False
         assert (spec.device_type, spec.device_index) == (None, None)
@@ -155,7 +155,13 @@ class TestBuildPolicy:
             policy = build_policy(TrainingJobSpec(policy="act", compile_model=True))
 
         assert policy is get_policy.return_value
-        get_policy.assert_called_once_with("act", source="physicalai", compile_model=True)
+        get_policy.assert_called_once_with(
+            "act",
+            source="physicalai",
+            compile_model=True,
+            optimizer_lr=3e-5,
+            optimizer_lr_backbone=3e-5,
+        )
 
     @pytest.mark.parametrize("policy_name", sorted(PRETRAINED_BASE_CHECKPOINTS))
     def test_finetune_only_policies_start_from_pretrained_weights(self, policy_name: str) -> None:
@@ -386,6 +392,7 @@ class TestRunTrainingJob:
         assert kwargs["max_epochs"] == 5
         assert kwargs["precision"] == "32-true"
         assert kwargs["auto_scale_batch_size"] is True
+        assert kwargs["log_every_n_steps"] == 20
         assert (kwargs["accelerator"], kwargs["strategy"], kwargs["devices"]) == ("cpu", "auto", [1])
 
     def test_xpu_gets_its_single_device_strategy(self, tmp_path: Path) -> None:
@@ -468,7 +475,16 @@ class TestRunTrainingJob:
         assert len(checkpoint_callbacks) == 1
         callback = checkpoint_callbacks[0]
         assert callback.dirpath == str(tmp_path / "cache" / "job")
-        assert (callback.monitor, callback.mode, callback.save_top_k) == ("val/loss", "min", 1)
+        assert (callback.monitor, callback.mode, callback.save_top_k) == ("val/loss", "min", 5)
+        assert callback.save_last is True
+        assert callback.save_weights_only is True
+
+    def test_iteration_times_are_logged(self, tmp_path: Path) -> None:
+        from physicalai.train.callbacks import IterationTimer
+
+        trainer_class = _run(TrainingJobSpec(policy="act"), tmp_path)
+
+        assert any(isinstance(callback, IterationTimer) for callback in trainer_class.call_args.kwargs["callbacks"])
 
     def test_missing_checkpoint_from_the_callback_falls_back_to_an_explicit_save(self, tmp_path: Path) -> None:
         """A run with nothing for the callback to monitor (e.g. no validation split) still gets a checkpoint."""
