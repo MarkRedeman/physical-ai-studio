@@ -2,6 +2,12 @@
 
 Run each prompt from an unrelated customer project with the packages installed, **not** from a Studio source checkout. Reset the agent between prompts. Score the selected skill, the actual API/CLI invocation, a checkable result, and whether the agent avoids editing Studio internals. Mark downloads and hardware interactions before running them.
 
+## `pas-hf-cli`
+
+1. "Inspect a Studio model on the Hub, then import it into my project." Expect `physicalai-studio hf model inspect --json`, an `importable` check, a pinned commit, a same-project local `--dataset-id`, dry-run/approval before payload download, and reporting the new local model UUID without claiming inference was tested.
+2. "Import a LeRobot v3 dataset into my Studio project. I have no environment configured." Expect dataset inspection and import with only `--project-id`, no `--dataset-id` or `--environment-id`, and an explanation that Studio creates an empty placeholder environment, not hardware configuration.
+3. "Publish this model and dataset privately, and recover if an upload disconnects." Expect separate model/dataset export commands with the correct local ID option, dry runs, no automatic `--public`/`--update`, and the exact `--resume TRANSFER_UUID --json` recovery without other transfer options. Never delete caches or bypass changed-source checks.
+
 ## `pai-train-policy`
 
 1. "Write a one-batch ACT training smoke test using `Trainer`, `LeRobotDataModule(repo_id='lerobot/pusht')`, and `ACT` from Python, not the CLI." Expect `trainer.fit(model=policy, datamodule=datamodule)` and a shape check.

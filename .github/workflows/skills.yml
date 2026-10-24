@@ -92,6 +92,9 @@ jobs:
       - name: Validate skills and adapter symlinks
         run: python3 .github/scripts/skills/agent_skills.py validate
 
+      - name: Test skill namespaces and adapters
+        run: python3 -m unittest discover -s .github/scripts/skills -p 'test_*.py' -v
+
   skillspector-scan:
     name: SkillSpector scan
     runs-on: ubuntu-latest
