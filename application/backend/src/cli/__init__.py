@@ -6,6 +6,7 @@ import click
 
 from cli.database import database
 from cli.datasets import datasets
+from cli.hf import hf
 from cli.models import models
 from cli.serve import serve
 
@@ -33,5 +34,6 @@ def gen_api(target_path: str) -> None:
 
 cli.add_command(database)
 cli.add_command(datasets)
+cli.add_command(hf)
 cli.add_command(models)
 cli.add_command(serve)

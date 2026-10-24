@@ -65,6 +65,13 @@ Please check out [this document](docs/video_hardware_acceleration_intel.md) for 
 
 ## Usage
 
+### Hugging Face transfers
+
+Use `physicalai-studio hf model` or `physicalai-studio hf dataset` to inspect,
+import, and export Studio-compatible Hub resources. Transfers support `--json`,
+`--dry-run`, and resuming interrupted uploads/downloads. See the
+[Hugging Face CLI guide](docs/huggingface_integration.md#studio-hub-cli).
+
 ### Start Server
 
 ```bash
