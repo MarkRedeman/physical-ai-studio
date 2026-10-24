@@ -22,82 +22,89 @@ async def validate_target(project_id: str, dataset_id: str | None = None) -> Non
                 raise ValueError("--dataset-id must identify a dataset in the target project")
 
 
-async def export_source(kind: str, asset_id: str) -> dict[str, Any]:
-    """Read a local resource and a portable, deliberately limited metadata projection."""
+async def model_export_source(model_id: str) -> dict[str, Any]:
+    """Read a model and its portable metadata; reject active training jobs."""
     from db import get_async_db_session_ctx
-    from db.schema import DatasetDB, JobDB, ModelDB
+    from db.schema import JobDB, ModelDB
     from settings import get_settings
 
     settings = get_settings()
     async with get_async_db_session_ctx() as session:
-        record = await session.get(ModelDB if kind == "model" else DatasetDB, asset_id)
+        record = await session.get(ModelDB, model_id)
         if record is None:
-            raise ValueError(f"Local {kind} {asset_id} does not exist")
+            raise ValueError(f"Local model {model_id} does not exist")
         metadata: dict[str, Any] = {"name": record.name, "source_id": record.id, "source_project_id": record.project_id}
-        if isinstance(record, ModelDB):
-            job = await session.get(JobDB, record.train_job_id) if record.train_job_id else None
-            if job and job.status in {"pending", "running"}:
-                raise ValueError("Cannot export a model while its training job is active")
-            path = Path(record.path)
-            properties = cast("dict[str, Any]", record.properties)
-            metadata.update(
-                policy=record.policy,
-                version=record.version,
-                source_dataset_id=record.dataset_id,
-                properties={
-                    key: properties[key]
-                    for key in ("lora_enabled", "lora_use_dora", "snapflow_enabled")
-                    if isinstance(properties.get(key), bool)
-                },
-            )
-            parent = settings.models_dir
-        else:
-            path = settings.datasets_dir / record.id
-            parent = settings.datasets_dir
-            metadata["default_task"] = record.default_task
-        if path.is_symlink() or not path.resolve().is_relative_to(parent.resolve()) or not path.is_dir():
-            raise ValueError(f"Resource directory is missing or outside managed {kind} storage")
+        job = await session.get(JobDB, record.train_job_id) if record.train_job_id else None
+        if job and job.status in {"pending", "running"}:
+            raise ValueError("Cannot export a model while its training job is active")
+        path = Path(record.path)
+        properties = cast("dict[str, Any]", record.properties)
+        metadata.update(
+            policy=record.policy,
+            version=record.version,
+            source_dataset_id=record.dataset_id,
+            properties={
+                key: properties[key]
+                for key in ("lora_enabled", "lora_use_dora", "snapflow_enabled")
+                if isinstance(properties.get(key), bool)
+            },
+        )
+        _validate_source_path(path, settings.models_dir)
         return {"path": str(path.resolve()), "metadata": metadata}
 
 
-async def register_import(state: dict[str, Any], destination: Path, inspection: dict[str, Any]) -> dict[str, Any]:
-    """Register once, atomically; saved UUIDs make recovery after commit idempotent."""
+async def dataset_export_source(dataset_id: str) -> dict[str, Any]:
+    """Read a dataset and its portable task/name metadata."""
     from db import get_async_db_session_ctx
-    from db.schema import DatasetDB, ModelDB, ProjectEnvironmentDB
+    from db.schema import DatasetDB
+    from settings import get_settings
 
-    kind = state["kind"]
+    settings = get_settings()
+    async with get_async_db_session_ctx() as session:
+        record = await session.get(DatasetDB, dataset_id)
+        if record is None:
+            raise ValueError(f"Local dataset {dataset_id} does not exist")
+        path = settings.datasets_dir / record.id
+        _validate_source_path(path, settings.datasets_dir)
+        return {
+            "path": str(path.resolve()),
+            "metadata": {
+                "name": record.name,
+                "source_id": record.id,
+                "source_project_id": record.project_id,
+                "default_task": record.default_task,
+            },
+        }
+
+
+def _validate_source_path(path: Path, parent: Path) -> None:
+    if path.is_symlink() or not path.resolve().is_relative_to(parent.resolve()) or not path.is_dir():
+        raise ValueError("Resource directory is missing or outside managed storage")
+
+
+def _import_name(state: dict[str, Any], metadata: dict[str, Any]) -> str:
+    name = state.get("name") or metadata.get("name") or state["repo_id"].split("/")[-1]
+    if not isinstance(name, str) or not name.strip() or len(name) > 255:
+        raise ValueError("Asset name must contain 1 to 255 characters")
+    return name
+
+
+async def register_model_import(state: dict[str, Any], destination: Path, inspection: dict[str, Any]) -> dict[str, Any]:
+    """Register a model once without inventing training history or foreign links."""
+    from db import get_async_db_session_ctx
+    from db.schema import ModelDB
+
     asset_id = state["asset_id"]
     project_id = state["project_id"]
     dataset_id = state.get("dataset_id")
     await validate_target(project_id, dataset_id)
     metadata = inspection.get("studio", {})
-    name = state.get("name") or metadata.get("name") or state["repo_id"].split("/")[-1]
-    if not isinstance(name, str) or not name.strip() or len(name) > 255:
-        raise ValueError("Asset name must contain 1 to 255 characters")
+    name = _import_name(state, metadata)
     async with get_async_db_session_ctx() as session:
-        schema = ModelDB if kind == "model" else DatasetDB
-        existing = await session.get(schema, asset_id)
+        existing = await session.get(ModelDB, asset_id)
         if existing is not None:
             if existing.project_id != project_id or Path(existing.path).resolve() != destination.resolve():
                 raise ValueError("Saved import ID conflicts with an existing resource")
-        elif kind == "dataset":
-            # TODO: Remove this placeholder environment creation once datasets can
-            # be registered without an environment. Keep it in the same transaction.
-            environment = ProjectEnvironmentDB(
-                id=state["environment_id"], project_id=project_id, name=f"Imported dataset {asset_id}"
-            )
-            session.add(environment)
-            await session.flush()
-            session.add(
-                DatasetDB(
-                    id=asset_id,
-                    project_id=project_id,
-                    environment_id=environment.id,
-                    name=name,
-                    path=str(destination),
-                    default_task=metadata.get("default_task", ""),
-                )
-            )
         else:
             properties = metadata.get("properties", {})
             if not isinstance(properties, dict):
@@ -126,17 +133,62 @@ async def register_import(state: dict[str, Any], destination: Path, inspection: 
                 )
             )
         await session.commit()
-    result = {
-        "kind": kind,
+    return {
+        "kind": "model",
         "id": asset_id,
         "project_id": project_id,
         "path": str(destination),
         "repo_id": state["repo_id"],
         "revision": state["revision"],
     }
-    if kind == "dataset":
-        result["environment_id"] = state["environment_id"]
-    return result
+
+
+async def register_dataset_import(
+    state: dict[str, Any],
+    destination: Path,
+    inspection: dict[str, Any],
+) -> dict[str, Any]:
+    """Register a dataset and temporary empty environment in one transaction."""
+    from db import get_async_db_session_ctx
+    from db.schema import DatasetDB, ProjectEnvironmentDB
+
+    asset_id, project_id = state["asset_id"], state["project_id"]
+    await validate_target(project_id)
+    metadata = inspection.get("studio", {})
+    name = _import_name(state, metadata)
+    async with get_async_db_session_ctx() as session:
+        existing = await session.get(DatasetDB, asset_id)
+        if existing is not None:
+            if existing.project_id != project_id or Path(existing.path).resolve() != destination.resolve():
+                raise ValueError("Saved import ID conflicts with an existing resource")
+        else:
+            # TODO: Remove this placeholder environment creation once datasets can
+            # be registered without an environment. Keep it in the same transaction.
+            environment = ProjectEnvironmentDB(
+                id=state["environment_id"], project_id=project_id, name=f"Imported dataset {asset_id}"
+            )
+            session.add(environment)
+            await session.flush()
+            session.add(
+                DatasetDB(
+                    id=asset_id,
+                    project_id=project_id,
+                    environment_id=environment.id,
+                    name=name,
+                    path=str(destination),
+                    default_task=metadata.get("default_task", ""),
+                )
+            )
+        await session.commit()
+    return {
+        "kind": "dataset",
+        "id": asset_id,
+        "project_id": project_id,
+        "path": str(destination),
+        "repo_id": state["repo_id"],
+        "revision": state["revision"],
+        "environment_id": state["environment_id"],
+    }
 
 
 def validate_dataset_payload(root: Path) -> None:

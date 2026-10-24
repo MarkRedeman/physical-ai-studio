@@ -122,6 +122,8 @@ class FakeHub:
 
 @pytest.fixture
 def environment(tmp_path, monkeypatch):
+    # Customer-facing commands must not depend on running from the Studio checkout.
+    monkeypatch.chdir(tmp_path)
     settings = Settings(STORAGE_DIR=tmp_path / "studio", SETTINGS_FILE=str(tmp_path / "settings.json"))
     monkeypatch.setenv("SETTINGS_FILE", str(tmp_path / "settings.json"))
     monkeypatch.setattr("settings.get_settings", lambda: settings)
@@ -196,6 +198,36 @@ def test_help_has_singular_groups_and_no_network(monkeypatch):
     for args in [(), ("model",), ("dataset", "import"), ("model", "export")]:
         result = invoke(*args, "--help")
         assert result.exit_code == 0, result.output
+
+
+def test_model_and_dataset_commands_have_independent_options():
+    from cli.hf.dataset import export_dataset, import_dataset, inspect_dataset
+    from cli.hf.model import export_model, import_model, inspect_model
+
+    assert hf.commands["model"].commands == {
+        "inspect": inspect_model,
+        "import": import_model,
+        "export": export_model,
+    }
+    assert hf.commands["dataset"].commands == {
+        "inspect": inspect_dataset,
+        "import": import_dataset,
+        "export": export_dataset,
+    }
+    assert "--dataset-id" in invoke("model", "import", "--help").stdout
+    assert "--dataset-id" not in invoke("dataset", "import", "--help").stdout
+    assert "--model-id" in invoke("model", "export", "--help").stdout
+    assert "--model-id" not in invoke("dataset", "export", "--help").stdout
+    result = invoke("dataset", "import", "--dataset-id", str(uuid4()))
+    assert result.exit_code == 2
+    assert "No such option" in result.output
+
+
+def test_inspect_commands_do_not_dispatch_through_resource_kind(monkeypatch):
+    monkeypatch.setattr(inspection, "inspect_remote_model", lambda **kwargs: {"model_only": True})
+    monkeypatch.setattr(inspection, "inspect_remote_dataset", lambda **kwargs: {"dataset_only": True})
+    assert json.loads(invoke("model", "inspect", "owner/model", "--json").stdout) == {"model_only": True}
+    assert json.loads(invoke("dataset", "inspect", "owner/data", "--json").stdout) == {"dataset_only": True}
 
 
 def test_inspect_pins_revision_and_only_downloads_json(environment):

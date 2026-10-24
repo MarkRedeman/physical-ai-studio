@@ -18,8 +18,24 @@ from uuid import UUID, uuid4
 
 import click
 
-from cli.hf.inspection import hub_api, inspect_local, inspect_remote, safe_path, token
-from cli.hf.storage import export_source, register_import, uuid_string, validate_dataset_payload, validate_target
+from cli.hf.inspection import (
+    hub_api,
+    inspect_local_dataset,
+    inspect_local_model,
+    inspect_remote_dataset,
+    inspect_remote_model,
+    safe_path,
+    token,
+)
+from cli.hf.storage import (
+    dataset_export_source,
+    model_export_source,
+    register_dataset_import,
+    register_model_import,
+    uuid_string,
+    validate_dataset_payload,
+    validate_target,
+)
 
 
 class TransferError(ValueError):
@@ -118,8 +134,7 @@ def _space(path: Path, required: int) -> None:
         raise ValueError("Insufficient disk space (including DATA_IMPORT_MIN_FREE_BYTES headroom)")
 
 
-def import_asset(  # noqa: PLR0913, PLR0917
-    kind: str,
+def import_model(  # noqa: PLR0913, PLR0917
     repo_id: str | None,
     project_id: UUID | None,
     dataset_id: UUID | None,
@@ -129,33 +144,31 @@ def import_asset(  # noqa: PLR0913, PLR0917
     resume: UUID | None,
     dry_run: bool,
 ) -> dict[str, Any]:
-    """Prepare or resume a pinned download and idempotent local registration."""
+    """Import a Studio model with an explicit local dataset association."""
     if resume:
         if any(value is not None for value in (repo_id, project_id, dataset_id, name, revision, subfolder)) or dry_run:
             raise ValueError("--resume cannot be combined with new transfer options")
-        directory, state = _load(resume, kind, "import")
+        directory, state = _load(resume, "model", "import")
     else:
         if not repo_id or not project_id:
             raise ValueError("A new import requires REPO_ID and --project-id")
-        if kind == "model" and not dataset_id:
+        if not dataset_id:
             raise ValueError("A model import requires --dataset-id from the target project")
-        if kind == "dataset" and dataset_id:
-            raise ValueError("--dataset-id is only supported for model imports")
         if name is not None and (not name.strip() or len(name) > 255):
             raise ValueError("--name must contain 1 to 255 characters")
         asyncio.run(validate_target(str(project_id), uuid_string(dataset_id)))
-        inspection = inspect_remote(kind, repo_id, revision or "main", subfolder)
+        inspection = inspect_remote_model(repo_id, revision or "main", subfolder)
         _require_importable(inspection)
         if not inspection["size_complete"]:
             raise ValueError("Hub did not report all payload sizes; cannot enforce import disk limits")
         from settings import get_settings
 
         settings = get_settings()
-        _space(settings.models_dir if kind == "model" else settings.datasets_dir, inspection["size_bytes"])
+        _space(settings.models_dir, inspection["size_bytes"])
         if dry_run:
             return {**inspection, "dry_run": True, "project_id": str(project_id), "dataset_id": uuid_string(dataset_id)}
         directory, state = _new(
-            kind,
+            "model",
             "import",
             repo_id=repo_id,
             project_id=str(project_id),
@@ -164,65 +177,132 @@ def import_asset(  # noqa: PLR0913, PLR0917
             revision=inspection["revision"],
             inspection=inspection,
             asset_id=str(uuid4()),
-            environment_id=str(uuid4()),
         )
     with _transfer(directory, state):
         if state["phase"] != "completed":
-            state["result"] = _download(directory, state)
+            state["result"] = _download_model(directory, state)
             state["phase"] = "completed"
             _save(directory, state)
     return {**state["result"], "transfer_id": state["transfer_id"], "resume_command": _resume_command(state)}
 
 
-def _download(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
+def import_dataset(
+    repo_id: str | None,
+    project_id: UUID | None,
+    name: str | None,
+    revision: str | None,
+    subfolder: str | None,
+    resume: UUID | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Import a LeRobot dataset, creating its temporary environment at registration."""
+    if resume:
+        if any(value is not None for value in (repo_id, project_id, name, revision, subfolder)) or dry_run:
+            raise ValueError("--resume cannot be combined with new transfer options")
+        directory, state = _load(resume, "dataset", "import")
+    else:
+        if not repo_id or not project_id:
+            raise ValueError("A new import requires REPO_ID and --project-id")
+        if name is not None and (not name.strip() or len(name) > 255):
+            raise ValueError("--name must contain 1 to 255 characters")
+        asyncio.run(validate_target(str(project_id)))
+        inspection = inspect_remote_dataset(repo_id, revision or "main", subfolder)
+        _require_importable(inspection)
+        if not inspection["size_complete"]:
+            raise ValueError("Hub did not report all payload sizes; cannot enforce import disk limits")
+        from settings import get_settings
+
+        _space(get_settings().datasets_dir, inspection["size_bytes"])
+        if dry_run:
+            return {**inspection, "dry_run": True, "project_id": str(project_id)}
+        directory, state = _new(
+            "dataset",
+            "import",
+            repo_id=repo_id,
+            project_id=str(project_id),
+            name=name,
+            revision=inspection["revision"],
+            inspection=inspection,
+            asset_id=str(uuid4()),
+            environment_id=str(uuid4()),
+        )
+    with _transfer(directory, state):
+        if state["phase"] != "completed":
+            state["result"] = _download_dataset(directory, state)
+            state["phase"] = "completed"
+            _save(directory, state)
+    return {**state["result"], "transfer_id": state["transfer_id"], "resume_command": _resume_command(state)}
+
+
+def _download_files(state: dict[str, Any], parent: Path) -> Path:
+    """Resume the pinned payload into staging on the destination filesystem."""
     from huggingface_hub import snapshot_download
 
     from settings import get_settings
 
     settings = get_settings()
     inspection = state["inspection"]
-    kind = state["kind"]
-    parent = settings.models_dir if kind == "model" else settings.datasets_dir
-    destination = parent / state["asset_id"]
     if inspection["size_bytes"] > settings.data_import_max_uncompressed_bytes:
         raise ValueError("Transfer exceeds DATA_IMPORT_MAX_UNCOMPRESSED_BYTES")
-    asyncio.run(validate_target(state["project_id"], state.get("dataset_id")))
+    parent.mkdir(parents=True, exist_ok=True)
+    staging = parent / f".hf-{state['transfer_id']}"
+    staging.mkdir(exist_ok=True)
+    prefix = f"{inspection['subfolder']}/" if inspection["subfolder"] else ""
+    names = [f"{prefix}{name}" for name in inspection["files"]]
+    existing_bytes = sum(path.stat().st_size for path in staging.rglob("*") if path.is_file())
+    _space(staging, max(0, inspection["size_bytes"] - existing_bytes))
+    click.echo(f"Downloading {state['repo_id']} @ {state['revision']}", err=True)
+    snapshot_download(
+        state["repo_id"],
+        repo_type=state["kind"],
+        revision=state["revision"],
+        local_dir=staging,
+        allow_patterns=names,
+        token=token(),
+    )
+    return staging / inspection["subfolder"]
+
+
+def _download_model(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
+    from settings import get_settings
+
+    parent = get_settings().models_dir
+    destination = parent / state["asset_id"]
+    asyncio.run(validate_target(state["project_id"], state["dataset_id"]))
     if not destination.exists():
-        # Staging must share a filesystem with its final destination for atomic rename.
-        parent.mkdir(parents=True, exist_ok=True)
-        staging = parent / f".hf-{state['transfer_id']}"
-        staging.mkdir(exist_ok=True)
-        prefix = f"{inspection['subfolder']}/" if inspection["subfolder"] else ""
-        names = [f"{prefix}{name}" for name in inspection["files"]]
-        existing_bytes = sum(path.stat().st_size for path in staging.rglob("*") if path.is_file())
-        _space(staging, max(0, inspection["size_bytes"] - existing_bytes))
-        click.echo(f"Downloading {state['repo_id']} @ {state['revision']}", err=True)
-        snapshot_download(
-            state["repo_id"],
-            repo_type=kind,
-            revision=state["revision"],
-            local_dir=staging,
-            allow_patterns=names,
-            token=token(),
-        )
-        root = staging / inspection["subfolder"]
-        verified = inspect_local(kind, root)
+        root = _download_files(state, parent)
+        verified = inspect_local_model(root)
         _require_importable(verified)
-        if kind == "dataset":
-            validate_dataset_payload(root)
-        if kind == "model" and inspection["detected_format"] == "studio_exports":
+        if state["inspection"]["detected_format"] == "studio_exports":
             _normalize_exports(root, destination)
         else:
             root.rename(destination)
         state["phase"] = "downloaded"
         _save(directory, state)
-    if kind == "model" and inspection["detected_format"] == "studio_exports":
+    if state["inspection"]["detected_format"] == "studio_exports":
         _finish_normalization(destination)
-    verified = inspect_local(kind, destination)
+    verified = inspect_local_model(destination)
     _require_importable(verified)
-    if kind == "dataset":
-        validate_dataset_payload(destination)
-    return asyncio.run(register_import(state, destination, verified))
+    return asyncio.run(register_model_import(state, destination, verified))
+
+
+def _download_dataset(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
+    from settings import get_settings
+
+    parent = get_settings().datasets_dir
+    destination = parent / state["asset_id"]
+    asyncio.run(validate_target(state["project_id"]))
+    if not destination.exists():
+        root = _download_files(state, parent)
+        _require_importable(inspect_local_dataset(root))
+        validate_dataset_payload(root)
+        root.rename(destination)
+        state["phase"] = "downloaded"
+        _save(directory, state)
+    verified = inspect_local_dataset(destination)
+    _require_importable(verified)
+    validate_dataset_payload(destination)
+    return asyncio.run(register_dataset_import(state, destination, verified))
 
 
 def _normalize_exports(root: Path, destination: Path) -> None:
@@ -276,33 +356,30 @@ def _remote_destination(api: Any, kind: str, repo_id: str, names: list[str], upd
     return remote
 
 
-def export_asset(
-    kind: str,
+def export_model(
     repo_id: str | None,
-    asset_id: UUID | None,
+    model_id: UUID | None,
     public: bool,
     update: bool,
     resume: UUID | None,
     dry_run: bool,
 ) -> dict[str, Any]:
-    """Prepare or resume an upload, publishing completion metadata last."""
+    """Publish a Studio model, with model-specific source and manifest checks."""
     if resume:
-        if repo_id is not None or asset_id is not None or public or update or dry_run:
+        if repo_id is not None or model_id is not None or public or update or dry_run:
             raise ValueError("--resume cannot be combined with new transfer options")
-        directory, state = _load(resume, kind, "export")
+        directory, state = _load(resume, "model", "export")
     else:
         from huggingface_hub.utils import validate_repo_id
 
-        if not repo_id or not asset_id:
-            raise ValueError(f"A new export requires REPO_ID and --{kind}-id")
+        if not repo_id or not model_id:
+            raise ValueError("A new export requires REPO_ID and --model-id")
         validate_repo_id(repo_id)
-        source = asyncio.run(export_source(kind, str(asset_id)))
-        inspection = inspect_local(kind, Path(source["path"]))
+        source = asyncio.run(model_export_source(str(model_id)))
+        inspection = inspect_local_model(Path(source["path"]))
         _require_importable(inspection)
-        if kind == "dataset":
-            validate_dataset_payload(Path(source["path"]))
         names = [name for name in inspection["files"] if name != "studio.json"]
-        remote = _remote_destination(hub_api(), kind, repo_id, names, update)
+        remote = _remote_destination(hub_api(), "model", repo_id, names, update)
         # Publish local cards/licenses to new repos, but never overwrite existing ones.
         preserved = remote & {"README.md", "LICENSE", "LICENSE.md"}
         names = [name for name in names if name not in preserved]
@@ -310,26 +387,30 @@ def export_asset(
         if dry_run:
             return {
                 "dry_run": True,
-                "kind": kind,
+                "kind": "model",
                 "repo_id": repo_id,
                 "files": names,
                 "size_bytes": inspection["size_bytes"],
                 "private_if_created": not public,
             }
         directory, state = _new(
-            kind,
+            "model",
             "export",
             repo_id=repo_id,
-            asset_id=str(asset_id),
+            asset_id=str(model_id),
             source=source,
             files=names,
             fingerprints=fingerprints,
             public=public,
             update=update,
         )
+    state.setdefault("url", f"https://huggingface.co/{state['repo_id']}")
     with _transfer(directory, state):
         if state["phase"] != "completed":
-            state["result"] = _upload(directory, state)
+            _check_model_source(state)
+            _upload_payload(directory, state)
+            _check_model_source(state)
+            state["result"] = _complete_upload(state)
             state["phase"] = "completed"
             _save(directory, state)
         # Completed transfers need only their receipt, not retained multi-GB payloads.
@@ -337,11 +418,80 @@ def export_asset(
     return {**state["result"], "transfer_id": state["transfer_id"], "resume_command": _resume_command(state)}
 
 
-def _check_source(state: dict[str, Any]) -> None:
-    current = asyncio.run(export_source(state["kind"], state["asset_id"]))
+def export_dataset(
+    repo_id: str | None,
+    dataset_id: UUID | None,
+    public: bool,
+    update: bool,
+    resume: UUID | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Publish a LeRobot dataset, validating its task/episode shard references."""
+    if resume:
+        if repo_id is not None or dataset_id is not None or public or update or dry_run:
+            raise ValueError("--resume cannot be combined with new transfer options")
+        directory, state = _load(resume, "dataset", "export")
+    else:
+        from huggingface_hub.utils import validate_repo_id
+
+        if not repo_id or not dataset_id:
+            raise ValueError("A new export requires REPO_ID and --dataset-id")
+        validate_repo_id(repo_id)
+        source = asyncio.run(dataset_export_source(str(dataset_id)))
+        inspection = inspect_local_dataset(Path(source["path"]))
+        _require_importable(inspection)
+        validate_dataset_payload(Path(source["path"]))
+        names = [name for name in inspection["files"] if name != "studio.json"]
+        remote = _remote_destination(hub_api(), "dataset", repo_id, names, update)
+        preserved = remote & {"README.md", "LICENSE", "LICENSE.md"}
+        names = [name for name in names if name not in preserved]
+        fingerprints = _fingerprint(Path(source["path"]), names)
+        if dry_run:
+            return {
+                "dry_run": True,
+                "kind": "dataset",
+                "repo_id": repo_id,
+                "files": names,
+                "size_bytes": inspection["size_bytes"],
+                "private_if_created": not public,
+            }
+        directory, state = _new(
+            "dataset",
+            "export",
+            repo_id=repo_id,
+            asset_id=str(dataset_id),
+            source=source,
+            files=names,
+            fingerprints=fingerprints,
+            public=public,
+            update=update,
+        )
+    state.setdefault("url", f"https://huggingface.co/datasets/{state['repo_id']}")
+    with _transfer(directory, state):
+        if state["phase"] != "completed":
+            _check_dataset_source(state)
+            _upload_payload(directory, state)
+            _check_dataset_source(state)
+            state["result"] = _complete_upload(state)
+            state["phase"] = "completed"
+            _save(directory, state)
+        shutil.rmtree(directory / "payload", ignore_errors=True)
+    return {**state["result"], "transfer_id": state["transfer_id"], "resume_command": _resume_command(state)}
+
+
+def _check_model_source(state: dict[str, Any]) -> None:
+    current = asyncio.run(model_export_source(state["asset_id"]))
+    _check_source(state, current, inspect_local_model(Path(current["path"])))
+
+
+def _check_dataset_source(state: dict[str, Any]) -> None:
+    current = asyncio.run(dataset_export_source(state["asset_id"]))
+    _check_source(state, current, inspect_local_dataset(Path(current["path"])))
+
+
+def _check_source(state: dict[str, Any], current: dict[str, Any], inspection: dict[str, Any]) -> None:
     if current != state["source"] or _fingerprint(Path(current["path"]), state["files"]) != state["fingerprints"]:
         raise ValueError("Export source changed. Start a new transfer rather than resuming mixed content.")
-    inspection = inspect_local(state["kind"], Path(current["path"]))
     _require_importable(inspection)
     current_files = inspection["files"]
     ignored = {"studio.json", "README.md", "LICENSE", "LICENSE.md"}
@@ -349,8 +499,7 @@ def _check_source(state: dict[str, Any]) -> None:
         raise ValueError("Export source file inventory changed. Start a new transfer.")
 
 
-def _upload(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
-    _check_source(state)
+def _upload_payload(directory: Path, state: dict[str, Any]) -> None:
     root = Path(state["source"]["path"])
     payload = directory / "payload"
     payload.mkdir(exist_ok=True)
@@ -378,7 +527,7 @@ def _upload(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
         _save(directory, state)
     descriptor, head = _remote_descriptor(api, kind, repo_id)
     if descriptor.get("transfer_id") == state["transfer_id"] and descriptor.get("status") == "complete":
-        return _export_result(state, head)
+        return
     if descriptor.get("status") == "uploading" and descriptor.get("transfer_id") != state["transfer_id"]:
         raise ValueError("Another transfer owns this incomplete remote export. Resume that transfer first.")
     metadata = {
@@ -399,8 +548,11 @@ def _upload(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
     )
     click.echo(f"Uploading {len(state['files'])} files to {repo_id}. Ctrl-C retains resume state.", err=True)
     _large_upload(repo_id, kind, payload, state["files"])
-    # Never publish a complete descriptor for a source that changed mid-transfer.
-    _check_source(state)
+
+
+def _complete_upload(state: dict[str, Any]) -> dict[str, Any]:
+    api = hub_api()
+    kind, repo_id = state["kind"], state["repo_id"]
     descriptor, head = _remote_descriptor(api, kind, repo_id)
     if descriptor.get("transfer_id") != state["transfer_id"]:
         raise ValueError("Remote export ownership changed; refusing to publish completion metadata")
@@ -408,7 +560,16 @@ def _upload(directory: Path, state: dict[str, Any]) -> dict[str, Any]:
     sizes = {item.rfilename: item.size for item in inventory.siblings}
     if any(sizes.get(name) != state["fingerprints"][name][0] for name in state["files"]):
         raise ValueError("Remote payload is missing files or has unexpected sizes; resume before publishing completion")
-    metadata["status"] = "complete"
+    if descriptor.get("status") == "complete":
+        return _export_result(state, head)
+    metadata = {
+        "schema_version": 1,
+        "kind": kind,
+        "status": "complete",
+        "transfer_id": state["transfer_id"],
+        **state["source"]["metadata"],
+        "files": state["files"],
+    }
     commit = api.upload_file(
         repo_id=repo_id,
         repo_type=kind,
@@ -426,7 +587,7 @@ def _export_result(state: dict[str, Any], revision: str) -> dict[str, Any]:
         "repo_id": state["repo_id"],
         "id": state["asset_id"],
         "revision": revision,
-        "url": f"https://huggingface.co/{'datasets/' if state['kind'] == 'dataset' else ''}{state['repo_id']}",
+        "url": state["url"],
     }
 
 
