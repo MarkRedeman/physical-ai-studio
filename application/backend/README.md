@@ -65,6 +65,10 @@ Please check out [this document](docs/video_hardware_acceleration_intel.md) for 
 
 ## Usage
 
+For installed application commands, local-folder imports, database safety, and
+automation conventions, start with the [Studio CLI guide](docs/studio_cli.md).
+Run `physicalai-studio --help` to discover the commands in your installed version.
+
 ### Hugging Face transfers
 
 Use `physicalai-studio hf model` or `physicalai-studio hf dataset` to inspect,
@@ -133,13 +137,22 @@ uv run alembic downgrade -1
 
 ### CLI Commands
 
+Database commands operate on the configured local installation. Confirm its
+storage/database settings and back up existing data before making changes:
+
 ```bash
-# Initialize database
+# Inspect connectivity and migration status without applying migrations
+uv run physicalai-studio db check
+
+# Initialize or upgrade the schema (mutates the database)
 uv run physicalai-studio db init
 
-# Run migrations
+# Migrate legacy storage if needed and upgrade the schema
 uv run physicalai-studio db migrate
 ```
+
+`serve` also runs migrations on startup. Do not use `db clean` to repair a missing
+project or migration error; it deletes project data and jobs without confirmation.
 
 ## API Documentation
 

@@ -10,17 +10,26 @@ import click
 
 @click.group()
 def models() -> None:
-    """Model management commands."""
+    """Import Studio models from local folders.
+
+    For Hugging Face repositories, use hf model instead. These commands register
+    models in the configured local Studio database, not a remote Studio server.
+    """
 
 
 @models.command("import-dir")
-@click.option("--source-dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--project-id", required=True, type=click.UUID)
-@click.option("--dataset-id", required=True, type=click.UUID)
-@click.option("--model-name", required=True, type=str)
-@click.option("--move/--copy", default=False, show_default=True)
-@click.option("--base-model-id", type=click.UUID, default=None)
-@click.option("--version", type=int, default=1, show_default=True)
+@click.option(
+    "--source-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Existing Studio model directory or exports-only directory.",
+)
+@click.option("--project-id", required=True, type=click.UUID, help="Existing target Studio project UUID.")
+@click.option("--dataset-id", required=True, type=click.UUID, help="Local dataset UUID in the target project.")
+@click.option("--model-name", required=True, type=str, help="Display name for the imported model.")
+@click.option("--move/--copy", default=False, show_default=True, help="Move removes the source; copy keeps it intact.")
+@click.option("--base-model-id", type=click.UUID, default=None, help="Optional local parent model UUID for lineage.")
+@click.option("--version", type=int, default=1, show_default=True, help="Version assigned to the imported model.")
 def import_dir(
     source_dir: Path,
     project_id: UUID,
@@ -35,6 +44,14 @@ def import_dir(
     The dataset_id should reference a dataset that uses the same environment as the
     original training. The inference UI uses this dataset to determine which environment
     to load when running the model.
+
+    Copies files by default; --move removes the source directory on success.
+    This command has no --dry-run, --json, or resumable-transfer interface.
+
+    \b
+    Example (replace the UUID placeholders):
+      physicalai-studio models import-dir --source-dir ./model \\
+        --project-id PROJECT_UUID --dataset-id DATASET_UUID --model-name "My model"
     """
     from db import get_async_db_session_ctx
     from schemas import Model, TrainJob

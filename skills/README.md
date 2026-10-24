@@ -8,7 +8,7 @@ Studio owns these canonical skills. **`skills/using/` is the set intended for th
 | Using        | [`pai-work-with-datasets`](using/pai-work-with-datasets/SKILL.md)    | Use LeRobot datasets and datamodules    |
 | Using        | [`pai-export-policy`](using/pai-export-policy/SKILL.md)              | Export and check deployment parity      |
 | Using        | [`pai-benchmark-policy`](using/pai-benchmark-policy/SKILL.md)        | Evaluate a policy in a gym              |
-| Using        | [`pas-hf-cli`](using/pas-hf-cli/SKILL.md)                            | Inspect and transfer Studio Hub assets  |
+| Using        | [`pas-studio-cli`](using/pas-studio-cli/SKILL.md)                    | Discover and use Studio app commands    |
 | Contributing | [`add-policy`](contributing/add-policy/SKILL.md)                     | Extend the library with a policy family |
 | Contributing | [`add-benchmark`](contributing/add-benchmark/SKILL.md)               | Extend first-party benchmarks           |
 | Contributing | [`add-robot-form-field`](contributing/add-robot-form-field/SKILL.md) | Change Studio UI and plugin SDK         |

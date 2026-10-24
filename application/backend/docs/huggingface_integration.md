@@ -34,7 +34,8 @@ token is not sufficient for export.
 1. Sign in to [huggingface.co](https://huggingface.co/).
 2. Open **Settings** -> **Access Tokens**.
 3. Create a new token.
-4. Set permissions to read-only model access (see required permissions above).
+4. Grant read access for downloads, and write/create-repository permissions if
+   you intend to export (see required permissions above).
 5. Copy the token value.
 
 ## Configure the token
@@ -66,8 +67,13 @@ docker compose up
 
 ## Verify setup
 
-- Start a training job for a Hub-backed policy (for example, SmolVLA or Pi0.5).
-- Confirm there is no warning about a missing Hugging Face token.
+- For CLI use, inspect a repository that your account should be able to access:
+  `physicalai-studio hf model inspect OWNER/PRIVATE_MODEL --json`. This reads
+  metadata without downloading weights. Success on a public repo alone does not
+  prove that credentials are configured or that private/write access is granted.
+- For training, confirm there is no missing-token warning when starting an
+  otherwise intended Hub-backed training job. Do not start a large training job
+  solely to test credentials.
 
 ## Studio Hub CLI
 
@@ -75,7 +81,10 @@ These commands operate directly on the **local** Studio database and storage.
 Run them in the backend environment, using the same `STORAGE_DIR`, `SETTINGS_FILE`,
 and database configuration as the running application. For Docker deployments,
 run them inside the backend container. They do not call a remote Studio server.
-The database must already be initialized (`physicalai-studio db init`).
+Imports/exports require an initialized database; metadata inspection does not.
+If a project is unexpectedly missing, verify the installation configuration before
+initializing anything. See the [Studio CLI guide](studio_cli.md) for command
+discovery, local-folder imports, and database maintenance.
 
 Authentication uses the saved Studio token first, then `HF_TOKEN`. Without either,
 access is explicitly anonymous; the CLI does not silently use another account's
@@ -111,10 +120,18 @@ arguments directly; imports run the same inspection again at the pinned revision
 
 ```bash
 physicalai-studio hf model import OWNER/MODEL \
-  --project-id PROJECT_UUID --dataset-id LOCAL_DATASET_UUID
+  --project-id PROJECT_UUID --dataset-id LOCAL_DATASET_UUID \
+  --revision COMMIT_SHA --dry-run --json
 
-physicalai-studio hf dataset import OWNER/DATASET --project-id PROJECT_UUID
+physicalai-studio hf dataset import OWNER/DATASET \
+  --project-id PROJECT_UUID --revision COMMIT_SHA --dry-run --json
 ```
+
+Replace `COMMIT_SHA` with the `revision` returned by inspection and UUID placeholders
+with existing Studio record IDs. Add `--subfolder PATH` if inspection selected a
+nested root. Review the dry-run result, then repeat without `--dry-run` to transfer
+and register the asset. These commands are distinct from local-folder imports:
+`datasets import-dir` requires `--environment-id`, while Hub dataset import does not.
 
 `--name NAME` overrides the display name. Otherwise the name comes from Studio
 metadata, or the repository name for legacy repositories. Imports always generate
@@ -143,9 +160,13 @@ checkpoints or instantiating classes specified by the repository.
 ### Export
 
 ```bash
-physicalai-studio hf model export OWNER/MODEL --model-id MODEL_UUID
-physicalai-studio hf dataset export OWNER/DATASET --dataset-id DATASET_UUID
+physicalai-studio hf model export OWNER/MODEL --model-id MODEL_UUID --dry-run --json
+physicalai-studio hf dataset export OWNER/DATASET --dataset-id DATASET_UUID --dry-run --json
 ```
+
+After reviewing the selected files and destination, repeat without `--dry-run` to
+publish. Export's `REPO_ID` is the destination; its UUID option identifies the local
+asset. Import/export commands omit `REPO_ID` only when resuming a saved transfer.
 
 The local record determines the project. New repositories are **private** unless
 `--public` is supplied. That flag does not change an existing repository's visibility.
@@ -215,6 +236,18 @@ creating a Hub repository, or registering a local asset. Import dry runs still
 read local associations and remote metadata; export dry runs validate the local
 payload and destination. Disk checks honor Studio's import size/headroom settings.
 Commands never prompt interactively for missing information or credentials.
+
+### Troubleshooting
+
+| Symptom | Next action |
+| --- | --- |
+| Inspection exits 0 but `importable` is false | Read `errors`; select an ambiguous root with `--subfolder`, or finish an incomplete export before importing. |
+| Project/model/dataset UUID is not found | Verify local storage/database configuration and the record's UUID. Do not create a fresh database or substitute a Hub repo name. |
+| Access denied or repository not found | Verify spelling and token access; a private repo can appear missing. Use Studio settings or `HF_TOKEN`, not an assumed cached login. |
+| Export fails with a read-only token | Grant write permission for that destination; successful inspection/dry-run does not establish write access. |
+| Network interruption | Run the reported `resume_command` with the same storage/configuration; do not start another transfer or delete staging files. |
+| Source changed or stale remote shards detected | Plan a new export, normally to a fresh repo; do not edit transfer records or silently merge dataset shards. |
+| CLI option is unknown | Check that command's `--help` and the installed version; local-folder and Hub imports have different flags. |
 
 ## Security notes
 

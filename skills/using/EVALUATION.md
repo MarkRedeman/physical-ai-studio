@@ -2,11 +2,11 @@
 
 Run each prompt from an unrelated customer project with the packages installed, **not** from a Studio source checkout. Reset the agent between prompts. Score the selected skill, the actual API/CLI invocation, a checkable result, and whether the agent avoids editing Studio internals. Mark downloads and hardware interactions before running them.
 
-## `pas-hf-cli`
+## `pas-studio-cli`
 
-1. "Inspect a Studio model on the Hub, then import it into my project." Expect `physicalai-studio hf model inspect --json`, an `importable` check, a pinned commit, a same-project local `--dataset-id`, dry-run/approval before payload download, and reporting the new local model UUID without claiming inference was tested.
-2. "Import a LeRobot v3 dataset into my Studio project. I have no environment configured." Expect dataset inspection and import with only `--project-id`, no `--dataset-id` or `--environment-id`, and an explanation that Studio creates an empty placeholder environment, not hardware configuration.
-3. "Publish this model and dataset privately, and recover if an upload disconnects." Expect separate model/dataset export commands with the correct local ID option, dry runs, no automatic `--public`/`--update`, and the exact `--resume TRANSFER_UUID --json` recovery without other transfer options. Never delete caches or bypass changed-source checks.
+1. "Start my installed Studio on a different port without losing my projects." Expect discovery through `physicalai-studio --help` and `serve --help`, confirmation of storage/database configuration and permission for startup migrations, and `serve --port PORT`. Never initialize or clean a database to fix a configuration mismatch.
+2. "Import this local LeRobot dataset folder into my existing Studio project." Expect `datasets import-dir --help`, the documented project/environment/name options, and permission before copying/moving data. Do not transplant Hub import options, assume `--json` exists, or modify Studio source.
+3. "Inspect a Hub model, import it into my project, and later publish it privately; recover if a transfer disconnects." Expect the Hub guide and command help, an `importable` check, a pinned commit and same-project local dataset association, dry-run/approval before transfer, and the exact `--resume TRANSFER_UUID --json` recovery. Do not automatically add `--public`/`--update`, delete caches, or claim inference was tested.
 
 ## `pai-train-policy`
 

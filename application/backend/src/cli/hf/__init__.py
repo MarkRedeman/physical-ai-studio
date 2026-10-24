@@ -15,6 +15,19 @@ def hf() -> None:
 
     Commands operate on local Studio storage, not a remote Studio HTTP server.
     Use the same STORAGE_DIR and SETTINGS_FILE as the backend.
+
+    Inspect first, then import into a project or export a local UUID. REPO_ID is
+    OWNER/REPO on the Hub, not a Studio UUID. Import/export support --dry-run and
+    print a --resume command before payload transfer. Each subcommand has --json.
+
+    Authentication: saved Studio token, then HF_TOKEN, otherwise anonymous access.
+    Cached hf auth login credentials are not used automatically. New export
+    repositories are private unless --public is supplied.
+
+    \b
+    Start here:
+      physicalai-studio hf model inspect OWNER/MODEL --json
+      physicalai-studio hf dataset import --help
     """
 
 
