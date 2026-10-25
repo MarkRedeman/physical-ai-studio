@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -230,6 +231,26 @@ def test_inspect_commands_do_not_dispatch_through_resource_kind(monkeypatch):
     assert json.loads(invoke("dataset", "inspect", "owner/data", "--json").stdout) == {"dataset_only": True}
 
 
+@pytest.mark.parametrize(
+    ("resource", "operation"),
+    [
+        ("model", "import"),
+        ("model", "export"),
+        ("dataset", "import"),
+        ("dataset", "export"),
+    ],
+)
+def test_transfer_workflows_are_colocated_with_commands(resource, operation, monkeypatch):
+    module = import_module(f"cli.hf.{resource}")
+    workflow = f"_{operation}_{resource}"
+    assert getattr(module, workflow).__module__ == module.__name__
+    assert not hasattr(transfer, f"{operation}_{resource}")
+    monkeypatch.setattr(module, workflow, lambda **options: {"workflow": workflow})
+    result = invoke(resource, operation, "owner/repo", "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"workflow": workflow}
+
+
 def test_inspect_pins_revision_and_only_downloads_json(environment):
     env = environment
     env.hub.repos["owner/model"] = model_files(prefix="wrapper/")
@@ -444,16 +465,19 @@ def test_exports_only_import_normalizes_and_resumes_after_rename(environment, mo
         name.removeprefix("exports/"): content for name, content in model_files().items() if name.startswith("exports/")
     }
     env.hub.repos["owner/model"] = files
-    original = transfer._finish_normalization
+    model_cli = import_module("cli.hf.model")
+    original = model_cli._finish_normalization
     monkeypatch.setattr(
-        transfer, "_finish_normalization", lambda destination: (_ for _ in ()).throw(RuntimeError("Crash after rename"))
+        model_cli,
+        "_finish_normalization",
+        lambda destination: (_ for _ in ()).throw(RuntimeError("Crash after rename")),
     )
     result = invoke(
         "model", "import", "owner/model", "--project-id", env.project_id, "--dataset-id", env.dataset_id, "--json"
     )
     assert result.exit_code == 1
     state = transfer_state(env)
-    monkeypatch.setattr(transfer, "_finish_normalization", original)
+    monkeypatch.setattr(model_cli, "_finish_normalization", original)
     resumed = invoke("model", "import", "--resume", state["transfer_id"], "--json")
     assert resumed.exit_code == 0, resumed.output
     assert (Path(json.loads(resumed.stdout)["path"]) / "exports/torch/pi05.pt").exists()
