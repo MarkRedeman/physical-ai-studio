@@ -26,6 +26,7 @@ installed version; do not assume an option exists because another group has it.
 | Initialize or upgrade a database | `db init` | Applies pending schema migrations to new or existing databases |
 | Migrate an installation | `db migrate` | Handles legacy storage migration and database upgrades |
 | Import a local model directory | `models import-dir` | Copies by default; needs project, local dataset, and display name |
+| Import ACT checkpoints | `models import-act` | Imports child-directory checkpoints (skips root-level `last.ckpt`); moves files and exports Torch/OpenVINO |
 | Import a local dataset directory | `datasets import-dir` | Copies by default; needs project, existing environment, and display name |
 | Inspect/import/export Hub assets | `hf model` / `hf dataset` | Supports JSON inspection and resumable transfers; [detailed guide](huggingface_integration.md#studio-hub-cli) |
 | Generate OpenAPI JSON | `gen-api` | Developer utility; imports the application and overwrites the target file |
@@ -80,6 +81,10 @@ physicalai-studio models import-dir \
 physicalai-studio datasets import-dir \
   --source-dir ./dataset --project-id PROJECT_UUID \
   --environment-id ENVIRONMENT_UUID --dataset-name "Imported data"
+
+physicalai-studio models import-act \
+  --source-dir ./checkpoints --project-id PROJECT_UUID \
+  --dataset-id DATASET_UUID
 ```
 
 The model's associated dataset must belong to the target project and describe a
@@ -87,6 +92,11 @@ suitable environment. The dataset import accepts LeRobot v3 directories and
 requires an existing environment in that project. Both default to `--copy`;
 `--move` removes the source folder on success. Neither command supports `--json`,
 `--dry-run`, or the Hub transfer `--resume` interface.
+
+`models import-act` imports each `.ckpt` directly inside a checkpoint
+subdirectory as a separate ACT model; root-level checkpoint files are ignored.
+The dataset must belong to the specified project. Checkpoint files are moved to
+Studio storage before Torch and OpenVINO exports are created.
 
 For a Hub repository, use `hf model import` or `hf dataset import`, not these
 local-folder commands. In particular, **Hub dataset import creates a temporary
