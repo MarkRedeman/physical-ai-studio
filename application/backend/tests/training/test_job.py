@@ -17,6 +17,7 @@ import inspect
 import os
 import weakref
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -260,6 +261,32 @@ class _ExportablePolicy(ExportablePolicyMixin):
             msg = f"{backend} unavailable"
             raise RuntimeError(msg)
         self.exported.append((str(output_path), backend))
+
+
+def _wire_mocked_fit(trainer: Any, checkpoint: Path, *, model: Any, datamodule: Any) -> None:
+    """Simulate the trainer references Lightning leaves attached after fit."""
+    model._trainer = trainer
+    trainer.datamodule = datamodule
+    trainer.strategy._lightning_module = model
+    checkpoint.write_text("x")
+
+
+def _assert_resources_released_before_reload(
+    trainer_ref: weakref.ReferenceType[Any],
+    policy_ref: list[weakref.ReferenceType[_ExportablePolicy] | None],
+    release_memory: MagicMock,
+    exported_policy: _ExportablePolicy,
+    *_args: Any,
+    **_kwargs: Any,
+) -> _ExportablePolicy:
+    """Ensure checkpoint construction starts after training resources are released."""
+    trainer = trainer_ref()
+    assert trainer is not None
+    assert policy_ref[0] is not None and policy_ref[0]() is None
+    assert trainer.datamodule is None
+    assert trainer.strategy._lightning_module is None
+    release_memory.assert_called_once_with()
+    return exported_policy
 
 
 def _run(
@@ -584,9 +611,11 @@ class TestRunTrainingJob:
 
     def test_checkpoint_reload_failure_fails_the_job(self, tmp_path: Path) -> None:
         """Do not silently export final-epoch weights when the selected checkpoint fails to load."""
-        with patch(f"{JOB}._load_policy_from_checkpoint", side_effect=RuntimeError("reload failed")) as reload:
-            with pytest.raises(RuntimeError, match="reload failed"):
-                _run(TrainingJobSpec(policy="act"), tmp_path, checkpoint_loader=reload)
+        with (
+            patch(f"{JOB}._load_policy_from_checkpoint", side_effect=RuntimeError("reload failed")) as reload,
+            pytest.raises(RuntimeError, match="reload failed"),
+        ):
+            _run(TrainingJobSpec(policy="act"), tmp_path, checkpoint_loader=reload)
 
         reload.assert_called_once()
 
@@ -601,7 +630,7 @@ class TestRunTrainingJob:
         only after those references and the trained policy are released.
         """
         cache_dir = tmp_path / "cache" / "job"
-        trained_policy_ref: weakref.ReferenceType[_ExportablePolicy] | None = None
+        trained_policy_ref: list[weakref.ReferenceType[_ExportablePolicy] | None] = [None]
         exported_policy = _ExportablePolicy([ExportBackend.TORCH])
 
         with (
@@ -615,41 +644,32 @@ class TestRunTrainingJob:
             datamodule_instance = datamodule_class.return_value
 
             def build_test_policy(*args: Any, **kwargs: Any) -> _ExportablePolicy:
-                nonlocal trained_policy_ref
                 policy = _ExportablePolicy([ExportBackend.TORCH])
-                trained_policy_ref = weakref.ref(policy)
+                trained_policy_ref[0] = weakref.ref(policy)
                 return policy
 
             build_policy_mock.side_effect = build_test_policy
 
             # Simulate what Lightning's real `trainer.fit(policy, datamodule)` wires up,
             # including writing the checkpoint via the ModelCheckpoint callback.
-            def fake_fit(*args: Any, **kwargs: Any) -> None:
-                policy = kwargs["model"]
-                policy._trainer = trainer_instance
-                trainer_instance.datamodule = kwargs["datamodule"]
-                trainer_instance.strategy._lightning_module = policy
-                (cache_dir / CHECKPOINT_NAME).write_text("x")
-
             # A plain function avoids unittest.mock retaining fit's policy
             # argument in call history after training has returned.
-            trainer_instance.fit = fake_fit
+            trainer_instance.fit = partial(
+                _wire_mocked_fit,
+                trainer_instance,
+                cache_dir / CHECKPOINT_NAME,
+            )
 
             trainer_ref = weakref.ref(trainer_instance)
             datamodule_ref = weakref.ref(datamodule_instance)
 
-            def assert_resources_released(*args: Any, **kwargs: Any) -> _ExportablePolicy:
-                # Reconstruct only after cleanup, with no live trained-policy
-                # fallback competing with the selected checkpoint's weights.
-                trainer = trainer_ref()
-                assert trainer is not None
-                assert trained_policy_ref is not None and trained_policy_ref() is None
-                assert trainer.datamodule is None
-                assert trainer.strategy._lightning_module is None
-                release_memory.assert_called_once_with()
-                return exported_policy
-
-            reload.side_effect = assert_resources_released
+            reload.side_effect = partial(
+                _assert_resources_released_before_reload,
+                trainer_ref,
+                trained_policy_ref,
+                release_memory,
+                exported_policy,
+            )
 
             run_training_job(
                 TrainingJobSpec(policy="act"),
@@ -669,7 +689,7 @@ class TestRunTrainingJob:
 
         assert trainer_ref() is None, "trainer is still reachable; the reference cycle was not broken"
         assert datamodule_ref() is None, "datamodule is still reachable; the reference cycle was not broken"
-        assert trained_policy_ref is not None and trained_policy_ref() is None
+        assert trained_policy_ref[0] is not None and trained_policy_ref[0]() is None
 
 
 SNAPFLOW_SPEC = TrainingJobSpec(policy="pi05", max_epochs=8, snapflow_start_epoch=5)
