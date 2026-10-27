@@ -1,8 +1,7 @@
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 
 import {
     Badge,
-    Button,
     Content,
     ContextualHelp,
     Flex,
@@ -10,19 +9,20 @@ import {
     Grid,
     Heading,
     Icon,
-    Item,
     Link,
     Loading,
     minmax,
-    Picker,
     Text,
     ToastQueue,
     View,
 } from '@geti-ui/ui';
 import { ChevronLeft } from '@geti-ui/ui/icons';
+import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
+import { SchemaRecordingEnvironment } from '../../../api/openapi-spec';
 import { AppFooter } from '../../../components/app-footer/app-footer';
+import { RecordingEnvironmentGate } from '../../../features/datasets/recording-environments/recording-environment-gate';
 import { useDatasetId } from '../../../features/datasets/use-dataset';
 import { RuntimeSessionProvider, useRuntimeSession } from '../../../features/robots/runtime-session-provider';
 import { paths } from '../../../paths';
@@ -70,10 +70,8 @@ const TotalRecordedEpisodes = () => {
     );
 };
 
-const RecordingPage = () => {
+const RecordingSession = ({ recordingEnvironment }: { recordingEnvironment: SchemaRecordingEnvironment }) => {
     const { project_id, dataset_id } = useDatasetId();
-    const [selectedRecordingEnvironmentId, setSelectedRecordingEnvironmentId] = useState<string>();
-    const [environmentToAddId, setEnvironmentToAddId] = useState<string>();
 
     const { data: dataset } = $api.useSuspenseQuery('get', '/api/dataset/{dataset_id}', {
         params: {
@@ -83,85 +81,11 @@ const RecordingPage = () => {
         },
     });
 
-    const { data: recordingEnvironments } = $api.useSuspenseQuery(
-        'get',
-        '/api/dataset/{dataset_id}/recording-environments',
-        { params: { path: { dataset_id } } }
-    );
-    const { data: environments } = $api.useSuspenseQuery('get', '/api/projects/{project_id}/environments', {
-        params: { path: { project_id } },
-    });
-    const selectedRecordingEnvironment =
-        recordingEnvironments.find(({ id }) => id === selectedRecordingEnvironmentId) ?? recordingEnvironments[0];
-    const environmentId = selectedRecordingEnvironment?.environment_id;
-    const environmentQuery = $api.useQuery(
+    const { data: environment } = $api.useSuspenseQuery(
         'get',
         '/api/projects/{project_id}/environments/{environment_id}',
-        { params: { path: { project_id, environment_id: environmentId ?? '' } } },
-        { enabled: environmentId !== undefined }
+        { params: { path: { project_id, environment_id: recordingEnvironment.environment_id } } }
     );
-    const createRecordingEnvironment = $api.useMutation('post', '/api/dataset/{dataset_id}/recording-environments', {
-        meta: {
-            invalidates: [
-                ['get', '/api/dataset/{dataset_id}/recording-environments', { params: { path: { dataset_id } } }],
-            ],
-        },
-    });
-
-    const addEnvironment = async () => {
-        if (environmentToAddId === undefined) return;
-        const recordingEnvironment = await createRecordingEnvironment.mutateAsync({
-            params: { path: { dataset_id } },
-            body: { environment_id: environmentToAddId, camera_mappings: [] },
-        });
-        setSelectedRecordingEnvironmentId(recordingEnvironment.id);
-    };
-
-    if (selectedRecordingEnvironment === undefined || environmentQuery.data === undefined) {
-        return (
-            <Flex direction='column' gap='size-200' maxWidth='size-4600' margin='size-400'>
-                <Heading>Select a recording environment</Heading>
-                {recordingEnvironments.length > 0 && (
-                    <Picker
-                        label='Recording environment'
-                        items={recordingEnvironments}
-                        selectedKey={selectedRecordingEnvironmentId ?? recordingEnvironments[0].id}
-                        onSelectionChange={(id) => setSelectedRecordingEnvironmentId(id?.toString())}
-                    >
-                        {(recordingEnvironment) => {
-                            const environment = environments.find(
-                                ({ id }) => id === recordingEnvironment.environment_id
-                            );
-                            return (
-                                <Item key={recordingEnvironment.id}>
-                                    {environment?.name ?? 'Unavailable environment'}
-                                </Item>
-                            );
-                        }}
-                    </Picker>
-                )}
-                <Picker
-                    label='Add project environment'
-                    items={environments.filter(
-                        ({ id }) => !recordingEnvironments.some(({ environment_id }) => environment_id === id)
-                    )}
-                    selectedKey={environmentToAddId}
-                    onSelectionChange={(id) => setEnvironmentToAddId(id?.toString())}
-                >
-                    {(environment) => <Item key={environment.id}>{environment.name}</Item>}
-                </Picker>
-                <Button
-                    variant='accent'
-                    onPress={addEnvironment}
-                    isDisabled={environmentToAddId === undefined}
-                    isPending={createRecordingEnvironment.isPending}
-                >
-                    Use environment for recording
-                </Button>
-            </Flex>
-        );
-    }
-    const environment = environmentQuery.data;
     return (
         <RuntimeSessionProvider environment={environment} dataset={dataset} onError={ToastQueue.negative}>
             <Grid
@@ -216,9 +140,18 @@ const RecordingPage = () => {
 };
 
 export const Index = () => {
+    const { project_id, dataset_id } = useDatasetId();
+    const navigate = useNavigate();
+
     return (
         <Suspense fallback={<Loading mode='overlay' />}>
-            <RecordingPage />
+            <RecordingEnvironmentGate
+                project_id={project_id}
+                dataset_id={dataset_id}
+                onCancel={() => navigate(paths.project.datasets.show({ project_id, dataset_id }))}
+            >
+                {(recordingEnvironment) => <RecordingSession recordingEnvironment={recordingEnvironment} />}
+            </RecordingEnvironmentGate>
         </Suspense>
     );
 };
