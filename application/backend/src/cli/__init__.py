@@ -6,7 +6,6 @@ import click
 
 from cli.database import database
 from cli.datasets import datasets
-from cli.hf import hf
 from cli.models import models
 from cli.serve import serve
 
