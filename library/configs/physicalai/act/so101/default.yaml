@@ -1,0 +1,27 @@
+# Single-arm ACT baseline on 200 SO101 pick-and-place demonstrations.
+# 10 epochs at batch 8 with a 10% holdout is approximately 100k steps.
+# Candidate for validation, not a measured PhysicalAI rollout result.
+# Usage: physicalai fit --config configs/physicalai/act/so101/default.yaml
+model:
+  class_path: physicalai.policies.ACT
+  init_args:
+    optimizer_lr: 1e-5
+    compile_model: false
+
+data:
+  class_path: physicalai.data.lerobot.LeRobotDataModule
+  init_args:
+    repo_id: Daankrol/pick-and-place-multi-obj
+    revision: abf1f62b51dd3441b827478829e0d559fa4a96ac
+    data_format: physicalai
+    train_batch_size: 8
+    num_workers: 4
+    val_split: 0.1
+    val_split_seed: 42
+
+trainer:
+  max_epochs: 10
+  accelerator: gpu
+  devices: 1
+  precision: 32-true
+  check_val_every_n_epoch: 1

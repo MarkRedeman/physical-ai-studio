@@ -1,0 +1,34 @@
+# Adapt the pretrained policy to one arm and one pick-and-place task.
+# Official reference: https://huggingface.co/docs/lerobot/main/smolvla
+# 75 epochs at batch 64 with a 10% holdout approximates its 20k-step budget.
+# Usage: physicalai fit --config configs/physicalai/smolvla/so100/default.yaml
+model:
+  class_path: physicalai.policies.SmolVLA
+  init_args:
+    pretrained_name_or_path: lerobot/smolvla_base
+    freeze_vision_encoder: true
+    train_expert_only: true
+    train_state_proj: true
+    image_key_reorder_map:
+      top: 0
+      wrist: 1
+    num_cameras: 3
+    compile_model: false
+
+data:
+  class_path: physicalai.data.lerobot.LeRobotDataModule
+  init_args:
+    repo_id: lerobot/svla_so100_pickplace
+    revision: 728583b5eaf9e739a7f119e2def466fa1d552402
+    data_format: physicalai
+    train_batch_size: 64
+    num_workers: 4
+    val_split: 0.1
+    val_split_seed: 42
+
+trainer:
+  max_epochs: 75
+  accelerator: gpu
+  devices: 1
+  precision: 32-true
+  check_val_every_n_epoch: 1
