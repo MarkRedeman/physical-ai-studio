@@ -176,6 +176,95 @@ const goToSmolVlaTrainingParameters = async (user: ReturnType<typeof userEvent.s
 };
 
 describe('TrainModelDialog', () => {
+    it('loads a step recipe and submits the matching teacher and distillation budgets', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        const configuration = getMockedPolicyTrainingConfiguration();
+        configuration.defaults.max_epochs = null;
+        configuration.defaults.max_steps = 100;
+        configuration.defaults.snapflow = { distill_epochs: null, distill_steps: 25 };
+        let submitted: Record<string, unknown> | undefined;
+        server.use(
+            http.get('/api/policies/{policy}/default-training-config', () => HttpResponse.json(configuration)),
+            http.post('/api/jobs:train', async ({ request }) => {
+                submitted = (await request.json()) as Record<string, unknown>;
+                return HttpResponse.json({}, { status: 201 });
+            })
+        );
+        renderDialog({ baseModel: { ...baseModel, policy: 'smolvla' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByLabelText('Max Steps', { selector: 'input' })).toHaveValue('100');
+        expect(screen.getByLabelText('Distillation steps', { selector: 'input' })).toHaveValue('25');
+        expect(screen.getByText('Training steps: 125')).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: 'SnapFlow distillation' })).toBeChecked();
+        await user.click(screen.getByLabelText('Training limit', { selector: 'button' }));
+        await user.click(screen.getByRole('option', { name: 'Epochs' }));
+        expect(screen.getByLabelText('Distillation epochs', { selector: 'input' })).toHaveValue('3');
+        await user.click(screen.getByLabelText('Training limit', { selector: 'button' }));
+        await user.click(screen.getByRole('option', { name: 'Steps' }));
+        expect(screen.getByLabelText('Distillation steps', { selector: 'input' })).toHaveValue('25');
+        await goToLastStep(user);
+        await user.click(screen.getByRole('button', { name: 'Train' }));
+        await waitFor(() => expect(submitted).toBeDefined());
+        expect(submitted).toMatchObject({
+            max_epochs: null,
+            max_steps: 100,
+            snapflow_enabled: true,
+            snapflow_distill_epochs: null,
+            snapflow_distill_steps: 25,
+        });
+    });
+
+    it('preserves separate drafts when switching units and submits only the selected limit', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        let submitted: Record<string, unknown> | undefined;
+        server.use(
+            http.post('/api/jobs:train', async ({ request }) => {
+                submitted = (await request.json()) as Record<string, unknown>;
+                return HttpResponse.json({}, { status: 201 });
+            })
+        );
+        renderDialog({ baseModel });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        await user.clear(await screen.findByLabelText('Max Epochs', { selector: 'input' }));
+        await user.type(screen.getByLabelText('Max Epochs', { selector: 'input' }), '7');
+        await user.click(screen.getByLabelText('Training limit', { selector: 'button' }));
+        await user.click(screen.getByRole('option', { name: 'Steps' }));
+        await user.clear(screen.getByLabelText('Max Steps', { selector: 'input' }));
+        await user.type(screen.getByLabelText('Max Steps', { selector: 'input' }), '300');
+        await user.click(screen.getByLabelText('Training limit', { selector: 'button' }));
+        await user.click(screen.getByRole('option', { name: 'Epochs' }));
+        expect(screen.getByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('7');
+        await user.click(screen.getByLabelText('Training limit', { selector: 'button' }));
+        await user.click(screen.getByRole('option', { name: 'Steps' }));
+        expect(screen.getByLabelText('Max Steps', { selector: 'input' })).toHaveValue('300');
+        await user.click(screen.getByRole('button', { name: 'Back' }));
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByLabelText('Max Steps', { selector: 'input' })).toHaveValue('300');
+        await goToLastStep(user);
+        await user.click(screen.getByRole('button', { name: 'Train' }));
+        await waitFor(() => expect(submitted).toBeDefined());
+        expect(submitted).toMatchObject({ max_epochs: null, max_steps: 300, snapflow_enabled: false });
+    });
+
+    it('keeps the explicit step count when Auto batch size is enabled', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        const configuration = getMockedPolicyTrainingConfiguration();
+        configuration.defaults.max_epochs = null;
+        configuration.defaults.max_steps = 100;
+        configuration.defaults.auto_scale_batch_size = true;
+        server.use(http.get('/api/policies/{policy}/default-training-config', () => HttpResponse.json(configuration)));
+        renderDialog({ baseModel });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByText('Training steps: 100')).toBeInTheDocument();
+        expect(screen.queryByText(/set when training starts/)).not.toBeInTheDocument();
+    });
+
     it.each([null, 'Use batch size 32 for this reference task.'])(
         'uses policy help when supplied and generic help otherwise (%s)',
         async (advice) => {
@@ -276,7 +365,8 @@ describe('TrainModelDialog', () => {
         await user.click(screen.getByLabelText('Precision', { selector: 'button[aria-haspopup="listbox"]' }));
         await user.click(screen.getByRole('option', { name: 'BF16 True' }));
         const changed = getMockedPolicyTrainingConfiguration();
-        changed.defaults.max_epochs = 99;
+        changed.defaults.max_epochs = null;
+        changed.defaults.max_steps = 99;
         server.use(
             http.get('/api/policies/{policy}/default-training-config', () => HttpResponse.json(changed)),
             http.get('/api/system/devices/training', () =>
@@ -304,7 +394,8 @@ describe('TrainModelDialog', () => {
         server.use(
             http.get('/api/policies/{policy}/default-training-config', ({ params }) => {
                 const configuration = getMockedPolicyTrainingConfiguration();
-                configuration.defaults.max_epochs = params.policy === 'xr0' ? 30 : 10;
+                configuration.defaults.max_epochs = params.policy === 'xr0' ? null : 10;
+                configuration.defaults.max_steps = params.policy === 'xr0' ? 300 : null;
                 return HttpResponse.json(configuration);
             })
         );
@@ -318,7 +409,7 @@ describe('TrainModelDialog', () => {
         await user.click(screen.getByLabelText('Select XR0 policy'));
         await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
         await user.click(screen.getByRole('button', { name: 'Next' }));
-        expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('30');
+        expect(await screen.findByLabelText('Max Steps', { selector: 'input' })).toHaveValue('300');
         await user.click(screen.getByRole('button', { name: 'Back' }));
         await user.click(screen.getByLabelText('Select ACT policy'));
         await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());

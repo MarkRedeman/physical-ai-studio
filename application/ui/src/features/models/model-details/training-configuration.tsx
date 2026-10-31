@@ -56,6 +56,9 @@ export const TrainingParameters = ({ summary }: { summary: SchemaModelDetailResp
                 {summary.snapflow_distill_epochs !== null && summary.snapflow_distill_epochs !== undefined && (
                     <DetailRow name='Distillation epochs' value={summary.snapflow_distill_epochs} />
                 )}
+                {summary.snapflow_distill_steps !== null && summary.snapflow_distill_steps !== undefined && (
+                    <DetailRow name='Distillation steps' value={summary.snapflow_distill_steps} />
+                )}
             </Flex>
         </View>
     );

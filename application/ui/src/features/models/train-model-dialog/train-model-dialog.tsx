@@ -23,7 +23,7 @@ import { FeatureMappingStep } from './feature-mapping-step';
 import { formatBytes } from './policies';
 import { SetupStep } from './setup-step';
 import { TrainingDeviceInfo } from './training-device-info';
-import { MIN_EPOCHS_FOR_SNAPFLOW, TrainingParameters } from './training-parameters';
+import { MIN_EPOCHS_FOR_SNAPFLOW, TrainingLimitUnit, TrainingParameters } from './training-parameters';
 import { getEstimatedTrainingSteps } from './training-steps';
 import { TrainingSummaryNote } from './training-summary-note';
 import { useExportBackends } from './use-export-backends';
@@ -59,6 +59,8 @@ const EMPTY_CAMERA_SLOTS: SchemaPolicyCameraSlot[] = [];
 
 /** Mirrors `_DEFAULT_SNAPFLOW_DISTILL_EPOCHS` in the backend payload schema. */
 const DEFAULT_SNAPFLOW_DISTILL_EPOCHS = 3;
+const DEFAULT_MAX_STEPS = 20_000;
+const DEFAULT_SNAPFLOW_DISTILL_STEPS = 5_000;
 
 /** Strip the `trainer:` prefix off a training-target option id. */
 const targetRawId = (id: string): string => id.split(':', 2)[1] ?? id;
@@ -159,6 +161,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
         { enabled: selectedDataset !== null }
     );
     const [maxEpochs, setMaxEpochs] = useState<number>(defaultMaxEpochs ?? 5);
+    const [maxSteps, setMaxSteps] = useState(DEFAULT_MAX_STEPS);
+    const [limitUnit, setLimitUnit] = useState<TrainingLimitUnit>('epochs');
     const [batchSize, setBatchSize] = useState<number>(8);
     const [numWorkers, setNumWorkers] = useState<Key | null>('auto');
     const [autoScaleBatchSize, setAutoScaleBatchSize] = useState<boolean>(false);
@@ -174,6 +178,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
     const [loraUseDora, setLoraUseDora] = useState<boolean>(false);
     const [snapflowEnabled, setSnapflowEnabled] = useState<boolean>(false);
     const [snapflowDistillEpochs, setSnapflowDistillEpochs] = useState<number>(DEFAULT_SNAPFLOW_DISTILL_EPOCHS);
+    const [snapflowDistillSteps, setSnapflowDistillSteps] = useState(DEFAULT_SNAPFLOW_DISTILL_STEPS);
     const [augmentImages, setAugmentImages] = useState<boolean>(false);
     const [appliedPolicy, setAppliedPolicy] = useState<string | null>(null);
     const {
@@ -191,7 +196,9 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
             return;
         }
         const defaults = policyConfiguration.defaults;
-        setMaxEpochs(defaultMaxEpochs ?? defaults.max_epochs);
+        setLimitUnit(defaultMaxEpochs !== undefined || defaults.max_epochs !== null ? 'epochs' : 'steps');
+        setMaxEpochs(defaultMaxEpochs ?? defaults.max_epochs ?? 5);
+        setMaxSteps(defaults.max_steps ?? DEFAULT_MAX_STEPS);
         setBatchSize(defaults.batch_size);
         setNumWorkers(String(defaults.num_workers));
         setAutoScaleBatchSize(defaults.auto_scale_batch_size);
@@ -208,6 +215,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
         setLoraUseDora(defaults.lora?.use_dora ?? false);
         setSnapflowEnabled(defaults.snapflow !== null);
         setSnapflowDistillEpochs(defaults.snapflow?.distill_epochs ?? DEFAULT_SNAPFLOW_DISTILL_EPOCHS);
+        setSnapflowDistillSteps(defaults.snapflow?.distill_steps ?? DEFAULT_SNAPFLOW_DISTILL_STEPS);
         setAppliedPolicy(selectedPolicy);
     }, [policyConfiguration, appliedPolicy, selectedPolicy, defaultMaxEpochs]);
     const [selectedGpuKey, setSelectedGpuKey] = useState<Key | null>(null);
@@ -216,22 +224,41 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
     const isLoraSupported = supportsLora(selectedPolicy);
     const isLoraRequested = isLoraSupported && loraEnabled;
     const isSnapflowSupported = supportsSnapflow(selectedPolicy);
-    // snapflow_distill_epochs is additive on top of max_epochs (the teacher phase
-    // always runs the full max_epochs before distillation extends the run), so it
-    // needs no clamp against max_epochs.
-    const isSnapflowRequested = isSnapflowSupported && snapflowEnabled && maxEpochs >= MIN_EPOCHS_FOR_SNAPFLOW;
-    const trainingSteps = useMemo(
-        () =>
-            selectedDatasetEpisodes === undefined
-                ? undefined
-                : getEstimatedTrainingSteps(
-                      selectedDatasetEpisodes.map(({ length }) => length),
-                      batchSize,
-                      maxEpochs + (isSnapflowRequested ? snapflowDistillEpochs : 0),
-                      valSplit
-                  ),
-        [selectedDatasetEpisodes, batchSize, maxEpochs, isSnapflowRequested, snapflowDistillEpochs, valSplit]
-    );
+    // Distillation is additive in the selected unit, not carved out of the teacher budget.
+    const isSnapflowRequested =
+        isSnapflowSupported && snapflowEnabled && (limitUnit === 'steps' || maxEpochs >= MIN_EPOCHS_FOR_SNAPFLOW);
+    const activeLimit = limitUnit === 'epochs' ? maxEpochs : maxSteps;
+    const distillLimit = limitUnit === 'epochs' ? snapflowDistillEpochs : snapflowDistillSteps;
+    const limitMaximum = limitUnit === 'epochs' ? 10_000 : 100_000;
+    const isBudgetValid =
+        Number.isInteger(activeLimit) &&
+        activeLimit >= 1 &&
+        activeLimit <= limitMaximum &&
+        (!isSnapflowRequested || (Number.isInteger(distillLimit) && distillLimit >= 1 && distillLimit <= limitMaximum));
+    const trainingSteps = useMemo(() => {
+        if (limitUnit === 'steps') {
+            return maxSteps + (isSnapflowRequested ? snapflowDistillSteps : 0);
+        }
+        if (selectedDatasetEpisodes === undefined) {
+            return undefined;
+        }
+        return getEstimatedTrainingSteps(
+            selectedDatasetEpisodes.map(({ length }) => length),
+            batchSize,
+            maxEpochs + (isSnapflowRequested ? snapflowDistillEpochs : 0),
+            valSplit
+        );
+    }, [
+        limitUnit,
+        maxSteps,
+        snapflowDistillSteps,
+        selectedDatasetEpisodes,
+        batchSize,
+        maxEpochs,
+        isSnapflowRequested,
+        snapflowDistillEpochs,
+        valSplit,
+    ]);
     const {
         health: remoteTrainerHealth,
         isChecking: isCheckingRemoteTrainer,
@@ -310,6 +337,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
     const isSetupIncomplete =
         !selectedDataset ||
         !configurationReady ||
+        !isBudgetValid ||
         !selectedPolicy ||
         policiesUnavailable ||
         isLoadingPolicies ||
@@ -366,7 +394,14 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
 
         const dataset_id = selectedDataset?.toString();
 
-        if (!name.trim() || !dataset_id || !selectedPolicy || selectedTarget === null || !configurationReady) {
+        if (
+            !name.trim() ||
+            !dataset_id ||
+            !selectedPolicy ||
+            selectedTarget === null ||
+            !configurationReady ||
+            !isBudgetValid
+        ) {
             return;
         }
 
@@ -417,7 +452,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                 project_id: projectId,
                 model_name: name,
                 policy: selectedPolicy,
-                max_epochs: maxEpochs,
+                max_epochs: limitUnit === 'epochs' ? maxEpochs : null,
+                max_steps: limitUnit === 'steps' ? maxSteps : null,
                 batch_size: batchSize,
                 num_workers: numWorkers === 'auto' ? ('auto' as const) : Number(numWorkers),
                 auto_scale_batch_size: autoScaleBatchSize,
@@ -438,7 +474,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                 lora_dropout: loraDropout,
                 lora_use_dora: isLoraRequested && loraUseDora,
                 snapflow_enabled: isSnapflowRequested,
-                snapflow_distill_epochs: snapflowDistillEpochs,
+                snapflow_distill_epochs: limitUnit === 'epochs' ? snapflowDistillEpochs : null,
+                snapflow_distill_steps: limitUnit === 'steps' ? snapflowDistillSteps : null,
                 augment_images: augmentImages,
                 val_split: valSplit,
                 val_split_seed: valSplitSeed,
@@ -561,8 +598,12 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                         {activeStep === 'training-parameters' && (
                             <TrainingParameters
                                 help={policyConfiguration?.help}
+                                limitUnit={limitUnit}
+                                onLimitUnitChange={setLimitUnit}
                                 maxEpochs={maxEpochs}
                                 onMaxEpochsChange={setMaxEpochs}
+                                maxSteps={maxSteps}
+                                onMaxStepsChange={setMaxSteps}
                                 batchSize={batchSize}
                                 trainingSteps={trainingSteps}
                                 onBatchSizeChange={setBatchSize}
@@ -596,6 +637,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                                 onSnapflowEnabledChange={setSnapflowEnabled}
                                 snapflowDistillEpochs={snapflowDistillEpochs}
                                 onSnapflowDistillEpochsChange={setSnapflowDistillEpochs}
+                                snapflowDistillSteps={snapflowDistillSteps}
+                                onSnapflowDistillStepsChange={setSnapflowDistillSteps}
                             />
                         )}
 
