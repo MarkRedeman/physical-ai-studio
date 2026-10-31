@@ -1,5 +1,6 @@
 import { FormPreviewLayout } from '../../components/form-preview-layout';
 import { UnavailableRobotViewer } from '../../features/robots/controller/robot-viewer';
+import { LiveConnectProvider } from '../../features/robots/robot-form/live-connect/provider';
 import { Preview } from '../../features/robots/robot-form/preview';
 import { RobotFormProvider } from '../../features/robots/robot-form/provider';
 import { UpdateRobotForm } from '../../features/robots/robot-form/update-form';
@@ -17,11 +18,13 @@ export const Edit = () => {
     return (
         <RobotModelsProvider>
             <RobotFormProvider robot={robot}>
-                <FormPreviewLayout
-                    form={<UpdateRobotForm />}
-                    preview={<Preview />}
-                    previewProps={{ backgroundColor: 'gray-50', padding: 'size-400' }}
-                />
+                <LiveConnectProvider>
+                    <FormPreviewLayout
+                        form={<UpdateRobotForm />}
+                        preview={<Preview />}
+                        previewProps={{ backgroundColor: 'gray-50', padding: 'size-400' }}
+                    />
+                </LiveConnectProvider>
             </RobotFormProvider>
         </RobotModelsProvider>
     );

@@ -2,15 +2,18 @@ import type { FormEvent } from 'react';
 
 import { Button, Divider, Flex, Form, View } from '@geti-ui/ui';
 import { useNavigate } from 'react-router';
-import { v4 as uuidv4 } from 'uuid';
 
 import { $api } from '../../../api/client';
 import type { SchemaSo101RobotPayload } from '../../../api/openapi-spec';
 import { useProjectId } from '../../../features/projects/use-project';
 import { paths } from '../../../paths';
 import { useRobotCatalogQuery } from '../robot-catalog.hooks';
+import { SchemaRobotInput } from '../robot-types';
 import { FormFields, RobotFormHeading, RobotType } from './form';
+import { OfflineSaveButton, useRobotSubmission } from './live-connect/submission';
 import { useRobotForm, useRobotFormBody } from './provider';
+
+import classes from './form.module.css';
 
 const hasUploadedCalibration = (payload: unknown): boolean => {
     if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
@@ -23,7 +26,7 @@ const hasUploadedCalibration = (payload: unknown): boolean => {
 export const CreateRobotForm = () => {
     const navigate = useNavigate();
     const { project_id } = useProjectId();
-    const { activeType } = useRobotForm();
+    const { activeType, draftId } = useRobotForm();
     const { data: catalog } = useRobotCatalogQuery();
 
     const addRobotMutation = $api.useMutation('post', '/api/projects/{project_id}/robots', {
@@ -35,7 +38,7 @@ export const CreateRobotForm = () => {
         },
     });
 
-    const body = useRobotFormBody(uuidv4());
+    const body = useRobotFormBody(draftId);
     const isSO101 = activeType === 'SO101_Follower' || activeType === 'SO101_Leader';
     const shouldRunSO101Setup = isSO101 && !hasUploadedCalibration(body?.payload);
     const shouldRunZeroCalibration = catalog.some(
@@ -48,13 +51,7 @@ export const CreateRobotForm = () => {
               ? paths.project.robots.stararmSetup
               : paths.project.robots.zeroCalibration;
 
-    const handleSubmit = async (event: FormEvent) => {
-        event.preventDefault();
-
-        if (body === null) {
-            return;
-        }
-
+    const save = async (snapshot: SchemaRobotInput) => {
         if (shouldRunSO101Setup) {
             navigate(paths.project.robots.so101Setup({ project_id }));
             return;
@@ -67,13 +64,16 @@ export const CreateRobotForm = () => {
 
         const createdRobot = await addRobotMutation.mutateAsync({
             params: { path: { project_id } },
-            body,
+            body: snapshot,
         });
 
         navigate(paths.project.robots.show({ project_id, robot_id: createdRobot.id }));
     };
-
-    const isCreateDisabled = body === null;
+    const submission = useRobotSubmission(body, save, shouldRunSO101Setup || shouldRunZeroCalibration);
+    const handleSubmit = (event: FormEvent) => {
+        event.preventDefault();
+        void submission.submit();
+    };
 
     return (
         <Flex direction='column' gap='size-200'>
@@ -81,24 +81,35 @@ export const CreateRobotForm = () => {
             <Divider orientation='horizontal' size='S' />
             <Form onSubmit={handleSubmit}>
                 <Flex direction='column' gap='size-200'>
-                    <Flex direction='column' gap='size-200' width='100%'>
-                        <RobotType />
-                        <FormFields />
-                    </Flex>
+                    <fieldset className={classes.fields} disabled={submission.pending}>
+                        <Flex direction='column' gap='size-200' width='100%'>
+                            <RobotType />
+                            <FormFields />
+                        </Flex>
+                    </fieldset>
                     <Divider orientation='horizontal' size='S' />
+                    {submission.error !== null && <div role='alert'>{submission.error}</div>}
                     <View>
-                        <Button
-                            variant='accent'
-                            type='submit'
-                            isDisabled={isCreateDisabled}
-                            isPending={addRobotMutation.isPending}
-                        >
-                            {shouldRunSO101Setup
-                                ? 'Begin Setup'
-                                : shouldRunZeroCalibration
-                                  ? 'Begin Calibration'
-                                  : 'Add robot'}
-                        </Button>
+                        <Flex gap='size-100' wrap='wrap'>
+                            <Button
+                                variant='accent'
+                                type='submit'
+                                isDisabled={!submission.canSubmit}
+                                isPending={submission.pending}
+                            >
+                                {shouldRunSO101Setup
+                                    ? 'Begin Setup'
+                                    : shouldRunZeroCalibration
+                                      ? 'Begin Calibration'
+                                      : 'Add robot'}
+                            </Button>
+                            {!shouldRunSO101Setup && !shouldRunZeroCalibration && (
+                                <OfflineSaveButton
+                                    disabled={!submission.canSaveOffline}
+                                    onSave={() => void submission.submit(true)}
+                                />
+                            )}
+                        </Flex>
                     </View>
                 </Flex>
             </Form>

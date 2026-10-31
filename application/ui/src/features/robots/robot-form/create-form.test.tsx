@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@rstest/core';
+import { describe, expect, it, rs } from '@rstest/core';
 import { screen } from '@testing-library/react';
 import { HttpResponse } from 'msw';
 
@@ -6,7 +6,13 @@ import { http } from '../../../api/utils';
 import { server } from '../../../msw-node-setup';
 import { render } from '../../../test-utils/render';
 import { CreateRobotForm } from './create-form';
+import { LiveConnectProvider } from './live-connect/provider';
 import { RobotFormProvider } from './provider';
+
+rs.mock('react-use-websocket', () => ({
+    default: () => ({ sendJsonMessage: rs.fn(), readyState: 0 }),
+    ReadyState: { OPEN: 1 },
+}));
 
 const definition = (type: string, calibration: { instructions: string; zero_tolerance_deg: number } | null) => ({
     type,
@@ -28,12 +34,17 @@ const renderCreateForm = (robotType: string) => {
         ),
         http.get('/api/robots/catalog/{robot_type}/schema', () =>
             HttpResponse.json({ type: 'object', properties: {}, required: [] })
+        ),
+        http.post('/api/robots/catalog/{robot_type}/validate', async ({ request }) =>
+            HttpResponse.json(await request.json())
         )
     );
 
     return render(
         <RobotFormProvider robot={{ type: robotType, name: 'Khaos', payload: {} }}>
-            <CreateRobotForm />
+            <LiveConnectProvider>
+                <CreateRobotForm />
+            </LiveConnectProvider>
         </RobotFormProvider>,
         { route: '/projects/project-1/robots/new', path: '/projects/:project_id/robots/new' }
     );

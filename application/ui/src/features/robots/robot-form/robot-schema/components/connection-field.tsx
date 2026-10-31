@@ -5,6 +5,7 @@ import { Refresh } from '@geti-ui/ui/icons';
 
 import { useCatalogIdentifyMutation, useDiscoverRobotsQuery } from '../../../robot-catalog.hooks';
 import { SchemaRobotType } from '../../../robot-types';
+import { useLiveConnectHardwareBusy } from '../../live-connect/hardware-busy';
 import { ConnectionItem } from '../types';
 import { FieldContextualHelp } from './field-contextual-help';
 import { IdentifyError } from './identify-error';
@@ -81,6 +82,7 @@ type ConnectionFieldProps = {
 export const ConnectionField = ({ robotType, payload, options, isRequired, onChange }: ConnectionFieldProps) => {
     const discover = useDiscoverRobotsQuery(robotType);
     const identify = useCatalogIdentifyMutation();
+    const hardwareBusy = useLiveConnectHardwareBusy();
     const devices = (discover.data ?? []).map(normalizeDevice);
     const connectionKey = options.bind.connection;
     const serialNumberKey = options.bind.serial_number;
@@ -134,13 +136,14 @@ export const ConnectionField = ({ robotType, payload, options, isRequired, onCha
                             onPress={() =>
                                 identify.mutate({ params: { path: { robot_type: robotType } }, body: payload })
                             }
-                            isDisabled={identify.isPending}
+                            isDisabled={identify.isPending || hardwareBusy}
                         >
                             Identify
                         </ActionButton>
                     </View>
                 )}
             </Flex>
+            {hardwareBusy && options.identify && <Text>Disconnect Live connect before using Identify.</Text>}
             {identify.isError && <IdentifyError error={identify.error} />}
         </Flex>
     );

@@ -5,9 +5,13 @@ import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
 import { paths } from '../../../paths';
+import { SchemaRobotInput } from '../robot-types';
 import { useRobotId } from '../use-robot';
 import { FormFields, RobotFormHeading } from './form';
+import { OfflineSaveButton, useRobotSubmission } from './live-connect/submission';
 import { useRobotFormBody } from './provider';
+
+import classes from './form.module.css';
 
 export const UpdateRobotForm = () => {
     const navigate = useNavigate();
@@ -24,19 +28,18 @@ export const UpdateRobotForm = () => {
 
     const body = useRobotFormBody(robot_id);
 
-    const handleSubmit = async (event: FormEvent) => {
-        event.preventDefault();
-
-        if (body === null) {
-            return;
-        }
-
+    const save = async (snapshot: SchemaRobotInput) => {
         await updateRobotMutation.mutateAsync({
             params: { path: { project_id, robot_id } },
-            body,
+            body: snapshot,
         });
 
         navigate(paths.project.robots.show({ project_id, robot_id }));
+    };
+    const submission = useRobotSubmission(body, save);
+    const handleSubmit = (event: FormEvent) => {
+        event.preventDefault();
+        void submission.submit();
     };
 
     return (
@@ -45,19 +48,28 @@ export const UpdateRobotForm = () => {
             <Divider orientation='horizontal' size='S' />
             <Form onSubmit={handleSubmit}>
                 <Flex direction='column' gap='size-200'>
-                    <Flex direction='column' gap='size-200' width='100%'>
-                        <FormFields />
-                    </Flex>
+                    <fieldset className={classes.fields} disabled={submission.pending}>
+                        <Flex direction='column' gap='size-200' width='100%'>
+                            <FormFields />
+                        </Flex>
+                    </fieldset>
                     <Divider orientation='horizontal' size='S' />
+                    {submission.error !== null && <div role='alert'>{submission.error}</div>}
                     <View>
-                        <Button
-                            variant='accent'
-                            type='submit'
-                            isDisabled={body === null}
-                            isPending={updateRobotMutation.isPending}
-                        >
-                            Update robot
-                        </Button>
+                        <Flex gap='size-100' wrap='wrap'>
+                            <Button
+                                variant='accent'
+                                type='submit'
+                                isDisabled={!submission.canSubmit}
+                                isPending={submission.pending}
+                            >
+                                Update robot
+                            </Button>
+                            <OfflineSaveButton
+                                disabled={!submission.canSaveOffline}
+                                onSave={() => void submission.submit(true)}
+                            />
+                        </Flex>
                     </View>
                 </Flex>
             </Form>
