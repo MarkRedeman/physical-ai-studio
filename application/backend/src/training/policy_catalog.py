@@ -9,10 +9,38 @@ from packaging.requirements import Requirement
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class PolicyTrainingDefaults(BaseModel):
-    """Recommended values expressed in Studio training-payload field names."""
+class ValidationDefaults(BaseModel):
+    """Episode validation split configuration."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
+
+    split: float = Field(default=0.1, ge=0, lt=1, description="Fraction of episodes held out for validation.")
+    seed: int | None = Field(default=None, description="Validation split RNG seed; null uses the global RNG.")
+
+
+class LoraDefaults(BaseModel):
+    """Adapter settings; the presence of this configuration enables LoRA."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
+
+    rank: int = Field(default=32, ge=1, le=256, description="LoRA adapter rank.")
+    alpha: int | None = Field(default=None, ge=1, description="Scaling numerator; null uses the rank.")
+    dropout: float = Field(default=0.05, ge=0, lt=1, description="Adapter input dropout probability.")
+    use_dora: bool = Field(default=False, description="Use weight-decomposed adapters instead of plain LoRA.")
+
+
+class SnapflowDefaults(BaseModel):
+    """Distillation settings; the presence of this configuration enables SnapFlow."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
+
+    distill_epochs: int = Field(default=3, ge=1, le=10_000, description="Extra epochs after ordinary training.")
+
+
+class PolicyTrainingDefaults(BaseModel):
+    """Recommended values; grouped options translate to the existing job payload."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
     batch_size: int = Field(default=8, ge=1, le=256, description="Samples per training step.")
     max_epochs: int = Field(default=5, ge=1, le=10_000, description="Full passes through the training dataset.")
@@ -28,17 +56,32 @@ class PolicyTrainingDefaults(BaseModel):
     )
     auto_scale_batch_size: bool = Field(default=False, description="Find a fitting batch size before training.")
     augment_images: bool = Field(default=False, description="Apply Studio's default training-only image augmentations.")
-    val_split: float = Field(default=0.1, ge=0, lt=1, description="Fraction of episodes held out for validation.")
-    val_split_seed: int | None = Field(default=None, description="Validation split RNG seed; null uses the global RNG.")
-    lora_enabled: bool = Field(default=False, description="Fine-tune low-rank adapters rather than all model weights.")
-    lora_rank: int = Field(default=32, ge=1, le=256, description="LoRA adapter rank.")
-    lora_alpha: int | None = Field(default=None, ge=1, description="LoRA scaling numerator; null uses the rank.")
-    lora_dropout: float = Field(default=0.05, ge=0, lt=1, description="LoRA adapter input dropout probability.")
-    lora_use_dora: bool = Field(default=False, description="Use DoRA instead of plain LoRA; requires LoRA enabled.")
-    snapflow_enabled: bool = Field(default=False, description="Append SnapFlow distillation after ordinary training.")
-    snapflow_distill_epochs: int = Field(
-        default=3, ge=1, le=10_000, description="Additional distillation epochs, not included in max_epochs."
+    validation: ValidationDefaults = Field(default_factory=ValidationDefaults, description="Episode validation split.")
+    lora: LoraDefaults | None = Field(default=None, description="LoRA/DoRA adapter settings; null disables adapters.")
+    snapflow: SnapflowDefaults | None = Field(
+        default=None, description="Distillation settings; null disables SnapFlow."
     )
+
+
+class LoraHelp(BaseModel):
+    """Optional adapter guidance; absent values use generic UI help."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    description: str | None = Field(default=None, description="Adapter fine-tuning recommendation.")
+    rank: str | None = Field(default=None, description="Adapter capacity recommendation.")
+    alpha: str | None = Field(default=None, description="Adapter scaling guidance.")
+    dropout: str | None = Field(default=None, description="Adapter dropout guidance.")
+    use_dora: str | None = Field(default=None, description="DoRA guidance.")
+
+
+class SnapflowHelp(BaseModel):
+    """Optional distillation guidance; absent values use generic UI help."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    description: str | None = Field(default=None, description="Distillation recommendation.")
+    distill_epochs: str | None = Field(default=None, description="Distillation budget recommendation.")
 
 
 class PolicyTrainingHelp(BaseModel):
@@ -54,13 +97,8 @@ class PolicyTrainingHelp(BaseModel):
     gradient_checkpointing: str | None = Field(default=None, description="Activation memory and compute tradeoffs.")
     auto_scale_batch_size: str | None = Field(default=None, description="Automatic batch size guidance.")
     augment_images: str | None = Field(default=None, description="Image augmentation recommendation.")
-    lora_enabled: str | None = Field(default=None, description="Adapter fine-tuning recommendation.")
-    lora_rank: str | None = Field(default=None, description="Adapter capacity recommendation.")
-    lora_alpha: str | None = Field(default=None, description="Adapter scaling guidance.")
-    lora_dropout: str | None = Field(default=None, description="Adapter dropout guidance.")
-    lora_use_dora: str | None = Field(default=None, description="DoRA guidance.")
-    snapflow_enabled: str | None = Field(default=None, description="Distillation recommendation.")
-    snapflow_distill_epochs: str | None = Field(default=None, description="Distillation budget recommendation.")
+    lora: LoraHelp | None = Field(default=None, description="Optional adapter guidance.")
+    snapflow: SnapflowHelp | None = Field(default=None, description="Optional distillation guidance.")
 
 
 class PolicyCameraSlot(BaseModel):
@@ -77,7 +115,7 @@ class PolicyCameraSlot(BaseModel):
 class PolicyTrainingConfiguration(BaseModel):
     """Recommended training values with optional guidance and camera metadata."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
     defaults: PolicyTrainingDefaults = Field(description="Editable defaults to include in the training job payload.")
     help: PolicyTrainingHelp = Field(default_factory=PolicyTrainingHelp, description="Optional policy-specific help.")
@@ -143,16 +181,17 @@ POLICY_TRAINING_CONFIGURATIONS = {
             max_epochs=25,
             compile_model=True,
             gradient_checkpointing=False,
-            lora_enabled=True,
-            lora_alpha=32,
-            val_split_seed=42,
+            lora=LoraDefaults(alpha=32),
+            validation=ValidationDefaults(seed=42),
         ),
         help=PolicyTrainingHelp(
             batch_size="The ALOHA LoRA reference uses batch size 16. Reduce this if GPU memory is insufficient.",
             max_epochs="The ALOHA LoRA reference uses 25 epochs. Review validation loss for your task.",
-            gradient_checkpointing="The LoRA recipe disables checkpointing. Enable it to save memory with more compute.",
-            lora_enabled="The reference uses LoRA. The library automatically applies a 10x learning-rate multiplier.",
-            lora_rank="Start at 32; try 16 if a small dataset overfits, or 64 for more capacity with plenty of data.",
+            gradient_checkpointing="Disabled in the LoRA recipe. Enable it to save memory at extra compute cost.",
+            lora=LoraHelp(
+                description="LoRA fine-tuning. The library automatically applies a 10x learning-rate multiplier.",
+                rank="Start at 32; try 16 if a small dataset overfits, or 64 for more capacity with plenty of data.",
+            ),
         ),
     ),
     "molmoact2": PolicyTrainingConfiguration(
@@ -160,9 +199,9 @@ POLICY_TRAINING_CONFIGURATIONS = {
             batch_size=16,
             max_epochs=8,
             num_workers=8,
-            lora_enabled=True,
+            lora=LoraDefaults(),
             gradient_checkpointing=True,
-            val_split_seed=42,
+            validation=ValidationDefaults(seed=42),
         ),
         help=PolicyTrainingHelp(
             max_epochs=(
@@ -178,7 +217,9 @@ POLICY_TRAINING_CONFIGURATIONS = {
         ),
     ),
     "xr0": PolicyTrainingConfiguration(
-        defaults=PolicyTrainingDefaults(gradient_checkpointing=True, val_split=0.05, val_split_seed=42),
+        defaults=PolicyTrainingDefaults(
+            gradient_checkpointing=True, validation=ValidationDefaults(split=0.05, seed=42)
+        ),
         help=PolicyTrainingHelp(
             max_epochs=(
                 "Five epochs is a starting point. The SO101 reference recipe uses 30,000 optimizer steps and "
