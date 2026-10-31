@@ -10,12 +10,8 @@ from pydantic import ValidationError
 
 from main import app
 from schemas.job import LocalTrainJobPayload
-from training.policy_catalog import (
-    _STUDIO_POLICIES,
-    POLICY_TRAINING_CONFIGURATIONS,
-    LoraDefaults,
-    PolicyTrainingConfiguration,
-)
+from training.policy_catalog import _STUDIO_POLICIES, POLICY_TRAINING_CONFIGURATIONS
+from training.policy_training_configuration import LoraDefaults, PolicyTrainingConfiguration
 
 
 def test_every_studio_policy_has_a_configuration() -> None:
