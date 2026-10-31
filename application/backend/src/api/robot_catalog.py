@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from api.dependencies import RobotCatalogServiceDep, RobotConnectionManagerDep
 from exceptions import ResourceNotFoundError, ResourceType, RobotIdentifyError
 from robots.catalog.assets import resolve_robot_relative_asset_path, resolve_robot_urdf_path
+from robots.draft_validation import validate_draft_payload
 from schemas import SerialPortInfo
 
 
@@ -21,7 +22,7 @@ class RobotCatalogDefinitionResponse(BaseModel):
     type: str = Field(..., description="Stable backend robot type identifier")
     display_name: str = Field(..., description="Human-readable robot type label")
     role: Literal["follower", "leader"] = Field(..., description="Default robot role")
-    urdf_path: str = Field(description="URDF URL used by the UI model loader")
+    urdf_path: str | None = Field(description="URDF URL, or null when the plugin supplies no model")
     package_map: dict[str, str] = Field(default_factory=dict, description="URDF package name to URL prefix map")
     joint_map: dict[str, list[str]] = Field(
         description="Observation joint name to URDF joint(s) mapping",
@@ -45,7 +46,7 @@ def _to_response(definition: RobotCatalogDefinition) -> RobotCatalogDefinitionRe
         type=definition.type,
         display_name=definition.display_name,
         role=definition.role,
-        urdf_path=f"{catalog_root}/urdf",
+        urdf_path=f"{catalog_root}/urdf" if definition.asset is not None else None,
         package_map=package_map,
         joint_map=joint_map,
         zero_calibration=None
@@ -133,6 +134,15 @@ async def check_robot_online(
     if definition.probe is None:
         return False
     return await definition.probe.is_online(payload)
+
+
+@router.post("/{robot_type}/validate")  # noqa: FAST003 - resolved by RobotDefinitionDep
+async def validate_robot_configuration(
+    definition: RobotDefinitionDep,
+    payload: Annotated[dict[str, Any], Body(...)],
+) -> dict[str, Any]:
+    """Validate an unsaved configuration without building or connecting hardware."""
+    return validate_draft_payload(definition, payload)
 
 
 @router.get("/{robot_type}/urdf")  # noqa: FAST003 - consumed by RobotDefinitionDep via _get_robot_definition

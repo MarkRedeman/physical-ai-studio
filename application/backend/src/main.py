@@ -25,6 +25,7 @@ from api.project_camera import router as project_cameras_router
 from api.remote_servers import router as remote_servers_router
 from api.remote_trainers import router as remote_trainers_router
 from api.robot_catalog import router as robot_catalog_router
+from api.robot_live_connect import router as robot_live_connect_router
 from api.robot_observations import router as robot_observations_router
 from api.robot_setup import router as robot_setup_router
 from api.robot_zero_calibration import router as robot_zero_calibration_router
@@ -57,6 +58,7 @@ app.include_router(robot_setup_router)
 app.include_router(robot_zero_calibration_router)
 app.include_router(runtime_ws_router)
 app.include_router(runtime_sessions_router)
+app.include_router(robot_live_connect_router)
 app.include_router(robot_observations_router)
 app.include_router(project_environments_router)
 app.include_router(hardware_router)
