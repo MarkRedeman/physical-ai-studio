@@ -19,22 +19,30 @@ from training.policy_training_configuration import (
 
 POLICY_TRAINING_CONFIGURATIONS = {
     "act": PolicyTrainingConfiguration(
-        defaults=PolicyTrainingDefaults(batch_size=32, precision="32-true", augment_images=True),
+        defaults=PolicyTrainingDefaults(
+            batch_size=8, max_epochs=10, num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42)
+        ),
         help=PolicyTrainingHelp(
-            batch_size="The PushT reference recipe uses 32 samples per step. Reduce this if memory is insufficient.",
+            batch_size="The ACT baseline uses batch size 8. Larger images and more cameras need more memory.",
             max_epochs=(
-                "Five epochs is a starting point, not a validated ACT budget. The PushT reference recipe uses "
-                "70,000 steps; the equivalent epoch count depends on dataset size and batch size."
+                "The 200-episode SO101 baseline uses 10 epochs, roughly 100k steps at batch 8. "
+                "Smaller datasets need more epochs for the same update budget. Validate on your robot."
             ),
-            precision="The ACT PushT recipes use full FP32 precision, including on Intel XPU.",
-            augment_images="The reference uses ColorJitter. Studio enables its broader default augmentation pipeline.",
+            precision="The single-arm ACT baseline uses FP32, without automatic mixed precision.",
+            augment_images="Disabled in the baseline. Enable it only if it improves held-out task performance.",
         ),
     ),
     "smolvla": PolicyTrainingConfiguration(
-        defaults=PolicyTrainingDefaults(batch_size=64, max_epochs=100, precision="32-true", augment_images=True),
+        defaults=PolicyTrainingDefaults(
+            batch_size=64, max_epochs=75, num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42)
+        ),
         help=PolicyTrainingHelp(
-            batch_size="The PushT reference uses batch size 64. Reduce this if GPU memory is insufficient.",
-            max_epochs="The PushT reference recipe trains for 100 epochs. Review validation loss for your own task.",
+            batch_size="The SO100 pick-and-place reference uses batch 64. Reduce it if GPU memory is insufficient.",
+            max_epochs=(
+                "75 epochs approximates the reference's 20k steps on 50 episodes with a 10% holdout. "
+                "The 200-episode SO101 dataset needs roughly 15 epochs instead. Adjust for your dataset."
+            ),
+            augment_images="Disabled in the baseline; some real SO101 runs enable it. Compare physical rollouts.",
         ),
         camera_slots=[
             PolicyCameraSlot(
@@ -78,9 +86,9 @@ POLICY_TRAINING_CONFIGURATIONS = {
             validation=ValidationDefaults(seed=42),
         ),
         help=PolicyTrainingHelp(
-            batch_size="The ALOHA LoRA reference uses batch size 16. Reduce this if GPU memory is insufficient.",
-            max_epochs="The ALOHA LoRA reference uses 25 epochs. Review validation loss for your task.",
-            gradient_checkpointing="Disabled in the LoRA recipe. Enable it to save memory at extra compute cost.",
+            batch_size="Batch 16 is a provisional native LoRA starting point. Reduce it if memory is insufficient.",
+            max_epochs="25 epochs is provisional; a real SO101/Trossen rollout has not validated this native recipe.",
+            gradient_checkpointing="Enable checkpointing to save memory at extra compute cost.",
             lora=LoraHelp(
                 description="LoRA fine-tuning. The library automatically applies a 10x learning-rate multiplier.",
                 rank="Start at 32; try 16 if a small dataset overfits, or 64 for more capacity with plenty of data.",
@@ -92,14 +100,18 @@ POLICY_TRAINING_CONFIGURATIONS = {
             batch_size=16,
             max_epochs=8,
             num_workers=8,
-            lora=LoraDefaults(),
+            lora=LoraDefaults(rank=64, alpha=16),
             gradient_checkpointing=True,
             validation=ValidationDefaults(seed=42),
         ),
         help=PolicyTrainingHelp(
             max_epochs=(
-                "The SO101 reference recipe uses 8 epochs with LoRA. Studio uses the general pretrained checkpoint; "
-                "these defaults do not reproduce the SO101-specific model settings."
+                "The single-robot baseline uses 8 epochs on 200 SO101 episodes. This is a candidate, "
+                "not a validated rollout result. Adjust the budget for your dataset."
+            ),
+            lora=LoraHelp(
+                description="VLM LoRA with a fully trainable action expert, initialized from the general checkpoint.",
+                rank="Rank 64 and alpha 16 match the native MolmoAct2 baseline.",
             ),
         ),
     ),
