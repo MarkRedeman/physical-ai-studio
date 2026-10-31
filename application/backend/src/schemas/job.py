@@ -10,7 +10,7 @@ from schemas.aws_auth import AwsAuthenticationIssue
 from schemas.base_job import BaseJob, JobType
 from schemas.dataset_import_job import DatasetImportJobPayload
 from schemas.hardware import DeviceType
-from training.job import PEFT_POLICIES, SNAPFLOW_POLICIES
+from training.job import GRADIENT_CHECKPOINTING_POLICIES, PEFT_POLICIES, SNAPFLOW_POLICIES
 
 
 class ExportBackend(StrEnum):
@@ -165,11 +165,23 @@ class TrainJobPayloadBase(BaseModel):
         description="Fraction of episodes to hold out for eval-loss validation (0 = disabled)",
     )
     device: TrainingDevice | None = Field(default=None, description="Target training device (auto-detected if null)")
+    val_split_seed: int | None = Field(default=None, description="Validation split RNG seed; null uses the global RNG")
     precision: TrainingPrecision = Field(
         default=TrainingPrecision.BF16_MIXED,
         description="Training precision ('32-true', 'bf16-mixed')",
     )
     compile_model: bool = Field(default=False, description="Enable torch.compile for supported policies")
+    gradient_checkpointing: bool | None = Field(
+        default=None, description="Recompute activations to save memory; null keeps the library default"
+    )
+
+    @model_validator(mode="after")
+    def validate_gradient_checkpointing(self) -> "TrainJobPayloadBase":
+        """Reject an explicit activation-checkpointing override the policy cannot honor."""
+        if self.gradient_checkpointing is not None and self.policy.lower() not in GRADIENT_CHECKPOINTING_POLICIES:
+            raise ValueError(f"Gradient checkpointing overrides are not supported for policy {self.policy!r}.")
+        return self
+
     image_key_reorder_map: dict[str, int] = Field(
         default_factory=dict,
         description=(

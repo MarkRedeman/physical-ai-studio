@@ -95,6 +95,12 @@ def _context(
 class TestBuildSpec:
     """The payload -> spec translation shared by the local and remote backends."""
 
+    def test_checkpointing_and_split_seed_are_forwarded(self, tmp_path: Path) -> None:
+        payload = _payload(policy="pi05", gradient_checkpointing=False, val_split_seed=42)
+        spec = build_spec(_context(tmp_path, payload, model_policy="pi05"))
+        assert spec.gradient_checkpointing is False
+        assert spec.val_split_seed == 42
+
     def test_training_parameters_are_forwarded(self, tmp_path):
         payload = _payload(max_steps=500, batch_size=16, num_workers="auto", val_split=0.2)
         spec = build_spec(_context(tmp_path, payload))

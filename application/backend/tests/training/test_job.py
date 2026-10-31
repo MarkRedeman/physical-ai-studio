@@ -52,6 +52,8 @@ class TestTrainingJobSpec:
         assert (spec.num_workers, spec.val_split, spec.precision) == ("auto", 0.1, "bf16-mixed")
         assert (spec.compile_model, spec.auto_scale_batch_size) == (False, False)
         assert spec.augment_images is False
+        assert spec.gradient_checkpointing is None
+        assert spec.val_split_seed is None
         assert (spec.device_type, spec.device_index) == (None, None)
 
     def test_unknown_field_is_rejected(self) -> None:
@@ -128,6 +130,19 @@ class TestTrainingJobSpec:
 
 
 class TestBuildPolicy:
+    @pytest.mark.parametrize("enabled", [True, False, None])
+    def test_gradient_checkpointing_override(self, enabled: bool | None) -> None:
+        with patch("physicalai.policies.get_policy") as get_policy:
+            build_policy(TrainingJobSpec(policy="pi05", gradient_checkpointing=enabled))
+        if enabled is None:
+            assert "gradient_checkpointing" not in get_policy.call_args.kwargs
+        else:
+            assert get_policy.call_args.kwargs["gradient_checkpointing"] is enabled
+
+    def test_unsupported_gradient_checkpointing_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Gradient checkpointing"):
+            TrainingJobSpec(policy="act", gradient_checkpointing=False)
+
     def test_studio_trainable_policy_constructors_accept_wizard_arguments(self) -> None:
         """Bind Studio's actual kwargs to opt-in constructors without downloading weights."""
         available = _available_policy_classes()
@@ -396,7 +411,7 @@ class TestRunTrainingJob:
         assert (kwargs["accelerator"], kwargs["strategy"], kwargs["devices"]) == ("xpu", "xpu_single", 1)
 
     def test_dataset_is_loaded_from_the_local_root(self, tmp_path: Path) -> None:
-        spec = TrainingJobSpec(policy="act", batch_size=16, num_workers=2, val_split=0.25)
+        spec = TrainingJobSpec(policy="act", batch_size=16, num_workers=2, val_split=0.25, val_split_seed=42)
         cache_dir = tmp_path / "cache" / "job"
 
         with (
@@ -417,6 +432,7 @@ class TestRunTrainingJob:
         kwargs = datamodule.call_args.kwargs
         assert kwargs["root"] == str(tmp_path / "snapshot")
         assert (kwargs["train_batch_size"], kwargs["num_workers"], kwargs["val_split"]) == (16, 2, 0.25)
+        assert kwargs["val_split_seed"] == 42
 
     @pytest.mark.parametrize("augment_images", [True, False])
     def test_image_augmentation_is_opt_in(self, tmp_path: Path, augment_images: bool) -> None:

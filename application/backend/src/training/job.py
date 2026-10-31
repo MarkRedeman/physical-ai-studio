@@ -84,6 +84,9 @@ PEFT_POLICIES = frozenset({"pi05", "molmoact2"})
 """Policies whose ``Config`` mixes in ``physicalai.policies.mixins.peft.PeftConfigMixin`` and
 support LoRA/DoRA fine-tuning."""
 
+GRADIENT_CHECKPOINTING_POLICIES = frozenset({"pi05", "molmoact2", "rldx1", "xr0"})
+"""Policies whose constructors accept an activation-checkpointing override."""
+
 
 class RunOptions(BaseModel):
     """Runtime-only controls which are not part of the training payload."""
@@ -125,8 +128,12 @@ class TrainingJobSpec(BaseModel):
     batch_size: int = Field(default=8, ge=1, description="Training batch size.")
     num_workers: int | Literal["auto"] = Field(default="auto", description="Dataloader worker count.")
     val_split: float = Field(default=0.1, ge=0.0, lt=1.0, description="Fraction of episodes held out for validation.")
+    val_split_seed: int | None = Field(default=None, description="Validation split RNG seed; None uses the global RNG.")
     precision: str = Field(default="bf16-mixed", description="Lightning precision, e.g. '32-true' or 'bf16-mixed'.")
     compile_model: bool = Field(default=False, description="Whether to torch.compile the policy forward pass.")
+    gradient_checkpointing: bool | None = Field(
+        default=None, description="Recompute activations to save memory; None keeps the library default."
+    )
     augment_images: bool = Field(
         default=False,
         description="Whether to augment training images with the default pipeline.",
@@ -178,6 +185,15 @@ class TrainingJobSpec(BaseModel):
         description="Use DoRA (Weight-Decomposed LoRA) instead of plain LoRA. Ignored unless lora_enabled.",
     )
     run_options: RunOptions = Field(default_factory=RunOptions)
+
+    @model_validator(mode="after")
+    def validate_gradient_checkpointing(self) -> TrainingJobSpec:
+        """Reject activation-checkpointing overrides unsupported by the policy."""
+        if self.gradient_checkpointing is not None and (
+            self.policy_source != "physicalai" or self.policy.lower() not in GRADIENT_CHECKPOINTING_POLICIES
+        ):
+            raise ValueError(f"Gradient checkpointing overrides are not supported for policy {self.policy!r}.")
+        return self
 
     @model_validator(mode="after")
     def validate_lora(self) -> TrainingJobSpec:
@@ -252,6 +268,8 @@ def build_policy(spec: TrainingJobSpec, *, resume_from: Path | str | None = None
     from physicalai.policies import get_policy
 
     kwargs: dict[str, Any] = {"compile_model": spec.compile_model}
+    if spec.gradient_checkpointing is not None:
+        kwargs["gradient_checkpointing"] = spec.gradient_checkpointing
     if spec.policy_source == "physicalai":
         pretrained = PRETRAINED_BASE_CHECKPOINTS.get(spec.policy.lower())
         if pretrained is not None:
@@ -394,6 +412,7 @@ def run_training_job(
             train_batch_size=spec.batch_size,
             num_workers=spec.num_workers,
             val_split=spec.val_split,
+            val_split_seed=spec.val_split_seed,
             # Applied to the train split only; the datamodule leaves validation
             # images untouched so eval loss stays comparable across runs.
             image_transforms=DefaultImageAugmentations() if spec.augment_images else None,
