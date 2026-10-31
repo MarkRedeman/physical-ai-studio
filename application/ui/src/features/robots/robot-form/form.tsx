@@ -12,6 +12,8 @@ import { BimanualSO101FormFields } from './catalog/bimanual-so101';
 import { useRobotForm } from './provider';
 import { SchemaForm } from './robot-schema/schema-form';
 
+// TODO: work on it
+
 export const RobotType = () => {
     const { activeType, name, setName } = useRobotForm();
     const { setActiveType } = useRobotForm();
