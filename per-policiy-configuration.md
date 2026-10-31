@@ -10,7 +10,9 @@ Implements the application portion of [issue #1349](https://github.com/open-edge
   policies, requiring installed model extras, or contacting a remote trainer.
 - Use Pydantic models with documented, constrained fields and generated OpenAPI
   types. Separate executable `defaults`, optional typed `help`, and ordered
-  `camera_slots`. Keep existing job-schema defaults backward compatible.
+  `camera_slots`. Group validation, LoRA, and SnapFlow in nested models. Null
+  LoRA/SnapFlow configurations mean disabled; no separate enabled flags.
+  Translate explicitly to the existing flat job payload for compatibility.
 - Include batch size, epochs, workers, precision, compilation, Auto batch size,
   augmentation, validation split, LoRA/DoRA, and SnapFlow settings.
 - Add explicit nullable gradient-checkpointing overrides and validation-split
