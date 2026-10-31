@@ -14,7 +14,7 @@ from pydantic import SecretStr
 
 from schemas.job import RemoteTrainJobPayload, TrainJobPayloadAdapter
 from schemas.remote_trainer import AwsBatchConnection, RemoteTrainer
-from services.aws_batch import POLICY_INSTANCE_TYPES, aws_batch_connection_from_url, aws_batch_trainer_url
+from services.aws_batch import aws_batch_connection_from_url, aws_batch_trainer_url
 from services.remote_trainer_service import RemoteTrainerService
 from services.training_backends import get_training_backend
 from services.training_backends.aws_batch import AwsBatchTrainingBackend
@@ -22,6 +22,7 @@ from services.training_backends.base import TrainingCanceledError, TrainingConte
 from services.training_targets.remote import RemoteTrainingTargetHandler
 from trainer.batch.status import BatchJobStatus
 from training import TrainingJobSpec
+from training.policy_catalog import AWS_POLICY_INSTANCE_TYPES
 
 MODULE = "services.training_backends.aws_batch"
 
@@ -305,7 +306,7 @@ def test_policy_routes_match_existing_cloudformation_mapping() -> None:
     mapping = yaml.load(path.read_text(), Loader=yaml.BaseLoader)["Mappings"]["PolicyInstanceType"]
     assert {
         label.split(" (")[0].lower().replace(".", ""): value["InstanceType"] for label, value in mapping.items()
-    } == POLICY_INSTANCE_TYPES
+    } == AWS_POLICY_INSTANCE_TYPES
 
 
 @pytest.mark.asyncio
