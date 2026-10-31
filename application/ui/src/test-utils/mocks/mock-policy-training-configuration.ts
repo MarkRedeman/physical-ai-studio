@@ -6,6 +6,7 @@ export const getMockedPolicyTrainingConfiguration = (
     defaults: {
         batch_size: 8,
         max_epochs: 5,
+        max_steps: null,
         num_workers: 'auto',
         precision: '32-true',
         compile_model: false,
