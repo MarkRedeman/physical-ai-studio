@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { SchemaPolicyCameraSlot } from '../../../api/openapi-spec';
 import { DatasetCamera, useDatasetCameras } from '../../datasets/use-dataset-cameras';
-import { getPolicyCameraSlots, PolicyCameraSlot } from './policy-camera-slots';
 
 export interface FeatureMapping {
     /** The policy's camera slots, in slot order. Empty when the policy has no fixed order. */
-    slots: PolicyCameraSlot[];
+    slots: SchemaPolicyCameraSlot[];
     /** Cameras the dataset was recorded with. */
     cameras: DatasetCamera[];
     /** Camera key filling each slot, keyed by slot id. */
@@ -40,8 +40,7 @@ export interface FeatureMapping {
  * cover them exactly. Slots may stay empty — those are filled with masked empty
  * images at training time.
  */
-export const useFeatureMapping = (policy: string, datasetId: string | undefined): FeatureMapping => {
-    const slots = useMemo(() => getPolicyCameraSlots(policy), [policy]);
+export const useFeatureMapping = (slots: SchemaPolicyCameraSlot[], datasetId: string | undefined): FeatureMapping => {
     // A policy with no slots has nothing to map, so its dataset is never read.
     const { cameras, isLoading, isEmpty: isDatasetEmpty } = useDatasetCameras(slots.length > 0 ? datasetId : undefined);
 
@@ -80,7 +79,7 @@ export const useFeatureMapping = (policy: string, datasetId: string | undefined)
     const usedCameraKeys = new Set(Object.values(cameraKeyBySlotId).filter((key) => key !== null));
     const unmappedCameras = cameras.filter((camera) => !usedCameraKeys.has(camera.key));
 
-    const missingRequiredSlot = slots.find((slot) => slot.isRequired && (cameraKeyBySlotId[slot.id] ?? null) === null);
+    const missingRequiredSlot = slots.find((slot) => slot.is_required && (cameraKeyBySlotId[slot.id] ?? null) === null);
 
     const error = (() => {
         if (slots.length === 0 || isLoading || isDatasetEmpty) {

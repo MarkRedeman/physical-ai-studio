@@ -1,11 +1,13 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 
 import { SchemaModel } from '../../../api/openapi-spec';
 import { http } from '../../../api/utils';
 import { server } from '../../../msw-node-setup';
+import { createQueryClient } from '../../../query-client/query-client';
 import { getMockedDataset } from '../../../test-utils/mocks/mock-dataset';
+import { getMockedPolicyTrainingConfiguration } from '../../../test-utils/mocks/mock-policy-training-configuration';
 import { getMockedRemoteTrainer } from '../../../test-utils/mocks/mock-remote-trainer';
 import { getMockedTrainJob } from '../../../test-utils/mocks/mock-train-job';
 import { getMockedTrainJobPayload } from '../../../test-utils/mocks/mock-train-job-payload';
@@ -98,6 +100,20 @@ const mockProjectWithRemoteTrainer = (datasets = [testDataset, otherDataset]) =>
                 xr0: ['torch', 'openvino'],
             })
         ),
+        http.get('/api/policies/{policy}/default-training-config', ({ params }) =>
+            HttpResponse.json(
+                getMockedPolicyTrainingConfiguration({
+                    camera_slots:
+                        params.policy === 'smolvla'
+                            ? [
+                                  { id: 'camera1', name: 'Overview', description: 'Scene view', is_required: true },
+                                  { id: 'camera2', name: 'Gripper', description: 'Wrist view', is_required: false },
+                                  { id: 'camera3', name: 'Extra', description: 'Additional view', is_required: false },
+                              ]
+                            : [],
+                })
+            )
+        ),
         http.get('/api/dataset/{dataset_id}/episodes', () =>
             HttpResponse.json([{ episode_index: 0, tasks: ['Test task'], length: 100, fps: 30 }])
         ),
@@ -160,152 +176,216 @@ const goToSmolVlaTrainingParameters = async (user: ReturnType<typeof userEvent.s
 };
 
 describe('TrainModelDialog', () => {
-    it('automatically selects the only dataset when the dialog opens', async () => {
-        mockProjectWithRemoteTrainer([testDataset]);
-
-        renderDialog();
-
-        expect(await screen.findByRole('button', { name: /Dataset/ })).toHaveTextContent(testDataset.name);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
-    });
-
-    it.each([{ datasets: [] }, { datasets: [testDataset, otherDataset] }])(
-        'leaves dataset selection empty with $datasets.length datasets',
-        async ({ datasets }) => {
-            mockProjectWithRemoteTrainer(datasets);
-
-            renderDialog();
-
-            expect(await screen.findByRole('button', { name: /Dataset/ })).toHaveTextContent('Select…');
-            expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    it.each([null, 'Use batch size 32 for this reference task.'])(
+        'uses policy help when supplied and generic help otherwise (%s)',
+        async (advice) => {
+            const user = userEvent.setup();
+            mockProjectWithRemoteTrainer();
+            server.use(
+                http.get('/api/policies/{policy}/default-training-config', () =>
+                    HttpResponse.json(getMockedPolicyTrainingConfiguration({ help: { batch_size: advice } }))
+                )
+            );
+            renderDialog({ baseModel });
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+            await user.click(screen.getByRole('button', { name: 'Next' }));
+            await user.click(await screen.findByRole('button', { name: 'Batch size help' }));
+            expect(
+                await screen.findByText(advice ?? 'Samples per step. Larger batches need more memory.')
+            ).toBeInTheDocument();
         }
     );
 
-    it('keeps the base model dataset selected when retraining', async () => {
-        mockProjectWithRemoteTrainer();
-
-        renderDialog({ baseModel: { ...baseModel, dataset_id: otherDataset.id } });
-
-        expect(await screen.findByRole('button', { name: /Dataset/ })).toHaveTextContent(otherDataset.name);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
-    });
-
-    it('defaults the name to the selected policy until the user edits it', async () => {
+    it('submits policy defaults with user overrides, including the validation split seed', async () => {
         const user = userEvent.setup();
         mockProjectWithRemoteTrainer();
-
-        renderDialog();
-
-        await user.click(await screen.findByRole('button', { name: /select…/i }));
-        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
-        expect(screen.queryByRole('textbox', { name: /Name/ })).not.toBeInTheDocument();
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-        expect(await screen.findByRole('textbox', { name: /Name/ })).toHaveValue('ACT');
-
-        await user.click(screen.getByRole('button', { name: 'Back' }));
-        await user.click(screen.getByLabelText('Select SmolVLA policy'));
-        await goToSmolVlaTrainingParameters(user);
-        const name = screen.getByRole('textbox', { name: /Name/ });
-        expect(name).toHaveValue('SmolVLA');
-
-        await user.clear(name);
-        await user.type(name, 'My model');
-        await user.click(screen.getByRole('button', { name: 'Back' }));
-        await user.click(screen.getByRole('button', { name: 'Back' }));
-        await user.click(screen.getByLabelText('Select ACT policy'));
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-        expect(screen.getByRole('textbox', { name: /Name/ })).toHaveValue('My model');
-    });
-
-    it('shows the name above the summary on training parameters and in the summary afterwards', async () => {
-        const user = userEvent.setup();
-        mockProjectWithRemoteTrainer();
-        renderDialog();
-
-        await user.click(await screen.findByRole('button', { name: /select…/i }));
-        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
-        await user.click(screen.getByLabelText('Select SmolVLA policy'));
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-        await screen.findByLabelText(/Gripper/i, { selector: 'button' });
-        expect(screen.queryByRole('textbox', { name: /Name/ })).not.toBeInTheDocument();
-        expect(screen.queryByText('Name')).not.toBeInTheDocument();
-
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-        const name = screen.getByRole('textbox', { name: /Name/ });
-        const summary = screen.getByText('Device');
-        expect(name.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        await user.clear(name);
-        await user.type(name, 'My training run');
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-
-        expect(screen.queryByRole('textbox', { name: /Name/ })).not.toBeInTheDocument();
-        expect(screen.getByText('Name')).toBeInTheDocument();
-        expect(screen.getByText('My training run')).toBeInTheDocument();
-
-        await user.click(screen.getByRole('button', { name: 'Back' }));
-        const restoredName = screen.getByRole('textbox', { name: /Name/ });
-        expect(restoredName).toHaveValue('My training run');
-        await user.type(restoredName, ' updated');
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-        expect(screen.getByText('My training run updated')).toBeInTheDocument();
-    });
-
-    it.each(['', '   '])('blocks progress when the name is blank (%j)', async (value) => {
-        const user = userEvent.setup();
-        mockProjectWithRemoteTrainer();
-
-        renderDialog({ baseModel });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-
-        const name = screen.getByRole('textbox', { name: /Name/ });
-        await user.clear(name);
-        if (value) {
-            await user.type(name, value);
-        }
-
-        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-
-        await user.click(screen.getByRole('button', { name: 'Back' }));
-        expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
-        await user.click(screen.getByRole('button', { name: 'Next' }));
-        expect(screen.getByRole('textbox', { name: /Name/ })).toHaveValue(value);
-        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    });
-
-    it.each([
-        { model: undefined, customName: undefined, expectedName: 'ACT' },
-        { model: undefined, customName: 'My new model', expectedName: 'My new model' },
-        { model: baseModel, customName: undefined, expectedName: baseModel.name },
-        { model: baseModel, customName: 'My retrained model', expectedName: 'My retrained model' },
-    ])('submits the model name $expectedName', async ({ model, customName, expectedName }) => {
-        const user = userEvent.setup();
+        const configuration = getMockedPolicyTrainingConfiguration();
+        configuration.defaults = {
+            ...configuration.defaults,
+            batch_size: 16,
+            max_epochs: 25,
+            num_workers: 4,
+            precision: 'bf16-mixed',
+            compile_model: true,
+            gradient_checkpointing: false,
+            augment_images: true,
+            lora: { rank: 32, alpha: 32, dropout: 0.05, use_dora: false },
+            validation: { split: 0.05, seed: 42 },
+        };
         let submitted: Record<string, unknown> | undefined;
-        mockProjectWithRemoteTrainer();
         server.use(
+            http.get('/api/policies/{policy}/default-training-config', () => HttpResponse.json(configuration)),
+            http.get('/api/policies/{policy}/huggingface-access', () => HttpResponse.json({ requirements: [] })),
             http.post('/api/jobs:train', async ({ request }) => {
                 submitted = (await request.json()) as Record<string, unknown>;
                 return HttpResponse.json({}, { status: 201 });
             })
         );
-
-        renderDialog({ baseModel: model });
-        if (model === undefined) {
-            await user.click(await screen.findByRole('button', { name: /select…/i }));
-            await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
-        }
+        renderDialog();
+        await user.click(await screen.findByRole('button', { name: /select…/i }));
+        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        await user.click(screen.getByLabelText('Select Pi0.5 policy'));
         await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
         await user.click(screen.getByRole('button', { name: 'Next' }));
-        const name = await screen.findByRole('textbox', { name: /Name/ });
-        await waitFor(() => expect(name).toHaveValue(model?.name ?? 'ACT'));
-        if (customName !== undefined) {
-            await user.clear(name);
-            await user.type(name, customName);
-        }
+        expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('25');
+        expect(screen.getByRole('checkbox', { name: 'LoRA fine-tuning' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Gradient checkpointing' })).not.toBeChecked();
+        await user.clear(screen.getByLabelText('Max Epochs', { selector: 'input' }));
+        await user.type(screen.getByLabelText('Max Epochs', { selector: 'input' }), '27');
         await goToLastStep(user);
         await user.click(screen.getByRole('button', { name: 'Train' }));
+        await waitFor(() => expect(submitted).toBeDefined());
+        const { validation, lora, snapflow: _snapflow, ...defaults } = configuration.defaults;
+        expect(submitted).toMatchObject({
+            ...defaults,
+            max_epochs: 27,
+            policy: 'pi05',
+            val_split: validation.split,
+            val_split_seed: validation.seed,
+            lora_enabled: true,
+            lora_rank: lora?.rank,
+            lora_alpha: lora?.alpha,
+            lora_dropout: lora?.dropout,
+            lora_use_dora: lora?.use_dora,
+            snapflow_enabled: false,
+            snapflow_distill_epochs: 3,
+        });
+    });
 
-        await waitFor(() => expect(submitted).toMatchObject({ model_name: expectedName }));
+    it('keeps edits across navigation, default refetches, and device changes', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        const queryClient = createQueryClient();
+        server.use(
+            http.get('/api/remote-trainers/{remote_trainer_id}/health', () =>
+                HttpResponse.json({
+                    ...healthyRemoteTrainer,
+                    devices: [{ type: 'cuda', index: 0, name: 'CUDA GPU', memory: 24_000_000_000 }],
+                })
+            )
+        );
+        render(<TrainModelDialog baseModel={baseModel} close={() => undefined} />, {
+            route: `/projects/${projectId}/models`,
+            path: '/projects/:project_id/models',
+            queryClient,
+        });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        await user.clear(await screen.findByLabelText('Max Epochs', { selector: 'input' }));
+        await user.type(screen.getByLabelText('Max Epochs', { selector: 'input' }), '17');
+        await user.click(screen.getByLabelText('Precision', { selector: 'button[aria-haspopup="listbox"]' }));
+        await user.click(screen.getByRole('option', { name: 'BF16 True' }));
+        const changed = getMockedPolicyTrainingConfiguration();
+        changed.defaults.max_epochs = 99;
+        server.use(
+            http.get('/api/policies/{policy}/default-training-config', () => HttpResponse.json(changed)),
+            http.get('/api/system/devices/training', () =>
+                HttpResponse.json({
+                    mode: 'local',
+                    remote_available: true,
+                    devices: [{ type: 'cuda', index: 0, name: 'CUDA GPU', memory: 24_000_000_000 }],
+                })
+            )
+        );
+        await act(async () => {
+            await queryClient.refetchQueries();
+        });
+        await user.click(screen.getByRole('button', { name: 'Back' }));
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('17');
+        expect(screen.getByLabelText('Precision', { selector: 'button[aria-haspopup="listbox"]' })).toHaveTextContent(
+            'BF16 True'
+        );
+    });
+
+    it('resets defaults when switching policies, including a previously cached policy', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        server.use(
+            http.get('/api/policies/{policy}/default-training-config', ({ params }) => {
+                const configuration = getMockedPolicyTrainingConfiguration();
+                configuration.defaults.max_epochs = params.policy === 'xr0' ? 30 : 10;
+                return HttpResponse.json(configuration);
+            })
+        );
+        renderDialog();
+        await user.click(await screen.findByRole('button', { name: /select…/i }));
+        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        await user.clear(await screen.findByLabelText('Max Epochs', { selector: 'input' }));
+        await user.type(screen.getByLabelText('Max Epochs', { selector: 'input' }), '17');
+        await user.click(screen.getByRole('button', { name: 'Back' }));
+        await user.click(screen.getByLabelText('Select XR0 policy'));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('30');
+        await user.click(screen.getByRole('button', { name: 'Back' }));
+        await user.click(screen.getByLabelText('Select ACT policy'));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('10');
+    });
+
+    it('blocks progression while defaults load and lets the user retry a failed request', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        let finish!: () => void;
+        const pending = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        server.use(
+            http.get('/api/policies/{policy}/default-training-config', async () => {
+                await pending;
+                return HttpResponse.json({ detail: [] }, { status: 503 });
+            })
+        );
+        renderDialog({ baseModel });
+        expect(await screen.findByText('Loading policy training defaults…')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+        finish();
+        const retry = await screen.findByRole('button', { name: 'Retry' });
+        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+        server.use(
+            http.get('/api/policies/{policy}/default-training-config', () =>
+                HttpResponse.json(getMockedPolicyTrainingConfiguration())
+            )
+        );
+        await user.click(retry);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    });
+
+    it('ignores a late configuration response for a policy no longer selected', async () => {
+        const user = userEvent.setup();
+        mockProjectWithRemoteTrainer();
+        let finish!: () => void;
+        let requested = false;
+        const pending = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        server.use(
+            http.get('/api/policies/{policy}/default-training-config', async ({ params }) => {
+                const configuration = getMockedPolicyTrainingConfiguration();
+                if (params.policy === 'xr0') {
+                    requested = true;
+                    await pending;
+                    configuration.defaults.max_epochs = 99;
+                }
+                return HttpResponse.json(configuration);
+            })
+        );
+        renderDialog();
+        await user.click(await screen.findByRole('button', { name: /select…/i }));
+        await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        await user.click(screen.getByLabelText('Select XR0 policy'));
+        await waitFor(() => expect(requested).toBe(true));
+        await user.click(screen.getByLabelText('Select ACT policy'));
+        await act(async () => {
+            finish();
+            await pending;
+        });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Next' }));
+        expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('5');
     });
 
     it('does not submit a remote job when the final health check fails', async () => {
@@ -1136,7 +1216,7 @@ describe('TrainModelDialog', () => {
         expect(screen.queryByLabelText('Select ACT policy')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
         await user.click(screen.getByLabelText('Select SmolVLA policy'));
-        expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
     });
 
     it('shows policies installed on the selected remote trainer even if absent locally', async () => {

@@ -4,7 +4,12 @@ import { Button, ButtonGroup, Content, Dialog, Divider, Flex, Heading, Key, Text
 
 import { $api } from '../../../api/client';
 import { getApiErrorMessage } from '../../../api/errors';
-import { SchemaDeviceInfo, SchemaTrainJob as SchemaJob, SchemaModel } from '../../../api/openapi-spec';
+import {
+    SchemaDeviceInfo,
+    SchemaTrainJob as SchemaJob,
+    SchemaModel,
+    SchemaPolicyCameraSlot,
+} from '../../../api/openapi-spec';
 import { isOperationalIssue, issueToasts, showIssueError } from '../../../components/notification/issue-toasts';
 import { useProject } from '../../projects/use-project';
 import { InlineAlert } from '../../robots/setup-wizard/shared/inline-alert';
@@ -19,7 +24,7 @@ import { formatBytes } from './policies';
 import { SetupStep } from './setup-step';
 import { TrainingDeviceInfo } from './training-device-info';
 import { MIN_EPOCHS_FOR_SNAPFLOW, TrainingParameters } from './training-parameters';
-import { getEstimatedTrainingSteps, TRAINING_VAL_SPLIT } from './training-steps';
+import { getEstimatedTrainingSteps } from './training-steps';
 import { TrainingSummaryNote } from './training-summary-note';
 import { useExportBackends } from './use-export-backends';
 import { useFeatureMapping } from './use-feature-mapping';
@@ -50,6 +55,7 @@ export type TrainingTargetOption = {
 };
 
 const LOCAL_TARGET_ID = 'local';
+const EMPTY_CAMERA_SLOTS: SchemaPolicyCameraSlot[] = [];
 
 /** Mirrors `_DEFAULT_SNAPFLOW_DISTILL_EPOCHS` in the backend payload schema. */
 const DEFAULT_SNAPFLOW_DISTILL_EPOCHS = 3;
@@ -57,7 +63,7 @@ const DEFAULT_SNAPFLOW_DISTILL_EPOCHS = 3;
 /** Strip the `trainer:` prefix off a training-target option id. */
 const targetRawId = (id: string): string => id.split(':', 2)[1] ?? id;
 
-export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: TrainModelDialogProps) => {
+export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainModelDialogProps) => {
     const bestDevice = useBestTrainingDevice();
     const { data: remoteTrainers = [] } = $api.useQuery('get', '/api/remote-trainers');
     const { data: jobs = [] } = $api.useQuery('get', '/api/jobs');
@@ -152,12 +158,15 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
         { params: { path: { dataset_id: selectedDataset?.toString() ?? '' } } },
         { enabled: selectedDataset !== null }
     );
-    const [maxEpochs, setMaxEpochs] = useState<number>(defaultMaxEpochs);
+    const [maxEpochs, setMaxEpochs] = useState<number>(defaultMaxEpochs ?? 5);
     const [batchSize, setBatchSize] = useState<number>(8);
     const [numWorkers, setNumWorkers] = useState<Key | null>('auto');
     const [autoScaleBatchSize, setAutoScaleBatchSize] = useState<boolean>(false);
     const [precision, setPrecision] = useState<Key | null>(bestDevice?.type === 'cuda' ? 'bf16-mixed' : '32-true');
     const [compileModel, setCompileModel] = useState<boolean>(false);
+    const [gradientCheckpointing, setGradientCheckpointing] = useState<boolean | null>(null);
+    const [valSplit, setValSplit] = useState(0.1);
+    const [valSplitSeed, setValSplitSeed] = useState<number | null>(null);
     const [loraEnabled, setLoraEnabled] = useState<boolean>(false);
     const [loraRank, setLoraRank] = useState<number>(32);
     const [loraAlpha, setLoraAlpha] = useState<number | null>(null);
@@ -166,6 +175,41 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
     const [snapflowEnabled, setSnapflowEnabled] = useState<boolean>(false);
     const [snapflowDistillEpochs, setSnapflowDistillEpochs] = useState<number>(DEFAULT_SNAPFLOW_DISTILL_EPOCHS);
     const [augmentImages, setAugmentImages] = useState<boolean>(false);
+    const [appliedPolicy, setAppliedPolicy] = useState<string | null>(null);
+    const {
+        data: policyConfiguration,
+        isError: configurationFailed,
+        refetch: refetchConfiguration,
+    } = $api.useQuery('get', '/api/policies/{policy}/default-training-config', {
+        params: { path: { policy: selectedPolicy } },
+    });
+    const configurationReady = policyConfiguration !== undefined && appliedPolicy === selectedPolicy;
+
+    useEffect(() => {
+        // A cached refetch must not reset edits. Each policy selection starts a new draft.
+        if (policyConfiguration === undefined || appliedPolicy === selectedPolicy) {
+            return;
+        }
+        const defaults = policyConfiguration.defaults;
+        setMaxEpochs(defaultMaxEpochs ?? defaults.max_epochs);
+        setBatchSize(defaults.batch_size);
+        setNumWorkers(String(defaults.num_workers));
+        setAutoScaleBatchSize(defaults.auto_scale_batch_size);
+        setPrecision(defaults.precision);
+        setCompileModel(defaults.compile_model);
+        setGradientCheckpointing(defaults.gradient_checkpointing);
+        setAugmentImages(defaults.augment_images);
+        setValSplit(defaults.validation.split);
+        setValSplitSeed(defaults.validation.seed);
+        setLoraEnabled(defaults.lora !== null);
+        setLoraRank(defaults.lora?.rank ?? 32);
+        setLoraAlpha(defaults.lora?.alpha ?? null);
+        setLoraDropout(defaults.lora?.dropout ?? 0.05);
+        setLoraUseDora(defaults.lora?.use_dora ?? false);
+        setSnapflowEnabled(defaults.snapflow !== null);
+        setSnapflowDistillEpochs(defaults.snapflow?.distill_epochs ?? DEFAULT_SNAPFLOW_DISTILL_EPOCHS);
+        setAppliedPolicy(selectedPolicy);
+    }, [policyConfiguration, appliedPolicy, selectedPolicy, defaultMaxEpochs]);
     const [selectedGpuKey, setSelectedGpuKey] = useState<Key | null>(null);
     const selectedTarget = trainingTargetOptions.find((option) => option.id === targetId) ?? null;
     const isRemoteTarget = selectedTarget?.kind === 'trainer';
@@ -183,9 +227,10 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                 : getEstimatedTrainingSteps(
                       selectedDatasetEpisodes.map(({ length }) => length),
                       batchSize,
-                      maxEpochs + (isSnapflowRequested ? snapflowDistillEpochs : 0)
+                      maxEpochs + (isSnapflowRequested ? snapflowDistillEpochs : 0),
+                      valSplit
                   ),
-        [selectedDatasetEpisodes, batchSize, maxEpochs, isSnapflowRequested, snapflowDistillEpochs]
+        [selectedDatasetEpisodes, batchSize, maxEpochs, isSnapflowRequested, snapflowDistillEpochs, valSplit]
     );
     const {
         health: remoteTrainerHealth,
@@ -208,7 +253,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
         params: { path: { policy: selectedPolicy } },
     });
     // Fail closed: a policy with a *required* Hub dependency (see
-    // `_HUGGINGFACE_REQUIREMENTS`) that we could not verify access for -
+    // `HUGGINGFACE_REQUIREMENTS`) that we could not verify access for -
     // because the check is still loading, or because the request itself
     // failed outright (as opposed to the backend reporting a definite
     // `unavailable` status for one repository) - must not silently let
@@ -234,17 +279,10 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
     // Default to the first free GPU, or the first GPU when all are occupied.
     const activeDevice = isRemoteTarget ? selectedRemoteDevice : bestDevice;
 
-    useEffect(() => {
-        if (activeDevice?.type === 'cuda') {
-            setPrecision('bf16-mixed');
-        } else {
-            setPrecision('32-true');
-        }
-    }, [activeDevice]);
-
     // Cameras are mapped onto the policy's fixed camera slots; the mapping lives
     // here so the step can be left and re-entered without losing it.
-    const featureMapping = useFeatureMapping(selectedPolicy, selectedDataset?.toString());
+    const cameraSlots = policyConfiguration?.camera_slots ?? EMPTY_CAMERA_SLOTS;
+    const featureMapping = useFeatureMapping(cameraSlots, selectedDataset?.toString());
 
     // Which formats the trained model is exported to; the policy decides what is
     // on offer.
@@ -271,6 +309,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
     // Setup selections must remain valid throughout the wizard.
     const isSetupIncomplete =
         !selectedDataset ||
+        !configurationReady ||
         !selectedPolicy ||
         policiesUnavailable ||
         isLoadingPolicies ||
@@ -284,7 +323,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
     // and neither does retraining, so the steps -- and their numbering -- follow
     // the selected policy.
     const isRetraining = baseModel !== undefined;
-    const steps = useMemo(() => getWizardSteps(selectedPolicy, isRetraining), [selectedPolicy, isRetraining]);
+    const steps = getWizardSteps(cameraSlots.length > 0, isRetraining);
     const hasFeatureMapping = steps.includes('feature-mapping');
     // Switching to a policy that skips a step can leave `currentStep` behind, and
     // the setup step is the only one every policy has.
@@ -327,7 +366,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
 
         const dataset_id = selectedDataset?.toString();
 
-        if (!name.trim() || !dataset_id || !selectedPolicy || selectedTarget === null) {
+        if (!name.trim() || !dataset_id || !selectedPolicy || selectedTarget === null || !configurationReady) {
             return;
         }
 
@@ -384,6 +423,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                 auto_scale_batch_size: autoScaleBatchSize,
                 precision: (precision?.toString() ?? 'bf16-mixed') as SchemaJob['payload']['precision'],
                 compile_model: compileModel,
+                gradient_checkpointing: baseModel ? null : gradientCheckpointing,
                 // Empty without a mapping step (no fixed camera order, or retraining),
                 // which the training side reads as "keep the order it already has".
                 image_key_reorder_map: hasFeatureMapping ? featureMapping.imageKeyReorderMap : {},
@@ -400,7 +440,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                 snapflow_enabled: isSnapflowRequested,
                 snapflow_distill_epochs: snapflowDistillEpochs,
                 augment_images: augmentImages,
-                val_split: TRAINING_VAL_SPLIT,
+                val_split: valSplit,
+                val_split_seed: valSplitSeed,
                 ...extraPayload,
             } as const;
 
@@ -465,6 +506,20 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                     )}
 
                     {submitError !== null && <InlineAlert variant='error'>{submitError}</InlineAlert>}
+                    {!configurationReady && (
+                        <InlineAlert variant={configurationFailed ? 'error' : 'info'}>
+                            {configurationFailed ? (
+                                <>
+                                    Could not load this policy&apos;s training defaults.{' '}
+                                    <Button variant='secondary' onPress={() => void refetchConfiguration()}>
+                                        Retry
+                                    </Button>
+                                </>
+                            ) : (
+                                'Loading policy training defaults…'
+                            )}
+                        </InlineAlert>
+                    )}
 
                     <View minHeight='size-3600'>
                         {activeStep === 'setup' && (
@@ -488,7 +543,12 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                                 availablePolicies={availablePolicies}
                                 policiesUnavailable={policiesUnavailable}
                                 isLoadingPolicies={isLoadingPolicies}
-                                onSelectedPolicyChange={setSelectedPolicy}
+                                onSelectedPolicyChange={(policy) => {
+                                    if (policy !== selectedPolicy) {
+                                        setAppliedPolicy(null);
+                                        setSelectedPolicy(policy);
+                                    }
+                                }}
                                 isPolicyDisabled={baseModel !== undefined}
                                 activeDevice={activeDevice}
                             />
@@ -500,6 +560,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
 
                         {activeStep === 'training-parameters' && (
                             <TrainingParameters
+                                help={policyConfiguration?.help}
                                 maxEpochs={maxEpochs}
                                 onMaxEpochsChange={setMaxEpochs}
                                 batchSize={batchSize}
@@ -513,10 +574,12 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs = 5 }: Tra
                                 onPrecisionChange={setPrecision}
                                 compileModel={compileModel}
                                 onCompileModelChange={setCompileModel}
+                                gradientCheckpointing={baseModel ? null : gradientCheckpointing}
+                                onGradientCheckpointingChange={setGradientCheckpointing}
                                 augmentImages={augmentImages}
                                 onAugmentImagesChange={setAugmentImages}
                                 isAutoScaleBatchDisabled={activeDevice?.type !== 'cuda'}
-                                deviceType={activeDevice?.type}
+                                recommendedPrecision={policyConfiguration?.defaults.precision}
                                 isLoraSupported={isLoraSupported}
                                 loraEnabled={loraEnabled}
                                 onLoraEnabledChange={setLoraEnabled}
