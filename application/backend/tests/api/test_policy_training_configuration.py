@@ -59,7 +59,8 @@ def test_single_robot_recipe_matches_studio_defaults(policy: str, recipe: str) -
         assert checkpoint == PRETRAINED_BASE_CHECKPOINTS[policy]
     assert defaults.batch_size == data["train_batch_size"]
     assert defaults.num_workers == data["num_workers"]
-    assert defaults.max_epochs == trainer["max_epochs"]
+    assert defaults.max_epochs == trainer.get("max_epochs")
+    assert defaults.max_steps == trainer.get("max_steps")
     assert defaults.precision == trainer["precision"]
     assert defaults.validation.split == data["val_split"]
     assert defaults.validation.seed == data["val_split_seed"]
@@ -94,6 +95,7 @@ def test_defaults_are_valid_persistable_payloads(policy: str) -> None:
         lora_use_dora=lora.use_dora,
         snapflow_enabled=defaults.snapflow is not None,
         snapflow_distill_epochs=defaults.snapflow.distill_epochs if defaults.snapflow else 3,
+        snapflow_distill_steps=defaults.snapflow.distill_steps if defaults.snapflow else None,
     )
     assert LocalTrainJobPayload.model_validate_json(payload.model_dump_json()) == payload
     assert all(payload.model_dump()[key] == value for key, value in values.items())

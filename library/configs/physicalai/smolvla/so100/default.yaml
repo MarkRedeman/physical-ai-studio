@@ -1,6 +1,6 @@
 # Adapt the pretrained policy to one arm and one pick-and-place task.
 # Official reference: https://huggingface.co/docs/lerobot/main/smolvla
-# 75 epochs at batch 64 with a 10% holdout approximates its 20k-step budget.
+# Use the reference's 20k optimizer updates without converting them to epochs.
 # Usage: physicalai fit --config configs/physicalai/smolvla/so100/default.yaml
 model:
   class_path: physicalai.policies.SmolVLA
@@ -27,7 +27,7 @@ data:
     val_split_seed: 42
 
 trainer:
-  max_epochs: 75
+  max_steps: 20000
   accelerator: gpu
   devices: 1
   precision: 32-true

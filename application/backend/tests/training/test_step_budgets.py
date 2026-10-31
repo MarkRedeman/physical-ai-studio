@@ -30,6 +30,7 @@ class TinyPolicy(lightning.LightningModule):
         self.log("val/loss", self.weight.square())
 
     def configure_optimizers(self):
+        self.estimated_steps = self.trainer.estimated_stepping_batches
         return torch.optim.SGD(self.parameters(), lr=0.1)
 
     def enable_snapflow(self, **kwargs):
@@ -50,12 +51,15 @@ class TinyDataModule(lightning.LightningDataModule):
 
 @pytest.mark.parametrize("distill", [False, True])
 @pytest.mark.parametrize("validation", [False, True])
-def test_step_limited_run_saves_partial_epoch_checkpoints(tmp_path: Path, distill: bool, validation: bool) -> None:
+@pytest.mark.parametrize("steps", [5, 25])
+def test_step_limited_run_saves_partial_epoch_checkpoints(
+    tmp_path: Path, distill: bool, validation: bool, steps: int
+) -> None:
     policy = TinyPolicy()
     report = MagicMock()
     spec = TrainingJobSpec(
         policy="pi05" if distill else "act",
-        max_steps=5,
+        max_steps=steps,
         snapflow_start_step=3 if distill else None,
         device_type="cpu",
         precision="32-true",
@@ -74,7 +78,8 @@ def test_step_limited_run_saves_partial_epoch_checkpoints(tmp_path: Path, distil
             report=report,
             should_stop=lambda: False,
         )
-    assert (policy.teacher_batches, policy.distill_batches) == ((3, 2) if distill else (5, 0))
+    assert (policy.teacher_batches, policy.distill_batches) == ((3, steps - 3) if distill else (steps, 0))
+    assert policy.estimated_steps == steps
     assert (tmp_path / "model" / CHECKPOINT_NAME).is_file()
     assert (tmp_path / "model" / SNAPFLOW_CHECKPOINT_NAME).is_file() == distill
     assert any(call.args[0] == 100 for call in report.call_args_list)
