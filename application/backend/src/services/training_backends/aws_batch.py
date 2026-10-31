@@ -16,13 +16,14 @@ from physicalai.data.archive_safety import SafeZipArchive
 from schemas.aws_auth import AwsAuthenticationIssue
 from schemas.remote_trainer import AwsBatchConnection
 from services.aws_auth_service import authentication_issue
-from services.aws_batch import POLICY_INSTANCE_TYPES, _make_session
+from services.aws_batch import _make_session
 from services.dataset_download_service import DatasetDownloadService
 from services.staged_archive import cleanup_staged_archive
 from services.training_backends.base import TrainingCanceledError, TrainingSuspendedError
 from services.training_backends.local import build_spec, resolve_hf_token
 from settings import get_settings
 from trainer.batch.status import BatchJobStatus
+from training.policy_catalog import AWS_POLICY_INSTANCE_TYPES
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -176,7 +177,7 @@ class AwsBatchTrainingBackend:
         self._client("batch").terminate_job(jobId=job_id, reason=reason)
 
     def _submit(self, context: TrainingContext, prefix: str) -> str:
-        target = self._connection.targets[POLICY_INSTANCE_TYPES[context.payload.policy]]
+        target = self._connection.targets[AWS_POLICY_INSTANCE_TYPES[context.payload.policy]]
         token = resolve_hf_token()
         overrides = {"environment": [{"name": "HF_TOKEN", "value": token.get_secret_value()}]} if token else {}
         response = self._client("batch").submit_job(
