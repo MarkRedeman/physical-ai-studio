@@ -2,20 +2,56 @@
 
 import subprocess
 import sys
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from main import app
 from schemas.job import LocalTrainJobPayload
+from training.job import PRETRAINED_BASE_CHECKPOINTS
 from training.policy_catalog import _STUDIO_POLICIES, POLICY_TRAINING_CONFIGURATIONS
 from training.policy_training_configuration import LoraDefaults, PolicyTrainingConfiguration
 
 
 def test_every_studio_policy_has_a_configuration() -> None:
     assert POLICY_TRAINING_CONFIGURATIONS.keys() == _STUDIO_POLICIES.keys()
+
+
+@pytest.mark.parametrize(
+    ("policy", "recipe"),
+    [
+        ("act", "act/so101/default.yaml"),
+        ("smolvla", "smolvla/so100/default.yaml"),
+        ("molmoact2", "molmoact2/single_robot.yaml"),
+    ],
+)
+def test_single_robot_recipe_matches_studio_defaults(policy: str, recipe: str) -> None:
+    root = Path(__file__).resolve().parents[4] / "library/configs/physicalai"
+    configuration = yaml.safe_load((root / recipe).read_text())
+    defaults = POLICY_TRAINING_CONFIGURATIONS[policy].defaults
+    model = configuration["model"]["init_args"]
+    data = configuration["data"]["init_args"]
+    trainer = configuration["trainer"]
+
+    if checkpoint := model.get("pretrained_name_or_path"):
+        assert checkpoint == PRETRAINED_BASE_CHECKPOINTS[policy]
+    assert defaults.batch_size == data["train_batch_size"]
+    assert defaults.num_workers == data["num_workers"]
+    assert defaults.max_epochs == trainer["max_epochs"]
+    assert defaults.precision == trainer["precision"]
+    assert defaults.validation.split == data["val_split"]
+    assert defaults.validation.seed == data["val_split_seed"]
+    assert defaults.compile_model == model["compile_model"]
+    assert defaults.gradient_checkpointing == model.get("gradient_checkpointing")
+    assert defaults.augment_images == ("image_transforms" in data)
+    assert (defaults.lora is not None) == model.get("lora_enabled", False)
+    if defaults.lora is not None:
+        assert defaults.lora.model_dump() == {key: model[f"lora_{key}"] for key in defaults.lora.model_dump()}
+    assert defaults.snapflow is None
 
 
 @pytest.mark.parametrize("policy", POLICY_TRAINING_CONFIGURATIONS)
