@@ -34,14 +34,15 @@ POLICY_TRAINING_CONFIGURATIONS = {
     ),
     "smolvla": PolicyTrainingConfiguration(
         defaults=PolicyTrainingDefaults(
-            batch_size=64, max_epochs=75, num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42)
+            batch_size=64, max_steps=20_000, num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42)
         ),
         help=PolicyTrainingHelp(
             batch_size="The SO100 pick-and-place reference uses batch 64. Reduce it if GPU memory is insufficient.",
             max_epochs=(
-                "75 epochs approximates the reference's 20k steps on 50 episodes with a 10% holdout. "
-                "The 200-episode SO101 dataset needs roughly 15 epochs instead. Adjust for your dataset."
+                "In epoch mode, roughly 75 epochs on the 50-episode reference or 15 on the 200-episode SO101 "
+                "dataset approximates 20k updates at batch 64. Adjust for your training split."
             ),
+            max_steps="The SO100 pick-and-place reference uses 20,000 optimizer updates. Validate on your robot.",
             augment_images="Disabled in the baseline; some real SO101 runs enable it. Compare physical rollouts.",
         ),
         camera_slots=[
