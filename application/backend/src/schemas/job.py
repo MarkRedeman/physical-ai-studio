@@ -11,6 +11,7 @@ from schemas.base_job import BaseJob, JobType
 from schemas.dataset_import_job import DatasetImportJobPayload
 from schemas.hardware import DeviceType
 from training.job import GRADIENT_CHECKPOINTING_POLICIES, PEFT_POLICIES, SNAPFLOW_POLICIES
+from training.policy_training_configuration import resolve_training_limit
 
 
 class ExportBackend(StrEnum):
@@ -113,7 +114,7 @@ class TrainJobPayloadBase(BaseModel):
         default=None,
         ge=1,
         le=100_000,
-        description="Number of training steps (legacy; ignored when max_epochs is provided)",
+        description="Number of optimizer updates (ignored when max_epochs is provided)",
     )
     batch_size: int = Field(default=8, ge=1, le=256, description="Training batch size")
 
@@ -135,21 +136,10 @@ class TrainJobPayloadBase(BaseModel):
 
     @model_validator(mode="after")
     def resolve_training_limit(self) -> "TrainJobPayloadBase":
-        """Resolve training-limit fields, applying precedence and defaults.
-
-        Rules (in order of priority):
-        1. If ``max_epochs`` is set, use it (``max_steps`` is ignored).
-        2. If ``max_epochs`` is not set (including legacy ``max_steps``-only payloads),
-           default to ``_DEFAULT_MAX_EPOCHS`` epochs.
-
-        ``max_steps`` is retained only for backward-compatible payload parsing.
-        """
-        if self.max_epochs is not None:
-            # max_epochs wins; clear max_steps to avoid ambiguity downstream
-            self.max_steps = None
-        else:
-            # No epoch value provided (including legacy max_steps-only payloads)
-            self.max_epochs = _DEFAULT_MAX_EPOCHS
+        """Keep one active limit; older jobs with both limits continue to use epochs."""
+        self.max_epochs, self.max_steps = resolve_training_limit(
+            self.max_epochs, self.max_steps, default_epochs=_DEFAULT_MAX_EPOCHS
+        )
         return self
 
     num_workers: int | Literal["auto"] = Field(default="auto", description="DataLoader workers ('auto' or 0-16)")
@@ -254,7 +244,7 @@ class TrainJobPayloadBase(BaseModel):
             f"Only available for flow-matching policies (e.g. {sorted(SNAPFLOW_POLICIES)})."
         ),
     )
-    snapflow_distill_epochs: int = Field(
+    snapflow_distill_epochs: int | None = Field(
         default=_DEFAULT_SNAPFLOW_DISTILL_EPOCHS,
         ge=1,
         le=10_000,
@@ -262,6 +252,12 @@ class TrainJobPayloadBase(BaseModel):
             "How many additional epochs to spend distilling, appended after the "
             "max_epochs teacher run. Ignored when snapflow_enabled is false."
         ),
+    )
+    snapflow_distill_steps: int | None = Field(
+        default=None,
+        ge=1,
+        le=100_000,
+        description="Additional optimizer updates after max_steps. Required for step-budgeted SnapFlow runs.",
     )
 
     @model_validator(mode="after")
@@ -284,7 +280,7 @@ class TrainJobPayloadBase(BaseModel):
     def validate_snapflow(self) -> "TrainJobPayloadBase":
         """Reject a distillation request the policy cannot honour.
 
-        Runs after ``resolve_training_limit``, so ``max_epochs`` is resolved.
+        Runs after ``resolve_training_limit``, so the active training unit is resolved.
 
         Returns:
             The validated payload.
@@ -294,6 +290,14 @@ class TrainJobPayloadBase(BaseModel):
         """
         if not self.snapflow_enabled:
             return self
+
+        if self.max_steps is not None:
+            if self.snapflow_distill_steps is None:
+                raise ValueError("Step-budgeted SnapFlow requires snapflow_distill_steps.")
+            self.snapflow_distill_epochs = None
+        else:
+            self.snapflow_distill_epochs = self.snapflow_distill_epochs or _DEFAULT_SNAPFLOW_DISTILL_EPOCHS
+            self.snapflow_distill_steps = None
 
         if self.policy.lower() not in SNAPFLOW_POLICIES:
             msg = (
@@ -317,12 +321,15 @@ class TrainJobPayloadBase(BaseModel):
         Returns:
             The phase boundary, or None for an ordinary flow-matching run.
         """
-        if not self.snapflow_enabled:
-            return None
-        return self.max_epochs or _DEFAULT_MAX_EPOCHS
+        return self.max_epochs if self.snapflow_enabled else None
 
     @property
-    def total_epochs(self) -> int:
+    def snapflow_start_step(self) -> int | None:
+        """Optimizer-step boundary for a step-budgeted distillation run."""
+        return self.max_steps if self.snapflow_enabled else None
+
+    @property
+    def total_epochs(self) -> int | None:
         """Total training epochs, including the SnapFlow distillation phase.
 
         This is what should be handed to the trainer's epoch budget: the
@@ -331,12 +338,18 @@ class TrainJobPayloadBase(BaseModel):
 
         Returns:
             ``max_epochs`` when SnapFlow is disabled, otherwise
-            ``max_epochs + snapflow_distill_epochs``.
+            ``max_epochs + snapflow_distill_epochs``. Null for step-budgeted runs.
         """
-        max_epochs = self.max_epochs or _DEFAULT_MAX_EPOCHS
-        if not self.snapflow_enabled:
-            return max_epochs
-        return max_epochs + self.snapflow_distill_epochs
+        if self.max_epochs is None:
+            return None
+        return self.max_epochs + ((self.snapflow_distill_epochs or 0) if self.snapflow_enabled else 0)
+
+    @property
+    def total_steps(self) -> int | None:
+        """Total optimizer updates, including distillation; null for epoch-budgeted runs."""
+        if self.max_steps is None:
+            return None
+        return self.max_steps + ((self.snapflow_distill_steps or 0) if self.snapflow_enabled else 0)
 
     # Set by the worker for every target (not just remote ones): a snapshot is
     # taken up front so a job's model has stable provenance, and a remote/SSH

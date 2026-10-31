@@ -836,12 +836,29 @@ class TestHttpDatasetTransfer:
 
         body = await _submitted_body(settings, context)
 
-        expected = build_spec(context).model_dump(mode="json", exclude={"run_options", "snapflow_start_epoch"}) | {
+        expected = build_spec(context).model_dump(
+            mode="json", exclude={"run_options", "snapflow_start_epoch", "snapflow_start_step", "max_steps"}
+        ) | {
             "device_type": None,
             "device_index": None,
         }
         assert body["spec"] == expected
         assert (body["spec"]["policy"], body["spec"]["max_epochs"], body["spec"]["batch_size"]) == ("act", 5, 16)
+
+    @pytest.mark.anyio
+    async def test_step_budget_and_boundary_are_sent_to_the_trainer(self, tmp_path):
+        context = _context(
+            tmp_path,
+            policy="pi05",
+            max_steps=100,
+            snapflow_enabled=True,
+            snapflow_distill_steps=25,
+        )
+        body = await _submitted_body(_settings(), context)
+        assert body["spec"]["max_epochs"] is None
+        assert body["spec"]["max_steps"] == 125
+        assert body["spec"]["snapflow_start_step"] == 100
+        assert "snapflow_start_epoch" not in body["spec"]
 
     @pytest.mark.anyio
     async def test_submit_body_includes_lora_fields_when_enabled(self, tmp_path):
@@ -876,6 +893,8 @@ class TestHttpDatasetTransfer:
         body = await _submitted_body(_settings(), _context(tmp_path))
 
         assert "snapflow_start_epoch" not in body["spec"]
+        assert "snapflow_start_step" not in body["spec"]
+        assert "max_steps" not in body["spec"]
 
     @pytest.mark.anyio
     async def test_submit_sends_a_distillation_boundary_when_one_is_asked_for(self, tmp_path):

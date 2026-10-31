@@ -114,6 +114,7 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
         # SnapFlow distillation epochs are additive: the trainer's epoch budget
         # is the teacher run plus the distillation phase, not carved out of it.
         max_epochs=payload.total_epochs,
+        max_steps=payload.total_steps,
         batch_size=payload.batch_size,
         num_workers=payload.num_workers,
         val_split=payload.val_split,
@@ -129,6 +130,7 @@ def build_spec(context: TrainingContext) -> TrainingJobSpec:
         lora_dropout=payload.lora_dropout,
         lora_use_dora=payload.lora_use_dora,
         snapflow_start_epoch=payload.snapflow_start_epoch,
+        snapflow_start_step=payload.snapflow_start_step,
         device_type=str(device.type) if device else None,
         device_index=device.index if device else None,
         image_key_reorder_map=payload.image_key_reorder_map,

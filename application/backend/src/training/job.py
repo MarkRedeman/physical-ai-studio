@@ -39,6 +39,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
+from training.policy_training_configuration import resolve_training_limit
+
 if TYPE_CHECKING:
     from physicalai.policies.base import Policy
     from physicalai.train.callbacks import ReportFn, StopFn
@@ -117,14 +119,15 @@ class TrainingJobSpec(BaseModel):
         default="physicalai",
         description="Which implementation of the policy to train.",
     )
-    max_epochs: int = Field(
-        default=5,
+    max_epochs: int | None = Field(
+        default=None,
         ge=1,
         description=(
             "Total training epoch budget. When SnapFlow distillation is enabled this already "
             "includes the distillation phase (see snapflow_start_epoch)."
         ),
     )
+    max_steps: int | None = Field(default=None, ge=1, description="Total optimizer updates, including distillation.")
     batch_size: int = Field(default=8, ge=1, description="Training batch size.")
     num_workers: int | Literal["auto"] = Field(default="auto", description="Dataloader worker count.")
     val_split: float = Field(default=0.1, ge=0.0, lt=1.0, description="Fraction of episodes held out for validation.")
@@ -157,6 +160,7 @@ class TrainingJobSpec(BaseModel):
         ge=1,
         description=("Epoch at which to switch from flow matching to SnapFlow self-distillation."),
     )
+    snapflow_start_step: int | None = Field(default=None, ge=1, description="Optimizer-step distillation boundary.")
     device_type: str | None = Field(
         default=None,
         description="Accelerator to train on ('xpu', 'cuda', 'cpu', ...). None auto-detects.",
@@ -185,6 +189,12 @@ class TrainingJobSpec(BaseModel):
         description="Use DoRA (Weight-Decomposed LoRA) instead of plain LoRA. Ignored unless lora_enabled.",
     )
     run_options: RunOptions = Field(default_factory=RunOptions)
+
+    @model_validator(mode="after")
+    def resolve_limit(self) -> TrainingJobSpec:
+        """Preserve epoch precedence and default only when neither limit is supplied."""
+        self.max_epochs, self.max_steps = resolve_training_limit(self.max_epochs, self.max_steps)
+        return self
 
     @model_validator(mode="after")
     def validate_gradient_checkpointing(self) -> TrainingJobSpec:
@@ -231,15 +241,21 @@ class TrainingJobSpec(BaseModel):
             ValueError: If the policy cannot be distilled, or the boundary
                 leaves no epochs for the distillation phase.
         """
-        if self.snapflow_start_epoch is None:
+        if self.snapflow_start_epoch is None and self.snapflow_start_step is None:
             return self
+
+        if self.snapflow_start_epoch is not None and self.snapflow_start_step is not None:
+            raise ValueError("Specify only one SnapFlow boundary: snapflow_start_epoch or snapflow_start_step.")
         if self.policy.lower() not in SNAPFLOW_POLICIES:
             msg = (
                 f"SnapFlow distillation is not supported for policy {self.policy!r}; "
                 f"supported policies are {sorted(SNAPFLOW_POLICIES)}."
             )
             raise ValueError(msg)
-        if self.snapflow_start_epoch >= self.max_epochs:
+        if self.snapflow_start_step is not None:
+            if self.max_steps is None or self.snapflow_start_step >= self.max_steps:
+                raise ValueError("snapflow_start_step must be below max_steps in a step-budgeted run.")
+        elif self.max_epochs is None or self.snapflow_start_epoch >= self.max_epochs:
             msg = (
                 f"snapflow_start_epoch ({self.snapflow_start_epoch}) must be below max_epochs "
                 f"({self.max_epochs}) so at least one epoch is spent distilling."
@@ -363,7 +379,7 @@ def run_training_job(
     overwrites a best checkpoint with the final-epoch weights (see
     :func:`_ensure_checkpoint_exists`).
 
-    When ``spec.snapflow_start_epoch`` is set the run has two phases: standard
+    When a SnapFlow epoch or step boundary is set the run has two phases: standard
     flow matching, then SnapFlow self-distillation. Both phases keep their own
     checkpoint and export reloads whichever one :func:`resolve_checkpoint`
     picks, so the exported artifact (and therefore inference) always matches
@@ -431,16 +447,29 @@ def run_training_job(
         if snapflow_callback is not None:
             callbacks.append(snapflow_callback)
 
+        # Step-limited runs can end before the first epoch. Validate across epoch
+        # boundaries, and at least once before a short teacher finishes. Studio
+        # uses one optimizer update per batch; Lightning's interval counts batches.
+        validation = (
+            {
+                "check_val_every_n_epoch": None,
+                "val_check_interval": min(1000, spec.snapflow_start_step or spec.max_steps),
+            }
+            if spec.max_steps is not None
+            else {"check_val_every_n_epoch": 1}
+        )
+
         trainer = Trainer(
             logger=CSVLogger(cache_dir.parent, name=cache_dir.stem),
             callbacks=callbacks,
             accelerator=accelerator,
             strategy=resolve_strategy(spec.device_type),
             devices=resolve_devices(spec.device_index),
-            max_epochs=spec.max_epochs,
+            max_epochs=spec.max_epochs if spec.max_epochs is not None else -1,
+            max_steps=spec.max_steps if spec.max_steps is not None else -1,
             auto_scale_batch_size=spec.auto_scale_batch_size,
             precision=spec.precision,
-            check_val_every_n_epoch=1,
+            **validation,
         )
 
         report(0, "Training model", {})
@@ -466,14 +495,19 @@ def _build_snapflow_callback(spec: TrainingJobSpec) -> Any:
         A :class:`~physicalai.train.callbacks.SnapFlowPhaseCallback` when the
         spec sets a boundary, or ``None`` for an ordinary flow-matching run.
     """
-    if spec.snapflow_start_epoch is None:
+    if spec.snapflow_start_epoch is None and spec.snapflow_start_step is None:
         return None
 
     from physicalai.train.callbacks import SnapFlowPhaseCallback
 
-    logger.info("SnapFlow distillation starts at epoch %d of %d", spec.snapflow_start_epoch, spec.max_epochs)
+    boundary = (
+        {"start_epoch": spec.snapflow_start_epoch}
+        if spec.snapflow_start_epoch is not None
+        else {"start_step": spec.snapflow_start_step}
+    )
+    logger.info("SnapFlow distillation boundary: %s", boundary)
     return SnapFlowPhaseCallback(
-        start_epoch=spec.snapflow_start_epoch,
+        **boundary,
         checkpoint_prefix=SNAPFLOW_CHECKPOINT_PREFIX,
     )
 

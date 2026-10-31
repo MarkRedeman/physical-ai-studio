@@ -14,11 +14,29 @@ from main import app
 from schemas.job import LocalTrainJobPayload
 from training.job import PRETRAINED_BASE_CHECKPOINTS
 from training.policy_catalog import _STUDIO_POLICIES, POLICY_TRAINING_CONFIGURATIONS
-from training.policy_training_configuration import LoraDefaults, PolicyTrainingConfiguration
+from training.policy_training_configuration import (
+    LoraDefaults,
+    PolicyTrainingConfiguration,
+    PolicyTrainingDefaults,
+    SnapflowDefaults,
+)
 
 
 def test_every_studio_policy_has_a_configuration() -> None:
     assert POLICY_TRAINING_CONFIGURATIONS.keys() == _STUDIO_POLICIES.keys()
+
+
+def test_recipe_can_select_steps_without_default_epochs() -> None:
+    defaults = PolicyTrainingDefaults(max_steps=100, snapflow=SnapflowDefaults(distill_steps=25))
+    assert defaults.max_epochs is None
+    assert defaults.max_steps == 100
+    assert defaults.snapflow.distill_epochs is None
+    assert defaults.snapflow.distill_steps == 25
+
+
+def test_recipe_distillation_requires_matching_units() -> None:
+    with pytest.raises(ValidationError, match="same unit"):
+        PolicyTrainingDefaults(max_steps=100, snapflow=SnapflowDefaults())
 
 
 @pytest.mark.parametrize(
