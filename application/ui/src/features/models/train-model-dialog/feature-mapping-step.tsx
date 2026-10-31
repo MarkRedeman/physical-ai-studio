@@ -51,7 +51,7 @@ export const FeatureMappingStep = ({ policyName, mapping }: FeatureMappingStepPr
                         <Picker
                             width='100%'
                             label={slot.name}
-                            isRequired={slot.isRequired}
+                            isRequired={slot.is_required}
                             necessityIndicator='label'
                             placeholder='Empty'
                             isDisabled={cameras.length === 0}
