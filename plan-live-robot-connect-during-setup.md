@@ -5,15 +5,47 @@
 - [x] Investigate the existing form, plugin schema, observation stream, calibration flows, and driver lifecycle.
 - [x] Confirm UX choices with the user.
 - [x] Write this implementation plan in the repository root.
-- [ ] Validate temporary-owner release and handoff against the pinned PhysicalAI dependency.
-- [ ] Implement draft validation and live observation backend support.
-- [ ] Implement the form-scoped connection lifecycle.
-- [ ] Add live preview, read-only joint states, and error UI.
-- [ ] Integrate verified and offline saving, plus calibration handoff.
+- [x] Check the installed/pinned PhysicalAI public lifecycle API and reproduce its cleanup limitation without hardware.
+- [x] Replace temporary shared ownership with a direct driver and public hardware claims (user-approved direction).
+- [x] Implement draft validation and live observation backend support.
+- [x] Implement the form-scoped connection lifecycle.
+- [x] Add live preview, read-only joint states, and error UI.
+- [x] Integrate verified and offline saving, plus explicit release before calibration navigation.
+- [ ] Publish/integrate the public device-claim helper and update Studio's runtime dependency.
 - [ ] Complete automated tests and hardware acceptance checks.
 - [ ] Follow-up: optional plugin SDK visualization metadata (parked).
 
-No implementation changes have been made. Existing unrelated working-tree changes must be preserved.
+The initial implementation is committed in focused Conventional Commits across Studio and PhysicalAI. Existing unrelated working-tree changes are preserved. Hardware acceptance and the runtime dependency integration remain pending.
+
+### Implementation checkpoint: direct driver selected instead of scoped shared ownership
+
+The backend environment resolves PhysicalAI to `0.3.1.dev25+gb4cc2cf`, matching pinned revision `b4cc2cf569c24f92424001dde7aca4081096ebd1`; installed SO101 and Trossen plugins are both `0.2.0`.
+
+A hardware-free probe mocked transport, owner startup, and first observation attachment while exercising the installed SharedRobot connect/disconnect implementation:
+
+- Normal disconnect: owner started once, subscriber closed once, owner stop/wait never called.
+- Failed first-state attachment: owner started once, subscriber closed once, owner stop/wait never called.
+
+The user selected direct-driver lifecycle after reviewing this limitation. The scoped SharedRobot experiment has been removed; ordinary shared subscribers and owner behavior are unchanged.
+
+The live endpoint now calls `RobotClientFactory.build_robot_driver`, claims its `device_ids`, connects/reads directly, and acknowledges disconnect only after driver cleanup and claim release. A small public `physicalai.robot.transport.claim_devices` context manager exposes the existing device locks; no new owner/process/session framework is introduced.
+
+The public claim helper is committed in PhysicalAI as `7184e2f` (`feat(robot): add device claims for direct connections`). Studio's runtime dependency pin has not been changed; integrate the helper with a compatible revision that keeps device ownership locks enabled before hardware acceptance.
+
+**Dependency integration remains necessary:** the installed runtime lacks this new public helper and also lacks `RobotCalibrationError`, which existing Studio error translation already imports. Backend verification uses the PhysicalAI reference source through `PYTHONPATH`. The reference checkout contains a committed temporary device-lock bypass (`de330ec`); that user experiment is preserved and must not be included in a production integration that promises exclusivity. Guard tests confirm collision with the shared lock primitive, not the currently bypassed owner loop.
+
+Targeted UI tests, backend fake-driver tests, guard tests, lint and build checks are recorded during implementation. Full TypeScript verification has existing/schema-regeneration-related robot fixture and input/output union errors outside the new feature; do not hide them or refactor unrelated workflows just to make this experiment pass.
+
+### Verification results
+
+- Targeted form/schema/live-preview UI tests: **54 passed**.
+- Draft connection plus existing saved-observation backend tests: **20 passed**, using reference runtime/plugin sources and fake hardware.
+- Public device claim and existing lock tests: **25 passed**.
+- Changed UI/backend/runtime-helper lint: passed; production UI build: passed; targeted circular dependency checks: passed.
+- Full UI suite: 575 passed, one skipped, one remote-trainer test timed out. That remote-trainer test file passed all eight tests when rerun separately; no unrelated test code was changed.
+- Full TypeScript check remains blocked by existing robot fixtures and regenerated input/output union incompatibilities outside the new live-connect code. The new feature and its mocks produce no TypeScript errors.
+- OpenAPI JSON/types were regenerated from a hardware-free backend server. These generated files are git-ignored by the repository; they were not hand-edited or force-added.
+- No hardware was connected. The standard installed backend environment is older than current Studio source (missing `RobotCalibrationError` and `SO101SetupSession`). A production-compatible runtime/plugin update, including the new claim helper and enabled device locks, is still required before hardware acceptance.
 
 ## Goal
 
@@ -48,7 +80,7 @@ Keep the experiment small and removable: one form-scoped UI feature, one draft o
 - `robots/robot_client_factory.py` already calls any installed catalog robot's builder and wraps its exported recipe in `SharedRobot`.
 - `robots/shared_robot_errors.py` translates structured PhysicalAI errors, including device ownership and calibration failures.
 - `api/robot_catalog.py` exposes payload JSON Schema, discovery, identify, and online probes. Probe success is not driver connection success; probes are optional.
-- `workers/robots/robot_zero_calibration_worker.py` demonstrates unsaved payload validation and observation streaming, but uses an exclusive plain driver and invokes calibration callbacks. Do not reuse that worker for ordinary live preview.
+- `workers/robots/robot_zero_calibration_worker.py` demonstrates unsaved payload validation and direct-driver observation streaming, but invokes calibration callbacks. Follow its direct-driver approach without reusing the calibration worker itself. Existing direct probes/wizards do not acquire the new claim helper; this feature explicitly releases before invoking them rather than claiming to retrofit all existing hardware access.
 - The SO101 payload uses a Python model validator requiring either a port or serial number. JSON Schema alone cannot express all plugin validation rules.
 - Asset-less plugins are valid, but the catalog currently advertises a URDF URL even when no asset exists. The initial feature should make missing assets explicit rather than render a failed/blank model.
 
@@ -100,7 +132,7 @@ Validation can run without Live connect consent because it does not touch hardwa
 Add a dedicated endpoint, provisionally `/api/projects/{project_id}/robots/draft/observations/ws`, adjacent to the existing observation endpoint:
 
 - Accept a validated-at-source but revalidated-on-server draft configuration in a websocket command/handshake, not in a URL query string.
-- Reuse the catalog builder, SharedRobot wrapping, observation conversion, and structured error translation.
+- Reuse `build_robot_driver`, observation conversion, and structured error translation. Do not wrap the setup driver in SharedRobot.
 - Verify project existence and validate command shape/configuration before hardware access.
 - Never persist a temporary robot, start a RuntimeSession, call `send_action`, invoke identify, or invoke calibration.
 - Preserve the existing observation event shape; add request/generation correlation and connection lifecycle events where needed.
@@ -111,22 +143,15 @@ Add a dedicated endpoint, provisionally `/api/projects/{project_id}/robots/draft
 
 Factor only genuinely shared streaming/error helpers out of the existing endpoint. Keep the saved-robot endpoint behavior unchanged unless a directly required fix is covered by regression tests.
 
-### 3. Temporary ownership and release: first implementation checkpoint
+### 3. Direct ownership and acknowledged release
 
-Use a setup-specific owner identity associated with an immutable validated configuration generation. It must not alias the persisted robot owner or another generation with different settings. Keep the persisted draft UUID stable for eventual saving, separately from temporary transport identity.
+Each websocket owns one direct driver built from the validated draft. Acquire all canonical `device_ids` through the public claim helper before `connect()`. A conflicting claim rejects the attempt before driver I/O; there is no attachment to or takeover of another runtime. Claims roll back atomically for composite robots.
 
-This intentionally refuses live verification when another owner holds the hardware; it must not silently attach to or take over an active runtime. An offline metadata/name update can still be saved after valid configuration checks and the explicit warning.
+Retain the driver before connection so partial failures can be disconnected. Serialize connect/read/disconnect off the event loop, and shield cleanup against browser/backend cancellation. A late connection completion must still be cleaned up.
 
-Before building the rest of the feature, prove:
+Keep claims until `disconnect()` succeeds. If cleanup fails repeatedly, retain the session/claim until restart and report that safe release is unconfirmed. Do not release the lock merely because a timeout elapsed. Direct driver calls cannot be forcibly interrupted by cancelling an async task: the UI reports connection/release timeouts without pretending the underlying operation stopped.
 
-1. A temporary SharedRobot owner can connect using the public API and a suitably short, nonzero idle window.
-2. Closing/replacing the form connection releases the owner predictably, including driver shutdown/homing time.
-3. A subsequent generation or existing calibration flow can acquire the device without overlapping I/O.
-4. Saving and navigating to the existing detail page does not leave it fighting a temporary owner.
-
-Use a visible release phase and bounded handoff/retry for contention caused by this feature's prior owner. Do not treat a missing metadata response alone as proof of release, blindly sleep and claim success, kill another owner's process, or access private `_owner` fields.
-
-If the current public API cannot provide reliable release/handoff, stop at this checkpoint and propose a narrow public scoped-owner lifecycle addition in PhysicalAI. Do not work around that limitation with duplicated device locks or a new Studio process framework. This is a technical prerequisite to resolve, not an assumption that release is already immediate.
+Use request/generation IDs to reject stale observations and a `disconnected` acknowledgement to serialize reconfiguration, normal save, and calibration handoff. Keep the persisted draft UUID stable independently of these request IDs. No idle-window delays or private owner handles are used.
 
 ### 4. Isolated frontend lifecycle
 
@@ -184,11 +209,11 @@ Keep high-frequency observations in this feature's context rather than in the fo
 
 ## Implementation sequence
 
-### A. Prove lifecycle and write contract tests
+### A. Prove direct lifecycle and write contract tests
 
-- Confirm pinned dependency behavior and temporary-owner identity/release approach.
+- Confirm pinned dependency behavior and direct-driver claim/release approach.
 - Write backend tests for draft validation, first observation, stale state, ownership conflict, configuration replacement, client disconnect during connection, and cleanup.
-- Resolve the public lifecycle prerequisite before proceeding if necessary.
+- Integrate the public claim helper into a production-compatible runtime version; keep shared owner behavior unchanged.
 
 ### B. Backend vertical slice
 
@@ -227,7 +252,7 @@ Keep high-frequency observations in this feature's context rather than in the fo
 - [ ] Connected requires valid fresh observation, not socket-open state or cached traffic.
 - [ ] Connect/read/permission/ownership/calibration/transport errors produce actionable UI.
 - [ ] Partial connection failure, late connection completion, unmount, and backend cancellation clean up.
-- [ ] Different setup generations cannot attach to stale configuration or contend indefinitely with their own prior owner.
+- [ ] Different setup generations cannot reuse stale configuration or begin I/O before their prior direct connection releases its claim.
 - [ ] Another runtime/robot owner is never stopped or reconfigured.
 - [ ] Missing asset, unknown units, unknown range, continuous/prismatic joints, grippers, and one-to-many mappings render honestly.
 - [ ] Normal save is gated both visually and in its handler; offline save still validates and requires confirmation.
@@ -270,4 +295,4 @@ Implement and test the metadata in SO101 and WidowX AI plugins first, expose it 
 - Prefer one small backend module and one UI feature folder, with only necessary route, submit, factory/helper, catalog, documentation, and generated-contract edits.
 - Keep timing constants and first-party conversion adapters local and replaceable.
 - Tests and safety checks are part of the minimal implementation, not optional follow-ups.
-- Removing the experiment should remove its UI wrapper/folder and draft routes, restore ordinary submit integration, and leave persistence, existing observations, and calibration architecture intact.
+- Removing the experiment should remove its UI wrapper/folder and draft routes, restore ordinary submit integration, and leave persistence, existing observations, and calibration architecture intact. The public claim helper remains a small independent runtime utility.

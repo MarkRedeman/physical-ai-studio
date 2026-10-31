@@ -31,6 +31,22 @@ After the plugin has been installed and Studio has restarted:
 3. Select the follower or leader robot type supplied by the plugin.
 4. Complete the configuration form and save the robot.
 
+Before saving, use **Enable Live connect** to test the configuration. Confirm the
+safety warning: connecting or disconnecting a driver can move the arm or change
+motor torque. Once enabled, Studio connects automatically after the configuration
+passes validation and reconnects when configuration values change. Changing only
+the robot name does not reconnect it.
+
+The preview shows measured joint states and read-only joint indicators. A plugin
+without a URDF still shows its readings. Until a plugin supplies an established
+visualization convention, Studio shows raw values rather than guessing joint
+units; SO101 normalized-to-model visualization is approximate.
+
+Normal saving requires a healthy connection for the current configuration. Use
+**Save without verification** and confirm its warning when configuring a robot
+offline. This still validates the payload and does not bypass required setup or
+calibration. Live preview releases its connection before entering calibration.
+
 The robot picker and robot form are automatically updated after installation
 and restart. The form is generated from the plugin's catalog definition and
 payload model, so different robot types can expose different configuration
