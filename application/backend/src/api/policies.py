@@ -15,11 +15,11 @@ from training.policy_catalog import (
     HUGGINGFACE_REQUIREMENTS,
     POLICY_TRAINING_CONFIGURATIONS,
     AvailablePolicy,
-    PolicyTrainingConfiguration,
     available_policy_classes,
     policy_catalog,
 )
 from training.policy_catalog import missing_policy_dependencies as _missing_policy_dependencies
+from training.policy_training_configuration import PolicyTrainingConfiguration
 
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
 
