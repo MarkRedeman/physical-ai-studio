@@ -15,25 +15,25 @@ export const validateRequiredUiFields = (schema: JsonSchema, payload: Record<str
     const validateProperties = (
         properties: Record<string, FieldSchema> | undefined,
         values: Record<string, unknown>,
+        required: string[] = [],
         prefix = ''
     ): string[] =>
         Object.entries(properties ?? {}).flatMap(([name, field]) => {
             const resolved = resolveReference(field, definitions);
             const fieldName = `${prefix}${name}`;
-            const value = values[name];
+            const value = values[name] === undefined ? resolved.default : values[name];
+            const requiredField =
+                required.includes(name) ||
+                (isFieldUiOptions(resolved['x-physicalai-ui']) && resolved['x-physicalai-ui'].required);
 
-            if (
-                isFieldUiOptions(resolved['x-physicalai-ui']) &&
-                resolved['x-physicalai-ui'].required &&
-                isMissingRequiredValue(value, resolved)
-            ) {
+            if (requiredField && isMissingRequiredValue(value, resolved)) {
                 return [`${fieldName} is required`];
             }
 
-            return resolved.properties === undefined
+            return resolved.properties === undefined || value === null || (value === undefined && !requiredField)
                 ? []
-                : validateProperties(resolved.properties, asRecord(value), `${fieldName}.`);
+                : validateProperties(resolved.properties, asRecord(value), resolved.required, `${fieldName}.`);
         });
 
-    return validateProperties(schema.properties, payload);
+    return validateProperties(schema.properties, payload, schema.required);
 };

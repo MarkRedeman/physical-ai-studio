@@ -1,6 +1,7 @@
 import { createContext, ReactNode, RefObject, useContext, useMemo, useRef, useState } from 'react';
 
 import { TextFieldRef } from '@geti-ui/ui';
+import { v4 as uuidv4 } from 'uuid';
 
 import type { SchemaRobotInput } from '../robot-types';
 
@@ -14,6 +15,7 @@ type RobotFormState = {
 };
 
 type RobotFormContextValue = RobotFormState & {
+    draftId: string;
     setActiveType: (type: string) => void;
     setName: (name: string) => void;
     setPayload: (payload: RobotPayload) => void;
@@ -28,7 +30,7 @@ export const RobotFormProvider = ({
     robot,
 }: {
     children: ReactNode;
-    robot?: { type: string; name: string; payload: unknown };
+    robot?: { id?: string; type: string; name: string; payload: unknown };
 }) => {
     const [state, setState] = useState<RobotFormState>(() => ({
         activeType: robot?.type,
@@ -37,10 +39,12 @@ export const RobotFormProvider = ({
     }));
 
     const nameFieldRef = useRef<TextFieldRef | null>(null);
+    const [draftId] = useState(() => robot?.id ?? uuidv4());
 
     const value = useMemo<RobotFormContextValue>(
         () => ({
             ...state,
+            draftId,
             setActiveType: (activeType) => setState((previous) => ({ ...previous, activeType, payload: {} })),
             setName: (name) => setState((previous) => ({ ...previous, name })),
             setPayload: (payload) => setState((previous) => ({ ...previous, payload })),
@@ -48,7 +52,7 @@ export const RobotFormProvider = ({
                 setState((previous) => ({ ...previous, payload: { ...previous.payload, [field]: fieldValue } })),
             nameFieldRef,
         }),
-        [nameFieldRef, state]
+        [draftId, nameFieldRef, state]
     );
 
     return <RobotFormContext.Provider value={value}>{children}</RobotFormContext.Provider>;
