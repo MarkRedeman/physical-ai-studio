@@ -1,8 +1,19 @@
 """Typed Studio training defaults, policy guidance, and camera slot metadata."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+def resolve_training_limit(
+    max_epochs: int | None, max_steps: int | None, *, default_epochs: int = 5
+) -> tuple[int | None, int | None]:
+    """Keep one active limit, preferring epochs for compatibility with older jobs."""
+    if max_epochs is not None:
+        return max_epochs, None
+    if max_steps is not None:
+        return None, max_steps
+    return default_epochs, None
 
 
 class ValidationDefaults(BaseModel):
@@ -30,7 +41,17 @@ class SnapflowDefaults(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
-    distill_epochs: int = Field(default=3, ge=1, le=10_000, description="Extra epochs after ordinary training.")
+    distill_epochs: int | None = Field(default=None, ge=1, le=10_000, description="Additional training epochs.")
+    distill_steps: int | None = Field(default=None, ge=1, le=100_000, description="Additional optimizer updates.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_limit(cls, data: Any) -> Any:
+        """Default to three epochs unless an explicit step budget is given."""
+        if not isinstance(data, dict):
+            return data
+        epochs, steps = resolve_training_limit(data.get("distill_epochs"), data.get("distill_steps"), default_epochs=3)
+        return {**data, "distill_epochs": epochs, "distill_steps": steps}
 
 
 class PolicyTrainingDefaults(BaseModel):
@@ -39,7 +60,8 @@ class PolicyTrainingDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
     batch_size: int = Field(default=8, ge=1, le=256, description="Samples per training step.")
-    max_epochs: int = Field(default=5, ge=1, le=10_000, description="Full passes through the training dataset.")
+    max_epochs: int | None = Field(default=None, ge=1, le=10_000, description="Dataset passes; preferred over steps.")
+    max_steps: int | None = Field(default=None, ge=1, le=100_000, description="Optimizer updates; null uses epochs.")
     num_workers: Annotated[int, Field(ge=0, le=16)] | Literal["auto"] = Field(
         default="auto", description="DataLoader workers (0-16); auto uses available CPUs."
     )
@@ -57,6 +79,24 @@ class PolicyTrainingDefaults(BaseModel):
     snapflow: SnapflowDefaults | None = Field(
         default=None, description="Distillation settings; null disables SnapFlow."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_limit(cls, data: Any) -> Any:
+        """Default to five epochs only when neither limit is supplied."""
+        if not isinstance(data, dict):
+            return data
+        epochs, steps = resolve_training_limit(data.get("max_epochs"), data.get("max_steps"))
+        return {**data, "max_epochs": epochs, "max_steps": steps}
+
+    @model_validator(mode="after")
+    def validate_distillation_unit(self) -> "PolicyTrainingDefaults":
+        """Require the teacher and distillation to use the same unit."""
+        if self.snapflow is not None:
+            budget = self.snapflow.distill_epochs if self.max_epochs is not None else self.snapflow.distill_steps
+            if budget is None:
+                raise ValueError("SnapFlow distillation must use the same unit as the training limit.")
+        return self
 
 
 class LoraHelp(BaseModel):
@@ -78,6 +118,7 @@ class SnapflowHelp(BaseModel):
 
     description: str | None = Field(default=None, description="Distillation recommendation.")
     distill_epochs: str | None = Field(default=None, description="Distillation budget recommendation.")
+    distill_steps: str | None = Field(default=None, description="Distillation optimizer-step budget recommendation.")
 
 
 class PolicyTrainingHelp(BaseModel):
@@ -87,6 +128,7 @@ class PolicyTrainingHelp(BaseModel):
 
     batch_size: str | None = Field(default=None, description="Batch size recommendation and memory tradeoffs.")
     max_epochs: str | None = Field(default=None, description="Training budget recommendation and dataset assumptions.")
+    max_steps: str | None = Field(default=None, description="Optimizer-step budget recommendation.")
     num_workers: str | None = Field(default=None, description="Data loading worker recommendation.")
     precision: str | None = Field(default=None, description="Policy-specific numerical precision guidance.")
     compile_model: str | None = Field(default=None, description="Compilation speed and startup tradeoffs.")

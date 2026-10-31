@@ -82,6 +82,16 @@ class TestTrainingJobSpec:
 
         assert TrainingJobSpec.model_validate_json(spec.model_dump_json()) == spec
 
+    def test_step_budget_round_trips_without_default_epochs(self) -> None:
+        spec = TrainingJobSpec(policy="act", max_steps=100)
+        assert spec.max_epochs is None
+        assert TrainingJobSpec.model_validate_json(spec.model_dump_json()) == spec
+
+    @pytest.mark.parametrize("boundary", [0, 100, 101])
+    def test_step_boundary_must_leave_teacher_and_distillation_updates(self, boundary: int) -> None:
+        with pytest.raises(ValidationError):
+            TrainingJobSpec(policy="pi05", max_steps=100, snapflow_start_step=boundary)
+
     def test_lora_disabled_by_default(self) -> None:
         spec = TrainingJobSpec(policy="act")
 
@@ -340,6 +350,12 @@ def _run(
 
 
 class TestRunTrainingJob:
+    def test_step_budget_configures_cross_epoch_validation(self, tmp_path: Path) -> None:
+        kwargs = _run(TrainingJobSpec(policy="act", max_steps=1500), tmp_path).call_args.kwargs
+        assert (kwargs["max_epochs"], kwargs["max_steps"]) == (-1, 1500)
+        assert kwargs["check_val_every_n_epoch"] is None
+        assert kwargs["val_check_interval"] == 1000
+
     def test_hf_token_is_set_during_the_run_and_cleared_after(self, tmp_path: Path, monkeypatch) -> None:
         """The token is scoped to this run: visible while training, gone once it returns."""
         monkeypatch.delenv("HF_TOKEN", raising=False)

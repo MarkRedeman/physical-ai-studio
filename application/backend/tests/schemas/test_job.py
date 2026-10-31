@@ -28,6 +28,21 @@ def _base_kwargs() -> dict:
     }
 
 
+@pytest.mark.parametrize(
+    ("limits", "epochs", "steps"),
+    [
+        ({}, 5, None),
+        ({"max_epochs": 8}, 8, None),
+        ({"max_steps": 100}, None, 100),
+        ({"max_epochs": 5, "max_steps": 100}, 5, None),
+    ],
+)
+def test_training_limit_precedence(limits: dict, epochs: int | None, steps: int | None) -> None:
+    payload = LocalTrainJobPayload(**_base_kwargs(), **limits)
+    assert (payload.max_epochs, payload.max_steps) == (epochs, steps)
+    assert LocalTrainJobPayload.model_validate_json(payload.model_dump_json()) == payload
+
+
 class TestLocalTarget:
     def test_local_job_accepts_no_remote_fields(self) -> None:
         payload = LocalTrainJobPayload(**_base_kwargs())
@@ -127,6 +142,23 @@ class TestSnapFlowDistillation:
 
         assert payload.snapflow_enabled is False
         assert payload.snapflow_start_epoch is None
+
+    def test_step_budget_adds_distillation_after_the_teacher(self) -> None:
+        payload = LocalTrainJobPayload(
+            **{**_base_kwargs(), "policy": "pi05"},
+            max_steps=100,
+            snapflow_enabled=True,
+            snapflow_distill_steps=25,
+        )
+        assert payload.snapflow_start_epoch is None
+        assert payload.snapflow_start_step == 100
+        assert payload.total_epochs is None
+        assert payload.total_steps == 125
+        assert payload.snapflow_distill_epochs is None
+
+    def test_step_budget_requires_matching_distillation_unit(self) -> None:
+        with pytest.raises(ValidationError, match="snapflow_distill_steps"):
+            LocalTrainJobPayload(**{**_base_kwargs(), "policy": "pi05"}, max_steps=100, snapflow_enabled=True)
 
     @pytest.mark.parametrize("policy", ["pi05", "smolvla", "Pi05", "SmolVLA"])
     def test_flow_matching_policies_can_be_distilled(self, policy: str) -> None:
