@@ -943,6 +943,18 @@ wheels = [
 ]
 
 [[package]]
+name = "fashionstar-uart-sdk"
+version = "1.3.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/2f/668fefb2bbea2e4e510b02a765c0f9aead0ac581f212814af0a3a27bb03e/fashionstar_uart_sdk-1.3.12.tar.gz", hash = "sha256:ea397f881a66fc547c1c9f573eede86b8f11e80b6cf605e66449024e6ec2b562", size = 14150, upload-time = "2026-06-05T04:32:50.275Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/93/68/9250da05e1a540e76c9d72fe3bcbefe7c5f8cf9c82a799e8728f0c28aaaa/fashionstar_uart_sdk-1.3.12-py3-none-any.whl", hash = "sha256:1c510512bc2a485a562084eb60570527b92231626b2ab36dd97292467241ebed", size = 14827, upload-time = "2026-06-05T04:32:48.897Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.143.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1678,6 +1690,39 @@ feetech = [
     { name = "deepdiff" },
     { name = "feetech-servo-sdk" },
     { name = "pyserial" },
+]
+
+[[package]]
+name = "lerobot-motor-starai"
+version = "0.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fashionstar-uart-sdk" },
+    { name = "lerobot" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ba/e5/0da86d7e07ebd88f4e143fb72de721c8b2337fc8029caf5d2228bc710bd9/lerobot_motor_starai-0.0.6.tar.gz", hash = "sha256:3c333fc3422abd571550693ee912fb590fe70f6d6308a3e759fd8b4ab35f4c5b", size = 11015, upload-time = "2026-06-05T09:57:11.682Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/3b/eda95de82e118e1e80bbb8fc559e7f8db247f0ebde35e11551522babcabe/lerobot_motor_starai-0.0.6-py3-none-any.whl", hash = "sha256:83c8d03702e1556997627898debb4e23ce0d7e7b5e713514c3e64ffdd71c0b01", size = 11303, upload-time = "2026-06-05T09:57:10.451Z" },
+]
+
+[[package]]
+name = "lerobot-robot-stararm102"
+version = "0.0.1"
+source = { git = "https://github.com/servodevelop/Star-Arm-102.git?subdirectory=lerobot%2Fsingle-arm%2Flerobot-robot-stararm102&rev=24e463b7b34cd97f694a59011acea65c5213bdc3#24e463b7b34cd97f694a59011acea65c5213bdc3" }
+dependencies = [
+    { name = "fashionstar-uart-sdk" },
+    { name = "lerobot" },
+    { name = "lerobot-motor-starai" },
+]
+
+[[package]]
+name = "lerobot-teleoperator-stararm102"
+version = "0.0.0"
+source = { git = "https://github.com/servodevelop/Star-Arm-102.git?subdirectory=lerobot%2Fsingle-arm%2Flerobot-stararm102&rev=24e463b7b34cd97f694a59011acea65c5213bdc3#24e463b7b34cd97f694a59011acea65c5213bdc3" }
+dependencies = [
+    { name = "fashionstar-uart-sdk" },
+    { name = "lerobot" },
+    { name = "lerobot-motor-starai" },
 ]
 
 [[package]]
@@ -2877,11 +2922,15 @@ dependencies = [
     { name = "boto3", extra = ["crt"] },
     { name = "click" },
     { name = "cv2-enumerate-cameras" },
+    { name = "fashionstar-uart-sdk" },
     { name = "fastapi", extra = ["standard"] },
     { name = "greenlet" },
     { name = "harvesters", marker = "sys_platform != 'darwin'" },
     { name = "huggingface-hub" },
     { name = "lerobot", extra = ["dataset", "feetech"] },
+    { name = "lerobot-motor-starai" },
+    { name = "lerobot-robot-stararm102" },
+    { name = "lerobot-teleoperator-stararm102" },
     { name = "loguru" },
     { name = "numpy" },
     { name = "omegaconf" },
@@ -2959,12 +3008,16 @@ requires-dist = [
     { name = "boto3", extras = ["crt"], specifier = ">=1.42" },
     { name = "click", specifier = ">=8.3.0" },
     { name = "cv2-enumerate-cameras" },
+    { name = "fashionstar-uart-sdk", specifier = "==1.3.12" },
     { name = "fastapi", extras = ["standard"], specifier = "<1" },
     { name = "greenlet", specifier = ">=3.2.4" },
     { name = "harvesters", marker = "sys_platform != 'darwin'" },
     { name = "httpx", marker = "extra == 'tests'" },
     { name = "huggingface-hub", specifier = ">=0.27" },
     { name = "lerobot", extras = ["dataset", "feetech"], specifier = "==0.6.0" },
+    { name = "lerobot-motor-starai", specifier = "==0.0.6" },
+    { name = "lerobot-robot-stararm102", git = "https://github.com/servodevelop/Star-Arm-102.git?subdirectory=lerobot%2Fsingle-arm%2Flerobot-robot-stararm102&rev=24e463b7b34cd97f694a59011acea65c5213bdc3" },
+    { name = "lerobot-teleoperator-stararm102", git = "https://github.com/servodevelop/Star-Arm-102.git?subdirectory=lerobot%2Fsingle-arm%2Flerobot-stararm102&rev=24e463b7b34cd97f694a59011acea65c5213bdc3" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "numpy" },
     { name = "omegaconf", specifier = ">=2.3.0" },

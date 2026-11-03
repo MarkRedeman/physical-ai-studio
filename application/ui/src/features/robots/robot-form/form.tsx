@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { Item, Picker, TextField } from '@geti-ui/ui';
+import { ComboBox, Item, Picker, TextField } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { FormHeading } from '../../../components/form-heading/form-heading';
@@ -16,6 +16,33 @@ export const RobotType = () => {
     const { activeType, name, setName } = useRobotForm();
     const { setActiveType } = useRobotForm();
     const catalogQuery = useRobotCatalogQuery();
+
+    return (
+        <ComboBox
+            isRequired
+            label='Robot type'
+            width='100%'
+            selectedKey={activeType}
+            onSelectionChange={(selected) => {
+                if (selected === null) {
+                    return;
+                }
+                const entry = catalogQuery.data.find(({ type }) => type === selected);
+                setActiveType(selected.toString());
+                if (entry === undefined) {
+                    return;
+                }
+                const previousSuggestedName = catalogQuery.data.find(({ type }) => type === activeType)?.display_name;
+                if (name === '' || name === previousSuggestedName) {
+                    setName(entry.display_name);
+                }
+            }}
+        >
+            {catalogQuery.data.map((entry) => (
+                <Item key={entry.type}>{entry.display_name}</Item>
+            ))}
+        </ComboBox>
+    );
 
     return (
         <Picker
