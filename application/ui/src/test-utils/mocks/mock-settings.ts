@@ -1,6 +1,17 @@
-import { SchemaUserSettingsResponse } from '../../api/openapi-spec';
+import { SchemaRerunSettings, SchemaUserSettingsResponse, SchemaUserSettingsResponse } from '../../api/openapi-spec';
 
-export const getMockedSettings = (overrides: Partial<SchemaUserSettingsResponse> = {}): SchemaUserSettingsResponse => ({
+export const getMockedRerunSettings = (overrides: Partial<SchemaRerunSettings> = {}): SchemaRerunSettings => ({
+    enabled: true,
+    mode: 'spawn',
+    open_viewer: false,
+    spawn_port: 9876,
+    connect_addr: '127.0.0.1:9876',
+    ...overrides,
+});
+
+export const getMockedUserSettings = (
+    overrides: Partial<SchemaUserSettingsResponse> = {}
+): SchemaUserSettingsResponse => ({
     video_recording: { preset: null },
     trainer: {
         request_timeout_s: 30,
@@ -18,5 +29,10 @@ export const getMockedSettings = (overrides: Partial<SchemaUserSettingsResponse>
     },
     hotkeys: { bindings: {} },
     rerun: { enabled: false, mode: 'spawn', open_viewer: false, spawn_port: 9876, connect_addr: '127.0.0.1:9876' },
+    rerun: getMockedRerunSettings(),
     ...overrides,
+});
+
+export const getMockedSettings = (overrides: Partial<SchemaUserSettingsResponse> = {}): SchemaUserSettingsResponse => ({
+    ...getMockedRerunSettings(overrides),
 });
