@@ -297,6 +297,22 @@ corresponding safety clamp; do not rely on that setting to limit motion.
 - The generic bridge currently supplies no StarArm-specific URDF asset for
   these generated catalog entries; the native plugin bundles its own URDF.
 
+## Saving calibration_dir: PosixPath serialization error
+
+Setting `calibration_dir` exposed a Studio persistence bug: Pydantic validated
+the input string as a `Path`, but `ProjectRobotMapper.to_schema` used
+Python-mode `model_dump()`. SQLAlchemy's JSON column could not serialize the
+result, causing `Object of type PosixPath is not JSON serializable` on save.
+
+The mapper now uses `payload.model_dump(mode="json")` for both creation and
+updates. Database values are JSON-compatible strings; runtime validation still
+restores `Path` objects. No database migration or calibration-file change is
+needed. Restart the backend to load the fix, then retry saving the robot with
+the same absolute `calibration_dir` string.
+
+Regression coverage includes nested paths, an unset calibration directory,
+and an isolated SQLite create/update round trip through `RobotService`.
+
 References:
 
 - [Pinned upstream single-arm guide](https://github.com/servodevelop/Star-Arm-102/blob/24e463b7b34cd97f694a59011acea65c5213bdc3/lerobot/single-arm/README.md)
