@@ -34,6 +34,7 @@ dependencies = [
   "sse-starlette>=2.0.0",
   "huggingface-hub>=0.27",
   "psutil~=7.2",
+  "rerun-sdk~=0.26.2",
   "physicalai-studio-plugin~=0.3.0",
   "physicalai-so101-plugin~=0.2.0",
   'physicalai-trossen-plugin~=0.2.0; sys_platform == "darwin" or sys_platform == "linux"',

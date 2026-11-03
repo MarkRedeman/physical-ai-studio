@@ -47,6 +47,7 @@ from runtime_session.environment import RELOAD, Environment, describe_environmen
 from runtime_session.home_position import HOME_EVENTS, home_key
 from runtime_session.model import COMPONENT as MODEL
 from runtime_session.model import ProcessModel, model_inputs
+from runtime_session.rerun import RerunObserver
 from runtime_session.slot import Slot
 from runtime_session.store import ACTION, STATE, FeatureSpecMismatchError, Store
 from schemas.home_position import (
@@ -170,12 +171,24 @@ class RuntimeSession:
         self._home_stop_requested = False
         self._stopping_control: Control | None = None
         """Hosted for the session's lifetime; its parts join it."""
+        self._observer: RerunObserver | None = None
 
     async def __aenter__(self) -> Self:
         self._bus = Bus.host(self.id)
         self._serve_commands(self._bus)
         self._listen(self._bus)
         self._registry.add(self)
+        observer = RerunObserver(self.id)
+        try:
+            await observer.__aenter__()
+        except Exception:
+            logger.exception("Session {} could not start Rerun; continuing without visualization", self.id)
+        except BaseException:
+            self._registry.remove(self)
+            self._bus.close()
+            raise
+        else:
+            self._observer = observer
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
@@ -212,6 +225,8 @@ class RuntimeSession:
                     )
                 if self._bus is not None:
                     self._bus.close()
+                if self._observer is not None:
+                    await self._observer.__aexit__(None, None, None)
                 logger.info("Session {} closed ({})", self.id, reason)
                 self.finished.set()
 
@@ -371,6 +386,8 @@ class RuntimeSession:
                 await self._dataset.unload()
                 self._drop_store()  # first: the new one takes the same name
                 self._store = Store.create(description.spec, self.id)
+                if self._observer is not None:
+                    self._observer.set_store(self._store)
             try:
                 await self._environment.load(self._loaded_environment(environment, description))
                 logger.info("Session {} loaded environment {!r}", self.id, environment.name)
@@ -385,6 +402,8 @@ class RuntimeSession:
     def _drop_store(self) -> None:
         """Hold the lock, with nothing loaded that uses the store."""
         if self._store is not None:
+            if self._observer is not None:
+                self._observer.set_store(None)
             self._store.unlink()
             self._store = None
 
@@ -522,7 +541,9 @@ class RuntimeSession:
 
     @asynccontextmanager
     async def _watched_control(self, config: ControlConfig, environment: Environment) -> AsyncIterator[Control]:
-        control = build_control(config, environment.store, environment.leader, self._model.value, self.bus)
+        control = build_control(
+            config, environment.store, environment.leader, self._model.value, self.bus, observer=self._observer
+        )
         async with self._reported(_CONTROL, control):
             yield control
 
@@ -842,6 +863,8 @@ class RuntimeSession:
             self._emit(StateMessage(data=self.state()))
 
     def _emit(self, event: StateMessage | ErrorMessage) -> None:
+        if self._observer is not None:
+            self._observer.emit_session(event)
         if self._bus is not None:
             self._bus.publish(EVENTS, event)
         if event.type == "state":
