@@ -313,6 +313,27 @@ the same absolute `calibration_dir` string.
 Regression coverage includes nested paths, an unset calibration directory,
 and an isolated SQLite create/update round trip through `RobotService`.
 
+## Worker config reconstruction: string has no mkdir
+
+After saving `calibration_dir`, worker construction exposed a second bug in
+the local LeRobot bridge: it called the config dataclass directly with the
+stored JSON values. Dataclasses do not coerce strings to `Path`, so LeRobot
+received a string and failed on `calibration_dir.mkdir(...)`.
+
+The fix is in the Runtime checkout at
+`/home/mark/projects/intel/physicalai/packages/physicalai-lerobot-plugin`, not in
+the vendor package or the calibration JSON. Catalog builders and worker-side
+follower/leader reconstruction now share typed config materialization. It
+restores paths and nested dataclasses, including the leader's button config,
+and resolves postponed/inherited annotations.
+
+The bridge's 89 tests passed, including JSON/local-pickle roundtrip regression
+tests for both adapter roles. Actual upstream follower and leader constructors
+also accepted string paths with the fix, without opening serial ports.
+Restart the backend with the same local editable-plugin flags to load it;
+keep the stored path as a JSON string. No database or calibration-file edits
+are needed for this error.
+
 References:
 
 - [Pinned upstream single-arm guide](https://github.com/servodevelop/Star-Arm-102/blob/24e463b7b34cd97f694a59011acea65c5213bdc3/lerobot/single-arm/README.md)
