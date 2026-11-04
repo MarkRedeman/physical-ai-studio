@@ -15,8 +15,10 @@ import { MoreMenu } from '@geti-ui/ui/icons';
 
 import { SchemaSessionEnvironment, SchemaSessionState, SchemaStatusMessage } from '../../../api/openapi-spec';
 import { failureOf, SessionPartName, Statuses } from '../runtime-session-provider';
-import { EnvironmentRobots } from './environment-robots';
+import { EnvironmentDevices } from './environment-devices';
 import { PartAction } from './part-controls';
+
+import classes from './parts-panel.module.css';
 
 /** Card-header actions use task language; recovery appears only when something failed. */
 export const PartActions = ({
@@ -115,10 +117,10 @@ export const PartRow = ({
 }) => (
     <Flex alignItems='center' justifyContent='space-between' gap='size-100'>
         <Flex direction='column' minWidth={0}>
-            <Text UNSAFE_style={{ fontWeight: 500, overflowWrap: 'anywhere' }}>
+            <Text UNSAFE_className={classes.resourceName}>
                 {isPending ? 'Preparing…' : (name ?? `No ${label.toLowerCase()} selected`)}
             </Text>
-            {detail && !isPending && <Text>{detail}</Text>}
+            {detail && !isPending && <Text UNSAFE_className={classes.resourceDetail}>{detail}</Text>}
             {error && !isPending && (
                 <Disclosure isQuiet defaultExpanded>
                     <DisclosureTitle>Error details</DisclosureTitle>
@@ -155,7 +157,8 @@ export const EnvironmentRow = ({
         ({ component }) =>
             component.startsWith('environment/') &&
             component !== 'environment/follower' &&
-            (environment?.leader_id == null || component !== 'environment/leader')
+            (environment?.leader_id == null || component !== 'environment/leader') &&
+            !environment?.cameras.some((camera) => component === `environment/${camera.key}`)
     );
     const failure = failureOf(statuses, 'environment');
     const canExpand = environment != null;
@@ -175,7 +178,7 @@ export const EnvironmentRow = ({
                             {failure !== null && (
                                 <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-red-600)' }}>{failure}</Text>
                             )}
-                            <EnvironmentRobots environment={environment} statuses={statuses} control={control} />
+                            <EnvironmentDevices environment={environment} statuses={statuses} control={control} />
                             {devices.length > 0 && <DeviceStatuses devices={devices} environment={environment} />}
                         </Flex>
                     )}
