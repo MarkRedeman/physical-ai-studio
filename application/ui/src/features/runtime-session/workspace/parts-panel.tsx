@@ -1,10 +1,11 @@
-import { ReactNode, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
     ActionButton,
-    Button,
+    Disclosure,
+    DisclosurePanel,
+    DisclosureTitle,
     Flex,
-    Heading,
     Item,
     Menu,
     MenuTrigger,
@@ -12,13 +13,56 @@ import {
     StatusLight,
     Text,
 } from '@geti-ui/ui';
-import { ChevronDownLight, ChevronRightSmallLight, MoreMenu } from '@geti-ui/ui/icons';
+import { MoreMenu } from '@geti-ui/ui/icons';
 
 import { SchemaSessionEnvironment, SchemaStatusMessage } from '../../../api/openapi-spec';
-import { failureOf, SessionPartName, Statuses, useRuntimeSession } from '../runtime-session-provider';
-import { PartAction, usePartControls } from './part-controls';
+import { failureOf, SessionPartName, Statuses } from '../runtime-session-provider';
+import { PartAction } from './part-controls';
 
-const DEVICE_STATUS = { starting: 'notice', running: 'positive', failed: 'negative', stopped: 'neutral' } as const;
+/** Card-header actions use task language; recovery appears only when something failed. */
+export const PartActions = ({
+    part,
+    isLoaded,
+    isPending,
+    isDisabled,
+    canChoose,
+    canRetry,
+    onAction,
+}: {
+    part: SessionPartName;
+    isLoaded: boolean;
+    isPending: boolean;
+    isDisabled: boolean;
+    canChoose: boolean;
+    canRetry: boolean;
+    onAction: (action: PartAction) => void;
+}) => {
+    if (isPending) return <ProgressCircle size='S' isIndeterminate aria-label={`Preparing ${part}`} />;
+    if (!isLoaded)
+        return (
+            <ActionButton isQuiet isDisabled={isDisabled || !canChoose} onPress={() => onAction('swap')}>
+                Choose {part}…
+            </ActionButton>
+        );
+
+    const actions: { id: PartAction; label: string }[] = [{ id: 'swap', label: `Change ${part}…` }];
+    if (canRetry) actions.push({ id: 'reload', label: part === 'environment' ? 'Reconnect devices' : 'Try again' });
+
+    return (
+        <MenuTrigger>
+            <ActionButton isQuiet aria-label={`${part} actions`} isDisabled={isDisabled || (!canChoose && !canRetry)}>
+                <MoreMenu />
+            </ActionButton>
+            <Menu
+                items={actions}
+                disabledKeys={canChoose ? [] : ['swap']}
+                onAction={(key) => onAction(key as PartAction)}
+            >
+                {(action) => <Item key={action.id}>{action.label}</Item>}
+            </Menu>
+        </MenuTrigger>
+    );
+};
 
 /** Each of the environment's devices, as it last reported. */
 const DeviceStatuses = ({
@@ -37,10 +81,15 @@ const DeviceStatuses = ({
         <Flex direction='column' marginStart='size-300'>
             {devices.map(({ component, state, error }) => (
                 <Flex key={component} direction='column'>
-                    <StatusLight variant={DEVICE_STATUS[state]}>
-                        {label(component.slice('environment/'.length))}
-                    </StatusLight>
-                    {error && (
+                    {state === 'failed' ? (
+                        <StatusLight variant='negative'>{label(component.slice('environment/'.length))}</StatusLight>
+                    ) : (
+                        <Text>
+                            {label(component.slice('environment/'.length))}
+                            {state === 'starting' ? ' · Connecting…' : ''}
+                        </Text>
+                    )}
+                    {error && state === 'failed' && (
                         <Text marginStart='size-300' UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)' }}>
                             {error}
                         </Text>
@@ -51,196 +100,90 @@ const DeviceStatuses = ({
     );
 };
 
+/** A selected resource and its status; actions belong in its card header. */
 export const PartRow = ({
     label,
     name,
     detail,
     error,
-    light,
-    isLoaded,
     isPending,
-    isDisabled = false,
-    actions,
-    onAction,
-    expander,
 }: {
     label: string;
     name: string | undefined;
     detail?: string;
     error?: string | null;
-    /** The light, when more than this part's own state decides it. */
-    light?: 'notice' | 'negative';
-    isLoaded: boolean;
     isPending: boolean;
-    isDisabled?: boolean;
-    actions: PartAction[];
-    onAction: (action: PartAction) => void;
-    expander?: ReactNode;
 }) => (
     <Flex alignItems='center' justifyContent='space-between' gap='size-100'>
         <Flex direction='column' minWidth={0}>
-            <StatusLight
-                variant={isPending ? 'notice' : error ? 'negative' : (light ?? (isLoaded ? 'positive' : 'neutral'))}
-            >
-                {label}
-            </StatusLight>
-            <Text marginStart='size-300' UNSAFE_style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {isPending ? 'Loading…' : (name ?? 'Not loaded')}
-                {detail && !isPending ? ` · ${detail}` : ''}
+            <Text UNSAFE_style={{ fontWeight: 500, overflowWrap: 'anywhere' }}>
+                {isPending ? 'Preparing…' : (name ?? `No ${label.toLowerCase()} selected`)}
             </Text>
+            {detail && !isPending && <Text>{detail}</Text>}
             {error && !isPending && (
-                <Text marginStart='size-300' UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)' }}>
-                    {error}
-                </Text>
-            )}
-        </Flex>
-        <Flex alignItems='center' flexShrink={0}>
-            {expander}
-            {isPending ? (
-                <ProgressCircle size='S' isIndeterminate aria-label={`Loading ${label}`} />
-            ) : !isLoaded ? (
-                <Button
-                    variant='secondary'
-                    isDisabled={isDisabled || !actions.includes('swap')}
-                    onPress={() => onAction('swap')}
-                >
-                    Load {label.toLowerCase()}…
-                </Button>
-            ) : (
-                <MenuTrigger>
-                    <ActionButton
-                        isQuiet
-                        aria-label={`${label} actions`}
-                        isDisabled={isDisabled || actions.length === 0}
-                    >
-                        <MoreMenu />
-                    </ActionButton>
-                    <Menu onAction={(key) => onAction(key as PartAction)}>
-                        {actions.map((action) => (
-                            <Item key={action}>
-                                {action === 'reload'
-                                    ? 'Reload'
-                                    : action === 'swap'
-                                      ? isLoaded
-                                          ? 'Swap…'
-                                          : 'Load…'
-                                      : 'Unload'}
-                            </Item>
-                        ))}
-                    </Menu>
-                </MenuTrigger>
+                <Disclosure isQuiet defaultExpanded>
+                    <DisclosureTitle>Error details</DisclosureTitle>
+                    <DisclosurePanel>
+                        <Text
+                            UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)', overflowWrap: 'anywhere' }}
+                        >
+                            {error}
+                        </Text>
+                    </DisclosurePanel>
+                </Disclosure>
             )}
         </Flex>
     </Flex>
 );
 
-/** The environment as one light, its devices' worst state; expand it for each device and why it failed. */
+/** Expand the environment's status to see individual devices and their errors. */
 export const EnvironmentRow = ({
     environment,
     statuses,
-    actions,
     isPending,
-    isDisabled,
-    onAction,
 }: {
     environment: SchemaSessionEnvironment | null | undefined;
     statuses: Statuses;
-    actions: PartAction[];
     isPending: boolean;
-    isDisabled?: boolean;
-    onAction: (action: PartAction) => void;
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const devices = Object.values(statuses).filter(({ component }) => component.startsWith('environment/'));
     const failed = devices.filter(({ state }) => state === 'failed').length;
-    const isStarting = devices.some(({ state }) => state === 'starting');
-    const canExpand = environment != null && devices.length > 0;
+    const failure = failureOf(statuses, 'environment');
+    const canExpand = environment != null && (devices.length > 0 || failure !== null);
+    const failures = devices
+        .filter(({ state }) => state === 'failed')
+        .map(({ component, error }) => `${component}:${error}`)
+        .join('|');
+    useEffect(() => {
+        if (failure !== null || failures !== '') setIsExpanded(true);
+    }, [failure, failures]);
 
     return (
         <>
             <PartRow
                 label='Environment'
                 name={environment?.name}
-                detail={failed > 0 ? `${failed} device${failed === 1 ? '' : 's'} failed` : undefined}
-                error={failureOf(statuses, 'environment')}
-                light={failed > 0 ? 'negative' : isStarting ? 'notice' : undefined}
-                isLoaded={environment != null}
+                error={canExpand ? undefined : failure}
                 isPending={isPending}
-                isDisabled={isDisabled}
-                actions={actions}
-                onAction={onAction}
-                expander={
-                    canExpand && (
-                        <ActionButton
-                            isQuiet
-                            aria-label={isExpanded ? 'Hide devices' : 'Show devices'}
-                            aria-expanded={isExpanded}
-                            onPress={() => setIsExpanded(!isExpanded)}
-                        >
-                            {isExpanded ? <ChevronDownLight /> : <ChevronRightSmallLight />}
-                        </ActionButton>
-                    )
-                }
             />
-            {canExpand && isExpanded && <DeviceStatuses devices={devices} environment={environment} />}
+            {canExpand && (
+                <Disclosure isQuiet isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
+                    <DisclosureTitle>
+                        {failed > 0
+                            ? `${failed} device${failed === 1 ? ' needs' : 's need'} attention`
+                            : 'Device details'}
+                    </DisclosureTitle>
+                    <DisclosurePanel>
+                        <Flex direction='column' gap='size-100'>
+                            {failure !== null && (
+                                <Text UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)' }}>{failure}</Text>
+                            )}
+                            <DeviceStatuses devices={devices} environment={environment} />
+                        </Flex>
+                    </DisclosurePanel>
+                </Disclosure>
+            )}
         </>
-    );
-};
-
-/** What the session has loaded, each part with its status and reload, swap and unload. */
-export const PartsPanel = () => {
-    const { state, statuses } = useRuntimeSession();
-    const { pendingPart, act } = usePartControls();
-
-    const environment = state?.environment;
-    const dataset = state?.dataset;
-    const model = state?.model;
-    const environmentFailure = failureOf(statuses, 'environment');
-
-    const loaded = (isLoaded: boolean): PartAction[] => (isLoaded ? ['reload', 'swap', 'unload'] : ['swap']);
-
-    /** A dataset or model is kept without a working environment, but loading one needs it. */
-    const partActions = (isLoaded: boolean): PartAction[] => {
-        if (environment == null || environmentFailure !== null) {
-            return isLoaded ? ['unload'] : [];
-        }
-        return loaded(isLoaded);
-    };
-
-    const row = (part: SessionPartName) => ({
-        isPending: pendingPart === part,
-        onAction: (action: PartAction) => act(part, action),
-    });
-
-    return (
-        <Flex direction='column' gap='size-150'>
-            <Heading level={4} margin={0}>
-                State
-            </Heading>
-            <EnvironmentRow
-                environment={environment}
-                statuses={statuses}
-                actions={loaded(environment != null)}
-                {...row('environment')}
-            />
-            <PartRow
-                label='Dataset'
-                name={dataset?.name}
-                detail={dataset?.episodes_recorded ? `${dataset.episodes_recorded} recorded this session` : undefined}
-                error={failureOf(statuses, 'dataset')}
-                isLoaded={dataset != null}
-                actions={partActions(dataset != null)}
-                {...row('dataset')}
-            />
-            <PartRow
-                label='Model'
-                name={model?.name}
-                detail={model ? `${model.backend} · ${model.device}` : undefined}
-                error={failureOf(statuses, 'model')}
-                isLoaded={model != null}
-                actions={partActions(model != null)}
-                {...row('model')}
-            />
-        </Flex>
     );
 };

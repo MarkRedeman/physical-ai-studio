@@ -55,7 +55,7 @@ const SwapDialog = ({
 
     return (
         <Dialog>
-            <Heading>{title}</Heading>
+            <Heading>Choose {title.toLowerCase()}</Heading>
             <Divider />
             <Content>
                 <Picker
@@ -82,7 +82,7 @@ const SwapDialog = ({
                         }
                     }}
                 >
-                    Load
+                    Use {title.toLowerCase()}
                 </Button>
             </ButtonGroup>
         </Dialog>
@@ -128,7 +128,7 @@ const LoadModelDialog = ({
 
     return (
         <Dialog>
-            <Heading>Model</Heading>
+            <Heading>Choose model</Heading>
             <Divider />
             <Content>
                 <Flex direction='column' gap='size-200'>
@@ -183,7 +183,7 @@ const LoadModelDialog = ({
                         }
                     }}
                 >
-                    Load
+                    Use model
                 </Button>
             </ButtonGroup>
         </Dialog>
@@ -193,9 +193,9 @@ const LoadModelDialog = ({
 /** Confirm a load that unloads parts which no longer fit, listing why. */
 const ConfirmUnload = ({ confirmation }: { confirmation: PendingConfirmation }) => (
     <AlertDialog
-        title='Unload parts that no longer fit?'
+        title='Update session setup?'
         variant='warning'
-        primaryActionLabel='Unload and continue'
+        primaryActionLabel='Switch and continue'
         secondaryActionLabel='Cancel'
         onPrimaryAction={confirmation.confirm}
         onSecondaryAction={confirmation.cancel}
@@ -204,7 +204,8 @@ const ConfirmUnload = ({ confirmation }: { confirmation: PendingConfirmation }) 
             {confirmation.parts.map((part) => (
                 <View key={`${part.part}-${part.name}`}>
                     <Text>
-                        The {part.part} <strong>{part.name}</strong> will be unloaded:
+                        The {part.part} <strong>{part.name}</strong> will be removed from this session because it is not
+                        compatible:
                     </Text>
                     <ul>
                         {part.reasons.map((reason) => (
