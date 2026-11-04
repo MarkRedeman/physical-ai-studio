@@ -217,6 +217,39 @@ test('stacks setup below the live views on narrower screens', async ({ page }, t
     await page.screenshot({ path: testInfo.outputPath('narrow.png') });
 });
 
+test('spans both workspace columns with recording and inference controls', async ({ page, network }) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] }))
+    );
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto(`${RECORD_URL}?modePreview=true`);
+    for (const mode of ['record', 'inference']) {
+        if (mode === 'inference') await page.getByRole('radio', { name: 'Inference', exact: true }).click();
+        const controls = await page
+            .getByRole('region', { name: mode === 'record' ? 'Episode controls' : 'Inference controls' })
+            .boundingBox();
+        const live = await page.getByRole('main', { name: 'Live session' }).boundingBox();
+        const setup = await page.getByRole('complementary', { name: 'Session setup' }).boundingBox();
+        expect(controls).not.toBeNull();
+        expect(live).not.toBeNull();
+        expect(setup).not.toBeNull();
+        expect(controls?.x).toBe(live?.x);
+        expect((controls?.x ?? 0) + (controls?.width ?? 0)).toBe((setup?.x ?? 0) + (setup?.width ?? 0));
+        expect(live?.y).toBeGreaterThan((controls?.y ?? 0) + (controls?.height ?? 0));
+        expect(setup?.y).toBe(live?.y);
+        for (const name of ['Environment', 'Recording', 'Inference']) {
+            const panel = await page.getByRole('region', { name, exact: true }).boundingBox();
+            expect(panel?.x).toBe(setup?.x);
+            expect(panel?.width).toBe(setup?.width);
+            if (name === 'Environment') expect(panel?.y).toBe(live?.y);
+        }
+    }
+    expect(controlCommandCount).toBe(0);
+});
+
 test('highlights a disconnected device and opens its details automatically', async ({ page }, testInfo) => {
     await page.goto(`${RECORD_URL}?deviceFailure=true`);
     const environment = page.getByRole('region', { name: 'Environment' });
