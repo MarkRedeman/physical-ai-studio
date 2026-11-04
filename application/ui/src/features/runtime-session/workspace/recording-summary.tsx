@@ -106,7 +106,7 @@ export const RecordingSummary = () => {
                     <Icon>
                         <InfoOutline />
                     </Icon>
-                    <Text>Recording tips</Text>
+                    <Text UNSAFE_className={classes.helpButtonText}>Recording tips</Text>
                 </ActionButton>
                 <RecordingTips />
             </DialogTrigger>

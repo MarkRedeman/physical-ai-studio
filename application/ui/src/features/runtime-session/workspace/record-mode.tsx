@@ -233,9 +233,6 @@ export const DatasetRecordingSection = () => {
                 recentTasks={recentTasks}
                 isReadOnly={isRecording || isPending}
             />
-            {isRateFixed && (
-                <Text UNSAFE_className={classes.hint}>Recording at {dataset.fps} fps · fixed for this dataset</Text>
-            )}
         </Flex>
     );
 };

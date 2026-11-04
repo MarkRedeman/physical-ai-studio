@@ -1,6 +1,19 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
-import { ActionButton, Content, Dialog, DialogTrigger, Flex, Heading, SearchField, Text, TextArea } from '@geti-ui/ui';
+import {
+    ActionButton,
+    Content,
+    Dialog,
+    DialogTrigger,
+    Flex,
+    Heading,
+    SearchField,
+    Text,
+    TextArea,
+    Tooltip,
+    TooltipTrigger,
+} from '@geti-ui/ui';
+import { Undo } from '@geti-ui/ui/icons';
 
 import { $api } from '../../../api/client';
 import { SchemaEpisodeInfo } from '../../../api/openapi-spec';
@@ -75,11 +88,35 @@ export const CurrentTaskPicker = ({
         params: { path: { dataset_id } },
     });
     const suggestions = getTaskSuggestions(episodes, recentTasks);
+    const taskId = useId();
+    const labelId = useId();
 
     return (
         <Flex direction='column' gap='size-50'>
+            <div className={classes.taskHeader}>
+                <label htmlFor={taskId} id={labelId} className={classes.taskLabel}>
+                    Current task <span aria-hidden='true'>*</span>
+                </label>
+                {suggestions.length > 0 && (
+                    <DialogTrigger type='popover'>
+                        <TooltipTrigger delay={300}>
+                            <ActionButton
+                                isQuiet
+                                isDisabled={isReadOnly}
+                                aria-label='Use previous task…'
+                                UNSAFE_className={classes.historyButton}
+                            >
+                                <Undo />
+                            </ActionButton>
+                            <Tooltip>Use a previous task</Tooltip>
+                        </TooltipTrigger>
+                        {(close) => <TaskHistory tasks={suggestions} onSelect={onChange} close={close} />}
+                    </DialogTrigger>
+                )}
+            </div>
             <TextArea
-                label='Current task'
+                id={taskId}
+                aria-labelledby={labelId}
                 width='100%'
                 isRequired
                 isReadOnly={isReadOnly}
@@ -87,14 +124,6 @@ export const CurrentTaskPicker = ({
                 onChange={onChange}
                 description='Describe the action to capture in this episode.'
             />
-            {suggestions.length > 0 && (
-                <DialogTrigger type='popover'>
-                    <ActionButton isQuiet isDisabled={isReadOnly} alignSelf='start'>
-                        Use previous task…
-                    </ActionButton>
-                    {(close) => <TaskHistory tasks={suggestions} onSelect={onChange} close={close} />}
-                </DialogTrigger>
-            )}
             {isError && (
                 <Text UNSAFE_className={classes.hint}>
                     Previous tasks could not be loaded. You can still enter a new task.
