@@ -187,6 +187,19 @@ test('distinguishes neutral borders, selection, hover, and keyboard focus', asyn
     expect(controlCommandCount).toBe(0);
 });
 
+test('uses matching panel headings and keeps guidance larger than metadata', async ({ page }) => {
+    await page.goto(RECORD_URL);
+    for (const name of ['Environment', 'Recording', 'Inference']) {
+        const heading = page.getByRole('heading', { name, exact: true });
+        await expect(heading).toHaveCSS('font-size', '16px');
+        await expect(heading).toHaveCSS('font-weight', '600');
+        await expect(heading).toHaveCSS('color', 'rgb(255, 255, 255)');
+    }
+    await expect(page.getByText(/Once you train a model/)).toHaveCSS('font-size', '14px');
+    await expect(page.getByText('Pick and place', { exact: true })).toHaveCSS('font-weight', '600');
+    await expect(page.getByText('Recording at 30 fps · fixed for this dataset')).toHaveCSS('font-size', '12px');
+});
+
 test('stacks setup below the live views on narrower screens', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 820, height: 1000 });
     await page.goto(RECORD_URL);

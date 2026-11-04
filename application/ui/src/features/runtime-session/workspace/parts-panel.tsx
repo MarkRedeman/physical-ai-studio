@@ -117,7 +117,7 @@ export const PartRow = ({
 }) => (
     <Flex alignItems='center' justifyContent='space-between' gap='size-100'>
         <Flex direction='column' minWidth={0}>
-            <Text UNSAFE_className={classes.resourceName}>
+            <Text UNSAFE_className={classes.resourceName} data-empty={name == null && !isPending ? true : undefined}>
                 {isPending ? 'Preparing…' : (name ?? `No ${label.toLowerCase()} selected`)}
             </Text>
             {detail && !isPending && <Text UNSAFE_className={classes.resourceDetail}>{detail}</Text>}

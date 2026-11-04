@@ -34,8 +34,12 @@
     font-size: var(--spectrum-global-dimension-font-size-100);
 }
 
+.statusCopy > strong {
+    font-weight: 600;
+}
+
 .hint {
-    font-size: var(--spectrum-global-dimension-font-size-75);
+    font-size: var(--spectrum-global-dimension-font-size-100);
     color: var(--spectrum-global-color-gray-700);
     line-height: 1.5;
 }

@@ -1,7 +1,14 @@
 .resourceName {
+    font-size: var(--spectrum-global-dimension-font-size-100);
     font-weight: 600;
     line-height: 1.4;
+    color: var(--spectrum-global-color-gray-900);
     overflow-wrap: anywhere;
+}
+
+.resourceName[data-empty] {
+    font-weight: 400;
+    color: var(--spectrum-global-color-gray-700);
 }
 
 .resourceDetail {
