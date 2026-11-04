@@ -29,7 +29,9 @@ from loguru import logger
 from exceptions import RuntimeSessionCommandError
 from robots.features import sanitize_camera_name
 from runtime_session.bus import Bus, Subscription, publish_status, status_key
+from runtime_session.home_position import capability_for_so101
 from runtime_session.store import FeatureSpec, Store
+from schemas.home_position import HomeCapability
 from schemas.runtime_session import CommandDone, ReloadEnvironment, SessionCamera, SessionEnvironment, StatusMessage
 from workers.base import WorkerStartupError
 from workers.camera_worker import CameraWorker, camera_image_spec
@@ -64,6 +66,7 @@ class EnvironmentDescription:
     """Camera rows by store key, the key a dataset records them under."""
     simulation_url: str | None = None
     """For a simulated follower: where its simulation served when this was described."""
+    home_capability: HomeCapability | None = None
 
     def session_environment(self) -> SessionEnvironment:
         """What the session's ``state`` message says about this environment."""
@@ -83,6 +86,7 @@ class EnvironmentDescription:
                 )
                 for key, camera in self.cameras.items()
             ],
+            home_capability=self.home_capability,
         )
 
 
@@ -126,6 +130,7 @@ async def describe_environment(
         leader=leader,
         cameras=cameras,
         simulation_url=getattr(robot.payload, "http_url", None),
+        home_capability=capability_for_so101(follower, getattr(robot.payload, "serial_number", "")),
     )
 
 
@@ -221,6 +226,7 @@ class Environment:
                     hz=DEFAULT_ROBOT_HZ,
                     session_id=self.session_id,
                     component=f"{COMPONENT}/follower",
+                    home_capability=description.home_capability,
                 )
                 managers: dict[str, AbstractAsyncContextManager[Any]] = {"follower": follower}
                 for key, row in description.cameras.items():
