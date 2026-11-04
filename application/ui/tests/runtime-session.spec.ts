@@ -25,10 +25,10 @@ test.beforeEach(async ({ network, page }) => {
             HttpResponse.json([{ id: 'environment-1', name: 'Workbench' }])
         ),
         http.get('/api/projects/{project_id}/models', () => HttpResponse.json([])),
-        http.get('/api/projects/{project_id}/robots/{robot_id}', () =>
+        http.get('/api/projects/{project_id}/robots/{robot_id}', ({ params }) =>
             HttpResponse.json({
-                id: 'robot-1',
-                name: 'Demo follower',
+                id: String(params.robot_id),
+                name: params.robot_id === 'leader-1' ? 'Demo leader' : 'Demo follower',
                 type: 'demo-robot',
                 unavailable: true,
                 payload: {},
@@ -124,4 +124,16 @@ test('highlights a disconnected device and opens its details automatically', asy
     await expect(environment.getByText('Leader disconnected. Check its USB connection.')).toBeVisible();
     await expect(environment.getByRole('switch', { name: 'Teleoperate' })).toBeDisabled();
     await page.screenshot({ path: testInfo.outputPath('device-error.png') });
+});
+
+test('shows robot representations and activity inside the environment chevron', async ({ page }, testInfo) => {
+    await page.goto(RECORD_URL);
+    const environment = page.getByRole('region', { name: 'Environment' });
+    await environment.getByRole('button', { name: 'Show device details' }).click();
+    await expect(environment.getByText('Demo follower')).toBeVisible();
+    await expect(environment.getByText('Demo leader')).toBeVisible();
+    await page.getByRole('switch', { name: 'Teleoperate' }).click();
+    await expect(environment.getByRole('group', { name: 'Follower robot' }).getByText('Active')).toBeVisible();
+    await expect(environment.getByRole('group', { name: 'Leader robot' }).getByText('Active')).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('robot-overview.png') });
 });

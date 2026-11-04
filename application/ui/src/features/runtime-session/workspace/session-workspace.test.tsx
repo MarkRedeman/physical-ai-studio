@@ -67,7 +67,7 @@ describe('SessionWorkspace', () => {
         expect(screen.getByText('Leader disconnected')).toBeVisible();
         await user.click(toggle);
         expect(screen.getByRole('button', { name: 'Show device details' })).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.getByText('Leader disconnected')).not.toBeVisible();
+        expect(screen.queryByText('Leader disconnected')).not.toBeInTheDocument();
     });
 
     it('shows the dataset total in the recording toolbar, including this session', async () => {
