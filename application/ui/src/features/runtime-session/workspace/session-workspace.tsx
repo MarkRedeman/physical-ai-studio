@@ -1,6 +1,6 @@
 import { ReactNode, Suspense } from 'react';
 
-import { Flex, Heading, Loading, StatusLight, Text } from '@geti-ui/ui';
+import { Flex, Heading, Loading, Text } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { useProjectId } from '../../projects/use-project';
@@ -8,8 +8,8 @@ import { TeleopSwitch } from '../cells/robot-cell';
 import { failureOf, SessionPartName, useRuntimeSession } from '../runtime-session-provider';
 import { SessionViewer } from '../session-viewer';
 import { InferenceMode } from './inference-mode';
-import { PartAction, PartControlsProvider, usePartControls } from './part-controls';
-import { EnvironmentRow, PartRow } from './parts-panel';
+import { PartControlsProvider, usePartControls } from './part-controls';
+import { EnvironmentRow, PartActions, PartRow } from './parts-panel';
 import { DatasetRecordingSection, RecordingProvider, RecordingToolbar } from './record-mode';
 
 import classes from './session-workspace.module.css';
@@ -20,17 +20,29 @@ const WorkspaceSection = ({
     title,
     children,
     isActive = false,
+    actions,
+    hasError = false,
 }: {
     title: string;
     children: ReactNode;
     isActive?: boolean;
+    actions?: ReactNode;
+    hasError?: boolean;
 }) => (
-    <section className={classes.section} data-active={isActive || undefined} aria-label={title}>
+    <section
+        className={classes.section}
+        data-active={isActive || undefined}
+        data-error={hasError || undefined}
+        aria-label={title}
+    >
         <div className={classes.sectionHeading}>
             <Heading level={3} margin={0}>
                 {title}
             </Heading>
-            {isActive && <StatusLight variant='positive'>Active</StatusLight>}
+            <Flex alignItems='center' gap='size-100'>
+                {isActive && <Text UNSAFE_className={classes.activeLabel}>Active</Text>}
+                {actions}
+            </Flex>
         </div>
         <Flex direction='column' gap='size-200'>
             {children}
@@ -51,29 +63,41 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const environmentFailure = failureOf(statuses, 'environment');
     const isRecording = dataset?.is_recording ?? false;
     const isTeleop = state?.control?.type === 'teleop';
+    const hasDeviceFailure = Object.values(statuses).some(
+        (status) => status.component.startsWith('environment/') && status.state === 'failed'
+    );
 
-    const loaded = (isLoaded: boolean): PartAction[] => (isLoaded ? ['reload', 'swap', 'unload'] : ['swap']);
-    const partActions = (isLoaded: boolean): PartAction[] => {
-        if (environment == null || environmentFailure !== null) return isLoaded ? ['unload'] : [];
-        return loaded(isLoaded);
-    };
-    const row = (part: SessionPartName) => ({
-        isPending: pendingPart === part,
-        onAction: (action: PartAction) => act(part, action),
-        // Loading or replacing resources during an episode can discard it.
-        isDisabled: isRecording || pendingPart !== null,
-    });
+    const actions = (part: SessionPartName) => (
+        <PartActions
+            part={part}
+            isLoaded={state?.[part] != null}
+            isPending={pendingPart === part}
+            isDisabled={isRecording || pendingPart !== null}
+            canChoose={part === 'environment' || (environment != null && environmentFailure === null)}
+            canRetry={
+                failureOf(statuses, part) !== null ||
+                (part === 'environment' &&
+                    Object.values(statuses).some(
+                        (status) => status.component.startsWith('environment/') && status.state === 'failed'
+                    ))
+            }
+            onAction={(action) => act(part, action)}
+        />
+    );
 
     const recording = (
-        <WorkspaceSection title='Recording' isActive={isRecording}>
+        <WorkspaceSection
+            title='Recording'
+            isActive={isRecording}
+            actions={actions('dataset')}
+            hasError={failureOf(statuses, 'dataset') !== null}
+        >
             <PartRow
                 label='Dataset'
                 name={dataset?.name}
                 detail={dataset ? `${dataset.episodes_recorded} saved this session` : undefined}
                 error={failureOf(statuses, 'dataset')}
-                isLoaded={dataset != null}
-                actions={partActions(dataset != null)}
-                {...row('dataset')}
+                isPending={pendingPart === 'dataset'}
             />
             {dataset != null ? (
                 <DatasetRecordingSection />
@@ -96,15 +120,18 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                 </Text>
             </section>
         ) : (
-            <WorkspaceSection title='Inference' isActive={state?.control?.type === 'model'}>
+            <WorkspaceSection
+                title='Inference'
+                isActive={state?.control?.type === 'model'}
+                actions={actions('model')}
+                hasError={failureOf(statuses, 'model') !== null}
+            >
                 <PartRow
                     label='Model'
                     name={model?.name}
                     detail={model ? `${model.backend} · ${model.device}` : undefined}
                     error={failureOf(statuses, 'model')}
-                    isLoaded={model != null}
-                    actions={partActions(model != null)}
-                    {...row('model')}
+                    isPending={pendingPart === 'model'}
                 />
                 {model != null ? (
                     <InferenceMode />
@@ -116,12 +143,15 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
 
     return (
         <>
-            <WorkspaceSection title='Environment'>
+            <WorkspaceSection
+                title='Environment'
+                actions={actions('environment')}
+                hasError={environmentFailure !== null || hasDeviceFailure}
+            >
                 <EnvironmentRow
                     environment={environment}
                     statuses={statuses}
-                    actions={loaded(environment != null)}
-                    {...row('environment')}
+                    isPending={pendingPart === 'environment'}
                 />
                 {environment?.leader_id != null && (
                     <div className={classes.teleop} data-active={isTeleop || undefined}>
