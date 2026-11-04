@@ -55,6 +55,18 @@ beforeEach(() => {
 });
 
 describe('SessionWorkspace', () => {
+    it('keeps the setup panels without an introductory heading or description', async () => {
+        renderWorkspace();
+        const setup = await screen.findByRole('complementary', { name: 'Session setup' });
+        expect(within(setup).queryByRole('heading', { name: 'Session setup' })).not.toBeInTheDocument();
+        expect(
+            within(setup).queryByText('Select a mode to record demonstrations or run a model.')
+        ).not.toBeInTheDocument();
+        for (const name of ['Environment', 'Recording', 'Inference']) {
+            expect(within(setup).getByRole('region', { name })).toBeInTheDocument();
+        }
+    });
+
     it('opens device failures automatically and lets the header chevron hide them', async () => {
         statuses['environment/leader'] = {
             type: 'status',
@@ -244,6 +256,6 @@ describe('SessionWorkspace', () => {
         });
         renderWorkspace();
         expect(await screen.findByRole('radio', { name: 'Inference' })).toBeDisabled();
-        expect(screen.getByText(/before switching modes/)).toBeInTheDocument();
+        expect(screen.queryByText(/before switching modes/)).not.toBeInTheDocument();
     });
 });

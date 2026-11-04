@@ -277,7 +277,6 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
 
 const WorkspaceContent = ({ initialMode, cancelHref, backButton }: SessionWorkspaceProps) => {
     const { mode } = useSessionMode();
-    const { state } = useRuntimeSession();
     const back = backButton ?? <BackButton href={cancelHref} />;
     return (
         <div className={classes.workspace}>
@@ -289,16 +288,6 @@ const WorkspaceContent = ({ initialMode, cancelHref, backButton }: SessionWorksp
                 </div>
             </main>
             <aside className={classes.sidebar} aria-label='Session setup'>
-                <div className={classes.sidebarHeading}>
-                    <Heading level={2} margin={0}>
-                        Session setup
-                    </Heading>
-                    <Text UNSAFE_className={classes.hint}>
-                        {state?.dataset?.is_recording
-                            ? 'Save or discard this episode before switching modes.'
-                            : 'Select a mode to record demonstrations or run a model.'}
-                    </Text>
-                </div>
                 <Sections initialMode={initialMode} />
             </aside>
         </div>
