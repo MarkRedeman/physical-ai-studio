@@ -199,8 +199,8 @@ describe('SessionWorkspace', () => {
         await user.click(within(inference).getByRole('radio', { name: 'Inference' }));
         expect(screen.getByRole('button', { name: 'Run model' })).toBeEnabled();
         expect(within(inference).queryByRole('slider')).not.toBeInTheDocument();
-        await user.click(within(inference).getByRole('button', { name: 'Execution settings' }));
-        expect(within(inference).getAllByRole('slider')).toHaveLength(1);
+        await user.click(within(inference).getByRole('button', { name: /Execution settings/ }));
+        expect(within(inference).getAllByRole('slider')).toHaveLength(2);
         await user.click(within(inference).getByRole('radio', { name: 'Asynchronous' }));
         expect(within(inference).getAllByRole('slider')).toHaveLength(2);
     });

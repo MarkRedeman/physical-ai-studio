@@ -20,7 +20,7 @@ This is still a UX experiment. Prioritize visual iteration and small signed comm
 - Added a compact task-history icon action beside **Current task**, with a tooltip and accessible “Use previous task…” label. It opens a popover with search and wrapping task buttons. Suggestions combine previous episode tasks and successfully saved tasks from this session, trim blanks, and deduplicate.
 - Put editable recording rate **before Current task** for new datasets. Explain that the first saved episode locks it; show only a muted fixed-rate summary afterward.
 - Replaced empty inference's “No model selected” and header chooser with a clickable, left-aligned text resource selector and a right-hand chevron. Do not add a play icon here: it suggests playing a movie. An earlier large centered/dashed tile felt inconsistent with the rest of the screen. Projects without runnable exports retain a quiet training/export placeholder.
-- Kept inference execution settings behind a disclosure, with execution-mode radios and the chunk threshold shown only for asynchronous execution.
+- Inference shows a larger backend-logo tile with the model name and backend/device details to its right. Execution-mode radios are horizontal. The compact **Execution settings** disclosure contains action rate and request threshold, with Hz/percentage values summarized while collapsed. **Request threshold is supported in both synchronous and asynchronous execution**; do not hide it for synchronous mode.
 - Mode selection adds a border glow even when idle; “Recording”/“Running” text describes actual execution separately. The toolbar shows the selected workflow's actions. Selecting a mode never starts motion; switching first holds any existing robot control and waits for its acknowledgement. Switching is disabled during episodes and shared recording/model commands.
 
 ## Code map
@@ -35,7 +35,7 @@ Under `application/ui/src/features/runtime-session/workspace/`:
 - `current-task-picker.tsx` / `.module.css`: multiline editor and searchable task-history popover.
 - `recording-summary.tsx` / `.module.css`: dataset-progress block, persisted + session totals, and recording guidance popover.
 - `back-to-dataset-button.tsx`: waits for dataset finalization before leaving; stays on the page if it fails.
-- `inference-mode.tsx`: shared inference provider, model settings, and inference Run/Stop toolbar.
+- `inference-mode.tsx` / `.module.css`: shared inference provider, backend branding, compact settings, and inference Run/Stop toolbar.
 
 Entry points: `application/ui/src/routes/datasets/record/index.tsx` and `application/ui/src/features/models/inference/inference-page.tsx`. Shared hotkey handling is in `application/ui/src/features/hotkeys/use-hotkey.ts`; it now ignores handled events and dialog/menu/listbox interactions.
 
