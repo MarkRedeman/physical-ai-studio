@@ -84,11 +84,11 @@ const useInferenceState = () => {
             // Ease onto model actions instead of jumping from the follower's current position.
             grace_s: 3,
         };
-        void run({ command: 'set_control', control }, 'Could not run the model.');
+        void run({ command: 'set_control', control, reject_open_episode: true }, 'Could not run the model.');
     };
     const stop = () => {
         if (isRunning && !isPending && !isRecording)
-            void run({ command: 'set_control', control: null }, 'Could not stop the model.');
+            void run({ command: 'set_control', control: null, reject_open_episode: true }, 'Could not stop the model.');
     };
 
     return {

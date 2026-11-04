@@ -11,12 +11,15 @@ import {
 } from 'react';
 
 import { toast } from '@geti-ui/ui';
-import useWebSocket from 'react-use-websocket';
+import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { v4 as uuidv4 } from 'uuid';
 
 import { fetchClient } from '../../api/client';
 import {
     SchemaAckMessage,
+    SchemaCancelHomeReturnCommand,
+    SchemaCaptureHomePositionCommand,
+    SchemaCheckRecordingIdleCommand,
     SchemaDiscardEpisodeCommand,
     SchemaEnvironmentDraft,
     SchemaEnvironmentWithRelations,
@@ -27,6 +30,8 @@ import {
     SchemaLoadModelCommand,
     SchemaObservationMessage,
     SchemaReloadEnvironmentCommand,
+    SchemaRenewHomeReturnCommand,
+    SchemaReturnHomeCommand,
     SchemaSaveEpisodeCommand,
     SchemaSessionState,
     SchemaSetControlCommand,
@@ -63,7 +68,12 @@ type Command =
     | Omit<SchemaUnloadModelCommand, 'request_id'>
     | Omit<SchemaStartEpisodeCommand, 'request_id'>
     | Omit<SchemaSaveEpisodeCommand, 'request_id'>
-    | Omit<SchemaDiscardEpisodeCommand, 'request_id'>;
+    | Omit<SchemaDiscardEpisodeCommand, 'request_id'>
+    | Omit<SchemaCaptureHomePositionCommand, 'request_id'>
+    | Omit<SchemaReturnHomeCommand, 'request_id'>
+    | Omit<SchemaRenewHomeReturnCommand, 'request_id'>
+    | Omit<SchemaCancelHomeReturnCommand, 'request_id'>
+    | Omit<SchemaCheckRecordingIdleCommand, 'request_id'>;
 
 /** A model export to load: which model, and the backend and device it runs on. */
 export type SessionModelToLoad = Omit<SchemaLoadModelCommand, 'request_id' | 'command'>;
@@ -139,6 +149,7 @@ interface RuntimeSessionContextValue {
 const RuntimeSessionContext = createContext<RuntimeSessionContextValue | null>(null);
 
 const SESSION_HZ = 20;
+const HOME_COMMANDS = new Set(['capture_home_position', 'return_home', 'renew_home_return', 'cancel_home_return']);
 
 const sessionSocketUrl = (project_id: string) =>
     fetchClient.PATH('/api/projects/{project_id}/runtime/ws', { params: { path: { project_id } } });
@@ -230,7 +241,7 @@ export const RuntimeSessionProvider = ({
         [frames]
     );
 
-    const { sendJsonMessage } = useWebSocket(sessionSocketUrl(project_id), {
+    const { sendJsonMessage, getWebSocket } = useWebSocket(sessionSocketUrl(project_id), {
         queryParams: { hz: SESSION_HZ },
         // A new socket is a new session; the load effect below loads it again.
         shouldReconnect: () => !sessionClosed.current,
@@ -329,10 +340,24 @@ export const RuntimeSessionProvider = ({
         (command: Command) =>
             new Promise<SchemaAckMessage>((resolve) => {
                 const request_id = uuidv4();
+                const isHomeCommand = HOME_COMMANDS.has(command.command);
+                if (isHomeCommand && getWebSocket()?.readyState !== ReadyState.OPEN) {
+                    resolve({
+                        type: 'ack',
+                        request_id,
+                        ok: false,
+                        error: {
+                            message: 'Home commands require a connected session.',
+                            error_code: 'connection_closed',
+                        },
+                    });
+                    return;
+                }
                 pending.set(request_id, resolve);
-                sendJsonMessage({ ...command, request_id });
+                // Never replay a buffered home movement into a new session after reconnecting.
+                sendJsonMessage({ ...command, request_id }, !isHomeCommand);
             }),
-        [pending, sendJsonMessage]
+        [pending, sendJsonMessage, getWebSocket]
     );
 
     // Reload whenever the environment changes, and on every new socket (a new session).
