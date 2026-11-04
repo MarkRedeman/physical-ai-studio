@@ -1,8 +1,23 @@
 .workspace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-150);
+    height: 100%;
+    min-height: 0;
+}
+
+.sessionControls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-150);
+    flex: none;
+}
+
+.workspaceBody {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;
     gap: var(--spectrum-global-dimension-size-200);
-    height: 100%;
+    flex: 1;
     min-height: 0;
 }
 
@@ -28,8 +43,6 @@
     gap: var(--spectrum-global-dimension-size-150);
     min-height: 0;
     overflow: auto;
-    scrollbar-gutter: stable;
-    padding: var(--spectrum-global-dimension-size-50) var(--spectrum-global-dimension-size-100);
 }
 
 .section {
@@ -58,7 +71,7 @@
 
 .section:has(.modeRadio input:focus-visible) {
     outline: 2px solid var(--spectrum-global-color-blue-600);
-    outline-offset: 3px;
+    outline-offset: -3px;
 }
 
 .section[data-error] {
@@ -132,7 +145,7 @@
 }
 
 @media (max-width: 900px) {
-    .workspace {
+    .workspaceBody {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: minmax(400px, 60vh) auto;
         overflow: auto;

@@ -280,16 +280,20 @@ const WorkspaceContent = ({ initialMode, cancelHref, backButton }: SessionWorksp
     const back = backButton ?? <BackButton href={cancelHref} />;
     return (
         <div className={classes.workspace}>
-            <main className={classes.liveWorkspace} aria-label='Live session'>
+            <div className={classes.sessionControls}>
                 <HomeReturnBanner />
                 {mode === 'record' ? <RecordingToolbar backButton={back} /> : <InferenceToolbar backButton={back} />}
-                <div className={classes.viewer}>
-                    <SessionViewer cancelHref={cancelHref} />
-                </div>
-            </main>
-            <aside className={classes.sidebar} aria-label='Session setup'>
-                <Sections initialMode={initialMode} />
-            </aside>
+            </div>
+            <div className={classes.workspaceBody}>
+                <main className={classes.liveWorkspace} aria-label='Live session'>
+                    <div className={classes.viewer}>
+                        <SessionViewer cancelHref={cancelHref} />
+                    </div>
+                </main>
+                <aside className={classes.sidebar} aria-label='Session setup'>
+                    <Sections initialMode={initialMode} />
+                </aside>
+            </div>
         </div>
     );
 };
