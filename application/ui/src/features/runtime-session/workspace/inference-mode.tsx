@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Button, Flex, Item, Picker, Slider, TextArea, toast } from '@geti-ui/ui';
+import { Button, Flex, Item, Picker, Slider, TextArea, toast, View } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { SchemaExecutionConfig, SchemaModelControlConfig } from '../../../api/openapi-spec';
@@ -74,6 +74,8 @@ export const InferenceMode = () => {
     return (
         <Flex direction='column' gap='size-200'>
             <TextArea label='Task' width='100%' value={task} onChange={setTask} isReadOnly={isRunning} />
+
+            {/* TODO: change this picker to be a RadioGroup */}
             <Picker
                 label='Execution'
                 width='100%'
@@ -84,37 +86,43 @@ export const InferenceMode = () => {
             >
                 {(item) => <Item key={item.key}>{item.label}</Item>}
             </Picker>
-            <Slider
-                label='Action rate'
-                width='100%'
-                minValue={5}
-                maxValue={100}
-                step={5}
-                value={hz}
-                onChange={setHz}
-                getValueLabel={(value) => `${value} Hz`}
-                isDisabled={isRunning}
-            />
-            <Slider
-                label='Request the next chunk at'
-                width='100%'
-                minValue={0}
-                maxValue={1}
-                step={0.05}
-                value={threshold}
-                onChange={setThreshold}
-                formatOptions={{ style: 'percent' }}
-                isDisabled={isRunning}
-            />
-            {isRunning ? (
-                <Button variant='secondary' isPending={isPending} onPress={() => void setControl(null)}>
-                    Stop
-                </Button>
-            ) : (
-                <Button isPending={isPending} isDisabled={!canRun} onPress={play}>
-                    Play
-                </Button>
-            )}
+
+            {/* TODO: hide under a disclosrue, or a small dialog? Add contextual help information */}
+            <View>
+                <Slider
+                    label='Action rate'
+                    width='100%'
+                    minValue={5}
+                    maxValue={100}
+                    step={5}
+                    value={hz}
+                    onChange={setHz}
+                    getValueLabel={(value) => `${value} Hz`}
+                    isDisabled={isRunning}
+                />
+                <Slider
+                    label='Request the next chunk at'
+                    width='100%'
+                    minValue={0}
+                    maxValue={1}
+                    step={0.05}
+                    value={threshold}
+                    onChange={setThreshold}
+                    formatOptions={{ style: 'percent' }}
+                    isDisabled={isRunning}
+                />
+            </View>
+            <View isHidden>
+                {isRunning ? (
+                    <Button variant='secondary' isPending={isPending} onPress={() => void setControl(null)}>
+                        Stop
+                    </Button>
+                ) : (
+                    <Button isPending={isPending} isDisabled={!canRun} onPress={play}>
+                        Play
+                    </Button>
+                )}
+            </View>
         </Flex>
     );
 };
