@@ -161,6 +161,15 @@ class SetControlCommand(BaseModel):
     command: Literal["set_control"] = "set_control"
     request_id: str
     control: ControlConfig | None
+    reject_open_episode: bool = False
+    """Operator takeovers reject an open episode instead of implicitly discarding it."""
+
+
+class CheckRecordingIdleCommand(BaseModel):
+    """Validate an idle recorder before changing UI mode without starting/stopping control."""
+
+    command: Literal["check_recording_idle"] = "check_recording_idle"
+    request_id: str
 
 
 RuntimeSessionCommand = Annotated[
@@ -168,6 +177,7 @@ RuntimeSessionCommand = Annotated[
     | UnloadEnvironmentCommand
     | ReloadEnvironmentCommand
     | SetControlCommand
+    | CheckRecordingIdleCommand
     | LoadDatasetCommand
     | UnloadDatasetCommand
     | LoadModelCommand

@@ -28,7 +28,7 @@ class HomeCapability(BaseModel):
 
 
 class HomePose(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     version: Literal[1] = 1
     robot_id: UUID

@@ -87,6 +87,9 @@ class ModelControl(Control):
         if self._events is not None:
             self._events.step = self.step
         action = self.source.update(observation, {}, self.step)
+        if self.should_stop():
+            return  # A slow prediction must not publish an action after a takeover requested stop.
+        self.step += 1
         due = max(time.monotonic() + 1 / self.hz, self.started_at + self.grace_s)
         self.store.write(ACTION, action, timestamp=due)
         if self._events is not None:

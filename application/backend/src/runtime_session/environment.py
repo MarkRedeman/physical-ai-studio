@@ -130,7 +130,9 @@ async def describe_environment(
         leader=leader,
         cameras=cameras,
         simulation_url=getattr(robot.payload, "http_url", None),
-        home_capability=capability_for_so101(follower, getattr(robot.payload, "serial_number", "")),
+        home_capability=capability_for_so101(
+            follower, getattr(robot.payload, "serial_number", ""), environment_id=environment.id
+        ),
     )
 
 
