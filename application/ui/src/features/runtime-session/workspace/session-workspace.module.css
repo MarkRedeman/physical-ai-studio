@@ -1,0 +1,101 @@
+.workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: var(--spectrum-global-dimension-size-200);
+    height: 100%;
+    min-height: 0;
+}
+
+.liveWorkspace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-150);
+    min-width: 0;
+    min-height: 0;
+}
+
+.viewer {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-100);
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-150);
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    padding-inline-end: var(--spectrum-global-dimension-size-50);
+}
+
+.sidebarHeading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-50);
+    padding: var(--spectrum-global-dimension-size-100);
+}
+
+.section {
+    padding: var(--spectrum-global-dimension-size-200);
+    background: var(--spectrum-global-color-gray-100);
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-100);
+}
+
+.section[data-active] {
+    border-color: var(--spectrum-global-color-green-600);
+}
+
+.emptySection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-100);
+    padding: var(--spectrum-global-dimension-size-200);
+    border: 1px dashed var(--spectrum-global-color-gray-400);
+    border-radius: var(--spectrum-global-dimension-size-100);
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.sectionHeading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spectrum-global-dimension-size-100);
+    margin-bottom: var(--spectrum-global-dimension-size-150);
+}
+
+.hint {
+    color: var(--spectrum-global-color-gray-700);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    line-height: 1.5;
+}
+
+.teleop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-50);
+    padding: var(--spectrum-global-dimension-size-150);
+    background: var(--spectrum-global-color-gray-200);
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-75);
+}
+
+.teleop[data-active] {
+    border-color: var(--spectrum-global-color-blue-600);
+}
+
+@media (max-width: 900px) {
+    .workspace {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(400px, 60vh) auto;
+        overflow: auto;
+    }
+
+    .sidebar {
+        overflow: visible;
+    }
+}

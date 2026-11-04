@@ -54,7 +54,7 @@ const InferenceWorkspace = ({
                                         <ChevronLeft />
                                     </Icon>
                                     <Flex direction={'column'}>
-                                        <Text UNSAFE_className={classes.headerText}>Running model</Text>
+                                        <Text UNSAFE_className={classes.headerText}>Runtime session</Text>
                                         <Text UNSAFE_className={classes.subHeaderText}>{model.name}</Text>
                                     </Flex>
                                 </Flex>

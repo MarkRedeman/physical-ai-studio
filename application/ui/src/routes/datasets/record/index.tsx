@@ -29,7 +29,6 @@ import {
     RuntimeSessionProvider,
     useRuntimeSession,
 } from '../../../features/runtime-session/runtime-session-provider';
-import { HeaderRecordButton, RecordButton } from '../../../features/runtime-session/workspace/record-mode';
 import { SessionWorkspace } from '../../../features/runtime-session/workspace/session-workspace';
 import { paths } from '../../../paths';
 
@@ -118,7 +117,7 @@ const FinishRecordingLink = ({ subtitle }: { subtitle: string }) => {
                     )}
                     <Flex direction={'column'}>
                         <Text UNSAFE_className={classes.headerText}>
-                            {isFinishing ? 'Saving recording…' : 'Adding Episode'}
+                            {isFinishing ? 'Saving recording…' : 'Runtime session'}
                         </Text>
                         <Text UNSAFE_className={classes.subHeaderText}>{subtitle}</Text>
                     </Flex>
@@ -184,10 +183,6 @@ const RecordingPage = () => {
                         justifyContent={'space-between'}
                     >
                         <FinishRecordingLink subtitle={`${environment.name} | ${dataset.default_task}`} />
-                        <Suspense fallback={null}>
-                            <HeaderRecordButton />
-                        </Suspense>
-
                         <Suspense fallback={null}>
                             <TotalRecordedEpisodes />
                         </Suspense>

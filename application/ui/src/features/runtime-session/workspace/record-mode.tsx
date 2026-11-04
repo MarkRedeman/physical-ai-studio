@@ -1,13 +1,13 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
-import { Button, Flex, Form, Keyboard, Slider, Text, TextArea, toast } from '@geti-ui/ui';
+import { Button, Flex, Keyboard, Slider, Text, TextArea, toast } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { SchemaSessionDataset } from '../../../api/openapi-spec';
 import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
 import { useHotkey } from '../../hotkeys/use-hotkey';
-import { TeleopSwitch } from '../cells/robot-cell';
 import { ERROR_TOAST, failureOf, useRuntimeSession } from '../runtime-session-provider';
+import { usePartControls } from './part-controls';
 
 import classes from './record-mode.module.css';
 
@@ -15,244 +15,183 @@ const RecordingTimer = () => {
     const [seconds, setSeconds] = useState(0);
 
     useEffect(() => {
-        const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+        const started = Date.now();
+        const timer = window.setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
         return () => window.clearInterval(timer);
     }, []);
 
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60)
+    const minutes = Math.floor(seconds / 60)
         .toString()
         .padStart(2, '0');
-    const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
+    const remaining = (seconds % 60).toString().padStart(2, '0');
 
     return (
-        <span className={classes.timer} aria-hidden='true'>
-            {hours > 0
-                ? hours.toString().padStart(2, '0') + ':' + minutes + ':' + remainingSeconds
-                : minutes + ':' + remainingSeconds}
+        <span className={classes.timer} aria-label='Elapsed recording time'>
+            {minutes}:{remaining}
         </span>
     );
 };
 
-const RecordingStatus = () => (
-    <div className={classes.toolbarStatus} role='status' aria-live='polite'>
-        <span className={classes.recordingDot} aria-hidden='true' />
-        <div className={classes.statusCopy}>
-            <strong>Recording episode</strong>
-        </div>
-        <RecordingTimer />
-    </div>
-);
-
-/** Send a recording command and report a failure; ``isPending`` while one is in flight. */
-const useRecordingCommand = () => {
-    const { send } = useRuntimeSession();
+/** Shared by the task editor, toolbar and a single set of keyboard shortcuts. */
+const useRecordingState = () => {
+    const { state, statuses, send, isLoading } = useRuntimeSession();
+    const { pendingPart } = usePartControls();
+    const dataset = state?.dataset;
+    const { data: savedDataset, isPending: isTaskLoading } = $api.useQuery(
+        'get',
+        '/api/dataset/{dataset_id}',
+        { params: { path: { dataset_id: dataset?.dataset_id ?? '' } } },
+        { enabled: dataset != null }
+    );
+    const [task, setTask] = useState('');
     const [isPending, setIsPending] = useState(false);
+    const inFlight = useRef(false);
+    const defaultTask = savedDataset?.default_task ?? '';
+
+    useEffect(() => setTask(defaultTask), [defaultTask, dataset?.dataset_id]);
+
+    const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
+    const bindings = getEffectiveBindings(settings.hotkeys.bindings);
+    const isRecording = dataset?.is_recording ?? false;
+    const isReady =
+        state?.environment != null &&
+        failureOf(statuses, 'environment') === null &&
+        dataset != null &&
+        failureOf(statuses, 'dataset') === null;
+    const canRecord = isReady && !isPending && !isLoading && pendingPart === null;
+    const canStart = canRecord && !isRecording && !isTaskLoading && task.trim() !== '';
 
     const run = async (command: Parameters<typeof send>[0]) => {
+        if (inFlight.current) return;
+        inFlight.current = true;
         setIsPending(true);
         try {
             const ack = await send(command);
             if (!ack.ok) {
                 toast.negative(ack.error?.message ?? 'The recording command failed.', ERROR_TOAST);
             }
+            return ack;
         } finally {
+            inFlight.current = false;
             setIsPending(false);
         }
     };
 
-    return { run, isPending };
-};
-
-/** The dataset's default task, as the task box starts with it; refetched when the dataset is swapped. */
-const useDefaultTask = (dataset_id: string | undefined) => {
-    const { data } = $api.useQuery(
-        'get',
-        '/api/dataset/{dataset_id}',
-        { params: { path: { dataset_id: dataset_id ?? '' } } },
-        { enabled: dataset_id !== undefined }
-    );
-    return data?.default_task ?? '';
-};
-
-/** The rate a dataset with nothing recorded yet is recorded at; changing it loads the dataset again at that rate. */
-const RecordingRate = ({ dataset }: { dataset: SchemaSessionDataset }) => {
-    const [fps, setFps] = useState(dataset.fps);
-    const { run, isPending } = useRecordingCommand();
-
-    useEffect(() => setFps(dataset.fps), [dataset.fps]);
-
-    // Once it has episodes, here or on disk, the dataset has its own rate.
-    const isFixed = dataset.fps_fixed || dataset.episodes_recorded > 0 || dataset.is_recording;
-    const reload = (value: number) => {
-        if (value !== dataset.fps) {
-            void run({ command: 'load_dataset', dataset_id: dataset.dataset_id, fps: value });
-        }
+    const start = () => {
+        if (canStart) void run({ command: 'start_episode', task: task.trim() });
+    };
+    // Saving/discarding stays available if a device fails during an episode.
+    const save = () => {
+        if (isRecording && !isPending) void run({ command: 'save_episode' });
+    };
+    const discard = () => {
+        if (isRecording && !isPending) void run({ command: 'discard_episode' });
     };
 
-    if (isFixed) {
-        return null;
+    useHotkey(bindings['recording.start_episode'], start, canStart);
+    useHotkey(bindings['recording.accept_episode'], save, isRecording && !isPending);
+    useHotkey(bindings['recording.discard_episode'], discard, isRecording && !isPending);
+
+    return { task, setTask, isRecording, isPending, canStart, bindings, start, save, discard, run };
+};
+
+const RecordingContext = createContext<ReturnType<typeof useRecordingState> | null>(null);
+
+export const RecordingProvider = ({ children }: { children: ReactNode }) => {
+    const recording = useRecordingState();
+    return <RecordingContext.Provider value={recording}>{children}</RecordingContext.Provider>;
+};
+
+const useRecording = () => {
+    const recording = useContext(RecordingContext);
+    if (recording === null) throw new Error('useRecording must be used within a RecordingProvider');
+    return recording;
+};
+
+/** The rate is editable only until the dataset has its first episode. */
+const RecordingRate = ({ dataset }: { dataset: SchemaSessionDataset }) => {
+    const { statuses, isLoading } = useRuntimeSession();
+    const { run, isPending } = useRecording();
+    const { pendingPart } = usePartControls();
+    const [fps, setFps] = useState(dataset.fps);
+    useEffect(() => setFps(dataset.fps), [dataset.fps]);
+
+    if (dataset.fps_fixed || dataset.episodes_recorded > 0) {
+        return <Text UNSAFE_className={classes.hint}>Recording at {dataset.fps} fps · fixed for this dataset</Text>;
     }
+
+    const reload = async (value: number) => {
+        if (value === dataset.fps) return;
+        const ack = await run({ command: 'load_dataset', dataset_id: dataset.dataset_id, fps: value });
+        if (!ack?.ok) setFps(dataset.fps);
+    };
 
     return (
         <Slider
             label='Recording rate'
             value={fps}
             onChange={setFps}
-            onChangeEnd={reload}
+            onChangeEnd={(value) => void reload(value)}
             minValue={10}
             maxValue={100}
             step={5}
             getValueLabel={(value) => `${value} fps`}
-            isDisabled={isFixed || isPending}
             width='100%'
+            isDisabled={
+                dataset.is_recording ||
+                isPending ||
+                isLoading ||
+                pendingPart !== null ||
+                failureOf(statuses, 'environment') !== null
+            }
         />
     );
 };
 
-/** Record mode's side bar: teleoperation, the task, and start / accept / discard with their hotkeys. */
-export const RecordMode = () => {
-    const { state, statuses } = useRuntimeSession();
-    const dataset = state?.dataset ?? undefined;
-    const defaultTask = useDefaultTask(dataset?.dataset_id);
-    const [task, setTask] = useState(defaultTask);
-    const { run, isPending } = useRecordingCommand();
-
-    useEffect(() => setTask(defaultTask), [defaultTask]);
-
-    const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
-    const bindings = getEffectiveBindings(settings.hotkeys.bindings);
-
-    const isRecording = dataset?.is_recording ?? false;
-    // The dataset stays loaded without a working environment, with nothing to record from.
-    const canRecord =
-        dataset !== undefined &&
-        !isPending &&
-        state?.environment != null &&
-        failureOf(statuses, 'environment') === null;
-
-    const start = () => void run({ command: 'start_episode', task });
-    const save = () => void run({ command: 'save_episode' });
-    const discard = () => void run({ command: 'discard_episode' });
-
-    useHotkey(bindings['recording.start_episode'], start, canRecord && !isRecording && task !== '');
-    useHotkey(bindings['recording.accept_episode'], save, canRecord && isRecording);
-    useHotkey(bindings['recording.discard_episode'], discard, canRecord && isRecording);
-
-    const onStart = (event: FormEvent) => {
-        event.preventDefault();
-        if (task !== '') {
-            start();
+export const RecordingToolbar = () => {
+    const { state, statuses, isLoading } = useRuntimeSession();
+    const { task, isRecording, isPending, canStart, bindings, start, save, discard } = useRecording();
+    const getHint = () => {
+        if (isLoading) return 'Preparing the session…';
+        if (state?.environment == null || failureOf(statuses, 'environment') !== null) {
+            return 'Load a working environment to record episodes';
         }
+        if (state.dataset == null) return 'Load a dataset to record episodes';
+        if (failureOf(statuses, 'dataset') !== null) return 'Reload the dataset to record episodes';
+        if (task.trim() === '') return 'Add a task to start recording';
+        return 'Ready for the next episode';
     };
 
     return (
-        <Flex direction='column' gap='size-200'>
-            {state?.environment?.leader_id != null && <TeleopSwitch />}
-            <Form validationBehavior='native' onSubmit={onStart}>
-                <Flex direction='column' gap='size-150'>
-                    <TextArea
-                        label='Task'
-                        isReadOnly={isRecording}
-                        errorMessage={'A task is required in order to record.'}
-                        name='Task'
-                        width='100%'
-                        isRequired
-                        value={task}
-                        onChange={setTask}
-                    />
-                    {dataset !== undefined && <RecordingRate dataset={dataset} />}
-                    {isRecording && <RecordingStatus />}
-                    {isRecording ? (
-                        <Flex gap='size-100'>
-                            <Button flex isDisabled={isPending} variant={'negative'} onPress={discard}>
-                                <Text>Discard</Text>
-                                <Keyboard UNSAFE_className={classes.hotkey}>
-                                    {formatKeyCombo(bindings['recording.discard_episode'])}
-                                </Keyboard>
-                            </Button>
-                            <Button flex isPending={isPending} onPress={save}>
-                                <Text>Accept</Text>
-                                <Keyboard UNSAFE_className={classes.hotkey}>
-                                    {formatKeyCombo(bindings['recording.accept_episode'])}
-                                </Keyboard>
-                            </Button>
-                        </Flex>
-                    ) : (
-                        <Button type={'submit'} isPending={isPending} isDisabled={dataset === undefined}>
-                            <Text>Start episode</Text>
-                            <Keyboard UNSAFE_className={classes.hotkey}>
-                                {formatKeyCombo(bindings['recording.start_episode'])}
-                            </Keyboard>
-                        </Button>
-                    )}
-                </Flex>
-            </Form>
-        </Flex>
-    );
-};
-
-/** Record mode's side bar: teleoperation, the task, and start / accept / discard with their hotkeys. */
-export const HeaderRecordButton = () => {
-    const { state, statuses } = useRuntimeSession();
-    const dataset = state?.dataset ?? undefined;
-    const defaultTask = useDefaultTask(dataset?.dataset_id);
-    const [task, setTask] = useState(defaultTask);
-    const { run, isPending } = useRecordingCommand();
-
-    useEffect(() => setTask(defaultTask), [defaultTask]);
-
-    const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
-    const bindings = getEffectiveBindings(settings.hotkeys.bindings);
-
-    const isRecording = dataset?.is_recording ?? false;
-    // The dataset stays loaded without a working environment, with nothing to record from.
-    const canRecord =
-        dataset !== undefined &&
-        !isPending &&
-        state?.environment != null &&
-        failureOf(statuses, 'environment') === null;
-
-    const start = () => void run({ command: 'start_episode', task });
-    const save = () => void run({ command: 'save_episode' });
-    const discard = () => void run({ command: 'discard_episode' });
-
-    useHotkey(bindings['recording.start_episode'], start, canRecord && !isRecording && task !== '');
-    useHotkey(bindings['recording.accept_episode'], save, canRecord && isRecording);
-    useHotkey(bindings['recording.discard_episode'], discard, canRecord && isRecording);
-
-    const onStart = (event: FormEvent) => {
-        event.preventDefault();
-        if (task !== '') {
-            start();
-        }
-    };
-
-    // TODO: if mode is inference, then switch to "Play" & Stop
-
-    return (
-        <Form validationBehavior='native' onSubmit={onStart}>
-            <Flex direction='row' gap='size-150'>
+        <div className={classes.toolbar} aria-label='Episode controls' role='region'>
+            <div className={classes.toolbarStatus} role='status'>
+                {isRecording && <span className={classes.recordingDot} aria-hidden='true' />}
+                <div className={classes.statusCopy}>
+                    <strong>{isRecording ? 'Recording episode' : 'Episode recording'}</strong>
+                    <span className={classes.hint}>
+                        {isRecording ? 'Save this episode or discard it to try again.' : getHint()}
+                    </span>
+                </div>
+                {isRecording && <RecordingTimer />}
+            </div>
+            <Flex gap='size-100' flexShrink={0} wrap>
                 {isRecording ? (
-                    <Flex gap='size-100'>
-                        <Button flex isDisabled={isPending} variant={'negative'} onPress={discard}>
+                    <>
+                        <Button variant='secondary' isDisabled={isPending} onPress={discard}>
                             <Text>Discard</Text>
                             <Keyboard UNSAFE_className={classes.hotkey}>
                                 {formatKeyCombo(bindings['recording.discard_episode'])}
                             </Keyboard>
                         </Button>
-
-                        <RecordingStatus />
-
-                        <Button flex isPending={isPending} onPress={save}>
-                            <Text>Accept</Text>
+                        <Button variant='accent' isPending={isPending} onPress={save}>
+                            <Text>Save episode</Text>
                             <Keyboard UNSAFE_className={classes.hotkey}>
                                 {formatKeyCombo(bindings['recording.accept_episode'])}
                             </Keyboard>
                         </Button>
-                    </Flex>
+                    </>
                 ) : (
-                    <Button type={'submit'} isPending={isPending} isDisabled={dataset === undefined}>
+                    <Button variant='accent' isDisabled={!canStart} isPending={isPending} onPress={start}>
                         <Text>Start episode</Text>
                         <Keyboard UNSAFE_className={classes.hotkey}>
                             {formatKeyCombo(bindings['recording.start_episode'])}
@@ -260,139 +199,27 @@ export const HeaderRecordButton = () => {
                     </Button>
                 )}
             </Flex>
-        </Form>
+        </div>
     );
 };
 
-/** Record mode's side bar: teleoperation, the task, and start / accept / discard with their hotkeys. */
-export const RecordButton = () => {
-    const { state, statuses } = useRuntimeSession();
-    const dataset = state?.dataset ?? undefined;
-    const defaultTask = useDefaultTask(dataset?.dataset_id);
-    const [task, setTask] = useState(defaultTask);
-    const { run, isPending } = useRecordingCommand();
-
-    useEffect(() => setTask(defaultTask), [defaultTask]);
-
-    const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
-    const bindings = getEffectiveBindings(settings.hotkeys.bindings);
-
-    const isRecording = dataset?.is_recording ?? false;
-    // The dataset stays loaded without a working environment, with nothing to record from.
-    const canRecord =
-        dataset !== undefined &&
-        !isPending &&
-        state?.environment != null &&
-        failureOf(statuses, 'environment') === null;
-
-    const start = () => void run({ command: 'start_episode', task });
-    const save = () => void run({ command: 'save_episode' });
-    const discard = () => void run({ command: 'discard_episode' });
-
-    useHotkey(bindings['recording.start_episode'], start, canRecord && !isRecording && task !== '');
-    useHotkey(bindings['recording.accept_episode'], save, canRecord && isRecording);
-    useHotkey(bindings['recording.discard_episode'], discard, canRecord && isRecording);
-
-    const onStart = (event: FormEvent) => {
-        event.preventDefault();
-        if (task !== '') {
-            start();
-        }
-    };
-
-    return (
-        <Flex direction='column' gap='size-200'>
-            <Form validationBehavior='native' onSubmit={onStart}>
-                <Flex direction='column' gap='size-150'>
-                    {isRecording && <RecordingStatus />}
-                    {isRecording ? (
-                        <Flex gap='size-100'>
-                            <Button flex isDisabled={isPending} variant={'negative'} onPress={discard}>
-                                <Text>Discard</Text>
-                                <Keyboard UNSAFE_className={classes.hotkey}>
-                                    {formatKeyCombo(bindings['recording.discard_episode'])}
-                                </Keyboard>
-                            </Button>
-                            <Button flex isPending={isPending} onPress={save}>
-                                <Text>Accept</Text>
-                                <Keyboard UNSAFE_className={classes.hotkey}>
-                                    {formatKeyCombo(bindings['recording.accept_episode'])}
-                                </Keyboard>
-                            </Button>
-                        </Flex>
-                    ) : (
-                        <Button type={'submit'} isPending={isPending} isDisabled={dataset === undefined}>
-                            <Text>Start episode</Text>
-                            <Keyboard UNSAFE_className={classes.hotkey}>
-                                {formatKeyCombo(bindings['recording.start_episode'])}
-                            </Keyboard>
-                        </Button>
-                    )}
-                </Flex>
-            </Form>
-        </Flex>
-    );
-};
-
-/** Record mode's side bar: teleoperation, the task, and start / accept / discard with their hotkeys. */
 export const DatasetRecordingSection = () => {
-    const { state, statuses } = useRuntimeSession();
-    const dataset = state?.dataset ?? undefined;
-    const defaultTask = useDefaultTask(dataset?.dataset_id);
-    const [task, setTask] = useState(defaultTask);
-    const { run, isPending } = useRecordingCommand();
-
-    useEffect(() => setTask(defaultTask), [defaultTask]);
-
-    const { data: settings } = $api.useSuspenseQuery('get', '/api/settings');
-    const bindings = getEffectiveBindings(settings.hotkeys.bindings);
-
-    const isRecording = dataset?.is_recording ?? false;
-    // The dataset stays loaded without a working environment, with nothing to record from.
-    const canRecord =
-        dataset !== undefined &&
-        !isPending &&
-        state?.environment != null &&
-        failureOf(statuses, 'environment') === null;
-
-    const start = () => void run({ command: 'start_episode', task });
-    const save = () => void run({ command: 'save_episode' });
-    const discard = () => void run({ command: 'discard_episode' });
-
-    useHotkey(bindings['recording.start_episode'], start, canRecord && !isRecording && task !== '');
-    useHotkey(bindings['recording.accept_episode'], save, canRecord && isRecording);
-    useHotkey(bindings['recording.discard_episode'], discard, canRecord && isRecording);
-
-    const onStart = (event: FormEvent) => {
-        event.preventDefault();
-        if (task !== '') {
-            start();
-        }
-    };
+    const { state } = useRuntimeSession();
+    const { task, setTask, isRecording, isPending } = useRecording();
+    const dataset = state?.dataset;
 
     return (
-        <Flex direction='column' gap='size-200'>
-            {/* TODO: figure out a better way to make the teleop switch standout
-                Maybe we can add a well like thing around it that is clickable and whose
-                borders light up when enabled?
-              */}
-            {state?.environment?.leader_id != null && <TeleopSwitch />}
-            <Form validationBehavior='native' onSubmit={onStart}>
-                <Flex direction='column' gap='size-150'>
-                    <TextArea
-                        label='Task'
-                        isReadOnly={isRecording}
-                        errorMessage={'A task is required in order to record.'}
-                        name='Task'
-                        width='100%'
-                        isRequired
-                        value={task}
-                        onChange={setTask}
-                    />
-                    {dataset !== undefined && <RecordingRate dataset={dataset} />}
-                    {isRecording && <RecordingStatus />}
-                </Flex>
-            </Form>
+        <Flex direction='column' gap='size-150'>
+            <TextArea
+                label='Task'
+                description='e.g. Pick up the cube and place it in the tray.'
+                width='100%'
+                isRequired
+                isReadOnly={isRecording || isPending}
+                value={task}
+                onChange={setTask}
+            />
+            {dataset != null && <RecordingRate key={dataset.dataset_id} dataset={dataset} />}
         </Flex>
     );
 };
