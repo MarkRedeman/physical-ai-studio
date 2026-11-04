@@ -90,10 +90,6 @@
     border-style: dashed;
 }
 
-.section[data-empty]:not([data-active]) .sectionHeading {
-    color: var(--spectrum-global-color-gray-700);
-}
-
 .modeGroup {
     min-width: 0;
 }
@@ -102,10 +98,12 @@
     margin: 0;
 }
 
+.sectionTitle,
 .modeLabel {
     font-size: var(--spectrum-global-dimension-font-size-200);
     font-weight: 600;
     line-height: 1.4;
+    color: var(--spectrum-global-color-gray-900);
 }
 
 .sectionHeading {
@@ -118,7 +116,7 @@
 
 .hint {
     color: var(--spectrum-global-color-gray-700);
-    font-size: var(--spectrum-global-dimension-font-size-75);
+    font-size: var(--spectrum-global-dimension-font-size-100);
     line-height: 1.5;
 }
 

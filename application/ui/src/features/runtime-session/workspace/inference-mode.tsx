@@ -215,7 +215,7 @@ export const InferenceMode = () => {
                                     formatOptions={{ style: 'percent' }}
                                     isDisabled={isLocked}
                                 />
-                                <Text UNSAFE_className={settingsClasses.hint}>
+                                <Text UNSAFE_className={settingsClasses.guidance}>
                                     Request the next action chunk when this fraction remains.
                                 </Text>
                             </Flex>

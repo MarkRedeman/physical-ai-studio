@@ -87,7 +87,7 @@ const WorkspaceSection = ({
             {...(modeKey == null ? {} : surfaceEvents)}
         >
             <div className={classes.sectionHeading}>
-                <Heading level={3} margin={0}>
+                <Heading level={3} margin={0} UNSAFE_className={classes.sectionTitle}>
                     {modeKey ? (
                         <Radio value={modeKey} UNSAFE_className={classes.modeRadio}>
                             <Text UNSAFE_className={classes.modeLabel}>{title}</Text>
