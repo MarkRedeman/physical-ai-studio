@@ -10,7 +10,7 @@
     gap: var(--spectrum-global-dimension-size-100);
     padding: var(--spectrum-global-dimension-size-125);
     background: var(--spectrum-global-color-gray-75);
-    border: 1px solid var(--spectrum-global-color-gray-300);
+    border: 1px solid var(--spectrum-global-color-gray-400);
     border-radius: var(--spectrum-global-dimension-size-75);
 }
 
