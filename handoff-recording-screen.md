@@ -25,6 +25,8 @@ This is still a UX experiment. Prioritize visual iteration and small signed comm
 - Inference shows a larger backend-logo tile with the model name and backend/device details to its right. Execution-mode radios are horizontal. The compact **Execution settings** disclosure contains action rate and request threshold, with Hz/percentage values summarized while collapsed. **Request threshold is supported in both synchronous and asynchronous execution**; do not hide it for synchronous mode.
 - A small inference footer shows the latest model-call latency and the recent average. Timing is per action chunk, excludes worker communication, and excludes the first warm-up prediction from the average. Updates are capped at four per second; stopping/restarting or switching models clears the displayed series.
 - Mode selection adds a border glow even when idle; “Recording”/“Running” text describes actual execution separately. The toolbar shows the selected workflow's actions. Selecting a mode never starts motion; switching first holds any existing robot control and waits for its acknowledgement. Switching is disabled during episodes and shared recording/model commands.
+- Mode-card titles and non-interactive backgrounds select the associated mode. Native radios remain the keyboard controls; the cards are not nested buttons. Fields, sliders, menus, and portaled dialogs do not select a mode. Control presses or drags released over card padding are ignored.
+- The teleoperation panel background toggles its switch, using the same shared readiness/pending/episode guards. Clicking the switch or its label must toggle only once. Enabling teleoperation from inference still stops model control and selects Recording through the existing command path.
 
 ## Code map
 
@@ -40,6 +42,7 @@ Under `application/ui/src/features/runtime-session/workspace/`:
 - `back-to-dataset-button.tsx`: waits for dataset finalization before leaving; stays on the page if it fails.
 - `inference-mode.tsx` / `.module.css`: shared inference provider, backend branding, compact settings, and inference Run/Stop toolbar.
 - `inference-latency-footer.tsx` / `.module.css`: latency, warm-up/waiting/stopped states, and measurement help. `runtime-session-provider.tsx` delivers metrics through a separate channel so telemetry does not update all setup controls.
+- `mode-card-interaction.ts`: safe surface-click filtering and gesture tracking. `teleoperation-panel.tsx` uses it with `../use-teleoperation.ts`, which is also the controller for the standalone robot-cell switch.
 
 Entry points: `application/ui/src/routes/datasets/record/index.tsx` and `application/ui/src/features/models/inference/inference-page.tsx`. Shared hotkey handling is in `application/ui/src/features/hotkeys/use-hotkey.ts`; it now ignores handled events and dialog/menu/listbox interactions.
 
@@ -55,6 +58,7 @@ Latency is measured in `application/backend/src/workers/model_worker.py`, aggreg
 6. **Status semantics:** don't infer activity just from a connected device. Preserve failure priority and automatic expansion when a new error arrives, while allowing the user to collapse details. Camera statuses use `environment/{camera.key}`, not camera IDs.
 7. **Visual/accessibility follow-up:** check long names/tasks, many cameras, narrow screens, light theme, popover placement, keyboard focus/return, and disabled-state explanations. Current camera/robot previews use mocked devices, not real feeds.
 8. **Latency semantics:** the average contains up to 20 successful, non-warm-up predictions. A new worker reset gives a new run ID; ignore delayed results from previous runs. Use client receipt time for age, not an assumption that browser and server clocks agree. An old result is labeled “Last result,” not reported as a new prediction. Do not confuse model-call latency with robot-loop or RPC round-trip latency.
+9. **Clickable surfaces:** wrap new complex fields in a native element with `data-mode-interactive` so their tracks, labels, and padding cannot activate the parent. Do not blanket-stop event propagation or add a button role/tab stop to the card. React portal events follow component ancestry, so DOM containment is essential. Keep the existing recording/home-return guards authoritative.
 
 ## Verification state
 
@@ -63,6 +67,8 @@ Before the latest experimental pass, the full unit suite passed (559 passed, one
 The device/task-history pass checked four mocked browser preview flows: device overview, task-history search/selection, first-episode rate setup, and model selection. The mode-selector follow-up checked radio switching, toolbar changes, stopping existing model control, keyboard switching, and disabled switching during an episode. The progress/help follow-up previewed an empty dataset, persisted + session episode totals, recording tips, and the compact model selector. **Do not assume current HEAD passes the full suite, lint, type-check, or build.** The latest shared mode/command providers and task-history/camera changes still need regression coverage and verification.
 
 The latency follow-up passed nine targeted backend tests (including fake-worker sync/async inference), six footer unit tests, and a mocked WebSocket browser flow covering early warm-up metrics, live updates, delayed results after stopping, and restart. Real hardware/backend latency was not exercised, and the live backend was not restarted.
+
+Clickable surfaces passed 28 focused guard/gesture tests and eight mocked browser cases. These cover titles/backgrounds, keyboard controls, nested fields and slider tracks, portaled help/history/menu interactions, episode locks, device failures, and single teleoperation toggles. The background handler ignores gestures started on controls without changing those controls' own native behavior. Run these tests with Node 24 or newer.
 
 Run UI commands from `application/ui/` when ready: `npm run lint`, `npm run format:check`, `npm run type-check`, `npm run test:unit`, `npm run build`, and `npm run test:component`. Browser previews used installed Chrome via a temporary Playwright config because the bundled Chromium executable was missing.
 

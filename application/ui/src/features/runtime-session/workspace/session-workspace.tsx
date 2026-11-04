@@ -6,18 +6,19 @@ import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
 import { useProjectId } from '../../projects/use-project';
-import { TELEOP_CONTROL, TeleopSwitch } from '../cells/robot-cell';
 import { failureOf, SessionPartName, useRuntimeSession } from '../runtime-session-provider';
 import { SessionViewer } from '../session-viewer';
 import { HomePosition, HomeReturnBanner } from './home-position';
 import { HomePositionProvider } from './home-position-provider';
 import { InferenceLatencyFooter } from './inference-latency-footer';
 import { InferenceMode, InferenceModelSummary, InferenceProvider, InferenceToolbar } from './inference-mode';
+import { useSurfaceActivation } from './mode-card-interaction';
 import { PartControlsProvider, usePartControls } from './part-controls';
 import { EnvironmentRow, PartActions, PartRow } from './parts-panel';
 import { DatasetRecordingSection, RecordingProvider, RecordingToolbar } from './record-mode';
 import { RecordingSummary } from './recording-summary';
 import { ModeKey, SessionModeProvider, useSessionMode } from './session-mode';
+import { TeleoperationPanel } from './teleoperation-panel';
 
 import classes from './session-workspace.module.css';
 
@@ -67,34 +68,45 @@ const WorkspaceSection = ({
     isQuiet?: boolean;
     actions?: ReactNode;
     hasError?: boolean;
-}) => (
-    <section
-        className={classes.section}
-        data-active={isSelected || undefined}
-        data-empty={isQuiet || undefined}
-        data-error={hasError || undefined}
-        aria-label={title}
-    >
-        <div className={classes.sectionHeading}>
-            <Heading level={3} margin={0}>
-                {modeKey ? (
-                    <Radio value={modeKey} UNSAFE_className={classes.modeRadio}>
-                        <Text UNSAFE_className={classes.modeLabel}>{title}</Text>
-                    </Radio>
-                ) : (
-                    title
-                )}
-            </Heading>
-            <Flex alignItems='center' gap='size-100'>
-                {activity && <Text UNSAFE_className={classes.activeLabel}>{activity}</Text>}
-                {actions}
+}) => {
+    const { canSwitch, selectMode } = useSessionMode();
+    const surfaceEvents = useSurfaceActivation(
+        () => {
+            if (modeKey != null) void selectMode(modeKey);
+        },
+        modeKey == null || !canSwitch || isSelected
+    );
+    return (
+        <section
+            className={classes.section}
+            data-active={isSelected || undefined}
+            data-empty={isQuiet || undefined}
+            data-error={hasError || undefined}
+            data-selectable={(modeKey != null && canSwitch && !isSelected) || undefined}
+            aria-label={title}
+            {...(modeKey == null ? {} : surfaceEvents)}
+        >
+            <div className={classes.sectionHeading}>
+                <Heading level={3} margin={0}>
+                    {modeKey ? (
+                        <Radio value={modeKey} UNSAFE_className={classes.modeRadio}>
+                            <Text UNSAFE_className={classes.modeLabel}>{title}</Text>
+                        </Radio>
+                    ) : (
+                        title
+                    )}
+                </Heading>
+                <Flex alignItems='center' gap='size-100'>
+                    {activity && <Text UNSAFE_className={classes.activeLabel}>{activity}</Text>}
+                    {actions}
+                </Flex>
+            </div>
+            <Flex direction='column' gap='size-200'>
+                {children}
             </Flex>
-        </div>
-        <Flex direction='column' gap='size-200'>
-            {children}
-        </Flex>
-    </section>
-);
+        </section>
+    );
+};
 
 const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const { project_id } = useProjectId();
@@ -102,7 +114,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
         params: { path: { project_id } },
     });
     const { state, statuses } = useRuntimeSession();
-    const { mode, selectMode, canSwitch, isPending, setTeleoperation } = useSessionMode();
+    const { mode, selectMode, canSwitch, isPending } = useSessionMode();
     const { pendingPart, act } = usePartControls();
     const environment = state?.environment;
     const dataset = state?.dataset;
@@ -110,7 +122,6 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const modelFailure = failureOf(statuses, 'model');
     const environmentFailure = failureOf(statuses, 'environment');
     const isRecording = dataset?.is_recording ?? false;
-    const isTeleop = state?.control?.type === 'teleop';
     const devices = Object.values(statuses).filter((status) => status.component.startsWith('environment/'));
     const deviceFailures = devices.filter((status) => status.state === 'failed');
     const hasDeviceFailure = deviceFailures.length > 0;
@@ -249,21 +260,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                     detailsId={deviceDetailsId}
                     control={state?.control}
                 />
-                {environment?.leader_id != null && (
-                    <div className={classes.teleop} data-active={isTeleop || undefined}>
-                        <TeleopSwitch
-                            isDisabled={isPending || pendingPart !== null}
-                            onToggle={(enabled) => setTeleoperation(enabled ? TELEOP_CONTROL : null)}
-                        />
-                        <Text UNSAFE_className={classes.hint}>
-                            {mode !== 'record'
-                                ? 'Enable teleoperation to stop model control and switch to Recording.'
-                                : isTeleop
-                                  ? 'The follower tracks your leader robot.'
-                                  : 'Enable to guide the follower with your leader robot.'}
-                        </Text>
-                    </div>
-                )}
+                {environment?.leader_id != null && <TeleoperationPanel />}
                 {SHOW_HOME_POSITION && environment != null && <HomePosition />}
             </WorkspaceSection>
             <RadioGroup

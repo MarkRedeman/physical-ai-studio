@@ -1,66 +1,23 @@
-import { Flex, ProgressCircle, Switch, toast, View } from '@geti-ui/ui';
-import { useMutation } from '@tanstack/react-query';
+import { Flex, ProgressCircle, Switch, View } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { getRobotConnectionErrorTitle } from '../../../api/errors';
-import { SchemaTeleopControlConfig } from '../../../api/openapi-spec';
 import { useProjectId } from '../../projects/use-project';
 import { RobotViewer, UnavailableRobotViewer } from '../../robots/controller/robot-viewer';
 import { RobotModelsProvider } from '../../robots/robot-models-context';
 import { AvailableSchemaRobot, isUnavailableRobot } from '../../robots/robot-types';
 import { InlineAlert } from '../../robots/setup-wizard/shared/inline-alert';
 import { useSynchronizeModelJoints } from '../../robots/use-synchronize-model-joints';
-import { ERROR_TOAST, failureOf, useRuntimeSession, useSessionJoints } from '../runtime-session-provider';
+import { useRuntimeSession, useSessionJoints } from '../runtime-session-provider';
+import { TeleoperationOptions, useTeleoperation } from '../use-teleoperation';
 
-/**
- * Teleoperation as the UI starts it. The leader is read at 100 Hz, each reading one command, and on every
- * start the follower takes 3 s to reach the leader instead of jumping to it.
- */
-export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 2 } as const satisfies SchemaTeleopControlConfig;
+export { TELEOP_CONTROL } from '../use-teleoperation';
 
 /** Drive the follower from the leader, or hold it where it is. */
-export const TeleopSwitch = ({
-    isDisabled = false,
-    onToggle,
-}: {
-    isDisabled?: boolean;
-    onToggle?: (enabled: boolean) => Promise<unknown>;
-}) => {
-    const { state, statuses, send } = useRuntimeSession();
-    const { mutate: setTeleop, isPending } = useMutation({
-        mutationFn: async (teleoperate: boolean) => {
-            if (onToggle != null) {
-                await onToggle(teleoperate);
-                return;
-            }
-            const ack = await send({
-                command: 'set_control',
-                control: teleoperate ? TELEOP_CONTROL : null,
-                reject_open_episode: true,
-            });
-            if (!ack.ok) {
-                toast.negative(ack.error?.message ?? 'Could not switch teleoperation.', ERROR_TOAST);
-            }
-        },
-    });
-
+export const TeleopSwitch = ({ isDisabled = false, onToggle }: TeleoperationOptions) => {
+    const control = useTeleoperation({ isDisabled, onToggle });
     return (
-        <Switch
-            isEmphasized
-            isSelected={state?.control?.type === 'teleop'}
-            // A failed environment stays loaded until it is loaded again, with nothing to drive;
-            // switching the control mid-episode discards the episode.
-            isDisabled={
-                isPending ||
-                isDisabled ||
-                state?.environment == null ||
-                failureOf(statuses, 'environment') !== null ||
-                failureOf(statuses, 'environment/leader') !== null ||
-                failureOf(statuses, 'environment/follower') !== null ||
-                state?.dataset?.is_recording
-            }
-            onChange={setTeleop}
-        >
+        <Switch isEmphasized {...control}>
             Teleoperate
         </Switch>
     );

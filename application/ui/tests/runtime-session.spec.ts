@@ -10,8 +10,10 @@ import { getMockedSettings } from '../src/test-utils/mocks/mock-settings';
 import { expect, http, test } from './fixtures';
 
 const RECORD_URL = '/projects/project-1/datasets/dataset-1/record';
+let controlCommandCount = 0;
 
 test.beforeEach(async ({ network, page }) => {
+    controlCommandCount = 0;
     network.use(
         http.get('/api/settings', () => HttpResponse.json(getMockedSettings())),
         http.get('/api/jobs', () => HttpResponse.json([])),
@@ -72,7 +74,10 @@ test.beforeEach(async ({ network, page }) => {
         };
         socket.onMessage((message) => {
             const command = JSON.parse(String(message));
-            if (command.command === 'set_control') state.control = command.control;
+            if (command.command === 'set_control') {
+                controlCommandCount += 1;
+                state.control = command.control;
+            }
             if (command.command === 'load_dataset' && state.dataset && command.fps) state.dataset.fps = command.fps;
             if (command.command === 'start_episode' && state.dataset) state.dataset.is_recording = true;
             if (command.command === 'save_episode' && state.dataset) {
@@ -314,4 +319,261 @@ test('previews backend branding and compact inference execution settings', async
     await expect(inference.getByRole('slider', { name: 'Request threshold' })).toBeVisible();
     await inference.getByRole('slider', { name: 'Request threshold' }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath('inference-advanced.png') });
+});
+
+test('selects modes from card backgrounds and titles while respecting episode locks', async ({ page, network }) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] }))
+    );
+    await page.setViewportSize({ width: 1440, height: 1400 });
+    await page.goto(`${RECORD_URL}?modePreview=true`);
+    await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
+    const recording = page.getByRole('region', { name: 'Recording', exact: true });
+    const inference = page.getByRole('region', { name: 'Inference', exact: true });
+    await inference.click({ position: { x: 8, y: 8 } });
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    expect(controlCommandCount).toBe(0);
+    await recording.getByRole('heading', { name: 'Recording', exact: true }).click();
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    await page.getByRole('radio', { name: 'Inference', exact: true }).focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    expect(controlCommandCount).toBe(0);
+    await page.getByRole('button', { name: 'Run model', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    await recording.click({ position: { x: 8, y: 8 } });
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    expect(controlCommandCount).toBe(2); // Start once, then hold once when deliberately switching cards.
+    await page.getByRole('button', { name: /Start episode/ }).click();
+    await expect(page.getByRole('button', { name: /Save episode/ })).toBeVisible();
+    await inference.click({ position: { x: 8, y: 8 } });
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeDisabled();
+    expect(controlCommandCount).toBe(2);
+});
+
+test('keeps nested inference fields and recording slider tracks independent of card selection', async ({
+    page,
+    network,
+}) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] }))
+    );
+    await page.setViewportSize({ width: 1440, height: 1450 });
+    await page.goto(`${RECORD_URL}?modePreview=true&newDataset=true`);
+    await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
+    const recording = page.getByRole('region', { name: 'Recording', exact: true });
+    const inference = page.getByRole('region', { name: 'Inference', exact: true });
+    await inference.getByRole('textbox', { name: 'Task', exact: true }).click();
+    await inference.getByRole('textbox', { name: 'Task', exact: true }).fill('Move the cube');
+    await inference.getByRole('radio', { name: 'Asynchronous', exact: true }).click();
+    await inference.getByRole('button', { name: /Execution settings/ }).click();
+    await expect(inference.getByRole('slider', { name: 'Request threshold' })).toBeVisible();
+    await inference.getByRole('button', { name: 'About inference latency' }).locator('svg').click();
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    expect(controlCommandCount).toBe(0);
+    await page.getByRole('radio', { name: 'Inference', exact: true }).click();
+    await page.getByRole('button', { name: 'Run model', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    const rate = recording.getByRole('slider', { name: 'Recording rate' });
+    const field = recording
+        .locator('[data-mode-interactive]')
+        .filter({ has: page.getByRole('slider', { name: 'Recording rate' }) });
+    const fieldBounds = await field.boundingBox();
+    const sliderBounds = await rate.boundingBox();
+    expect(fieldBounds).not.toBeNull();
+    expect(sliderBounds).not.toBeNull();
+    const valueBefore = await rate.evaluate(
+        (element) =>
+            element.getAttribute('aria-valuenow') ?? (element instanceof HTMLInputElement ? element.value : null)
+    );
+    await field.click({
+        position: {
+            x: (fieldBounds?.width ?? 0) * 0.8,
+            y: (sliderBounds?.y ?? 0) - (fieldBounds?.y ?? 0) + (sliderBounds?.height ?? 0) / 2,
+        },
+    });
+    await expect
+        .poll(() =>
+            rate.evaluate(
+                (element) =>
+                    element.getAttribute('aria-valuenow') ??
+                    (element instanceof HTMLInputElement ? element.value : null)
+            )
+        )
+        .not.toBe(valueBefore);
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    expect(controlCommandCount).toBe(1);
+});
+
+test('does not stop inference when editing recording fields or using their menus and portaled dialogs', async ({
+    page,
+    network,
+}) => {
+    const previousTask = 'Pick the cube from the tray';
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] })),
+        http.get('/api/dataset/{dataset_id}/episodes', () =>
+            HttpResponse.json(getMockedEpisodes([{ tasks: [previousTask] }]))
+        )
+    );
+    await page.setViewportSize({ width: 1440, height: 1450 });
+    await page.goto(`${RECORD_URL}?modePreview=true`);
+    await page.getByRole('radio', { name: 'Inference', exact: true }).click();
+    await page.getByRole('button', { name: 'Run model', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    const recording = page.getByRole('region', { name: 'Recording', exact: true });
+    const task = recording.getByRole('textbox', { name: 'Current task' });
+    await task.click();
+    await task.fill('A new multiline task\nwith more instructions');
+    await recording.locator('label').filter({ hasText: 'Current task' }).click();
+    await expect(task).toBeFocused();
+    const taskBounds = await task.boundingBox();
+    const cardBounds = await recording.boundingBox();
+    expect(taskBounds).not.toBeNull();
+    expect(cardBounds).not.toBeNull();
+    await page.mouse.move(
+        (taskBounds?.x ?? 0) + (taskBounds?.width ?? 0) / 2,
+        (taskBounds?.y ?? 0) + (taskBounds?.height ?? 0) / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move((cardBounds?.x ?? 0) + 8, (cardBounds?.y ?? 0) + 8, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    await recording.getByRole('button', { name: 'Use previous task…' }).locator('svg').click();
+    await page.getByRole('searchbox', { name: 'Find a task' }).fill('cube');
+    await page.getByRole('button', { name: previousTask, exact: true }).click();
+    await expect(task).toHaveValue(previousTask);
+    await recording.getByRole('button', { name: 'Recording tips' }).click();
+    await page
+        .getByRole('dialog')
+        .getByText(/starting recommendation/)
+        .click();
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await recording.getByRole('button', { name: 'dataset actions' }).click();
+    await page.getByRole('menuitem', { name: 'Change dataset…' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose dataset' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    expect(controlCommandCount).toBe(1);
+});
+
+test('opens the model chooser without selecting its card', async ({ page, network }) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        )
+    );
+    await page.goto(RECORD_URL);
+    await page.getByRole('button', { name: 'Choose a model for inference' }).locator('svg').click();
+    await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    expect(controlCommandCount).toBe(0);
+});
+
+test('toggles teleoperation from its panel without double-toggling the switch or label', async ({ page }) => {
+    await page.goto(RECORD_URL);
+    const panel = page.getByRole('group', { name: 'Teleoperation', exact: true });
+    const toggle = panel.getByRole('switch', { name: 'Teleoperate' });
+    await expect(toggle).toBeEnabled();
+    await panel.click({ position: { x: 8, y: 8 } });
+    await expect(toggle).toBeChecked();
+    await expect(toggle).toBeEnabled();
+    expect(controlCommandCount).toBe(1);
+    await panel.click({ position: { x: 8, y: 8 } });
+    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toBeEnabled();
+    expect(controlCommandCount).toBe(2);
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+    await expect(toggle).toBeEnabled();
+    expect(controlCommandCount).toBe(3);
+    const label = panel.getByText('Teleoperate', { exact: true });
+    await label.scrollIntoViewIfNeeded();
+    const labelBounds = await label.boundingBox();
+    expect(labelBounds).not.toBeNull();
+    // Spectrum overlays a transparent input on the label; click where a user clicks, not the covered span.
+    await page.mouse.click(
+        (labelBounds?.x ?? 0) + (labelBounds?.width ?? 0) / 2,
+        (labelBounds?.y ?? 0) + (labelBounds?.height ?? 0) / 2
+    );
+    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toBeEnabled();
+    expect(controlCommandCount).toBe(4);
+    await toggle.focus();
+    await page.keyboard.press('Space');
+    await expect(toggle).toBeChecked();
+    await expect(toggle).toBeEnabled();
+    expect(controlCommandCount).toBe(5);
+    await page.getByRole('button', { name: /Start episode/ }).click();
+    await expect(toggle).toBeDisabled();
+    await panel.click({ position: { x: 8, y: 8 } });
+    await expect(toggle).toBeChecked();
+    expect(controlCommandCount).toBe(5);
+});
+
+test('does not add a panel toggle to a drag that starts on the native switch', async ({ page }) => {
+    await page.goto(RECORD_URL);
+    const panel = page.getByRole('group', { name: 'Teleoperation', exact: true });
+    const toggle = panel.getByRole('switch', { name: 'Teleoperate' });
+    await expect(toggle).toBeEnabled();
+    const toggleBounds = await toggle.boundingBox();
+    const panelBounds = await panel.boundingBox();
+    expect(toggleBounds).not.toBeNull();
+    expect(panelBounds).not.toBeNull();
+    await page.mouse.move(
+        (toggleBounds?.x ?? 0) + (toggleBounds?.width ?? 0) / 2,
+        (toggleBounds?.y ?? 0) + (toggleBounds?.height ?? 0) / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move((panelBounds?.x ?? 0) + 8, (panelBounds?.y ?? 0) + 8, { steps: 5 });
+    await page.mouse.up();
+    // The native switch may complete its own press; the background must never add a second toggle.
+    expect(controlCommandCount).toBeLessThanOrEqual(1);
+});
+
+test('does not toggle teleoperation from the panel when a device is disconnected', async ({ page }) => {
+    await page.goto(`${RECORD_URL}?deviceFailure=true`);
+    const panel = page.getByRole('group', { name: 'Teleoperation', exact: true });
+    await expect(panel.getByRole('switch', { name: 'Teleoperate' })).toBeDisabled();
+    await panel.click({ position: { x: 8, y: 8 } });
+    await expect(panel.getByRole('switch', { name: 'Teleoperate' })).not.toBeChecked();
+    expect(controlCommandCount).toBe(0);
+});
+
+test('enables teleoperation from the panel when inference is active and selects Recording', async ({
+    page,
+    network,
+}) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] }))
+    );
+    await page.goto(`${RECORD_URL}?modePreview=true`);
+    await page.getByRole('radio', { name: 'Inference', exact: true }).click();
+    await page.getByRole('button', { name: 'Run model', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    const panel = page.getByRole('group', { name: 'Teleoperation', exact: true });
+    await expect(panel.getByRole('switch', { name: 'Teleoperate' })).toBeEnabled();
+    await panel.click({ position: { x: 8, y: 8 } });
+    await expect(panel.getByRole('switch', { name: 'Teleoperate' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeHidden();
+    expect(controlCommandCount).toBe(2);
 });
