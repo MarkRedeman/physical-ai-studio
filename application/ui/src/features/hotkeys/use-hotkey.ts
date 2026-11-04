@@ -11,6 +11,7 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLSelectElement ||
+        target.closest('[role="dialog"], [role="menu"], [role="listbox"]') !== null ||
         target.isContentEditable
     );
 };
@@ -27,7 +28,7 @@ export const useHotkey = (combo: string, handler: () => void, enabled = true): v
         }
 
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.repeat || isTypingTarget(e.target)) {
+            if (e.defaultPrevented || e.repeat || isTypingTarget(e.target)) {
                 return;
             }
 

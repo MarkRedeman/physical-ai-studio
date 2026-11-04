@@ -1,7 +1,7 @@
 import { ReactNode, Suspense, useEffect, useId, useState } from 'react';
 
 import { ActionButton, Flex, Heading, Loading, Text } from '@geti-ui/ui';
-import { ChevronDownLight, ChevronLeft, ChevronRightSmallLight } from '@geti-ui/ui/icons';
+import { ChevronDownLight, ChevronLeft, ChevronRightSmallLight, Play } from '@geti-ui/ui/icons';
 import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
@@ -78,9 +78,15 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const environment = state?.environment;
     const dataset = state?.dataset;
     const model = state?.model;
+    const modelFailure = failureOf(statuses, 'model');
     const environmentFailure = failureOf(statuses, 'environment');
     const isRecording = dataset?.is_recording ?? false;
     const isTeleop = state?.control?.type === 'teleop';
+    const savedEpisodes = dataset?.episodes_recorded ?? 0;
+    const recordingDetail =
+        savedEpisodes === 0
+            ? 'No episodes saved this session yet'
+            : `${savedEpisodes} ${savedEpisodes === 1 ? 'episode' : 'episodes'} saved this session`;
     const devices = Object.values(statuses).filter((status) => status.component.startsWith('environment/'));
     const deviceFailures = devices.filter((status) => status.state === 'failed');
     const hasDeviceFailure = deviceFailures.length > 0;
@@ -114,7 +120,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             <PartRow
                 label='Dataset'
                 name={dataset?.name}
-                detail={dataset ? `${dataset.episodes_recorded} saved this session` : undefined}
+                detail={dataset ? recordingDetail : undefined}
                 error={failureOf(statuses, 'dataset')}
                 isPending={pendingPart === 'dataset'}
             />
@@ -146,20 +152,47 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             <WorkspaceSection
                 title='Inference'
                 isActive={state?.control?.type === 'model'}
-                actions={actions('model')}
-                hasError={failureOf(statuses, 'model') !== null}
+                actions={model != null ? actions('model') : undefined}
+                hasError={modelFailure !== null}
             >
-                <PartRow
-                    label='Model'
-                    name={model?.name}
-                    detail={model ? `${model.backend} · ${model.device}` : undefined}
-                    error={failureOf(statuses, 'model')}
-                    isPending={pendingPart === 'model'}
-                />
                 {model != null ? (
-                    <InferenceMode />
+                    <>
+                        <PartRow
+                            label='Model'
+                            name={model?.name}
+                            detail={model ? `${model.backend} · ${model.device}` : undefined}
+                            error={failureOf(statuses, 'model')}
+                            isPending={pendingPart === 'model'}
+                        />
+                        <InferenceMode />
+                    </>
                 ) : (
-                    <Text UNSAFE_className={classes.hint}>Load a trained model to run it on this environment.</Text>
+                    <>
+                        {modelFailure !== null && <Text UNSAFE_className={classes.error}>{modelFailure}</Text>}
+                        <button
+                            type='button'
+                            className={classes.modelWell}
+                            onClick={() => act('model', 'swap')}
+                            disabled={
+                                isRecording ||
+                                pendingPart !== null ||
+                                !hasRunnableModels ||
+                                environment == null ||
+                                environmentFailure !== null
+                            }
+                            aria-label='Choose a model for inference'
+                        >
+                            <span className={classes.modelWellIcon} aria-hidden='true'>
+                                <Play />
+                            </span>
+                            <strong>{pendingPart === 'model' ? 'Preparing model…' : 'Choose a model'}</strong>
+                            <span>
+                                {environment == null || environmentFailure !== null
+                                    ? 'Connect an environment to run a model.'
+                                    : 'Run a trained policy on your environment.'}
+                            </span>
+                        </button>
+                    </>
                 )}
             </WorkspaceSection>
         );

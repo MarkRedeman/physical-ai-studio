@@ -1,12 +1,13 @@
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
-import { Button, Flex, Keyboard, Slider, Text, TextArea, toast } from '@geti-ui/ui';
+import { Button, Flex, Keyboard, Slider, Text, toast } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { SchemaSessionDataset } from '../../../api/openapi-spec';
 import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
 import { useHotkey } from '../../hotkeys/use-hotkey';
 import { ERROR_TOAST, failureOf, useRuntimeSession } from '../runtime-session-provider';
+import { CurrentTaskPicker } from './current-task-picker';
 import { usePartControls } from './part-controls';
 import { RecordingSummary } from './recording-summary';
 
@@ -46,6 +47,7 @@ const useRecordingState = () => {
     );
     const [task, setTask] = useState('');
     const [isPending, setIsPending] = useState(false);
+    const [savedTasks, setSavedTasks] = useState<Record<string, string[]>>({});
     const inFlight = useRef(false);
     const defaultTask = savedDataset?.default_task ?? '';
 
@@ -83,7 +85,20 @@ const useRecordingState = () => {
     };
     // Saving/discarding stays available if a device fails during an episode.
     const save = () => {
-        if (isRecording && !isPending) void run({ command: 'save_episode' });
+        if (isRecording && !isPending) {
+            void run({ command: 'save_episode' }).then((ack) => {
+                if (ack?.ok && dataset != null && task.trim() !== '') {
+                    // The episodes endpoint does not include this session until the dataset is closed.
+                    setSavedTasks((previous) => ({
+                        ...previous,
+                        [dataset.dataset_id]: [
+                            task.trim(),
+                            ...(previous[dataset.dataset_id] ?? []).filter((saved) => saved !== task.trim()),
+                        ],
+                    }));
+                }
+            });
+        }
     };
     const discard = () => {
         if (isRecording && !isPending) void run({ command: 'discard_episode' });
@@ -93,7 +108,19 @@ const useRecordingState = () => {
     useHotkey(bindings['recording.accept_episode'], save, isRecording && !isPending);
     useHotkey(bindings['recording.discard_episode'], discard, isRecording && !isPending);
 
-    return { task, setTask, isRecording, isPending, canStart, bindings, start, save, discard, run };
+    return {
+        task,
+        setTask,
+        isRecording,
+        isPending,
+        canStart,
+        bindings,
+        start,
+        save,
+        discard,
+        run,
+        recentTasks: savedTasks[dataset?.dataset_id ?? ''] ?? [],
+    };
 };
 
 const RecordingContext = createContext<ReturnType<typeof useRecordingState> | null>(null);
@@ -117,10 +144,6 @@ const RecordingRate = ({ dataset }: { dataset: SchemaSessionDataset }) => {
     const [fps, setFps] = useState(dataset.fps);
     useEffect(() => setFps(dataset.fps), [dataset.fps]);
 
-    if (dataset.fps_fixed || dataset.episodes_recorded > 0) {
-        return <Text UNSAFE_className={classes.hint}>Recording at {dataset.fps} fps · fixed for this dataset</Text>;
-    }
-
     const reload = async (value: number) => {
         if (value === dataset.fps) return;
         const ack = await run({ command: 'load_dataset', dataset_id: dataset.dataset_id, fps: value });
@@ -128,24 +151,27 @@ const RecordingRate = ({ dataset }: { dataset: SchemaSessionDataset }) => {
     };
 
     return (
-        <Slider
-            label='Recording rate'
-            value={fps}
-            onChange={setFps}
-            onChangeEnd={(value) => void reload(value)}
-            minValue={10}
-            maxValue={100}
-            step={5}
-            getValueLabel={(value) => `${value} fps`}
-            width='100%'
-            isDisabled={
-                dataset.is_recording ||
-                isPending ||
-                isLoading ||
-                pendingPart !== null ||
-                failureOf(statuses, 'environment') !== null
-            }
-        />
+        <Flex direction='column' gap='size-50'>
+            <Slider
+                label='Recording rate'
+                value={fps}
+                onChange={setFps}
+                onChangeEnd={(value) => void reload(value)}
+                minValue={10}
+                maxValue={100}
+                step={5}
+                getValueLabel={(value) => `${value} fps`}
+                width='100%'
+                isDisabled={
+                    dataset.is_recording ||
+                    isPending ||
+                    isLoading ||
+                    pendingPart !== null ||
+                    failureOf(statuses, 'environment') !== null
+                }
+            />
+            <Text UNSAFE_className={classes.hint}>Locks after your first saved episode.</Text>
+        </Flex>
     );
 };
 
@@ -210,21 +236,24 @@ export const RecordingToolbar = ({ backButton }: { backButton: ReactNode }) => {
 
 export const DatasetRecordingSection = () => {
     const { state } = useRuntimeSession();
-    const { task, setTask, isRecording, isPending } = useRecording();
+    const { task, setTask, isRecording, isPending, recentTasks } = useRecording();
     const dataset = state?.dataset;
+    if (dataset == null) return null;
+    const isRateFixed = dataset.fps_fixed || dataset.episodes_recorded > 0;
 
     return (
         <Flex direction='column' gap='size-150'>
-            <TextArea
-                label='Task'
-                description='e.g. Pick up the cube and place it in the tray.'
-                width='100%'
-                isRequired
-                isReadOnly={isRecording || isPending}
-                value={task}
+            {!isRateFixed && <RecordingRate key={dataset.dataset_id} dataset={dataset} />}
+            <CurrentTaskPicker
+                dataset_id={dataset.dataset_id}
+                task={task}
                 onChange={setTask}
+                recentTasks={recentTasks}
+                isReadOnly={isRecording || isPending}
             />
-            {dataset != null && <RecordingRate key={dataset.dataset_id} dataset={dataset} />}
+            {isRateFixed && (
+                <Text UNSAFE_className={classes.hint}>Recording at {dataset.fps} fps · fixed for this dataset</Text>
+            )}
         </Flex>
     );
 };
