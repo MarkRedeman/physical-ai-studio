@@ -46,6 +46,13 @@ test.beforeEach(async ({ network, page }) => {
         if (state.environment && page.url().includes('devicesPreview'))
             state.environment.cameras = [getMockedSessionCamera()];
         if (state.dataset && page.url().includes('newDataset')) state.dataset.fps_fixed = false;
+        if (page.url().includes('modePreview'))
+            state.model = {
+                model_id: 'model-1',
+                name: 'Cube policy',
+                backend: 'onnx',
+                device: 'cpu',
+            };
         const publish = () => {
             socket.send(JSON.stringify({ type: 'state', data: state }));
             for (const component of ['environment/follower', 'environment/leader']) {
@@ -99,6 +106,8 @@ test('keeps episode actions visible and locks resource changes while recording',
     await expect(page.getByRole('button', { name: /Save episode/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'dataset actions' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Back to dataset' })).toBeDisabled();
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeDisabled();
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeDisabled();
     await expect(page.getByRole('switch', { name: 'Teleoperate' })).toBeDisabled();
     await expect(page.getByRole('textbox', { name: /Current task/ })).toHaveAttribute('readonly');
     await page.screenshot({ path: testInfo.outputPath('recording.png') });
@@ -106,6 +115,41 @@ test('keeps episode actions visible and locks resource changes while recording',
     await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
     await expect(page.getByText('Plugin unavailable:')).toBeVisible();
     await expect(page.getByText(/1 episode saved this session/)).toBeVisible();
+});
+
+test('previews mode radios and moves the glow without starting robot motion', async ({ page, network }, testInfo) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] }))
+    );
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto(`${RECORD_URL}?modePreview=true`);
+    const recording = page.getByRole('region', { name: 'Recording', exact: true });
+    const inference = page.getByRole('region', { name: 'Inference', exact: true });
+    await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
+    await expect(recording).toHaveAttribute('data-active', 'true');
+    await expect(inference).not.toHaveAttribute('data-active');
+    await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath('recording-selected.png') });
+    await page.getByRole('radio', { name: 'Inference', exact: true }).click();
+    await expect(inference).toHaveAttribute('data-active', 'true');
+    await expect(recording).not.toHaveAttribute('data-active');
+    await expect(page.getByRole('button', { name: 'Run model', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeHidden();
+    await expect(recording).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('inference-selected.png') });
+    await page.getByRole('button', { name: 'Run model', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeVisible();
+    await page.getByRole('radio', { name: 'Recording', exact: true }).click();
+    await expect(recording).toHaveAttribute('data-active', 'true');
+    await expect(page.getByRole('switch', { name: 'Teleoperate' })).not.toBeChecked();
+    await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
+    await page.getByRole('radio', { name: 'Recording', exact: true }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeHidden();
 });
 
 test('stacks setup below the live views on narrower screens', async ({ page }, testInfo) => {
