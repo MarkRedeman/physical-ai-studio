@@ -54,7 +54,7 @@ describe('SessionWorkspace', () => {
     it('shows a quiet inference placeholder when the project has no models', async () => {
         renderWorkspace();
         expect(await screen.findByText(/Once you train a model/)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Load model/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Choose model/ })).not.toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Recording' })).toBeInTheDocument();
     });
 
@@ -65,7 +65,7 @@ describe('SessionWorkspace', () => {
             )
         );
         renderWorkspace();
-        expect(await screen.findByRole('button', { name: /Load model/ })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: /Choose model/ })).toBeEnabled();
         expect(screen.queryByText(/Once you train a model/)).not.toBeInTheDocument();
     });
 
@@ -73,7 +73,7 @@ describe('SessionWorkspace', () => {
         server.use(http.get('/api/projects/{project_id}/models', () => HttpResponse.json([getMockedModel()])));
         renderWorkspace();
         expect(await screen.findByText('Export a trained model to run it here.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Load model/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Choose model/ })).not.toBeInTheDocument();
     });
 
     it('starts with the task edited in the recording card', async () => {
@@ -133,7 +133,7 @@ describe('SessionWorkspace', () => {
         renderWorkspace();
         expect(await screen.findByRole('button', { name: /Save episode/ })).toBeEnabled();
         expect(screen.getByRole('button', { name: /Discard/ })).toBeEnabled();
-        expect(screen.getByRole('button', { name: 'Dataset actions' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'dataset actions' })).toBeDisabled();
         expect(screen.getByRole('textbox', { name: /Task/ })).toHaveAttribute('readonly');
         await user.click(screen.getByRole('button', { name: /Save episode/ }));
         expect(send).toHaveBeenCalledExactlyOnceWith({ command: 'save_episode' });

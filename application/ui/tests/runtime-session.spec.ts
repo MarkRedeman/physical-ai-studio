@@ -12,6 +12,7 @@ const RECORD_URL = '/projects/project-1/datasets/dataset-1/record';
 test.beforeEach(async ({ network, page }) => {
     network.use(
         http.get('/api/settings', () => HttpResponse.json(getMockedSettings())),
+        http.get('/api/jobs', () => HttpResponse.json([])),
         http.get('/api/projects/{project_id}', () =>
             HttpResponse.json(getMockedProject({ datasets: [getMockedDataset()] }))
         ),
@@ -59,8 +60,9 @@ test('keeps inference secondary before the first model is trained', async ({ pag
     await page.goto(RECORD_URL);
     await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
     await expect(page.getByText(/Once you train a model/)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Load model/ })).toBeHidden();
+    await expect(page.getByRole('button', { name: /Choose model/ })).toBeHidden();
     await expect(page.getByRole('region', { name: 'Recording' })).toBeVisible();
+    await expect(page.getByText('Plugin unavailable:')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('ready.png') });
 });
 
@@ -68,7 +70,7 @@ test('keeps episode actions visible and locks resource changes while recording',
     await page.goto(RECORD_URL);
     await page.getByRole('button', { name: /Start episode/ }).click();
     await expect(page.getByRole('button', { name: /Save episode/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Dataset actions' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'dataset actions' })).toBeDisabled();
     await expect(page.getByRole('textbox', { name: /Task/ })).toHaveAttribute('readonly');
     await page.screenshot({ path: testInfo.outputPath('recording.png') });
     await page.getByRole('button', { name: /Save episode/ }).click();
