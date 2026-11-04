@@ -110,13 +110,18 @@ class HomeReturn:
         self._period = 1 / hz
         self._last_tick = 0.0
         self._path_elapsed = 0.0
+        self._sequence = 0
 
     @property
     def moving(self) -> bool:
         return self.motion is not None and self.motion.state == "moving"
 
     def observe(self, sample: Sample, now: float) -> None:
-        if sample.names != self.names or not np.all(np.isfinite(sample.value)):
+        if (
+            sample.names != self.names
+            or sample.value.shape != (len(self.names),)
+            or not np.all(np.isfinite(sample.value))
+        ):
             self._finish("failed", "Robot returned invalid joint observations.")
             raise ValueError("Robot returned invalid joint observations.")
         if now - sample.timestamp > MAX_SAMPLE_AGE_S or sample.timestamp > now + 0.05:
@@ -195,6 +200,7 @@ class HomeReturn:
         self._start, self._target, self._last_command = start, target, start.copy()
         self._started, self._duration, self._lease = now, duration, now
         self._last_tick, self._path_elapsed = now, 0.0
+        self._sequence = 0
         self._settled_at = None
         self.motion = HomeMotion(operation_id=operation_id, robot_id=self.capability.robot_id, state="moving")
         if all(
@@ -204,7 +210,7 @@ class HomeReturn:
             self.motion = self.motion.model_copy(
                 update={"state": "reached", "progress": 1.0, "message": "The follower is already at home."}
             )
-        self.publish(self.motion)
+        self.publish_motion()
         return self.motion
 
     def renew(self, operation_id: UUID, now: float) -> None:
@@ -227,6 +233,12 @@ class HomeReturn:
         if not self.moving:
             return
         self.motion = self.motion.model_copy(update={"state": state, "message": message})
+        self.publish_motion()
+
+    def publish_motion(self) -> None:
+        """Publish ordered state so delayed progress cannot overwrite completion or cancellation."""
+        self._sequence += 1
+        self.motion = self.motion.model_copy(update={"sequence": self._sequence})
         self.publish(self.motion)
 
     def command(self, now: float) -> np.ndarray | None:  # noqa: PLR0911 - each safety failure stops independently
@@ -268,5 +280,5 @@ class HomeReturn:
         self.motion = self.motion.model_copy(update={"progress": fraction})
         if now - self._last_publish >= 0.1:
             self._last_publish = now
-            self.publish(self.motion)
+            self.publish_motion()
         return command

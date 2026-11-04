@@ -30,11 +30,14 @@ from api.dependencies import (
     RobotServiceDep,
     RuntimeSessionRegistryDep,
 )
+from exceptions import RuntimeSessionCommandError
 from runtime_session import session as runtime_session
 from runtime_session.bus import STATUSES, Bus, BusRequestError, NoResponderError, Subscription, command_key
+from runtime_session.inference_metrics import METRICS
 from runtime_session.resolve import project_resolvers
 from runtime_session.session import RuntimeSession
 from runtime_session.store import ACTION, STATE, Sample
+from schemas.inference_metrics import InferenceMetricsMessage
 from schemas.runtime_session import (
     AckMessage,
     ObservationFrame,
@@ -49,6 +52,10 @@ from schemas.runtime_session import (
 from workers.rate import Rate
 
 router = APIRouter(prefix="/api/projects/{project_id}/runtime", tags=["Runtime Sessions"])
+
+RuntimeSessionStreamMessage = Annotated[
+    RuntimeSessionServerMessage | InferenceMetricsMessage, Field(discriminator="type")
+]
 
 _COMMAND_TIMEOUT_S = 600.0
 """A backstop only: every handler bounds its own work (a dataset copy, a video encode)."""
@@ -71,7 +78,7 @@ class _SessionEnded(Exception):
     summary="Runtime session (WebSocket)",
     status_code=426,
     responses={
-        200: {"model": RuntimeSessionServerMessage, "description": "JSON messages the server sends"},
+        200: {"model": RuntimeSessionStreamMessage, "description": "JSON messages the server sends"},
         299: {"model": RuntimeSessionCommand, "description": "JSON commands the client sends"},
     },
 )
@@ -112,13 +119,15 @@ async def runtime_session_websocket(  # noqa: PLR0913, D103 - FastAPI dependenci
             with (
                 session.bus.subscribe(runtime_session.EVENTS, SessionEvent) as events,
                 session.bus.subscribe(STATUSES, StatusMessage) as statuses,
+                session.bus.subscribe(METRICS, InferenceMetricsMessage) as metrics,
             ):
                 await websocket.send_json(StateMessage(data=session.state()).model_dump(mode="json"))
                 # anyio, not asyncio.TaskGroup: Starlette cancels through anyio scopes, which asyncio's group can leak.
                 async with anyio.create_task_group() as tasks:
-                    tasks.start_soon(_forward_commands, websocket, session.bus)
+                    tasks.start_soon(_forward_commands, websocket, session)
                     tasks.start_soon(_forward_events, websocket, events)
                     tasks.start_soon(_forward_events, websocket, statuses)
+                    tasks.start_soon(_forward_events, websocket, metrics)
                     tasks.start_soon(_sample_store, websocket, session, hz)
         except* (WebSocketDisconnect, _SessionEnded):
             pass
@@ -126,15 +135,15 @@ async def runtime_session_websocket(  # noqa: PLR0913, D103 - FastAPI dependenci
             logger.opt(exception=errors).error("Runtime session {} websocket failed", session.id)
 
 
-async def _forward_commands(websocket: WebSocket, bus: Bus) -> None:
+async def _forward_commands(websocket: WebSocket, session: RuntimeSession) -> None:
     """Put each command onto the bus, one at a time and in order, and ack it with the reply."""
     while True:
         raw = await websocket.receive_text()
-        ack = await _request(bus, raw)
+        ack = await _request(session.bus, raw, session=session)
         await websocket.send_json(ack.model_dump(mode="json"))
 
 
-async def _request(bus: Bus, raw: str) -> AckMessage:
+async def _request(bus: Bus, raw: str, *, session: RuntimeSession | None = None) -> AckMessage:
     try:
         header = _CommandHeader.model_validate_json(raw)
     except ValidationError as error:
@@ -146,9 +155,13 @@ async def _request(bus: Bus, raw: str) -> AckMessage:
         )
 
     try:
+        if session is not None and header.command not in {"renew_home_return", "cancel_home_return"}:
+            session.require_home_idle()
         result: dict[str, Any] = await bus.request(
             command_key(header.command), raw, dict[str, Any], timeout=_COMMAND_TIMEOUT_S
         )
+    except RuntimeSessionCommandError as error:
+        return failed(error.message, error.error_code)
     except BusRequestError as error:
         # The handler's details (``parts`` for ``incompatible_parts``, say) go to the client as they are.
         return AckMessage(

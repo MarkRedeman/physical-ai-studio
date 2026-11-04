@@ -16,6 +16,14 @@ from pydantic import BaseModel, Field
 
 from schemas.base import UTCDatetime
 from schemas.environment import CameraEnvironmentConfiguration, RobotEnvironmentConfiguration
+from schemas.home_position import (
+    CancelHomeReturnCommand,
+    CaptureHomePositionCommand,
+    HomeCapability,
+    HomeMotion,
+    RenewHomeReturnCommand,
+    ReturnHomeCommand,
+)
 
 
 class EnvironmentDraft(BaseModel):
@@ -166,7 +174,11 @@ RuntimeSessionCommand = Annotated[
     | UnloadModelCommand
     | StartEpisodeCommand
     | SaveEpisodeCommand
-    | DiscardEpisodeCommand,
+    | DiscardEpisodeCommand
+    | CaptureHomePositionCommand
+    | ReturnHomeCommand
+    | RenewHomeReturnCommand
+    | CancelHomeReturnCommand,
     Field(discriminator="command"),
 ]
 
@@ -209,6 +221,7 @@ class SessionEnvironment(BaseModel):
     leader_id: UUID | None
     joint_names: list[str]
     cameras: list[SessionCamera]
+    home_capability: HomeCapability | None = None
 
 
 class SessionDataset(BaseModel):
@@ -236,6 +249,7 @@ class SessionState(BaseModel):
     """What drives the follower; ``None`` holds it still."""
     dataset: SessionDataset | None = None
     model: SessionModel | None = None
+    home_motion: HomeMotion | None = None
 
 
 class StateMessage(BaseModel):

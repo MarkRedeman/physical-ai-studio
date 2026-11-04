@@ -23,7 +23,17 @@ from loguru import logger
 from exceptions import RobotDeviceAlreadyOwnedError
 from robots.features import feature_names
 from runtime_session.bus import Bus, publish_status
-from runtime_session.store import ACTION, STATE, FeatureSpec, Store
+from runtime_session.home_position import HOME_EVENTS, HomeReturn, home_key
+from runtime_session.store import ACTION, STATE, FeatureSpec, Sample, Store
+from schemas.home_position import (
+    CancelHomeReturnCommand,
+    CaptureHomePositionCommand,
+    HomeCapability,
+    HomeMotion,
+    HomePose,
+    RenewHomeReturnCommand,
+    ReturnHomeCommand,
+)
 from workers.base import ProcessWorker
 from workers.rate import Rate
 
@@ -105,7 +115,7 @@ class RobotWorker(ProcessWorker["Robot"]):
     enables torque), as attaching a ``SharedRobot`` did.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - existing worker configuration plus optional home capability
         self,
         recipe: RobotRecipe,
         store_name: str,
@@ -115,6 +125,7 @@ class RobotWorker(ProcessWorker["Robot"]):
         observe_only: bool = False,
         session_id: str | None = None,
         component: str | None = None,
+        home_capability: HomeCapability | None = None,
     ) -> None:
         """Pass ``session_id`` and ``component`` to report a failure on that session's bus."""
         super().__init__(name=f"RobotWorker-{recipe.robot_id}")
@@ -126,6 +137,8 @@ class RobotWorker(ProcessWorker["Robot"]):
         self.session_id = session_id
         self.component = component
         self._bus: Bus | None = None
+        self.home_capability = home_capability
+        self._home: HomeReturn | None = None
 
     @asynccontextmanager
     async def lifecycle(self) -> AsyncIterator[Robot]:
@@ -136,13 +149,35 @@ class RobotWorker(ProcessWorker["Robot"]):
             with Bus.join(self.session_id) if self.session_id else nullcontext() as self._bus:
                 driver = cast("Robot", instantiate(self.recipe.driver))
                 driver.connect()
+                self._driver = driver
                 try:
                     self._check_joint_order(driver)
+                    if self.home_capability is not None and not self.observe_only and self._bus is not None:
+                        self._home = HomeReturn(
+                            self.home_capability,
+                            self.spec.joint_names,
+                            lambda motion: self._bus.publish(HOME_EVENTS, motion),
+                            hz=self.hz,
+                        )
+                        for operation, model, handler in (
+                            ("capture", CaptureHomePositionCommand, self._capture_home),
+                            ("return", ReturnHomeCommand, self._return_home),
+                            ("renew", RenewHomeReturnCommand, self._renew_home),
+                            ("cancel", CancelHomeReturnCommand, self._cancel_home),
+                        ):
+                            self._bus.serve(home_key(self.recipe.robot_id, operation), model, handler)
                     if not self.observe_only:
                         observation = driver.get_observation()
                         self._store.write(ACTION, observation.joint_positions, timestamp=observation.timestamp)
                     yield driver
                 finally:
+                    if self._home is not None and self._home.moving:
+                        try:
+                            self._cancel_home(
+                                CancelHomeReturnCommand(request_id="", operation_id=self._home.motion.operation_id)
+                            )
+                        except Exception:
+                            logger.exception("Could not hold follower during home-return shutdown")
                     driver.disconnect()
         finally:
             self._store.close()
@@ -168,6 +203,18 @@ class RobotWorker(ProcessWorker["Robot"]):
         while not self.should_stop():
             observation = context.get_observation()
             self._store.write(STATE, observation.joint_positions, timestamp=observation.timestamp)
+            if self._home is not None:
+                now = time.monotonic()
+                self._home.observe(
+                    Sample(observation.joint_positions.copy(), self.spec.joint_names, observation.timestamp), now
+                )
+                home_command = self._home.command(now)
+                if home_command is not None:
+                    command = home_command
+                    self._store.write(ACTION, command, timestamp=now)
+                    context.send_action(command, goal_time=tick)
+                    await rate.sleep()
+                    continue
             action = None if self.observe_only else self._store.read(ACTION)
             if action is not None:
                 if command is None:
@@ -177,3 +224,46 @@ class RobotWorker(ProcessWorker["Robot"]):
                 context.send_action(command, goal_time=tick)
             await rate.sleep()
         logger.info("Robot worker {} stopped", self.name)
+
+    def _home_required(self) -> HomeReturn:
+        if self._home is None:
+            raise ValueError("Return to home is not supported by this follower configuration.")
+        return self._home
+
+    def _capture_home(self, request: CaptureHomePositionCommand) -> HomePose:
+        if request.robot_id != self.recipe.robot_id:
+            raise ValueError("That is not this session's follower.")
+        return self._home_required().capture(time.monotonic())
+
+    def _return_home(self, request: ReturnHomeCommand) -> HomeMotion:
+        return self._home_required().start(request.operation_id, request.home, time.monotonic())
+
+    def _hold_home(self) -> None:
+        home = self._home_required()
+        if home.latest is None:
+            raise ValueError("No follower measurement is available to hold.")
+        self._store.write(ACTION, home.latest.value, timestamp=time.monotonic())
+        self._driver.send_action(home.latest.value, goal_time=1 / self.hz)
+
+    def _renew_home(self, request: RenewHomeReturnCommand) -> HomeMotion:
+        home = self._home_required()
+        try:
+            home.renew(request.operation_id, time.monotonic())
+        finally:
+            if not home.moving:
+                self._hold_home()
+        return home.motion
+
+    def _cancel_home(self, request: CancelHomeReturnCommand) -> HomeMotion:
+        home = self._home_required()
+        motion = home.cancel(request.operation_id)
+        try:
+            self._hold_home()
+        except Exception:
+            self.request_stop()  # Do not continue issuing actions after a failed stop command.
+            home.motion = motion.model_copy(
+                update={"state": "failed", "message": "Could not command hold. Use the physical emergency stop."}
+            )
+            home.publish_motion()
+            raise
+        return motion
