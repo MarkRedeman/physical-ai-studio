@@ -40,7 +40,7 @@ const DeviceStatuses = ({
     );
 };
 
-const PartRow = ({
+export const PartRow = ({
     label,
     name,
     detail,
@@ -110,7 +110,7 @@ const PartRow = ({
 );
 
 /** The environment as one light, its devices' worst state; expand it for each device and why it failed. */
-const EnvironmentRow = ({
+export const EnvironmentRow = ({
     environment,
     statuses,
     actions,

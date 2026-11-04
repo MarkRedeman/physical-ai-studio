@@ -29,6 +29,7 @@ import {
     RuntimeSessionProvider,
     useRuntimeSession,
 } from '../../../features/runtime-session/runtime-session-provider';
+import { HeaderRecordButton, RecordButton } from '../../../features/runtime-session/workspace/record-mode';
 import { SessionWorkspace } from '../../../features/runtime-session/workspace/session-workspace';
 import { paths } from '../../../paths';
 
@@ -183,6 +184,10 @@ const RecordingPage = () => {
                         justifyContent={'space-between'}
                     >
                         <FinishRecordingLink subtitle={`${environment.name} | ${dataset.default_task}`} />
+                        <Suspense fallback={null}>
+                            <HeaderRecordButton />
+                        </Suspense>
+
                         <Suspense fallback={null}>
                             <TotalRecordedEpisodes />
                         </Suspense>
