@@ -8,6 +8,7 @@ import { HttpResponse } from 'msw';
 import { http } from '../../../api/utils';
 import { server } from '../../../msw-node-setup';
 import { getMockedDataset } from '../../../test-utils/mocks/mock-dataset';
+import { getMockedEpisodes } from '../../../test-utils/mocks/mock-episode';
 import { getMockedModel } from '../../../test-utils/mocks/mock-model';
 import { getMockedRuntimeSession, getMockedSessionDataset } from '../../../test-utils/mocks/mock-runtime-session';
 import { getMockedSettings } from '../../../test-utils/mocks/mock-settings';
@@ -43,6 +44,7 @@ beforeEach(() => {
     send.mockReset().mockResolvedValue({ ok: true });
     server.use(
         http.get('/api/settings', () => HttpResponse.json(getMockedSettings())),
+        http.get('/api/dataset/{dataset_id}/episodes', () => HttpResponse.json([])),
         http.get('/api/dataset/{dataset_id}', () =>
             HttpResponse.json(getMockedDataset({ default_task: 'Pick up the cube' }))
         ),
@@ -51,6 +53,49 @@ beforeEach(() => {
 });
 
 describe('SessionWorkspace', () => {
+    it('opens device failures automatically and lets the header chevron hide them', async () => {
+        statuses['environment/leader'] = {
+            type: 'status',
+            component: 'environment/leader',
+            state: 'failed',
+            error: 'Leader disconnected',
+        };
+        const user = userEvent.setup();
+        renderWorkspace();
+        const toggle = await screen.findByRole('button', { name: 'Hide device details' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText('Leader disconnected')).toBeVisible();
+        await user.click(toggle);
+        expect(screen.getByRole('button', { name: 'Show device details' })).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByText('Leader disconnected')).not.toBeVisible();
+    });
+
+    it('shows the dataset total in the recording toolbar, including this session', async () => {
+        state.dataset = getMockedSessionDataset({ episodes_recorded: 3 });
+        server.use(http.get('/api/dataset/{dataset_id}/episodes', () => HttpResponse.json(getMockedEpisodes())));
+        renderWorkspace();
+        const toolbar = await screen.findByRole('region', { name: 'Episode controls' });
+        expect(await within(toolbar).findByText('5 episodes in dataset')).toBeInTheDocument();
+    });
+
+    it('highlights a failed dataset and opens its error details', async () => {
+        statuses.dataset = {
+            type: 'status',
+            component: 'dataset',
+            state: 'failed',
+            error: 'Could not open the dataset',
+        };
+        renderWorkspace();
+        const recording = await screen.findByRole('region', { name: 'Recording' });
+        expect(recording).toHaveAttribute('data-error', 'true');
+        expect(within(recording).getByRole('button', { name: 'Error details' })).toHaveAttribute(
+            'aria-expanded',
+            'true'
+        );
+        expect(within(recording).getByText('Could not open the dataset')).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Environment' })).not.toHaveAttribute('data-error');
+    });
+
     it('shows a quiet inference placeholder when the project has no models', async () => {
         renderWorkspace();
         expect(await screen.findByText(/Once you train a model/)).toBeInTheDocument();

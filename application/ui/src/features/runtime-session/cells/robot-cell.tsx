@@ -44,6 +44,8 @@ export const TeleopSwitch = ({ isDisabled = false }: { isDisabled?: boolean }) =
                 isDisabled ||
                 state?.environment == null ||
                 failureOf(statuses, 'environment') !== null ||
+                failureOf(statuses, 'environment/leader') !== null ||
+                failureOf(statuses, 'environment/follower') !== null ||
                 state?.dataset?.is_recording
             }
             onChange={setTeleop}

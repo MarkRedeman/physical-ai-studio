@@ -1,5 +1,5 @@
 import { rs } from '@rstest/core';
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { getMockedRuntimeSession } from '../../../test-utils/mocks/mock-runtime-session';
@@ -21,29 +21,20 @@ describe('EnvironmentRow', () => {
     it('keeps healthy device details collapsed', () => {
         render(<EnvironmentRow environment={environment} statuses={healthy} isPending={false} />);
         expect(screen.getByText('Workbench')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Device details' })).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByText('Follower')).not.toBeVisible();
     });
 
-    it('automatically expands failures and lets the user collapse the details', () => {
-        render(<EnvironmentRow environment={environment} statuses={failed} isPending={false} />);
-        expect(screen.getByRole('button', { name: '1 device needs attention' })).toHaveAttribute(
-            'aria-expanded',
-            'true'
-        );
+    it('shows failed device details when expanded', () => {
+        render(<EnvironmentRow environment={environment} statuses={failed} isPending={false} showDetails />);
         expect(screen.getByText('Leader')).toBeInTheDocument();
         expect(screen.getByText('Unplugged')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '1 device needs attention' }));
-        expect(screen.getByRole('button', { name: '1 device needs attention' })).toHaveAttribute(
-            'aria-expanded',
-            'false'
-        );
     });
 
-    it('expands when a new device failure arrives', () => {
+    it('shows and hides details using the header-controlled state', () => {
         const { rerender } = render(<EnvironmentRow environment={environment} statuses={healthy} isPending={false} />);
-        expect(screen.getByRole('button', { name: 'Device details' })).toHaveAttribute('aria-expanded', 'false');
-        rerender(<EnvironmentRow environment={environment} statuses={failed} isPending={false} />);
-        expect(screen.getByText('Unplugged')).toBeInTheDocument();
+        expect(screen.getByText('Follower')).not.toBeVisible();
+        rerender(<EnvironmentRow environment={environment} statuses={failed} isPending={false} showDetails />);
+        expect(screen.getByText('Unplugged')).toBeVisible();
     });
 });
 
