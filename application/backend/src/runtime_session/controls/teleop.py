@@ -40,5 +40,7 @@ class TeleopControl(Control):
 
     def on_tick(self) -> None:
         observation = self.leader.get_observation()
+        if self.should_stop():
+            return
         due = max(observation.timestamp + 1 / self.hz, self.started_at + self.grace_s)
         self.store.write(ACTION, observation.joint_positions, timestamp=due)

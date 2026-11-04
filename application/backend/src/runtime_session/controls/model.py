@@ -74,6 +74,8 @@ class ModelControl(Control):
         if state is None:
             return  # nothing to infer from until the follower is measured
         action = self.source.update(_Observation(state.value, state.timestamp), {}, self.step)
+        if self.should_stop():
+            return  # A slow prediction must not publish an action after a takeover requested stop.
         self.step += 1
         due = max(time.monotonic() + 1 / self.hz, self.started_at + self.grace_s)
         self.store.write(ACTION, action, timestamp=due)

@@ -58,6 +58,7 @@ from schemas.home_position import (
     ReturnHomeCommand,
 )
 from schemas.runtime_session import (
+    CheckRecordingIdleCommand,
     CommandDone,
     DiscardEpisodeCommand,
     ErrorMessage,
@@ -164,6 +165,10 @@ class RuntimeSession:
         self._bus: Bus | None = None
         self._home_motion: HomeMotion | None = None
         self._home_operation_id: UUID | None = None
+        self._home_starting_id: UUID | None = None
+        self._home_start_cancelled = False
+        self._home_stop_requested = False
+        self._stopping_control: Control | None = None
         """Hosted for the session's lifetime; its parts join it."""
 
     async def __aenter__(self) -> Self:
@@ -213,13 +218,17 @@ class RuntimeSession:
     def _serve_commands(self, bus: Bus) -> None:
         """Serve the commands that change what the session holds; workers serve their own."""
         commands: dict[str, tuple[type[BaseModel], Callable[[Any], Awaitable[None]]]] = {
+            "check_recording_idle": (CheckRecordingIdleCommand, lambda _command: self.check_recording_idle()),
             "load_environment": (
                 LoadEnvironmentCommand,
                 lambda command: self._load_draft(command.environment, unload_incompatible=command.unload_incompatible),
             ),
             "unload_environment": (UnloadEnvironmentCommand, lambda _command: self.unload_environment()),
             "reload_environment": (ReloadEnvironmentCommand, lambda _command: self.reload_environment()),
-            "set_control": (SetControlCommand, lambda command: self.set_control(command.control)),
+            "set_control": (
+                SetControlCommand,
+                lambda command: self.set_control(command.control, reject_open_episode=command.reject_open_episode),
+            ),
             "load_dataset": (
                 LoadDatasetCommand,
                 lambda command: self._load_dataset_by_id(command.dataset_id, command.fps),
@@ -463,7 +472,7 @@ class RuntimeSession:
         finally:
             self._registry.release_robots(self)
 
-    async def set_control(self, config: ControlConfig | None) -> None:
+    async def set_control(self, config: ControlConfig | None, *, reject_open_episode: bool = False) -> None:
         """Stop the running control, hold the follower where it is, then start ``config``.
 
         Raises:
@@ -473,19 +482,39 @@ class RuntimeSession:
         """
         async with self._lock:
             loaded = self._environment.require("Load an environment first.")
+            if reject_open_episode:
+                await self._no_open_episode()
             try:
                 await self._switch_control(loaded.environment, config)
             finally:
                 self._emit(StateMessage(data=self.state()))
 
-    async def _switch_control(self, environment: Environment, config: ControlConfig | None) -> None:
+    async def _switch_control(
+        self, environment: Environment, config: ControlConfig | None, *, home_request: ReturnHomeCommand | None = None
+    ) -> None:
         """Hold the lock. One control at a time, by construction: the old one is joined before the next starts."""
         self.require_home_idle()
+        self._require_control_stopped()
         # An episode records one way of driving the follower; a switch mid-episode would mix two.
         await self._stop_recording()
-        await self._control.unload()
+        previous = self._control.value
+        if previous is not None:
+            previous.request_stop()
+        try:
+            if home_request is not None:
+                await self.bus.request(
+                    home_key(home_request.home.robot_id, "hold"), home_request, CommandDone, timeout=1
+                )
+            elif (state := environment.store.read(STATE)) is not None:
+                environment.store.write(ACTION, state.value, timestamp=time.monotonic())
+        finally:
+            await self._control.unload()
+            self._stopping_control = previous
+            self._require_control_stopped()
         # Hold: the follower stays where it is now, not where the old control last pointed it.
-        if (state := environment.store.read(STATE)) is not None:
+        if home_request is not None:
+            await self.bus.request(home_key(home_request.home.robot_id, "hold"), home_request, CommandDone, timeout=1)
+        elif (state := environment.store.read(STATE)) is not None:
             environment.store.write(ACTION, state.value, timestamp=time.monotonic())
         if config is not None:
             await self._control.load(self._watched_control(config, environment))
@@ -672,6 +701,15 @@ class RuntimeSession:
                 "Stop the home return before changing control or session setup.", error_code="home_return_active"
             )
 
+    def _require_control_stopped(self) -> None:
+        if self._stopping_control is not None:
+            if self._stopping_control.is_alive():
+                raise RuntimeSessionCommandError(
+                    "Previous control is still stopping. Wait before starting another motion.",
+                    error_code="control_stopping",
+                )
+            self._stopping_control = None
+
     async def _no_open_episode(self) -> None:
         if self._dataset.value is not None:
             status = await self.bus.request(dataset_rpc.STATUS, dataset_rpc.Empty(), RecordingStatus, timeout=2)
@@ -679,6 +717,12 @@ class RuntimeSession:
                 raise RuntimeSessionCommandError(
                     "Save or discard the episode before using home position.", error_code="episode_open"
                 )
+
+    async def check_recording_idle(self) -> None:
+        """Mode selection without a running control must not silently strand an open episode."""
+        async with self._lock:
+            self.require_home_idle()
+            await self._no_open_episode()
 
     def _home_environment(self) -> LoadedEnvironment:
         loaded = self._environment.require("Connect an environment first.")
@@ -699,24 +743,52 @@ class RuntimeSession:
                 raise RuntimeSessionCommandError(
                     "Pause teleoperation or model control before setting home.", error_code="control_active"
                 )
+            self._require_control_stopped()
             return await self.bus.request(home_key(loaded.state.robot_id, "capture"), command, HomePose, timeout=2)
 
     async def return_home(self, command: ReturnHomeCommand) -> HomeMotion:
         """Stop existing control before starting a separately supervised return; ack is not completion."""
         async with self._lock:
+            if self._home_motion is not None and self._home_motion.operation_id == command.operation_id:
+                return self._home_motion  # Idempotent retries never stop a subsequent control.
             self.require_home_idle()
-            await self._no_open_episode()
             loaded = self._home_environment()
-            await self._switch_control(loaded.environment, None)
             self._home_operation_id = command.operation_id
+            self._home_starting_id = command.operation_id
+            self._home_start_cancelled = False
+            self._home_stop_requested = False
             try:
+                await self._no_open_episode()
+                if self._home_start_cancelled or self.closed.is_set():
+                    return self._cancelled_home_start(command)
+                await self.bus.request(home_key(loaded.state.robot_id, "validate"), command, CommandDone, timeout=1)
+                if self._home_start_cancelled or self.closed.is_set():
+                    return self._cancelled_home_start(command)
+                self._home_stop_requested = True
+                await self._switch_control(loaded.environment, None, home_request=command)
+                if self._home_start_cancelled or self.closed.is_set():
+                    return self._cancelled_home_start(command)
                 motion = await self.bus.request(
                     home_key(loaded.state.robot_id, "return"), command, HomeMotion, timeout=2
                 )
                 self._on_home_motion(motion)
                 return motion
             finally:
+                self._home_starting_id = None
+                self._home_stop_requested = False
                 self._emit(StateMessage(data=self.state()))
+
+    def _cancelled_home_start(self, command: ReturnHomeCommand) -> HomeMotion:
+        if self._home_motion is not None and self._home_motion.operation_id == command.operation_id:
+            return self._home_motion
+        motion = HomeMotion(
+            operation_id=command.operation_id,
+            robot_id=command.home.robot_id,
+            state="cancelled",
+            message="Return cancelled before movement started.",
+        )
+        self._on_home_motion(motion)
+        return motion
 
     async def renew_home(self, command: RenewHomeReturnCommand) -> HomeMotion:
         """Renew the worker watchdog without holding the session's mutation lock."""
@@ -726,6 +798,21 @@ class RuntimeSession:
     async def cancel_home(self, command: CancelHomeReturnCommand) -> HomeMotion:
         """Stop remains available independently of normal UI/session command locks."""
         loaded = self._home_environment()
+        if self._home_starting_id == command.operation_id:
+            self._home_start_cancelled = True
+            if self._home_stop_requested:
+                motion = await self.bus.request(
+                    home_key(loaded.state.robot_id, "cancel_pending"), command, HomeMotion, timeout=1
+                )
+            else:
+                motion = HomeMotion(
+                    operation_id=command.operation_id,
+                    robot_id=loaded.state.robot_id,
+                    state="cancelled",
+                    message="Return cancelled before movement started.",
+                )
+            self._on_home_motion(motion)
+            return motion
         motion = await self.bus.request(home_key(loaded.state.robot_id, "cancel"), command, HomeMotion, timeout=1)
         self._on_home_motion(motion)
         return motion
