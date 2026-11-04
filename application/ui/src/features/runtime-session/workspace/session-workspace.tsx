@@ -136,17 +136,20 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             actions={actions('dataset')}
             hasError={failureOf(statuses, 'dataset') !== null}
         >
+            <RecordingSummary />
             <PartRow
                 label='Dataset'
                 name={dataset?.name}
+                detail={
+                    dataset && (dataset.fps_fixed || dataset.episodes_recorded > 0)
+                        ? `Recording at ${dataset.fps} fps · fixed for this dataset`
+                        : undefined
+                }
                 error={failureOf(statuses, 'dataset')}
                 isPending={pendingPart === 'dataset'}
             />
             {dataset != null ? (
-                <>
-                    <RecordingSummary />
-                    <DatasetRecordingSection />
-                </>
+                <DatasetRecordingSection />
             ) : (
                 <Text UNSAFE_className={classes.hint}>Load a dataset to capture demonstrations.</Text>
             )}

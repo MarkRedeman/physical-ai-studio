@@ -211,6 +211,11 @@ test('previews a searchable task history', async ({ page, network }, testInfo) =
     );
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(RECORD_URL);
+    await expect(page.getByRole('textbox', { name: /Current task/ })).toBeVisible();
+    const historyButton = page.getByRole('button', { name: 'Use previous task…' });
+    const historyBounds = await historyButton.boundingBox();
+    expect(historyBounds?.height).toBeLessThanOrEqual(24);
+    expect(historyBounds?.width).toBeLessThanOrEqual(24);
     await page.getByRole('button', { name: 'Use previous task…' }).click();
     await page.getByRole('searchbox', { name: 'Find a task' }).fill('red block');
     await page.screenshot({ path: testInfo.outputPath('task-history.png') });
@@ -260,6 +265,13 @@ test('previews recording progress, visible guidance, and a consistent model sele
     await expect(recording.getByRole('group', { name: '30 episodes in dataset' })).toBeVisible();
     await expect(recording.getByText('+6 this session')).toBeVisible();
     await expect(recording.getByRole('button', { name: 'Recording tips' })).toBeVisible();
+    const summaryBounds = await recording.getByRole('region', { name: 'Dataset progress' }).boundingBox();
+    const datasetBounds = await recording.getByText('Pick and place', { exact: true }).boundingBox();
+    const rateBounds = await recording.getByText('Recording at 30 fps · fixed for this dataset').boundingBox();
+    const tipsBounds = await recording.getByRole('button', { name: 'Recording tips' }).boundingBox();
+    expect((summaryBounds?.y ?? 0) + (summaryBounds?.height ?? 0)).toBeLessThan(datasetBounds?.y ?? 0);
+    expect(rateBounds?.y).toBeGreaterThan(datasetBounds?.y ?? 0);
+    expect(tipsBounds?.height).toBeLessThanOrEqual(24);
     await expect(page.getByRole('region', { name: 'Episode controls' }).getByText(/episodes in dataset/)).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath('progress-and-selector.png') });
     await recording.getByRole('button', { name: 'Recording tips' }).click();
