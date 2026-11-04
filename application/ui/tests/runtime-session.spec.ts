@@ -40,9 +40,24 @@ test.beforeEach(async ({ network, page }) => {
     await page.routeWebSocket('**/api/**', (socket) => {
         if (!socket.url().includes('/runtime/ws')) return;
         const state = getMockedRuntimeSession();
-        const publish = () => socket.send(JSON.stringify({ type: 'state', data: state }));
+        if (state.environment) state.environment.leader_id = 'leader-1';
+        const publish = () => {
+            socket.send(JSON.stringify({ type: 'state', data: state }));
+            for (const component of ['environment/follower', 'environment/leader']) {
+                const failed = page.url().includes('deviceFailure') && component === 'environment/leader';
+                socket.send(
+                    JSON.stringify({
+                        type: 'status',
+                        component,
+                        state: failed ? 'failed' : 'running',
+                        error: failed ? 'Leader disconnected. Check its USB connection.' : null,
+                    })
+                );
+            }
+        };
         socket.onMessage((message) => {
             const command = JSON.parse(String(message));
+            if (command.command === 'set_control') state.control = command.control;
             if (command.command === 'start_episode' && state.dataset) state.dataset.is_recording = true;
             if (command.command === 'save_episode' && state.dataset) {
                 state.dataset.is_recording = false;
@@ -62,19 +77,26 @@ test('keeps inference secondary before the first model is trained', async ({ pag
     await expect(page.getByText(/Once you train a model/)).toBeVisible();
     await expect(page.getByRole('button', { name: /Choose model/ })).toBeHidden();
     await expect(page.getByRole('region', { name: 'Recording' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to dataset' })).toBeVisible();
+    await expect(page.getByText('0 episodes in dataset')).toBeVisible();
     await expect(page.getByText('Plugin unavailable:')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('ready.png') });
 });
 
 test('keeps episode actions visible and locks resource changes while recording', async ({ page }, testInfo) => {
     await page.goto(RECORD_URL);
+    await page.getByRole('switch', { name: 'Teleoperate' }).click();
+    await expect(page.getByRole('switch', { name: 'Teleoperate' })).toBeChecked();
     await page.getByRole('button', { name: /Start episode/ }).click();
     await expect(page.getByRole('button', { name: /Save episode/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'dataset actions' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Back to dataset' })).toBeDisabled();
+    await expect(page.getByRole('switch', { name: 'Teleoperate' })).toBeDisabled();
     await expect(page.getByRole('textbox', { name: /Task/ })).toHaveAttribute('readonly');
     await page.screenshot({ path: testInfo.outputPath('recording.png') });
     await page.getByRole('button', { name: /Save episode/ }).click();
     await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
+    await expect(page.getByText('Plugin unavailable:')).toBeVisible();
     await expect(page.getByText(/1 saved this session/)).toBeVisible();
 });
 
@@ -89,4 +111,17 @@ test('stacks setup below the live views on narrower screens', async ({ page }, t
     expect(setup?.y).toBeGreaterThanOrEqual((live?.y ?? 0) + (live?.height ?? 0));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('narrow.png') });
+});
+
+test('highlights a disconnected device and opens its details automatically', async ({ page }, testInfo) => {
+    await page.goto(`${RECORD_URL}?deviceFailure=true`);
+    const environment = page.getByRole('region', { name: 'Environment' });
+    await expect(environment).toHaveAttribute('data-error', 'true');
+    await expect(environment.getByRole('button', { name: 'Hide device details' })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+    );
+    await expect(environment.getByText('Leader disconnected. Check its USB connection.')).toBeVisible();
+    await expect(environment.getByRole('switch', { name: 'Teleoperate' })).toBeDisabled();
+    await page.screenshot({ path: testInfo.outputPath('device-error.png') });
 });
