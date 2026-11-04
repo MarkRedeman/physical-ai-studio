@@ -1,0 +1,78 @@
+.summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-100);
+    padding: var(--spectrum-global-dimension-size-150);
+    background: var(--spectrum-global-color-gray-200);
+    border-radius: var(--spectrum-global-dimension-size-75);
+}
+
+.stats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--spectrum-global-dimension-size-75);
+}
+
+.total {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spectrum-global-dimension-size-75);
+}
+
+.count {
+    font-size: var(--spectrum-global-dimension-font-size-400);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.countLabel,
+.sessionCount,
+.guidance {
+    color: var(--spectrum-global-color-gray-700);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    line-height: 1.5;
+}
+
+.sessionCount {
+    color: var(--spectrum-global-color-gray-800);
+}
+
+.progress {
+    height: var(--spectrum-global-dimension-size-50);
+    overflow: hidden;
+    background: var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-50);
+}
+
+.progress > span {
+    display: block;
+    height: 100%;
+    background: var(--spectrum-global-color-blue-600);
+    border-radius: inherit;
+}
+
+.helpButton {
+    margin-inline-start: calc(-1 * var(--spectrum-global-dimension-size-75));
+    color: var(--spectrum-global-color-gray-900);
+}
+
+.tips {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-100);
+    margin: 0;
+    padding-inline-start: var(--spectrum-global-dimension-size-200);
+    line-height: 1.5;
+    list-style: disc;
+}
+
+.tips strong {
+    font-weight: 600;
+}
+
+.tips li::marker {
+    color: var(--spectrum-global-color-gray-700);
+}

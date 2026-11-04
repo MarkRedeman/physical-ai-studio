@@ -70,12 +70,13 @@ describe('SessionWorkspace', () => {
         expect(screen.queryByText('Leader disconnected')).not.toBeInTheDocument();
     });
 
-    it('shows the dataset total in the recording toolbar, including this session', async () => {
+    it('shows the dataset total in the recording panel, including this session', async () => {
         state.dataset = getMockedSessionDataset({ episodes_recorded: 3 });
         server.use(http.get('/api/dataset/{dataset_id}/episodes', () => HttpResponse.json(getMockedEpisodes())));
         renderWorkspace();
-        const toolbar = await screen.findByRole('region', { name: 'Episode controls' });
-        expect(await within(toolbar).findByText('5 episodes in dataset')).toBeInTheDocument();
+        const recording = await screen.findByRole('region', { name: 'Recording', exact: true });
+        expect(await within(recording).findByRole('group', { name: '5 episodes in dataset' })).toBeInTheDocument();
+        expect(within(recording).getByRole('button', { name: 'Recording tips' })).toBeInTheDocument();
     });
 
     it('highlights a failed dataset and opens its error details', async () => {

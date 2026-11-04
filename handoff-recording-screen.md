@@ -8,17 +8,18 @@ This is still a UX experiment. Prioritize visual iteration and small signed comm
 
 ## What changed
 
-- Removed the separate top page header. The episode toolbar contains back navigation, recording actions, timer, and total episode count.
+- Removed the separate top page header. The episode toolbar contains back navigation, recording actions, and timer; dataset counts and guidance now live in the Recording card.
 - Consolidated recording into one provider so task edits, buttons, and hotkeys share state. Removed duplicate hidden recording controls and their hotkey registrations.
 - Added distinct Environment, Recording, and Inference cards. Resource actions live in each card's top-right corner, not in `PartRow`.
 - Replaced routine reload/unload menus with “Change…” and contextual recovery: “Reconnect devices” or “Try again.” Backend command names remain unchanged.
 - Removed normal green health lights. Failures highlight the affected card header; device errors automatically open details. The Environment header chevron toggles inline details, **not a disclosure heading**.
 - Adapted [Dawid's PR #1343](https://github.com/open-edge-platform/physical-ai-studio/pull/1343): compact device cards show names, roles, and activity. Follower tiles are purple; leader tiles are blue with mirrored thumbnails; camera tiles are teal with camera icons and resolution.
 - Distinguished readiness from activity: robot control produces “Active”; healthy cameras show “Streaming”; normal readiness stays muted. Errors override activity.
-- Improved dataset-name/session-count typography. Renamed Task to **Current task** and kept a multiline textarea—**do not replace it with a combobox**.
+- Consolidated episode counts into a dataset-progress block in Recording. Show the total, this session's contribution only when nonzero, progress toward the suggested 50 episodes, visible guidance, and a labeled **Recording tips** popover. Removed the separate “No episodes saved…” message. The recommendation is not a training prerequisite.
+- Renamed Task to **Current task** and kept a multiline textarea—**do not replace it with a combobox**.
 - Added a separate “Use previous task…” popover with search and wrapping task buttons. Suggestions combine previous episode tasks and successfully saved tasks from this session, trim blanks, and deduplicate.
 - Put editable recording rate **before Current task** for new datasets. Explain that the first saved episode locks it; show only a muted fixed-rate summary afterward.
-- Replaced empty inference's “No model selected” and header chooser with one large clickable model-selection well. Projects without runnable exports retain a quiet training/export placeholder.
+- Replaced empty inference's “No model selected” and header chooser with a clickable, left-aligned text resource selector and a right-hand chevron. Do not add a play icon here: it suggests playing a movie. An earlier large centered/dashed tile felt inconsistent with the rest of the screen. Projects without runnable exports retain a quiet training/export placeholder.
 - Kept inference execution settings behind a disclosure, with execution-mode radios and the chunk threshold shown only for asynchronous execution.
 - Mode selection adds a border glow even when idle; “Recording”/“Running” text describes actual execution separately. The toolbar shows the selected workflow's actions. Selecting a mode never starts motion; switching first holds any existing robot control and waits for its acknowledgement. Switching is disabled during episodes and shared recording/model commands.
 
@@ -32,7 +33,7 @@ Under `application/ui/src/features/runtime-session/workspace/`:
 - `record-mode.tsx`: shared recording state, commands, hotkeys, toolbar, recording rate.
 - `session-mode.tsx`: selected mode, safe switching, and shared recording/model command lock.
 - `current-task-picker.tsx` / `.module.css`: multiline editor and searchable task-history popover.
-- `recording-summary.tsx`: total persisted + session episode count.
+- `recording-summary.tsx` / `.module.css`: dataset-progress block, persisted + session totals, and recording guidance popover.
 - `back-to-dataset-button.tsx`: waits for dataset finalization before leaving; stays on the page if it fails.
 - `inference-mode.tsx`: shared inference provider, model settings, and inference Run/Stop toolbar.
 
@@ -52,7 +53,7 @@ Entry points: `application/ui/src/routes/datasets/record/index.tsx` and `applica
 
 Before the latest experimental pass, the full unit suite passed (559 passed, one skipped), the production build passed, and targeted browser checks passed. Full type-check had unrelated existing model-renaming API and settings-fixture errors.
 
-The device/task-history pass checked four mocked browser preview flows: device overview, task-history search/selection, first-episode rate setup, and the inference well opening model selection. The mode-selector follow-up checked radio switching, toolbar changes, stopping existing model control, keyboard switching, and disabled switching during an episode. **Do not assume current HEAD passes the full suite, lint, type-check, or build.** The latest shared mode/command providers and task-history/camera changes still need regression coverage and verification.
+The device/task-history pass checked four mocked browser preview flows: device overview, task-history search/selection, first-episode rate setup, and model selection. The mode-selector follow-up checked radio switching, toolbar changes, stopping existing model control, keyboard switching, and disabled switching during an episode. The progress/help follow-up previewed an empty dataset, persisted + session episode totals, recording tips, and the compact model selector. **Do not assume current HEAD passes the full suite, lint, type-check, or build.** The latest shared mode/command providers and task-history/camera changes still need regression coverage and verification.
 
 Run UI commands from `application/ui/` when ready: `npm run lint`, `npm run format:check`, `npm run type-check`, `npm run test:unit`, `npm run build`, and `npm run test:component`. Browser previews used installed Chrome via a temporary Playwright config because the bundled Chromium executable was missing.
 
@@ -66,3 +67,4 @@ Started from WIP `f3c03701b`; all subsequent commits were signed:
 - `9944f3d35`: initial robot activity cards.
 - `3080e91ee`: differentiated robot roles, camera visuals, resource typography.
 - `875873a12`: recording setup, task reuse, and actionable model selection.
+- `775f26cf3`: mode radios, active glow, and mode-specific toolbars.

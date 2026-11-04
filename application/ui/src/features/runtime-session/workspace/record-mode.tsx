@@ -9,7 +9,6 @@ import { useHotkey } from '../../hotkeys/use-hotkey';
 import { failureOf, useRuntimeSession } from '../runtime-session-provider';
 import { CurrentTaskPicker } from './current-task-picker';
 import { usePartControls } from './part-controls';
-import { RecordingSummary } from './recording-summary';
 import { useSessionMode } from './session-mode';
 
 import classes from './record-mode.module.css';
@@ -168,9 +167,9 @@ export const RecordingToolbar = ({ backButton }: { backButton: ReactNode }) => {
             return 'Load a working environment to record episodes';
         }
         if (state.dataset == null) return 'Load a dataset to record episodes';
-        if (failureOf(statuses, 'dataset') !== null) return 'Reload the dataset to record episodes';
+        if (failureOf(statuses, 'dataset') !== null) return 'Check the dataset in Session setup to continue';
         if (task.trim() === '') return 'Add a task to start recording';
-        return 'Ready for the next episode';
+        return 'Start an episode to capture the current task.';
     };
 
     return (
@@ -179,10 +178,9 @@ export const RecordingToolbar = ({ backButton }: { backButton: ReactNode }) => {
             <div className={classes.toolbarStatus} role='status'>
                 {isRecording && <span className={classes.recordingDot} aria-hidden='true' />}
                 <div className={classes.statusCopy}>
-                    <Flex alignItems='center' gap='size-150' wrap>
-                        <strong>{isRecording ? 'Recording episode' : 'Episode recording'}</strong>
-                        <RecordingSummary />
-                    </Flex>
+                    <strong>
+                        {isRecording ? 'Recording episode' : canStart ? 'Ready to record' : 'Record an episode'}
+                    </strong>
                     <span className={classes.hint}>
                         {isRecording ? 'Save this episode or discard it to try again.' : getHint()}
                     </span>

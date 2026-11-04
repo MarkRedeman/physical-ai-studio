@@ -1,7 +1,7 @@
 import { ReactNode, Suspense, useEffect, useId, useState } from 'react';
 
 import { ActionButton, Flex, Heading, Loading, Radio, RadioGroup, Text } from '@geti-ui/ui';
-import { ChevronDownLight, ChevronLeft, ChevronRightSmallLight, Play } from '@geti-ui/ui/icons';
+import { ChevronDownLight, ChevronLeft, ChevronRightSmallLight } from '@geti-ui/ui/icons';
 import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
@@ -13,6 +13,7 @@ import { InferenceMode, InferenceProvider, InferenceToolbar } from './inference-
 import { PartControlsProvider, usePartControls } from './part-controls';
 import { EnvironmentRow, PartActions, PartRow } from './parts-panel';
 import { DatasetRecordingSection, RecordingProvider, RecordingToolbar } from './record-mode';
+import { RecordingSummary } from './recording-summary';
 import { ModeKey, SessionModeProvider, useSessionMode } from './session-mode';
 
 import classes from './session-workspace.module.css';
@@ -104,11 +105,6 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const environmentFailure = failureOf(statuses, 'environment');
     const isRecording = dataset?.is_recording ?? false;
     const isTeleop = state?.control?.type === 'teleop';
-    const savedEpisodes = dataset?.episodes_recorded ?? 0;
-    const recordingDetail =
-        savedEpisodes === 0
-            ? 'No episodes saved this session yet'
-            : `${savedEpisodes} ${savedEpisodes === 1 ? 'episode' : 'episodes'} saved this session`;
     const devices = Object.values(statuses).filter((status) => status.component.startsWith('environment/'));
     const deviceFailures = devices.filter((status) => status.state === 'failed');
     const hasDeviceFailure = deviceFailures.length > 0;
@@ -143,12 +139,14 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             <PartRow
                 label='Dataset'
                 name={dataset?.name}
-                detail={dataset ? recordingDetail : undefined}
                 error={failureOf(statuses, 'dataset')}
                 isPending={pendingPart === 'dataset'}
             />
             {dataset != null ? (
-                <DatasetRecordingSection />
+                <>
+                    <RecordingSummary />
+                    <DatasetRecordingSection />
+                </>
             ) : (
                 <Text UNSAFE_className={classes.hint}>Load a dataset to capture demonstrations.</Text>
             )}
@@ -189,7 +187,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                     {modelFailure !== null && <Text UNSAFE_className={classes.error}>{modelFailure}</Text>}
                     <button
                         type='button'
-                        className={classes.modelWell}
+                        className={classes.modelPicker}
                         onClick={() => act('model', 'swap')}
                         disabled={
                             isRecording ||
@@ -201,16 +199,17 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                         }
                         aria-label='Choose a model for inference'
                     >
-                        <span className={classes.modelWellIcon} aria-hidden='true'>
-                            <Play />
+                        <span className={classes.modelPickerCopy}>
+                            <strong>{pendingPart === 'model' ? 'Preparing model…' : 'Select a trained model'}</strong>
+                            <span>
+                                {environment == null || environmentFailure !== null
+                                    ? 'Connect an environment first'
+                                    : 'Browse your available models'}
+                            </span>
                         </span>
-                        <strong>{pendingPart === 'model' ? 'Preparing model…' : 'Choose a model'}</strong>
-                        <span>
-                            {environment == null || environmentFailure !== null
-                                ? 'Connect an environment to run a model.'
-                                : 'Run a trained policy on your environment.'}
-                        </span>
+                        <ChevronRightSmallLight aria-hidden='true' />
                     </button>
+                    <Text UNSAFE_className={classes.hint}>The selected model will control the follower robot.</Text>
                 </>
             )}
         </WorkspaceSection>

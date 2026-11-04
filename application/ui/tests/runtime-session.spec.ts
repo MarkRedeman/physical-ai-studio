@@ -46,6 +46,7 @@ test.beforeEach(async ({ network, page }) => {
         if (state.environment && page.url().includes('devicesPreview'))
             state.environment.cameras = [getMockedSessionCamera()];
         if (state.dataset && page.url().includes('newDataset')) state.dataset.fps_fixed = false;
+        if (state.dataset && page.url().includes('summaryPreview')) state.dataset.episodes_recorded = 6;
         if (page.url().includes('modePreview'))
             state.model = {
                 model_id: 'model-1',
@@ -93,7 +94,7 @@ test('keeps inference secondary before the first model is trained', async ({ pag
     await expect(page.getByRole('button', { name: /Choose model/ })).toBeHidden();
     await expect(page.getByRole('region', { name: 'Recording' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Back to dataset' })).toBeVisible();
-    await expect(page.getByText('0 episodes in dataset')).toBeVisible();
+    await expect(page.getByRole('group', { name: '0 episodes in dataset' })).toBeVisible();
     await expect(page.getByText('Plugin unavailable:')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('ready.png') });
 });
@@ -114,7 +115,7 @@ test('keeps episode actions visible and locks resource changes while recording',
     await page.getByRole('button', { name: /Save episode/ }).click();
     await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
     await expect(page.getByText('Plugin unavailable:')).toBeVisible();
-    await expect(page.getByText(/1 episode saved this session/)).toBeVisible();
+    await expect(page.getByText('+1 this session')).toBeVisible();
 });
 
 test('previews mode radios and moves the glow without starting robot motion', async ({ page, network }, testInfo) => {
@@ -237,5 +238,37 @@ test('previews the actionable inference well', async ({ page, network }, testInf
     await expect(well).toBeEnabled();
     await page.screenshot({ path: testInfo.outputPath('inference-well.png') });
     await well.click();
+    await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
+});
+
+test('previews recording progress, visible guidance, and a consistent model selector', async ({
+    page,
+    network,
+}, testInfo) => {
+    network.use(
+        http.get('/api/dataset/{dataset_id}/episodes', () =>
+            HttpResponse.json(getMockedEpisodes(Array.from({ length: 24 }, (_, episode_index) => ({ episode_index }))))
+        ),
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        )
+    );
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto(`${RECORD_URL}?summaryPreview=true`);
+    await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
+    const recording = page.getByRole('region', { name: 'Recording', exact: true });
+    await expect(recording.getByRole('group', { name: '30 episodes in dataset' })).toBeVisible();
+    await expect(recording.getByText('+6 this session')).toBeVisible();
+    await expect(recording.getByRole('button', { name: 'Recording tips' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Episode controls' }).getByText(/episodes in dataset/)).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath('progress-and-selector.png') });
+    await recording.getByRole('button', { name: 'Recording tips' }).click();
+    await expect(page.getByRole('heading', { name: 'Recording a useful dataset' })).toBeVisible();
+    await page.getByRole('dialog').evaluate(async (element) => {
+        await Promise.allSettled(element.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    });
+    await page.screenshot({ path: testInfo.outputPath('recording-guidance.png') });
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Choose a model for inference' }).click();
     await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
 });
