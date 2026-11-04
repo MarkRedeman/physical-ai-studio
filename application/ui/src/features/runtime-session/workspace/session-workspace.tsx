@@ -6,9 +6,11 @@ import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
 import { useProjectId } from '../../projects/use-project';
-import { TeleopSwitch } from '../cells/robot-cell';
+import { TELEOP_CONTROL, TeleopSwitch } from '../cells/robot-cell';
 import { failureOf, SessionPartName, useRuntimeSession } from '../runtime-session-provider';
 import { SessionViewer } from '../session-viewer';
+import { HomePosition, HomeReturnBanner } from './home-position';
+import { HomePositionProvider } from './home-position-provider';
 import { InferenceLatencyFooter } from './inference-latency-footer';
 import { InferenceMode, InferenceModelSummary, InferenceProvider, InferenceToolbar } from './inference-mode';
 import { PartControlsProvider, usePartControls } from './part-controls';
@@ -97,7 +99,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
         params: { path: { project_id } },
     });
     const { state, statuses } = useRuntimeSession();
-    const { mode, selectMode, canSwitch, isPending } = useSessionMode();
+    const { mode, selectMode, canSwitch, isPending, setTeleoperation } = useSessionMode();
     const { pendingPart, act } = usePartControls();
     const environment = state?.environment;
     const dataset = state?.dataset;
@@ -246,16 +248,20 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                 />
                 {environment?.leader_id != null && (
                     <div className={classes.teleop} data-active={isTeleop || undefined}>
-                        <TeleopSwitch isDisabled={mode !== 'record' || isPending || pendingPart !== null} />
+                        <TeleopSwitch
+                            isDisabled={isPending || pendingPart !== null}
+                            onToggle={(enabled) => setTeleoperation(enabled ? TELEOP_CONTROL : null)}
+                        />
                         <Text UNSAFE_className={classes.hint}>
                             {mode !== 'record'
-                                ? 'Select Recording to guide the follower with your leader robot.'
+                                ? 'Enable teleoperation to stop model control and switch to Recording.'
                                 : isTeleop
                                   ? 'The follower tracks your leader robot.'
                                   : 'Enable to guide the follower with your leader robot.'}
                         </Text>
                     </div>
                 )}
+                {environment != null && <HomePosition />}
             </WorkspaceSection>
             <RadioGroup
                 aria-label='Session mode'
@@ -293,6 +299,7 @@ const WorkspaceContent = ({ initialMode, cancelHref, backButton }: SessionWorksp
     return (
         <div className={classes.workspace}>
             <main className={classes.liveWorkspace} aria-label='Live session'>
+                <HomeReturnBanner />
                 {mode === 'record' ? <RecordingToolbar backButton={back} /> : <InferenceToolbar backButton={back} />}
                 <div className={classes.viewer}>
                     <SessionViewer cancelHref={cancelHref} />
@@ -318,14 +325,20 @@ const WorkspaceContent = ({ initialMode, cancelHref, backButton }: SessionWorksp
 /** Both mode cards stay visible; selection changes the primary action, not the layout. */
 export const SessionWorkspace = ({ initialMode, cancelHref, backButton }: SessionWorkspaceProps) => (
     <PartControlsProvider>
-        <SessionModeProvider initialMode={initialMode}>
-            <Suspense fallback={<Loading mode='inline' />}>
-                <RecordingProvider>
-                    <InferenceProvider>
-                        <WorkspaceContent initialMode={initialMode} cancelHref={cancelHref} backButton={backButton} />
-                    </InferenceProvider>
-                </RecordingProvider>
-            </Suspense>
-        </SessionModeProvider>
+        <HomePositionProvider>
+            <SessionModeProvider initialMode={initialMode}>
+                <Suspense fallback={<Loading mode='inline' />}>
+                    <RecordingProvider>
+                        <InferenceProvider>
+                            <WorkspaceContent
+                                initialMode={initialMode}
+                                cancelHref={cancelHref}
+                                backButton={backButton}
+                            />
+                        </InferenceProvider>
+                    </RecordingProvider>
+                </Suspense>
+            </SessionModeProvider>
+        </HomePositionProvider>
     </PartControlsProvider>
 );

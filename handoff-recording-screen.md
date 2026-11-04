@@ -2,6 +2,8 @@
 
 ## Direction
 
+Home position and inference takeovers are now implemented; see [handoff-home-position.md](./handoff-home-position.md) for scope, safeguards, code paths, and commissioning requirements.
+
 Continue refining the unified runtime workspace: live robot/camera views on the left, session setup on the right. Recording and inference cards always remain visible, but **one mode is selected** using radios in their top-left headers. Entry points set the initial selection and section order; switching does not reorder or collapse cards.
 
 This is still a UX experiment. Prioritize visual iteration and small signed commits; do the full technical cleanup before treating it as release-ready. Do not revert unrelated work or include the existing untracked files in commits.

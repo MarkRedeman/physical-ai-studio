@@ -7,6 +7,7 @@ import json
 import math
 from collections import deque
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -58,7 +59,8 @@ def capability_for_so101(  # noqa: PLR0911 - fail closed at each capability gate
 
     try:
         checked = SO101Calibration.from_dict(calibration)
-    except (TypeError, ValueError, KeyError):
+        driver_version = version("physicalai-so101-plugin")
+    except (TypeError, ValueError, KeyError, PackageNotFoundError):
         return None
     limits = {}
     for name in _ARM_JOINTS:
@@ -80,6 +82,8 @@ def capability_for_so101(  # noqa: PLR0911 - fail closed at each capability gate
         "unit": unit,
         "calibration": checked.to_dict(),
         "environment_id": str(environment_id) if environment_id is not None else None,
+        "driver_version": driver_version,
+        "profile_version": 1,
     }
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return HomeCapability(robot_id=recipe.robot_id, fingerprint=fingerprint, unit=unit, joints=limits)
@@ -154,7 +158,7 @@ class HomeReturn:
             capability.fingerprint,
             capability.unit,
         ):
-            raise ValueError("Home belongs to a different robot, calibration, or joint unit. Set a new home.")
+            raise ValueError("Home does not match this environment, robot, calibration, or unit. Set a new home.")
         if set(pose.positions) != set(capability.joints):
             raise ValueError("Home must contain every arm joint and no gripper commands.")
         for name, value in pose.positions.items():
