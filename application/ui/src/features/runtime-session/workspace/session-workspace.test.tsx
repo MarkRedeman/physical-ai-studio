@@ -110,7 +110,8 @@ describe('SessionWorkspace', () => {
             )
         );
         renderWorkspace();
-        expect(await screen.findByRole('button', { name: /Choose model/ })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: 'Choose a model for inference' })).toBeEnabled();
+        expect(screen.queryByText('No model selected')).not.toBeInTheDocument();
         expect(screen.queryByText(/Once you train a model/)).not.toBeInTheDocument();
     });
 
@@ -124,7 +125,7 @@ describe('SessionWorkspace', () => {
     it('starts with the task edited in the recording card', async () => {
         const user = userEvent.setup();
         renderWorkspace();
-        const task = await screen.findByRole('textbox', { name: /Task/ });
+        const task = await screen.findByRole('textbox', { name: /Current task/ });
         await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
         await user.clear(task);
         await user.type(task, 'Place the cube in the tray');
@@ -134,7 +135,7 @@ describe('SessionWorkspace', () => {
 
     it('registers just one start hotkey and ignores it while typing', async () => {
         renderWorkspace();
-        const task = await screen.findByRole('textbox', { name: /Task/ });
+        const task = await screen.findByRole('textbox', { name: /Current task/ });
         await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
         fireEvent.keyDown(task, { key: 'ArrowRight' });
         expect(send).not.toHaveBeenCalled();
@@ -147,7 +148,7 @@ describe('SessionWorkspace', () => {
     it('does not start an episode with a whitespace-only task', async () => {
         const user = userEvent.setup();
         renderWorkspace();
-        const task = await screen.findByRole('textbox', { name: /Task/ });
+        const task = await screen.findByRole('textbox', { name: /Current task/ });
         await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
         await user.clear(task);
         await user.type(task, '   ');
@@ -166,7 +167,7 @@ describe('SessionWorkspace', () => {
     it('blocks starting while a resource is being replaced', async () => {
         pendingPart = 'model';
         renderWorkspace();
-        const task = await screen.findByRole('textbox', { name: /Task/ });
+        const task = await screen.findByRole('textbox', { name: /Current task/ });
         await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
         expect(screen.getByRole('button', { name: /Start episode/ })).toBeDisabled();
     });
@@ -179,7 +180,7 @@ describe('SessionWorkspace', () => {
         expect(await screen.findByRole('button', { name: /Save episode/ })).toBeEnabled();
         expect(screen.getByRole('button', { name: /Discard/ })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'dataset actions' })).toBeDisabled();
-        expect(screen.getByRole('textbox', { name: /Task/ })).toHaveAttribute('readonly');
+        expect(screen.getByRole('textbox', { name: /Current task/ })).toHaveAttribute('readonly');
         await user.click(screen.getByRole('button', { name: /Save episode/ }));
         expect(send).toHaveBeenCalledExactlyOnceWith({ command: 'save_episode' });
     });

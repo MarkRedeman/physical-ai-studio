@@ -92,6 +92,60 @@
     line-height: 1.5;
 }
 
+.modelWell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spectrum-global-dimension-size-100);
+    width: 100%;
+    padding: var(--spectrum-global-dimension-size-250) var(--spectrum-global-dimension-size-150);
+    color: var(--spectrum-global-color-gray-900);
+    background: var(--spectrum-global-color-gray-75);
+    border: 1px dashed var(--spectrum-global-color-gray-400);
+    border-radius: var(--spectrum-global-dimension-size-100);
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+}
+
+.modelWell > span:last-child {
+    max-width: 24ch;
+    color: var(--spectrum-global-color-gray-700);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    line-height: 1.5;
+}
+
+.modelWellIcon {
+    display: grid;
+    place-items: center;
+    width: var(--spectrum-global-dimension-size-500);
+    height: var(--spectrum-global-dimension-size-500);
+    color: var(--spectrum-global-color-blue-700);
+    background: color-mix(in srgb, var(--spectrum-global-color-blue-600) 12%, transparent);
+    border-radius: var(--spectrum-global-dimension-size-100);
+}
+
+.modelWell:hover:not(:disabled) {
+    border-color: var(--spectrum-global-color-blue-600);
+    background: color-mix(in srgb, var(--spectrum-global-color-blue-600) 5%, var(--spectrum-global-color-gray-75));
+}
+
+.modelWell:focus-visible {
+    outline: 2px solid var(--spectrum-global-color-blue-600);
+    outline-offset: 3px;
+}
+
+.modelWell:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.error {
+    color: var(--spectrum-global-color-red-600);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    overflow-wrap: anywhere;
+}
+
 .teleop {
     display: flex;
     flex-direction: column;

@@ -1,0 +1,40 @@
+.taskList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-75);
+    max-height: 280px;
+    overflow: auto;
+    margin: 0;
+    padding: var(--spectrum-global-dimension-size-50);
+    list-style: none;
+}
+
+.taskOption {
+    width: 100%;
+    padding: var(--spectrum-global-dimension-size-150);
+    color: var(--spectrum-global-color-gray-900);
+    background: var(--spectrum-global-color-gray-100);
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-75);
+    font: inherit;
+    line-height: 1.5;
+    text-align: start;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.taskOption:hover {
+    background: var(--spectrum-global-color-gray-200);
+    border-color: var(--spectrum-global-color-gray-500);
+}
+
+.taskOption:focus-visible {
+    outline: 2px solid var(--spectrum-global-color-blue-600);
+    outline-offset: 2px;
+}
+
+.hint {
+    color: var(--spectrum-global-color-gray-700);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+}

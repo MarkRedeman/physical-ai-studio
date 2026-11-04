@@ -2,8 +2,10 @@ import { HttpResponse } from 'msw';
 
 import { getMockedDataset } from '../src/test-utils/mocks/mock-dataset';
 import { getMockedEnvironment } from '../src/test-utils/mocks/mock-environment';
+import { getMockedEpisodes } from '../src/test-utils/mocks/mock-episode';
+import { getMockedModel } from '../src/test-utils/mocks/mock-model';
 import { getMockedProject } from '../src/test-utils/mocks/mock-project';
-import { getMockedRuntimeSession } from '../src/test-utils/mocks/mock-runtime-session';
+import { getMockedRuntimeSession, getMockedSessionCamera } from '../src/test-utils/mocks/mock-runtime-session';
 import { getMockedSettings } from '../src/test-utils/mocks/mock-settings';
 import { expect, http, test } from './fixtures';
 
@@ -41,6 +43,9 @@ test.beforeEach(async ({ network, page }) => {
         if (!socket.url().includes('/runtime/ws')) return;
         const state = getMockedRuntimeSession();
         if (state.environment) state.environment.leader_id = 'leader-1';
+        if (state.environment && page.url().includes('devicesPreview'))
+            state.environment.cameras = [getMockedSessionCamera()];
+        if (state.dataset && page.url().includes('newDataset')) state.dataset.fps_fixed = false;
         const publish = () => {
             socket.send(JSON.stringify({ type: 'state', data: state }));
             for (const component of ['environment/follower', 'environment/leader']) {
@@ -54,10 +59,13 @@ test.beforeEach(async ({ network, page }) => {
                     })
                 );
             }
+            if (state.environment?.cameras.length)
+                socket.send(JSON.stringify({ type: 'status', component: 'environment/wrist', state: 'running' }));
         };
         socket.onMessage((message) => {
             const command = JSON.parse(String(message));
             if (command.command === 'set_control') state.control = command.control;
+            if (command.command === 'load_dataset' && state.dataset && command.fps) state.dataset.fps = command.fps;
             if (command.command === 'start_episode' && state.dataset) state.dataset.is_recording = true;
             if (command.command === 'save_episode' && state.dataset) {
                 state.dataset.is_recording = false;
@@ -92,12 +100,12 @@ test('keeps episode actions visible and locks resource changes while recording',
     await expect(page.getByRole('button', { name: 'dataset actions' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Back to dataset' })).toBeDisabled();
     await expect(page.getByRole('switch', { name: 'Teleoperate' })).toBeDisabled();
-    await expect(page.getByRole('textbox', { name: /Task/ })).toHaveAttribute('readonly');
+    await expect(page.getByRole('textbox', { name: /Current task/ })).toHaveAttribute('readonly');
     await page.screenshot({ path: testInfo.outputPath('recording.png') });
     await page.getByRole('button', { name: /Save episode/ }).click();
     await expect(page.getByRole('button', { name: /Start episode/ })).toBeEnabled();
     await expect(page.getByText('Plugin unavailable:')).toBeVisible();
-    await expect(page.getByText(/1 saved this session/)).toBeVisible();
+    await expect(page.getByText(/1 episode saved this session/)).toBeVisible();
 });
 
 test('stacks setup below the live views on narrower screens', async ({ page }, testInfo) => {
@@ -127,13 +135,63 @@ test('highlights a disconnected device and opens its details automatically', asy
 });
 
 test('shows robot representations and activity inside the environment chevron', async ({ page }, testInfo) => {
-    await page.goto(RECORD_URL);
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    await page.goto(`${RECORD_URL}?devicesPreview=true`);
     const environment = page.getByRole('region', { name: 'Environment' });
     await environment.getByRole('button', { name: 'Show device details' }).click();
     await expect(environment.getByText('Demo follower')).toBeVisible();
     await expect(environment.getByText('Demo leader')).toBeVisible();
+    await expect(environment.getByRole('group', { name: 'Camera: Wrist camera' }).getByText('Streaming')).toBeVisible();
     await page.getByRole('switch', { name: 'Teleoperate' }).click();
     await expect(environment.getByRole('group', { name: 'Follower robot' }).getByText('Active')).toBeVisible();
     await expect(environment.getByRole('group', { name: 'Leader robot' }).getByText('Active')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('robot-overview.png') });
+});
+
+test('previews a searchable task history', async ({ page, network }, testInfo) => {
+    network.use(
+        http.get('/api/dataset/{dataset_id}/episodes', () =>
+            HttpResponse.json(
+                getMockedEpisodes([
+                    { episode_index: 0, tasks: ['Pick up the cube and place it in the tray.'] },
+                    {
+                        episode_index: 1,
+                        tasks: [
+                            'Move the red block to the left side of the table, then return the arm to its starting position.',
+                        ],
+                    },
+                ])
+            )
+        )
+    );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(RECORD_URL);
+    await page.getByRole('button', { name: 'Use previous task…' }).click();
+    await page.getByRole('searchbox', { name: 'Find a task' }).fill('red block');
+    await page.screenshot({ path: testInfo.outputPath('task-history.png') });
+    await page.getByRole('button', { name: /Move the red block/ }).click();
+    await expect(page.getByRole('textbox', { name: /Current task/ })).toHaveValue(/Move the red block/);
+    await page.screenshot({ path: testInfo.outputPath('recording-setup.png') });
+});
+
+test('previews recording rate before the first episode', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${RECORD_URL}?newDataset=true`);
+    await expect(page.getByRole('slider', { name: 'Recording rate' })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('rate-first.png') });
+});
+
+test('previews the actionable inference well', async ({ page, network }, testInfo) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        )
+    );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(RECORD_URL);
+    const well = page.getByRole('button', { name: 'Choose a model for inference' });
+    await expect(well).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath('inference-well.png') });
+    await well.click();
+    await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
 });
