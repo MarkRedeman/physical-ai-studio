@@ -1,15 +1,16 @@
-import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
-import { Button, Flex, Keyboard, Slider, Text, toast } from '@geti-ui/ui';
+import { Button, Flex, Keyboard, Slider, Text } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { SchemaSessionDataset } from '../../../api/openapi-spec';
 import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
 import { useHotkey } from '../../hotkeys/use-hotkey';
-import { ERROR_TOAST, failureOf, useRuntimeSession } from '../runtime-session-provider';
+import { failureOf, useRuntimeSession } from '../runtime-session-provider';
 import { CurrentTaskPicker } from './current-task-picker';
 import { usePartControls } from './part-controls';
 import { RecordingSummary } from './recording-summary';
+import { useSessionMode } from './session-mode';
 
 import classes from './record-mode.module.css';
 
@@ -36,7 +37,8 @@ const RecordingTimer = () => {
 
 /** Shared by the task editor, toolbar and a single set of keyboard shortcuts. */
 const useRecordingState = () => {
-    const { state, statuses, send, isLoading } = useRuntimeSession();
+    const { state, statuses, isLoading } = useRuntimeSession();
+    const { mode, isPending, run } = useSessionMode();
     const { pendingPart } = usePartControls();
     const dataset = state?.dataset;
     const { data: savedDataset, isPending: isTaskLoading } = $api.useQuery(
@@ -46,9 +48,7 @@ const useRecordingState = () => {
         { enabled: dataset != null }
     );
     const [task, setTask] = useState('');
-    const [isPending, setIsPending] = useState(false);
     const [savedTasks, setSavedTasks] = useState<Record<string, string[]>>({});
-    const inFlight = useRef(false);
     const defaultTask = savedDataset?.default_task ?? '';
 
     useEffect(() => setTask(defaultTask), [defaultTask, dataset?.dataset_id]);
@@ -61,24 +61,8 @@ const useRecordingState = () => {
         failureOf(statuses, 'environment') === null &&
         dataset != null &&
         failureOf(statuses, 'dataset') === null;
-    const canRecord = isReady && !isPending && !isLoading && pendingPart === null;
+    const canRecord = mode === 'record' && isReady && !isPending && !isLoading && pendingPart === null;
     const canStart = canRecord && !isRecording && !isTaskLoading && task.trim() !== '';
-
-    const run = async (command: Parameters<typeof send>[0]) => {
-        if (inFlight.current) return;
-        inFlight.current = true;
-        setIsPending(true);
-        try {
-            const ack = await send(command);
-            if (!ack.ok) {
-                toast.negative(ack.error?.message ?? 'The recording command failed.', ERROR_TOAST);
-            }
-            return ack;
-        } finally {
-            inFlight.current = false;
-            setIsPending(false);
-        }
-    };
 
     const start = () => {
         if (canStart) void run({ command: 'start_episode', task: task.trim() });
