@@ -49,6 +49,10 @@ test.beforeEach(async ({ network, page }) => {
             state.environment.cameras = [getMockedSessionCamera()];
         if (state.dataset && page.url().includes('newDataset')) state.dataset.fps_fixed = false;
         if (state.dataset && page.url().includes('summaryPreview')) state.dataset.episodes_recorded = 6;
+        if (page.url().includes('emptyPreview')) {
+            state.environment = null;
+            state.dataset = null;
+        }
         if (page.url().includes('modePreview'))
             state.model = {
                 model_id: 'model-1',
@@ -249,7 +253,8 @@ test('previews a searchable task history', async ({ page, network }, testInfo) =
                     {
                         episode_index: 1,
                         tasks: [
-                            'Move the red block to the left side of the table, then return the arm to its starting position.',
+                            'Move the red block to the left side of the table, ' +
+                                'then return the arm to its starting position.',
                         ],
                     },
                 ])
@@ -278,7 +283,7 @@ test('previews recording rate before the first episode', async ({ page }, testIn
     await page.screenshot({ path: testInfo.outputPath('rate-first.png') });
 });
 
-test('previews the actionable inference well', async ({ page, network }, testInfo) => {
+test('previews the model header action', async ({ page, network }, testInfo) => {
     network.use(
         http.get('/api/projects/{project_id}/models', () =>
             HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
@@ -286,10 +291,10 @@ test('previews the actionable inference well', async ({ page, network }, testInf
     );
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(RECORD_URL);
-    const well = page.getByRole('button', { name: 'Choose a model for inference' });
-    await expect(well).toBeEnabled();
-    await page.screenshot({ path: testInfo.outputPath('inference-well.png') });
-    await well.click();
+    const choose = page.getByRole('button', { name: 'Choose model…' });
+    await expect(choose).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath('inference-selector.png') });
+    await choose.click();
     await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
 });
 
@@ -328,7 +333,7 @@ test('previews recording progress, visible guidance, and a consistent model sele
     });
     await page.screenshot({ path: testInfo.outputPath('recording-guidance.png') });
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Choose a model for inference' }).click();
+    await page.getByRole('button', { name: 'Choose model…' }).click();
     await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
 });
 
@@ -521,10 +526,32 @@ test('opens the model chooser without selecting its card', async ({ page, networ
         )
     );
     await page.goto(RECORD_URL);
-    await page.getByRole('button', { name: 'Choose a model for inference' }).locator('svg').click();
+    await page.getByRole('button', { name: 'Choose model…' }).click();
     await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Recording', exact: true })).toBeChecked();
     expect(controlCommandCount).toBe(0);
+});
+
+test('keeps empty resource names quiet and disabled model guidance readable', async ({ page, network }, testInfo) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+        )
+    );
+    await page.goto(`${RECORD_URL}?emptyPreview=true`);
+    for (const resource of ['environment', 'dataset', 'model']) {
+        const emptyName = page.getByText(`No ${resource} selected`, { exact: true });
+        await expect(emptyName).toHaveCSS('font-size', '14px');
+        await expect(emptyName).toHaveCSS('font-weight', '400');
+        await expect(emptyName).toHaveCSS('color', 'rgb(143, 162, 188)');
+    }
+    await expect(page.getByRole('button', { name: 'Choose model…' })).toBeDisabled();
+    const guidance = page.getByText('Connect an environment first');
+    await expect(guidance).toBeVisible();
+    await expect(guidance).toHaveCSS('font-size', '14px');
+    await expect(guidance).toHaveCSS('color', 'rgb(143, 162, 188)');
+    expect(await guidance.evaluate((element) => element.closest('button'))).toBeNull();
+    await page.screenshot({ path: testInfo.outputPath('empty-resources.png') });
 });
 
 test('toggles teleoperation from its panel without double-toggling the switch or label', async ({ page }) => {
