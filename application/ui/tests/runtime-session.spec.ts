@@ -51,7 +51,7 @@ test.beforeEach(async ({ network, page }) => {
             state.model = {
                 model_id: 'model-1',
                 name: 'Cube policy',
-                backend: 'onnx',
+                backend: new URL(page.url()).searchParams.get('backend') ?? 'onnx',
                 device: 'cpu',
             };
         const publish = () => {
@@ -283,4 +283,35 @@ test('previews recording progress, visible guidance, and a consistent model sele
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Choose a model for inference' }).click();
     await expect(page.getByRole('heading', { name: 'Choose model' })).toBeVisible();
+});
+
+test('previews backend branding and compact inference execution settings', async ({ page, network }, testInfo) => {
+    network.use(
+        http.get('/api/projects/{project_id}/models', () =>
+            HttpResponse.json([getMockedModel({ available_backends: ['openvino'] })])
+        ),
+        http.get('/api/models/{model_id}', () => HttpResponse.json({ model: getMockedModel(), exports: [] }))
+    );
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto(`${RECORD_URL}?modePreview=true&backend=openvino`);
+    await page.getByRole('radio', { name: 'Inference', exact: true }).click();
+    const inference = page.getByRole('region', { name: 'Inference', exact: true });
+    await expect(inference.getByText('OpenVINO · cpu')).toBeVisible();
+    const syncBounds = await inference.getByRole('radio', { name: 'Synchronous', exact: true }).boundingBox();
+    const asyncBounds = await inference.getByRole('radio', { name: 'Asynchronous', exact: true }).boundingBox();
+    expect(asyncBounds?.y).toBe(syncBounds?.y);
+    expect(asyncBounds?.x).toBeGreaterThan(syncBounds?.x ?? 0);
+    await expect(inference.getByRole('slider', { name: 'Request threshold' })).toBeHidden();
+    const logoBounds = await inference.locator('[class*="backendLogo"] svg').boundingBox();
+    expect(logoBounds?.width).toBeGreaterThan(40);
+    expect(logoBounds?.height).toBeGreaterThan(40);
+    await inference.getByRole('button', { name: /Execution settings/ }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('inference-compact.png') });
+    await inference.getByRole('button', { name: /Execution settings/ }).click();
+    await expect(inference.getByRole('slider', { name: 'Request threshold' })).toBeVisible();
+    await expect(inference.getByRole('slider', { name: 'Action rate' })).toBeVisible();
+    await inference.getByRole('radio', { name: 'Asynchronous', exact: true }).click();
+    await expect(inference.getByRole('slider', { name: 'Request threshold' })).toBeVisible();
+    await inference.getByRole('slider', { name: 'Request threshold' }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('inference-advanced.png') });
 });
