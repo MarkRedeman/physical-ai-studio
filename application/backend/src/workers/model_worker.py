@@ -12,6 +12,7 @@ GIL for long stretches, which would stall the API process's event loop.
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
@@ -20,6 +21,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from runtime_session.bus import Bus
+from runtime_session.inference_metrics import METRICS, InferenceMetrics
 from runtime_session.store import FeatureSpec, Store
 from schemas.runtime_session import CommandDone
 from workers.base import ProcessWorker
@@ -27,6 +29,7 @@ from workers.base import ProcessWorker
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping
     from pathlib import Path
+    from uuid import UUID
 
 INFER = "rpc/model/infer"
 RESET = "rpc/model/reset"
@@ -66,6 +69,7 @@ class Inference:
     store: Store
     images: Mapping[str, str]
     """Model input name to the store camera it reads, such as ``images.gripper`` to ``gripper``."""
+    metrics: InferenceMetrics | None = None
 
     def infer(self, request: InferRequest) -> ActionChunk:
         observation: dict[str, Any] = {STATE: np.array([request.state], dtype=np.float32)}
@@ -76,10 +80,18 @@ class Inference:
             observation[name] = frame.value[np.newaxis]
         if request.task is not None:
             observation[TASK] = [request.task]
-        return ActionChunk(actions=np.asarray(self.model.predict_action_chunk(observation)).tolist())
+        started = time.perf_counter()
+        actions = np.asarray(self.model.predict_action_chunk(observation))
+        latency_ms = (time.perf_counter() - started) * 1000
+        result = ActionChunk(actions=actions.tolist())
+        if self.metrics is not None:
+            self.metrics.record(latency_ms)
+        return result
 
     def reset(self, _request: Empty) -> CommandDone:
         self.model.reset()
+        if self.metrics is not None:
+            self.metrics.reset()
         return CommandDone()
 
 
@@ -87,7 +99,7 @@ class ModelWorker(ProcessWorker[Inference]):
     ready_timeout_s = 300.0
     """Loading compiles or moves the model onto its device, which can take minutes."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - preserve worker inputs and add identity for telemetry
         self,
         export_dir: Path,
         *,
@@ -97,6 +109,7 @@ class ModelWorker(ProcessWorker[Inference]):
         store_name: str,
         spec: FeatureSpec,
         images: Mapping[str, str],
+        model_id: UUID | None = None,
     ) -> None:
         super().__init__(name=f"ModelWorker-{export_dir.parent.parent.name}")
         self.export_dir = export_dir
@@ -106,6 +119,7 @@ class ModelWorker(ProcessWorker[Inference]):
         self.store_name = store_name
         self.spec = spec
         self.images = dict(images)
+        self.model_id = model_id
 
     def open_model(self) -> Predictor:
         """Runs in the child. Tests replace this to infer without a real export."""
@@ -118,7 +132,15 @@ class ModelWorker(ProcessWorker[Inference]):
         store = Store.attach(self.spec, self.store_name)
         try:
             with Bus.join(self.session_id) as bus:
-                inference = Inference(self.open_model(), store, self.images)
+                metrics = None
+                if self.model_id is not None:
+                    metrics = InferenceMetrics(
+                        model_id=self.model_id,
+                        backend=self.backend,
+                        device=self.device,
+                        publish=lambda message: bus.publish(METRICS, message),
+                    )
+                inference = Inference(self.open_model(), store, self.images, metrics=metrics)
                 bus.serve(INFER, InferRequest, inference.infer)
                 bus.serve(RESET, Empty, inference.reset)
                 bus.serve(READY, Empty, lambda _request: CommandDone())

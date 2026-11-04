@@ -1,0 +1,45 @@
+.footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spectrum-global-dimension-size-100);
+    padding-top: var(--spectrum-global-dimension-size-75);
+    border-top: 1px solid var(--spectrum-global-color-gray-300);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+}
+
+.values {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--spectrum-global-dimension-size-75);
+    min-width: 0;
+}
+
+.label,
+.average {
+    color: var(--spectrum-global-color-gray-700);
+}
+
+.latest,
+.average {
+    font-variant-numeric: tabular-nums;
+}
+
+.latest {
+    font-weight: 600;
+}
+
+.help {
+    width: var(--spectrum-global-dimension-size-300);
+    min-width: var(--spectrum-global-dimension-size-300);
+    height: var(--spectrum-global-dimension-size-300);
+    min-height: var(--spectrum-global-dimension-size-300);
+    padding: 0;
+    flex: none;
+}
+
+.help svg {
+    width: 14px;
+    height: 14px;
+}
