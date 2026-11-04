@@ -35,10 +35,15 @@
     height: 100%;
 }
 
-.hint {
+.hint,
+.guidance {
     color: var(--spectrum-global-color-gray-700);
     font-size: var(--spectrum-global-dimension-font-size-75);
     line-height: 1.5;
+}
+
+.guidance {
+    font-size: var(--spectrum-global-dimension-font-size-100);
 }
 
 .disclosure {
@@ -54,8 +59,8 @@
 }
 
 .disclosureText {
-    font-size: var(--spectrum-global-dimension-font-size-75);
-    font-weight: 500;
+    font-size: var(--spectrum-global-dimension-font-size-100);
+    font-weight: 600;
     line-height: 1.5;
 }
 

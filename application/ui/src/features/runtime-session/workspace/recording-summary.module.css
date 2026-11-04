@@ -40,6 +40,10 @@
     color: var(--spectrum-global-color-gray-800);
 }
 
+.guidance {
+    font-size: var(--spectrum-global-dimension-font-size-100);
+}
+
 .progress {
     height: var(--spectrum-global-dimension-size-50);
     overflow: hidden;
