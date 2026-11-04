@@ -1,0 +1,73 @@
+.robots {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-100);
+}
+
+.robotCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-100);
+    padding: var(--spectrum-global-dimension-size-125);
+    background: var(--spectrum-global-color-gray-75);
+    border: 1px solid var(--spectrum-global-color-gray-300);
+    border-radius: var(--spectrum-global-dimension-size-75);
+}
+
+.robotCard[data-state='error'] {
+    border-color: var(--spectrum-global-color-red-600);
+}
+
+.robotSummary {
+    display: flex;
+    align-items: center;
+    gap: var(--spectrum-global-dimension-size-100);
+    min-width: 0;
+}
+
+.thumbnail {
+    width: var(--spectrum-global-dimension-size-400);
+    height: var(--spectrum-global-dimension-size-400);
+    object-fit: contain;
+    flex: none;
+}
+
+.robotCopy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spectrum-global-dimension-size-25);
+    flex: 1;
+    min-width: 0;
+}
+
+.robotName {
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.robotRole,
+.activity {
+    color: var(--spectrum-global-color-gray-700);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+}
+
+.activity {
+    flex: none;
+    padding: var(--spectrum-global-dimension-size-25) var(--spectrum-global-dimension-size-75);
+    border-radius: var(--spectrum-global-dimension-size-50);
+}
+
+.activity[data-state='active'] {
+    color: var(--spectrum-global-color-blue-700);
+    background: color-mix(in srgb, var(--spectrum-global-color-blue-600) 15%, transparent);
+}
+
+.activity[data-state='error'],
+.error {
+    color: var(--spectrum-global-color-red-600);
+}
+
+.error {
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    overflow-wrap: anywhere;
+}

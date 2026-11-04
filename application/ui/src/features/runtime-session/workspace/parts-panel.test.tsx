@@ -1,8 +1,12 @@
 import { rs } from '@rstest/core';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { HttpResponse } from 'msw';
 
-import { getMockedRuntimeSession } from '../../../test-utils/mocks/mock-runtime-session';
+import { http } from '../../../api/utils';
+import { server } from '../../../msw-node-setup';
+import { getMockedFollowerRobot, getMockedLeaderRobot } from '../../../test-utils/mocks/mock-robot';
+import { getMockedSessionEnvironment } from '../../../test-utils/mocks/mock-runtime-session';
 import { render } from '../../../test-utils/render';
 import { Statuses } from '../runtime-session-provider';
 import { EnvironmentRow, PartActions } from './parts-panel';
@@ -15,26 +19,28 @@ const failed: Statuses = {
     ...healthy,
     'environment/leader': { type: 'status', component: 'environment/leader', state: 'failed', error: 'Unplugged' },
 };
-const environment = getMockedRuntimeSession().environment;
+const environment = getMockedSessionEnvironment({ leader_id: 'leader-1' });
+const options = { route: '/projects/project-1', path: '/projects/:project_id' };
+
+beforeEach(() =>
+    server.use(
+        http.get('/api/projects/{project_id}/robots/{robot_id}', ({ params }) =>
+            HttpResponse.json(params.robot_id === 'leader-1' ? getMockedLeaderRobot() : getMockedFollowerRobot())
+        )
+    )
+);
 
 describe('EnvironmentRow', () => {
     it('keeps healthy device details collapsed', () => {
         render(<EnvironmentRow environment={environment} statuses={healthy} isPending={false} />);
         expect(screen.getByText('Workbench')).toBeInTheDocument();
-        expect(screen.getByText('Follower')).not.toBeVisible();
+        expect(screen.queryByRole('group', { name: 'Follower robot' })).not.toBeInTheDocument();
     });
 
     it('shows failed device details when expanded', () => {
-        render(<EnvironmentRow environment={environment} statuses={failed} isPending={false} showDetails />);
+        render(<EnvironmentRow environment={environment} statuses={failed} isPending={false} showDetails />, options);
         expect(screen.getByText('Leader')).toBeInTheDocument();
         expect(screen.getByText('Unplugged')).toBeInTheDocument();
-    });
-
-    it('shows and hides details using the header-controlled state', () => {
-        const { rerender } = render(<EnvironmentRow environment={environment} statuses={healthy} isPending={false} />);
-        expect(screen.getByText('Follower')).not.toBeVisible();
-        rerender(<EnvironmentRow environment={environment} statuses={failed} isPending={false} showDetails />);
-        expect(screen.getByText('Unplugged')).toBeVisible();
     });
 });
 

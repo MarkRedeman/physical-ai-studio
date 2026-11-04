@@ -87,7 +87,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const failureKey = deviceFailures.map(({ component, error }) => `${component}:${error}`).join('|');
     const [showDeviceDetails, setShowDeviceDetails] = useState(false);
     const deviceDetailsId = useId();
-    const canShowDevices = environment != null && (devices.length > 0 || environmentFailure !== null);
+    const canShowDevices = environment != null;
     useEffect(() => {
         if (environmentFailure !== null || failureKey !== '') setShowDeviceDetails(true);
     }, [environmentFailure, failureKey]);
@@ -192,6 +192,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                     isPending={pendingPart === 'environment'}
                     showDetails={showDeviceDetails}
                     detailsId={deviceDetailsId}
+                    control={state?.control}
                 />
                 {environment?.leader_id != null && (
                     <div className={classes.teleop} data-active={isTeleop || undefined}>
