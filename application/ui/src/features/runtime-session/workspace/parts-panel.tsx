@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-
 import {
     ActionButton,
     Disclosure,
@@ -90,7 +88,7 @@ const DeviceStatuses = ({
                         </Text>
                     )}
                     {error && state === 'failed' && (
-                        <Text marginStart='size-300' UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)' }}>
+                        <Text marginStart='size-300' UNSAFE_style={{ color: 'var(--spectrum-global-color-red-600)' }}>
                             {error}
                         </Text>
                     )}
@@ -125,7 +123,7 @@ export const PartRow = ({
                     <DisclosureTitle>Error details</DisclosureTitle>
                     <DisclosurePanel>
                         <Text
-                            UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)', overflowWrap: 'anywhere' }}
+                            UNSAFE_style={{ color: 'var(--spectrum-global-color-red-600)', overflowWrap: 'anywhere' }}
                         >
                             {error}
                         </Text>
@@ -141,23 +139,18 @@ export const EnvironmentRow = ({
     environment,
     statuses,
     isPending,
+    showDetails = false,
+    detailsId,
 }: {
     environment: SchemaSessionEnvironment | null | undefined;
     statuses: Statuses;
     isPending: boolean;
+    showDetails?: boolean;
+    detailsId?: string;
 }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
     const devices = Object.values(statuses).filter(({ component }) => component.startsWith('environment/'));
-    const failed = devices.filter(({ state }) => state === 'failed').length;
     const failure = failureOf(statuses, 'environment');
     const canExpand = environment != null && (devices.length > 0 || failure !== null);
-    const failures = devices
-        .filter(({ state }) => state === 'failed')
-        .map(({ component, error }) => `${component}:${error}`)
-        .join('|');
-    useEffect(() => {
-        if (failure !== null || failures !== '') setIsExpanded(true);
-    }, [failure, failures]);
 
     return (
         <>
@@ -168,21 +161,14 @@ export const EnvironmentRow = ({
                 isPending={isPending}
             />
             {canExpand && (
-                <Disclosure isQuiet isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-                    <DisclosureTitle>
-                        {failed > 0
-                            ? `${failed} device${failed === 1 ? ' needs' : 's need'} attention`
-                            : 'Device details'}
-                    </DisclosureTitle>
-                    <DisclosurePanel>
-                        <Flex direction='column' gap='size-100'>
-                            {failure !== null && (
-                                <Text UNSAFE_style={{ color: 'var(--spectrum-negative-visual-color)' }}>{failure}</Text>
-                            )}
-                            <DeviceStatuses devices={devices} environment={environment} />
-                        </Flex>
-                    </DisclosurePanel>
-                </Disclosure>
+                <div id={detailsId} hidden={!showDetails}>
+                    <Flex direction='column' gap='size-100'>
+                        {failure !== null && (
+                            <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-red-600)' }}>{failure}</Text>
+                        )}
+                        <DeviceStatuses devices={devices} environment={environment} />
+                    </Flex>
+                </div>
             )}
         </>
     );

@@ -54,6 +54,7 @@
     height: var(--spectrum-global-dimension-size-100);
     background: var(--spectrum-global-color-red-600);
     border-radius: 50%;
+    box-shadow: 0 0 0 0 rgb(211 21 16 / 45%);
     animation: recordingPulse 1.6s ease-out infinite;
 }
 

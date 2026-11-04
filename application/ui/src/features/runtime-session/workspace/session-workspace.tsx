@@ -1,6 +1,8 @@
-import { ReactNode, Suspense } from 'react';
+import { ReactNode, Suspense, useEffect, useId, useState } from 'react';
 
-import { Flex, Heading, Loading, Text } from '@geti-ui/ui';
+import { ActionButton, Flex, Heading, Loading, Text } from '@geti-ui/ui';
+import { ChevronDownLight, ChevronLeft, ChevronRightSmallLight } from '@geti-ui/ui/icons';
+import { useNavigate } from 'react-router';
 
 import { $api } from '../../../api/client';
 import { useProjectId } from '../../projects/use-project';
@@ -15,6 +17,22 @@ import { DatasetRecordingSection, RecordingProvider, RecordingToolbar } from './
 import classes from './session-workspace.module.css';
 
 export type ModeKey = 'record' | 'inference';
+
+const BackButton = ({ href }: { href: string }) => {
+    const navigate = useNavigate();
+    const { state } = useRuntimeSession();
+    return (
+        <ActionButton
+            isQuiet
+            onPress={() => navigate(href)}
+            aria-label='Back'
+            isDisabled={state?.dataset?.is_recording}
+        >
+            <ChevronLeft />
+            <Text>Back</Text>
+        </ActionButton>
+    );
+};
 
 const WorkspaceSection = ({
     title,
@@ -63,9 +81,16 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const environmentFailure = failureOf(statuses, 'environment');
     const isRecording = dataset?.is_recording ?? false;
     const isTeleop = state?.control?.type === 'teleop';
-    const hasDeviceFailure = Object.values(statuses).some(
-        (status) => status.component.startsWith('environment/') && status.state === 'failed'
-    );
+    const devices = Object.values(statuses).filter((status) => status.component.startsWith('environment/'));
+    const deviceFailures = devices.filter((status) => status.state === 'failed');
+    const hasDeviceFailure = deviceFailures.length > 0;
+    const failureKey = deviceFailures.map(({ component, error }) => `${component}:${error}`).join('|');
+    const [showDeviceDetails, setShowDeviceDetails] = useState(false);
+    const deviceDetailsId = useId();
+    const canShowDevices = environment != null && (devices.length > 0 || environmentFailure !== null);
+    useEffect(() => {
+        if (environmentFailure !== null || failureKey !== '') setShowDeviceDetails(true);
+    }, [environmentFailure, failureKey]);
 
     const actions = (part: SessionPartName) => (
         <PartActions
@@ -74,13 +99,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             isPending={pendingPart === part}
             isDisabled={isRecording || pendingPart !== null}
             canChoose={part === 'environment' || (environment != null && environmentFailure === null)}
-            canRetry={
-                failureOf(statuses, part) !== null ||
-                (part === 'environment' &&
-                    Object.values(statuses).some(
-                        (status) => status.component.startsWith('environment/') && status.state === 'failed'
-                    ))
-            }
+            canRetry={failureOf(statuses, part) !== null || (part === 'environment' && hasDeviceFailure)}
             onAction={(action) => act(part, action)}
         />
     );
@@ -108,7 +127,11 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     );
     const hasRunnableModels = models?.some((candidate) => candidate.available_backends.length > 0);
     const inference =
-        model == null && models !== undefined && !hasRunnableModels ? (
+        model == null &&
+        models !== undefined &&
+        !hasRunnableModels &&
+        failureOf(statuses, 'model') === null &&
+        pendingPart !== 'model' ? (
             <section className={classes.emptySection} aria-label='Inference'>
                 <Heading level={3} margin={0}>
                     Inference
@@ -145,13 +168,30 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
         <>
             <WorkspaceSection
                 title='Environment'
-                actions={actions('environment')}
+                actions={
+                    <>
+                        {canShowDevices && (
+                            <ActionButton
+                                isQuiet
+                                aria-label={showDeviceDetails ? 'Hide device details' : 'Show device details'}
+                                aria-expanded={showDeviceDetails}
+                                aria-controls={deviceDetailsId}
+                                onPress={() => setShowDeviceDetails(!showDeviceDetails)}
+                            >
+                                {showDeviceDetails ? <ChevronDownLight /> : <ChevronRightSmallLight />}
+                            </ActionButton>
+                        )}
+                        {actions('environment')}
+                    </>
+                }
                 hasError={environmentFailure !== null || hasDeviceFailure}
             >
                 <EnvironmentRow
                     environment={environment}
                     statuses={statuses}
                     isPending={pendingPart === 'environment'}
+                    showDetails={showDeviceDetails}
+                    detailsId={deviceDetailsId}
                 />
                 {environment?.leader_id != null && (
                     <div className={classes.teleop} data-active={isTeleop || undefined}>
@@ -180,13 +220,21 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
 };
 
 /** One workspace for recording demonstrations and running models, without switching modes. */
-export const SessionWorkspace = ({ initialMode, cancelHref }: { initialMode: ModeKey; cancelHref: string }) => (
+export const SessionWorkspace = ({
+    initialMode,
+    cancelHref,
+    backButton,
+}: {
+    initialMode: ModeKey;
+    cancelHref: string;
+    backButton?: ReactNode;
+}) => (
     <PartControlsProvider>
         <Suspense fallback={<Loading mode='inline' />}>
             <RecordingProvider>
                 <div className={classes.workspace}>
                     <main className={classes.liveWorkspace} aria-label='Live session'>
-                        <RecordingToolbar />
+                        <RecordingToolbar backButton={backButton ?? <BackButton href={cancelHref} />} />
                         <div className={classes.viewer}>
                             <SessionViewer cancelHref={cancelHref} />
                         </div>

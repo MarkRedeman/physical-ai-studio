@@ -8,6 +8,7 @@ import { formatKeyCombo, getEffectiveBindings } from '../../hotkeys/key-combo';
 import { useHotkey } from '../../hotkeys/use-hotkey';
 import { ERROR_TOAST, failureOf, useRuntimeSession } from '../runtime-session-provider';
 import { usePartControls } from './part-controls';
+import { RecordingSummary } from './recording-summary';
 
 import classes from './record-mode.module.css';
 
@@ -148,7 +149,7 @@ const RecordingRate = ({ dataset }: { dataset: SchemaSessionDataset }) => {
     );
 };
 
-export const RecordingToolbar = () => {
+export const RecordingToolbar = ({ backButton }: { backButton: ReactNode }) => {
     const { state, statuses, isLoading } = useRuntimeSession();
     const { task, isRecording, isPending, canStart, bindings, start, save, discard } = useRecording();
     const getHint = () => {
@@ -164,10 +165,14 @@ export const RecordingToolbar = () => {
 
     return (
         <div className={classes.toolbar} aria-label='Episode controls' role='region'>
+            {backButton}
             <div className={classes.toolbarStatus} role='status'>
                 {isRecording && <span className={classes.recordingDot} aria-hidden='true' />}
                 <div className={classes.statusCopy}>
-                    <strong>{isRecording ? 'Recording episode' : 'Episode recording'}</strong>
+                    <Flex alignItems='center' gap='size-150' wrap>
+                        <strong>{isRecording ? 'Recording episode' : 'Episode recording'}</strong>
+                        <RecordingSummary />
+                    </Flex>
                     <span className={classes.hint}>
                         {isRecording ? 'Save this episode or discard it to try again.' : getHint()}
                     </span>
