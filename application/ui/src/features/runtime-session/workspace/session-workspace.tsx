@@ -9,7 +9,7 @@ import { useProjectId } from '../../projects/use-project';
 import { TeleopSwitch } from '../cells/robot-cell';
 import { failureOf, SessionPartName, useRuntimeSession } from '../runtime-session-provider';
 import { SessionViewer } from '../session-viewer';
-import { InferenceMode, InferenceProvider, InferenceToolbar } from './inference-mode';
+import { InferenceMode, InferenceModelSummary, InferenceProvider, InferenceToolbar } from './inference-mode';
 import { PartControlsProvider, usePartControls } from './part-controls';
 import { EnvironmentRow, PartActions, PartRow } from './parts-panel';
 import { DatasetRecordingSection, RecordingProvider, RecordingToolbar } from './record-mode';
@@ -176,13 +176,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                 </Text>
             ) : model != null ? (
                 <>
-                    <PartRow
-                        label='Model'
-                        name={model.name}
-                        detail={`${model.backend} · ${model.device}`}
-                        error={modelFailure}
-                        isPending={pendingPart === 'model'}
-                    />
+                    <InferenceModelSummary model={model} error={modelFailure} isPending={pendingPart === 'model'} />
                     <InferenceMode />
                 </>
             ) : (
