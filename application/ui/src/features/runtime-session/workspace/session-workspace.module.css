@@ -46,6 +46,18 @@
     border-radius: var(--spectrum-global-dimension-size-100);
 }
 
+.section[data-selectable] {
+    cursor: pointer;
+}
+
+.section[data-selectable]:hover:not([data-error]) {
+    border-color: var(--spectrum-global-color-gray-500);
+}
+
+.section [data-mode-interactive] {
+    cursor: auto;
+}
+
 .section[data-active] {
     border-color: var(--spectrum-global-color-blue-600);
     border-style: solid;
@@ -178,6 +190,10 @@
 
 .teleop[data-active] {
     border-color: var(--spectrum-global-color-blue-600);
+}
+
+.teleop[data-toggleable] {
+    cursor: pointer;
 }
 
 @media (max-width: 900px) {

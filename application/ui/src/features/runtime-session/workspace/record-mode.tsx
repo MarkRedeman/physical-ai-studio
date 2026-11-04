@@ -134,27 +134,29 @@ const RecordingRate = ({ dataset }: { dataset: SchemaSessionDataset }) => {
     };
 
     return (
-        <Flex direction='column' gap='size-50'>
-            <Slider
-                label='Recording rate'
-                value={fps}
-                onChange={setFps}
-                onChangeEnd={(value) => void reload(value)}
-                minValue={10}
-                maxValue={100}
-                step={5}
-                getValueLabel={(value) => `${value} fps`}
-                width='100%'
-                isDisabled={
-                    dataset.is_recording ||
-                    isPending ||
-                    isLoading ||
-                    pendingPart !== null ||
-                    failureOf(statuses, 'environment') !== null
-                }
-            />
-            <Text UNSAFE_className={classes.hint}>Locks after your first saved episode.</Text>
-        </Flex>
+        <div data-mode-interactive>
+            <Flex direction='column' gap='size-50'>
+                <Slider
+                    label='Recording rate'
+                    value={fps}
+                    onChange={setFps}
+                    onChangeEnd={(value) => void reload(value)}
+                    minValue={10}
+                    maxValue={100}
+                    step={5}
+                    getValueLabel={(value) => `${value} fps`}
+                    width='100%'
+                    isDisabled={
+                        dataset.is_recording ||
+                        isPending ||
+                        isLoading ||
+                        pendingPart !== null ||
+                        failureOf(statuses, 'environment') !== null
+                    }
+                />
+                <Text UNSAFE_className={classes.hint}>Locks after your first saved episode.</Text>
+            </Flex>
+        </div>
     );
 };
 
