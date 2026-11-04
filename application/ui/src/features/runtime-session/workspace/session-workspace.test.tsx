@@ -195,7 +195,8 @@ describe('SessionWorkspace', () => {
         const user = userEvent.setup();
         renderWorkspace();
         const inference = await screen.findByRole('region', { name: 'Inference' });
-        expect(within(inference).getByRole('button', { name: 'Run model' })).toBeEnabled();
+        await user.click(within(inference).getByRole('radio', { name: 'Inference' }));
+        expect(screen.getByRole('button', { name: 'Run model' })).toBeEnabled();
         expect(within(inference).queryByRole('slider')).not.toBeInTheDocument();
         await user.click(within(inference).getByRole('button', { name: 'Execution settings' }));
         expect(within(inference).getAllByRole('slider')).toHaveLength(1);
@@ -209,7 +210,7 @@ describe('SessionWorkspace', () => {
             model: { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' },
         });
         renderWorkspace();
-        expect(await screen.findByRole('button', { name: 'Run model' })).toBeDisabled();
-        expect(screen.getByText(/before changing robot control/)).toBeInTheDocument();
+        expect(await screen.findByRole('radio', { name: 'Inference' })).toBeDisabled();
+        expect(screen.getByText(/before switching modes/)).toBeInTheDocument();
     });
 });
