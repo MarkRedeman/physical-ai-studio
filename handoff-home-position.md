@@ -2,6 +2,8 @@
 
 ## Implemented behavior
 
+**Currently hidden:** `SHOW_HOME_POSITION = false` in `session-workspace.tsx` hides the Environment entry point pending a second iteration. The backend, storage/provider code, and persistent Stop banner remain intact. Home entry-point browser flows are skipped while hidden; teleoperation takeover remains enabled.
+
 - **Home position** lives in Environment, outside the device-details chevron.
 - Set home from fresh, stationary follower measurements while control is paused. No default/zero pose is invented.
 - Save the validated pose in browser local storage, scoped to project/environment/follower. Storage failure falls back to session memory with a warning; unsaved environments are session-only.
