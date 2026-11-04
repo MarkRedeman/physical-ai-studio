@@ -23,6 +23,9 @@ import classes from './session-workspace.module.css';
 
 export type { ModeKey } from './session-mode';
 
+// Experimental: keep the entry point hidden until the next home-position iteration is ready.
+const SHOW_HOME_POSITION = false;
+
 interface SessionWorkspaceProps {
     initialMode: ModeKey;
     cancelHref: string;
@@ -261,7 +264,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                         </Text>
                     </div>
                 )}
-                {environment != null && <HomePosition />}
+                {SHOW_HOME_POSITION && environment != null && <HomePosition />}
             </WorkspaceSection>
             <RadioGroup
                 aria-label='Session mode'

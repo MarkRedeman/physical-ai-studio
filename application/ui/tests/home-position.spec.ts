@@ -92,7 +92,8 @@ test.beforeEach(async ({ network, page }) => {
     });
 });
 
-test('captures home, confirms return during inference, switches mode, and keeps Stop visible', async ({
+// Home entry-point flows are paused while the experimental card is hidden in SessionWorkspace.
+test.skip('captures home, confirms return during inference, switches mode, and keeps Stop visible', async ({
     page,
 }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 1100 });
@@ -127,6 +128,7 @@ test('captures home, confirms return during inference, switches mode, and keeps 
 
 test('teleoperation is a direct takeover from inference and selects Recording', async ({ page }, testInfo) => {
     await page.goto(URL);
+    await expect(page.getByRole('region', { name: 'Home position', exact: true })).toBeHidden();
     await page.getByRole('radio', { name: 'Inference', exact: true }).click();
     await page.getByRole('button', { name: 'Run model', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Stop model' })).toBeVisible();
@@ -137,7 +139,7 @@ test('teleoperation is a direct takeover from inference and selects Recording', 
     await page.screenshot({ path: testInfo.outputPath('teleop-takeover.png') });
 });
 
-test('restores browser home without automatically moving on reload', async ({ page }) => {
+test.skip('restores browser home without automatically moving on reload', async ({ page }) => {
     await page.goto(URL);
     await page.getByRole('button', { name: 'Set current pose as home' }).click();
     await expect(page.getByRole('button', { name: 'Return to home', exact: true })).toBeEnabled();

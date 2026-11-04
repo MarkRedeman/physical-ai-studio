@@ -2,7 +2,7 @@
 
 ## Direction
 
-Home position and inference takeovers are now implemented; see [handoff-home-position.md](./handoff-home-position.md) for scope, safeguards, code paths, and commissioning requirements.
+Inference takeovers are implemented; the experimental Home position entry point is currently hidden pending a second iteration. See [handoff-home-position.md](./handoff-home-position.md) for retained implementation, safeguards, and commissioning requirements.
 
 Continue refining the unified runtime workspace: live robot/camera views on the left, session setup on the right. Recording and inference cards always remain visible, but **one mode is selected** using radios in their top-left headers. Entry points set the initial selection and section order; switching does not reorder or collapse cards.
 
