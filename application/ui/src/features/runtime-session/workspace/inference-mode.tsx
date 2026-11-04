@@ -158,65 +158,71 @@ export const InferenceMode = () => {
         useInference();
     return (
         <Flex direction='column' gap='size-150'>
-            <TextArea label='Task' width='100%' value={task} onChange={setTask} isReadOnly={isLocked} />
-            <RadioGroup
-                label='Execution'
-                orientation='horizontal'
-                width='100%'
-                value={executionMode}
-                onChange={(value) => setExecutionMode(value as SchemaExecutionConfig['mode'])}
-                isDisabled={isLocked}
-            >
-                {EXECUTION_MODES.map((item) => (
-                    <Radio key={item.key} value={item.key}>
-                        {item.label}
-                    </Radio>
-                ))}
-            </RadioGroup>
-            <Disclosure isQuiet UNSAFE_className={settingsClasses.disclosure}>
-                <DisclosureTitle UNSAFE_className={settingsClasses.disclosureTitle}>
-                    <Flex alignItems='center' gap='size-100'>
-                        <Text UNSAFE_className={settingsClasses.disclosureText}>Execution settings</Text>
-                        <Text UNSAFE_className={settingsClasses.hint}>
-                            {hz} Hz · {Math.round(threshold * 100)}%
-                        </Text>
-                    </Flex>
-                </DisclosureTitle>
-                <DisclosurePanel
-                    UNSAFE_className={settingsClasses.disclosurePanel}
-                    UNSAFE_style={{ paddingBlock: 0, paddingInline: 0 }}
+            <div data-mode-interactive>
+                <TextArea label='Task' width='100%' value={task} onChange={setTask} isReadOnly={isLocked} />
+            </div>
+            <div data-mode-interactive>
+                <RadioGroup
+                    label='Execution'
+                    orientation='horizontal'
+                    width='100%'
+                    value={executionMode}
+                    onChange={(value) => setExecutionMode(value as SchemaExecutionConfig['mode'])}
+                    isDisabled={isLocked}
                 >
-                    <Flex direction='column' gap='size-100'>
-                        <Slider
-                            label='Action rate'
-                            width='100%'
-                            minValue={5}
-                            maxValue={100}
-                            step={5}
-                            value={hz}
-                            onChange={setHz}
-                            getValueLabel={(value) => `${value} Hz`}
-                            isDisabled={isLocked}
-                        />
-                        <Flex direction='column' gap='size-50'>
-                            <Slider
-                                label='Request threshold'
-                                width='100%'
-                                minValue={0}
-                                maxValue={1}
-                                step={0.05}
-                                value={threshold}
-                                onChange={setThreshold}
-                                formatOptions={{ style: 'percent' }}
-                                isDisabled={isLocked}
-                            />
+                    {EXECUTION_MODES.map((item) => (
+                        <Radio key={item.key} value={item.key}>
+                            {item.label}
+                        </Radio>
+                    ))}
+                </RadioGroup>
+            </div>
+            <div data-mode-interactive>
+                <Disclosure isQuiet UNSAFE_className={settingsClasses.disclosure}>
+                    <DisclosureTitle UNSAFE_className={settingsClasses.disclosureTitle}>
+                        <Flex alignItems='center' gap='size-100'>
+                            <Text UNSAFE_className={settingsClasses.disclosureText}>Execution settings</Text>
                             <Text UNSAFE_className={settingsClasses.hint}>
-                                Request the next action chunk when this fraction remains.
+                                {hz} Hz · {Math.round(threshold * 100)}%
                             </Text>
                         </Flex>
-                    </Flex>
-                </DisclosurePanel>
-            </Disclosure>
+                    </DisclosureTitle>
+                    <DisclosurePanel
+                        UNSAFE_className={settingsClasses.disclosurePanel}
+                        UNSAFE_style={{ paddingBlock: 0, paddingInline: 0 }}
+                    >
+                        <Flex direction='column' gap='size-100'>
+                            <Slider
+                                label='Action rate'
+                                width='100%'
+                                minValue={5}
+                                maxValue={100}
+                                step={5}
+                                value={hz}
+                                onChange={setHz}
+                                getValueLabel={(value) => `${value} Hz`}
+                                isDisabled={isLocked}
+                            />
+                            <Flex direction='column' gap='size-50'>
+                                <Slider
+                                    label='Request threshold'
+                                    width='100%'
+                                    minValue={0}
+                                    maxValue={1}
+                                    step={0.05}
+                                    value={threshold}
+                                    onChange={setThreshold}
+                                    formatOptions={{ style: 'percent' }}
+                                    isDisabled={isLocked}
+                                />
+                                <Text UNSAFE_className={settingsClasses.hint}>
+                                    Request the next action chunk when this fraction remains.
+                                </Text>
+                            </Flex>
+                        </Flex>
+                    </DisclosurePanel>
+                </Disclosure>
+            </div>
         </Flex>
     );
 };
