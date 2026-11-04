@@ -1,6 +1,17 @@
 import { ReactNode, useState } from 'react';
 
-import { ActionButton, Flex, Heading, Item, Menu, MenuTrigger, ProgressCircle, StatusLight, Text } from '@geti-ui/ui';
+import {
+    ActionButton,
+    Button,
+    Flex,
+    Heading,
+    Item,
+    Menu,
+    MenuTrigger,
+    ProgressCircle,
+    StatusLight,
+    Text,
+} from '@geti-ui/ui';
 import { ChevronDownLight, ChevronRightSmallLight, MoreMenu } from '@geti-ui/ui/icons';
 
 import { SchemaSessionEnvironment, SchemaStatusMessage } from '../../../api/openapi-spec';
@@ -48,6 +59,7 @@ export const PartRow = ({
     light,
     isLoaded,
     isPending,
+    isDisabled = false,
     actions,
     onAction,
     expander,
@@ -60,6 +72,7 @@ export const PartRow = ({
     light?: 'notice' | 'negative';
     isLoaded: boolean;
     isPending: boolean;
+    isDisabled?: boolean;
     actions: PartAction[];
     onAction: (action: PartAction) => void;
     expander?: ReactNode;
@@ -85,9 +98,21 @@ export const PartRow = ({
             {expander}
             {isPending ? (
                 <ProgressCircle size='S' isIndeterminate aria-label={`Loading ${label}`} />
+            ) : !isLoaded ? (
+                <Button
+                    variant='secondary'
+                    isDisabled={isDisabled || !actions.includes('swap')}
+                    onPress={() => onAction('swap')}
+                >
+                    Load {label.toLowerCase()}…
+                </Button>
             ) : (
                 <MenuTrigger>
-                    <ActionButton isQuiet aria-label={`${label} actions`}>
+                    <ActionButton
+                        isQuiet
+                        aria-label={`${label} actions`}
+                        isDisabled={isDisabled || actions.length === 0}
+                    >
                         <MoreMenu />
                     </ActionButton>
                     <Menu onAction={(key) => onAction(key as PartAction)}>
@@ -115,12 +140,14 @@ export const EnvironmentRow = ({
     statuses,
     actions,
     isPending,
+    isDisabled,
     onAction,
 }: {
     environment: SchemaSessionEnvironment | null | undefined;
     statuses: Statuses;
     actions: PartAction[];
     isPending: boolean;
+    isDisabled?: boolean;
     onAction: (action: PartAction) => void;
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -139,6 +166,7 @@ export const EnvironmentRow = ({
                 light={failed > 0 ? 'negative' : isStarting ? 'notice' : undefined}
                 isLoaded={environment != null}
                 isPending={isPending}
+                isDisabled={isDisabled}
                 actions={actions}
                 onAction={onAction}
                 expander={

@@ -19,7 +19,7 @@ import { ERROR_TOAST, failureOf, useRuntimeSession, useSessionJoints } from '../
 export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 2 } as const satisfies SchemaTeleopControlConfig;
 
 /** Drive the follower from the leader, or hold it where it is. */
-export const TeleopSwitch = () => {
+export const TeleopSwitch = ({ isDisabled = false }: { isDisabled?: boolean }) => {
     const { state, statuses, send } = useRuntimeSession();
     const { mutate: setTeleop, isPending } = useMutation({
         mutationFn: async (teleoperate: boolean) => {
@@ -39,7 +39,13 @@ export const TeleopSwitch = () => {
             isSelected={state?.control?.type === 'teleop'}
             // A failed environment stays loaded until it is loaded again, with nothing to drive;
             // switching the control mid-episode discards the episode.
-            isDisabled={isPending || failureOf(statuses, 'environment') !== null || state?.dataset?.is_recording}
+            isDisabled={
+                isPending ||
+                isDisabled ||
+                state?.environment == null ||
+                failureOf(statuses, 'environment') !== null ||
+                state?.dataset?.is_recording
+            }
             onChange={setTeleop}
         >
             Teleoperate

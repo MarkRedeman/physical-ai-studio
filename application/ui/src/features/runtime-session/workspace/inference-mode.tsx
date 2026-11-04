@@ -1,10 +1,23 @@
 import { useEffect, useState } from 'react';
 
-import { Button, Flex, Item, Picker, Slider, TextArea, toast, View } from '@geti-ui/ui';
+import {
+    Button,
+    Disclosure,
+    DisclosurePanel,
+    DisclosureTitle,
+    Flex,
+    Radio,
+    RadioGroup,
+    Slider,
+    Text,
+    TextArea,
+    toast,
+} from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { SchemaExecutionConfig, SchemaModelControlConfig } from '../../../api/openapi-spec';
 import { ERROR_TOAST, failureOf, useRuntimeSession } from '../runtime-session-provider';
+import { usePartControls } from './part-controls';
 
 const EXECUTION_MODES: { key: SchemaExecutionConfig['mode']; label: string }[] = [
     { key: 'sync', label: 'Synchronous' },
@@ -31,7 +44,8 @@ const useDefaultTask = (model_id: string | undefined) => {
 
 /** Inference mode's side bar: the task, the action rate and how chunks are requested, then play / stop. */
 export const InferenceMode = () => {
-    const { state, statuses, send } = useRuntimeSession();
+    const { state, statuses, send, isLoading } = useRuntimeSession();
+    const { pendingPart } = usePartControls();
     const defaultTask = useDefaultTask(state?.model?.model_id);
     const [task, setTask] = useState(defaultTask);
     const [mode, setMode] = useState<SchemaExecutionConfig['mode']>('sync');
@@ -43,11 +57,14 @@ export const InferenceMode = () => {
     useEffect(() => setTask(defaultTask), [defaultTask]);
 
     const isRunning = state?.control?.type === 'model';
+    const isRecording = state?.dataset?.is_recording ?? false;
+    const isLocked = isRunning || isRecording || isPending || isLoading || pendingPart !== null;
     const canRun =
         state?.environment != null &&
         failureOf(statuses, 'environment') === null &&
         state.model != null &&
-        failureOf(statuses, 'model') === null;
+        failureOf(statuses, 'model') === null &&
+        !isLocked;
 
     const setControl = async (control: SchemaModelControlConfig | null) => {
         setIsPending(true);
@@ -73,56 +90,73 @@ export const InferenceMode = () => {
 
     return (
         <Flex direction='column' gap='size-200'>
-            <TextArea label='Task' width='100%' value={task} onChange={setTask} isReadOnly={isRunning} />
+            <TextArea label='Task' width='100%' value={task} onChange={setTask} isReadOnly={isLocked} />
 
-            {/* TODO: change this picker to be a RadioGroup */}
-            <Picker
+            <RadioGroup
                 label='Execution'
                 width='100%'
-                items={EXECUTION_MODES}
-                selectedKey={mode}
-                onSelectionChange={(key) => key !== null && setMode(key as SchemaExecutionConfig['mode'])}
-                isDisabled={isRunning}
+                value={mode}
+                onChange={(value) => setMode(value as SchemaExecutionConfig['mode'])}
+                isDisabled={isLocked}
             >
-                {(item) => <Item key={item.key}>{item.label}</Item>}
-            </Picker>
+                {EXECUTION_MODES.map((item) => (
+                    <Radio key={item.key} value={item.key}>
+                        {item.label}
+                    </Radio>
+                ))}
+            </RadioGroup>
 
-            {/* TODO: hide under a disclosrue, or a small dialog? Add contextual help information */}
-            <View>
-                <Slider
-                    label='Action rate'
-                    width='100%'
-                    minValue={5}
-                    maxValue={100}
-                    step={5}
-                    value={hz}
-                    onChange={setHz}
-                    getValueLabel={(value) => `${value} Hz`}
-                    isDisabled={isRunning}
-                />
-                <Slider
-                    label='Request the next chunk at'
-                    width='100%'
-                    minValue={0}
-                    maxValue={1}
-                    step={0.05}
-                    value={threshold}
-                    onChange={setThreshold}
-                    formatOptions={{ style: 'percent' }}
-                    isDisabled={isRunning}
-                />
-            </View>
-            <View isHidden>
-                {isRunning ? (
-                    <Button variant='secondary' isPending={isPending} onPress={() => void setControl(null)}>
-                        Stop
-                    </Button>
-                ) : (
-                    <Button isPending={isPending} isDisabled={!canRun} onPress={play}>
-                        Play
-                    </Button>
-                )}
-            </View>
+            <Disclosure isQuiet>
+                <DisclosureTitle>Execution settings</DisclosureTitle>
+                <DisclosurePanel>
+                    <Flex direction='column' gap='size-150'>
+                        <Slider
+                            label='Action rate'
+                            width='100%'
+                            minValue={5}
+                            maxValue={100}
+                            step={5}
+                            value={hz}
+                            onChange={setHz}
+                            getValueLabel={(value) => `${value} Hz`}
+                            isDisabled={isLocked}
+                        />
+                        {mode === 'async' && (
+                            <>
+                                <Slider
+                                    label='Request the next chunk at'
+                                    width='100%'
+                                    minValue={0}
+                                    maxValue={1}
+                                    step={0.05}
+                                    value={threshold}
+                                    onChange={setThreshold}
+                                    formatOptions={{ style: 'percent' }}
+                                    isDisabled={isLocked}
+                                />
+                                <Text>
+                                    Request another action chunk when this fraction of the current chunk remains.
+                                </Text>
+                            </>
+                        )}
+                    </Flex>
+                </DisclosurePanel>
+            </Disclosure>
+            {isRecording && <Text>Save or discard the episode before changing robot control.</Text>}
+            {isRunning ? (
+                <Button
+                    variant='secondary'
+                    isDisabled={isRecording}
+                    isPending={isPending}
+                    onPress={() => void setControl(null)}
+                >
+                    Stop model
+                </Button>
+            ) : (
+                <Button isPending={isPending} isDisabled={!canRun} onPress={play}>
+                    Run model
+                </Button>
+            )}
         </Flex>
     );
 };

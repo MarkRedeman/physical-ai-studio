@@ -1,0 +1,169 @@
+import { ReactNode } from 'react';
+
+import { rs } from '@rstest/core';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { HttpResponse } from 'msw';
+
+import { http } from '../../../api/utils';
+import { server } from '../../../msw-node-setup';
+import { getMockedDataset } from '../../../test-utils/mocks/mock-dataset';
+import { getMockedModel } from '../../../test-utils/mocks/mock-model';
+import { getMockedRuntimeSession, getMockedSessionDataset } from '../../../test-utils/mocks/mock-runtime-session';
+import { getMockedSettings } from '../../../test-utils/mocks/mock-settings';
+import { render } from '../../../test-utils/render';
+import { Statuses } from '../runtime-session-provider';
+import { SessionWorkspace } from './session-workspace';
+
+const send = rs.fn();
+let state = getMockedRuntimeSession();
+let statuses: Statuses = {};
+let pendingPart: string | null = null;
+
+rs.mock('../runtime-session-provider', () => ({
+    useRuntimeSession: () => ({ state, statuses, send, isLoading: false }),
+    failureOf: (values: Statuses, part: string) => (values[part]?.state === 'failed' ? values[part].error : null),
+}));
+rs.mock('../session-viewer', () => ({ SessionViewer: () => <div>Live camera views</div> }));
+rs.mock('./part-controls', () => ({
+    PartControlsProvider: ({ children }: { children: ReactNode }) => children,
+    usePartControls: () => ({ pendingPart, act: rs.fn() }),
+}));
+
+const renderWorkspace = () =>
+    render(<SessionWorkspace initialMode='record' cancelHref='/projects' />, {
+        route: '/projects/project-1/datasets/dataset-1/record',
+        path: '/projects/:project_id/datasets/:dataset_id/record',
+    });
+
+beforeEach(() => {
+    state = getMockedRuntimeSession();
+    statuses = {};
+    pendingPart = null;
+    send.mockReset().mockResolvedValue({ ok: true });
+    server.use(
+        http.get('/api/settings', () => HttpResponse.json(getMockedSettings())),
+        http.get('/api/dataset/{dataset_id}', () =>
+            HttpResponse.json(getMockedDataset({ default_task: 'Pick up the cube' }))
+        ),
+        http.get('/api/projects/{project_id}/models', () => HttpResponse.json([]))
+    );
+});
+
+describe('SessionWorkspace', () => {
+    it('shows a quiet inference placeholder when the project has no models', async () => {
+        renderWorkspace();
+        expect(await screen.findByText(/Once you train a model/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Load model/ })).not.toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Recording' })).toBeInTheDocument();
+    });
+
+    it('offers loading when the project has an exported model', async () => {
+        server.use(
+            http.get('/api/projects/{project_id}/models', () =>
+                HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+            )
+        );
+        renderWorkspace();
+        expect(await screen.findByRole('button', { name: /Load model/ })).toBeEnabled();
+        expect(screen.queryByText(/Once you train a model/)).not.toBeInTheDocument();
+    });
+
+    it('explains that an unexported model must be exported first', async () => {
+        server.use(http.get('/api/projects/{project_id}/models', () => HttpResponse.json([getMockedModel()])));
+        renderWorkspace();
+        expect(await screen.findByText('Export a trained model to run it here.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Load model/ })).not.toBeInTheDocument();
+    });
+
+    it('starts with the task edited in the recording card', async () => {
+        const user = userEvent.setup();
+        renderWorkspace();
+        const task = await screen.findByRole('textbox', { name: /Task/ });
+        await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
+        await user.clear(task);
+        await user.type(task, 'Place the cube in the tray');
+        await user.click(screen.getByRole('button', { name: /Start episode/ }));
+        expect(send).toHaveBeenCalledExactlyOnceWith({ command: 'start_episode', task: 'Place the cube in the tray' });
+    });
+
+    it('registers just one start hotkey and ignores it while typing', async () => {
+        renderWorkspace();
+        const task = await screen.findByRole('textbox', { name: /Task/ });
+        await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
+        fireEvent.keyDown(task, { key: 'ArrowRight' });
+        expect(send).not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        await waitFor(() =>
+            expect(send).toHaveBeenCalledExactlyOnceWith({ command: 'start_episode', task: 'Pick up the cube' })
+        );
+    });
+
+    it('does not start an episode with a whitespace-only task', async () => {
+        const user = userEvent.setup();
+        renderWorkspace();
+        const task = await screen.findByRole('textbox', { name: /Task/ });
+        await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
+        await user.clear(task);
+        await user.type(task, '   ');
+        expect(screen.getByRole('button', { name: /Start episode/ })).toBeDisabled();
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        expect(send).not.toHaveBeenCalled();
+    });
+
+    it('blocks starting when the environment has failed', async () => {
+        statuses.environment = { type: 'status', component: 'environment', state: 'failed', error: 'Disconnected' };
+        renderWorkspace();
+        expect(await screen.findByRole('button', { name: /Start episode/ })).toBeDisabled();
+        expect(screen.getByText('Load a working environment to record episodes')).toBeInTheDocument();
+    });
+
+    it('blocks starting while a resource is being replaced', async () => {
+        pendingPart = 'model';
+        renderWorkspace();
+        const task = await screen.findByRole('textbox', { name: /Task/ });
+        await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
+        expect(screen.getByRole('button', { name: /Start episode/ })).toBeDisabled();
+    });
+
+    it('keeps save and discard available after a device fails during recording', async () => {
+        state = getMockedRuntimeSession({ dataset: getMockedSessionDataset({ is_recording: true }) });
+        statuses.environment = { type: 'status', component: 'environment', state: 'failed', error: 'Disconnected' };
+        const user = userEvent.setup();
+        renderWorkspace();
+        expect(await screen.findByRole('button', { name: /Save episode/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /Discard/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Dataset actions' })).toBeDisabled();
+        expect(screen.getByRole('textbox', { name: /Task/ })).toHaveAttribute('readonly');
+        await user.click(screen.getByRole('button', { name: /Save episode/ }));
+        expect(send).toHaveBeenCalledExactlyOnceWith({ command: 'save_episode' });
+    });
+
+    it('shows loaded model controls even if the model list is empty', async () => {
+        state.model = { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' };
+        server.use(
+            http.get('/api/models/{model_id}', () =>
+                HttpResponse.json({ model: getMockedModel({ dataset_id: null }), exports: [] })
+            )
+        );
+        const user = userEvent.setup();
+        renderWorkspace();
+        const inference = await screen.findByRole('region', { name: 'Inference' });
+        expect(within(inference).getByRole('button', { name: 'Run model' })).toBeEnabled();
+        expect(within(inference).queryByRole('slider')).not.toBeInTheDocument();
+        await user.click(within(inference).getByRole('button', { name: 'Execution settings' }));
+        expect(within(inference).getAllByRole('slider')).toHaveLength(1);
+        await user.click(within(inference).getByRole('radio', { name: 'Asynchronous' }));
+        expect(within(inference).getAllByRole('slider')).toHaveLength(2);
+    });
+
+    it('prevents starting model control during an episode', async () => {
+        state = getMockedRuntimeSession({
+            dataset: getMockedSessionDataset({ is_recording: true }),
+            model: { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' },
+        });
+        renderWorkspace();
+        expect(await screen.findByRole('button', { name: 'Run model' })).toBeDisabled();
+        expect(screen.getByText(/before changing robot control/)).toBeInTheDocument();
+    });
+});
