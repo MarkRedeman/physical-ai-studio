@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router';
 import { paths } from '../../../paths';
 import { useProjectId } from '../../projects/use-project';
 import { ERROR_TOAST, useRuntimeSession } from '../runtime-session-provider';
+import { useHomePositionBusy } from './home-position-provider';
 
 /** Finish copying session episodes into the selected dataset before navigating away. */
 export const BackToDatasetButton = ({ dataset_id }: { dataset_id: string }) => {
@@ -18,9 +19,10 @@ export const BackToDatasetButton = ({ dataset_id }: { dataset_id: string }) => {
     const [isFinishing, setIsFinishing] = useState(false);
     const inFlight = useRef(false);
     const isRecording = state?.dataset?.is_recording ?? false;
+    const homeBusy = useHomePositionBusy();
 
     const finish = async () => {
-        if (inFlight.current || isRecording) return;
+        if (inFlight.current || isRecording || homeBusy) return;
         inFlight.current = true;
         setIsFinishing(true);
         const selectedDatasetId = state?.dataset?.dataset_id ?? dataset_id;
@@ -48,7 +50,7 @@ export const BackToDatasetButton = ({ dataset_id }: { dataset_id: string }) => {
             <ActionButton
                 isQuiet
                 aria-label='Back to dataset'
-                isDisabled={isFinishing || isRecording}
+                isDisabled={isFinishing || isRecording || homeBusy}
                 onPress={() => void finish()}
             >
                 {isFinishing ? (

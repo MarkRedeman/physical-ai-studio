@@ -19,13 +19,24 @@ import { ERROR_TOAST, failureOf, useRuntimeSession, useSessionJoints } from '../
 export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 2 } as const satisfies SchemaTeleopControlConfig;
 
 /** Drive the follower from the leader, or hold it where it is. */
-export const TeleopSwitch = ({ isDisabled = false }: { isDisabled?: boolean }) => {
+export const TeleopSwitch = ({
+    isDisabled = false,
+    onToggle,
+}: {
+    isDisabled?: boolean;
+    onToggle?: (enabled: boolean) => Promise<unknown>;
+}) => {
     const { state, statuses, send } = useRuntimeSession();
     const { mutate: setTeleop, isPending } = useMutation({
         mutationFn: async (teleoperate: boolean) => {
+            if (onToggle != null) {
+                await onToggle(teleoperate);
+                return;
+            }
             const ack = await send({
                 command: 'set_control',
                 control: teleoperate ? TELEOP_CONTROL : null,
+                reject_open_episode: true,
             });
             if (!ack.ok) {
                 toast.negative(ack.error?.message ?? 'Could not switch teleoperation.', ERROR_TOAST);

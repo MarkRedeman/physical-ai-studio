@@ -43,6 +43,8 @@ if TYPE_CHECKING:
 
     from physicalai.robot import Robot
 
+    from schemas.runtime_session import CommandDone
+
 DEFAULT_ROBOT_HZ = 100.0
 
 
@@ -241,7 +243,7 @@ class RobotWorker(ProcessWorker["Robot"]):
     def _return_home(self, request: ReturnHomeCommand) -> HomeMotion:
         return self._home_required().start(request.operation_id, request.home, time.monotonic())
 
-    def _validate_home(self, request: ReturnHomeCommand):
+    def _validate_home(self, request: ReturnHomeCommand) -> CommandDone:
         from schemas.runtime_session import CommandDone
 
         home = self._home_required()
@@ -249,7 +251,7 @@ class RobotWorker(ProcessWorker["Robot"]):
         home.hold_positions(time.monotonic())
         return CommandDone()
 
-    def _hold_for_home(self, request: ReturnHomeCommand):
+    def _hold_for_home(self, request: ReturnHomeCommand) -> CommandDone:
         from schemas.runtime_session import CommandDone
 
         try:
