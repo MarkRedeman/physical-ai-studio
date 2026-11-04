@@ -114,6 +114,22 @@ def test_delayed_tick_does_not_jump_to_target():
     assert engine.motion.state == "failed"
 
 
+def test_worker_watchdog_stops_without_a_browser_renewal():
+    engine, pose, _ = make_return()
+    engine.start(uuid4(), pose, 100.4)
+    measured = np.array([0.0, 35.0])
+    for step in range(1, 160):
+        now = 100.4 + step / 100
+        engine.observe(Sample(measured.copy(), NAMES, now), now)
+        command = engine.command(now)
+        if command is not None:
+            measured = command
+        if not engine.moving:
+            break
+    assert engine.motion.state == "failed"
+    assert "heartbeat" in engine.motion.message
+
+
 def test_cancel_and_repeated_start_do_not_restart_a_move():
     engine, pose, _ = make_return()
     operation = uuid4()
@@ -140,10 +156,25 @@ def test_incompatible_or_out_of_range_pose_is_rejected(update):
     assert not engine.moving
 
 
-def test_nonfinite_pose_is_rejected_by_schema():
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), True, "3.0"])
+def test_nonfinite_or_coerced_pose_is_rejected_by_schema(value):
     _, pose, _ = make_return()
     with pytest.raises(ValidationError):
-        HomePose.model_validate({**pose.model_dump(), "positions": {"joint.pos": float("nan")}})
+        HomePose.model_validate({**pose.model_dump(), "positions": {"joint.pos": value}})
+
+
+def test_normalized_boundaries_are_not_treated_as_known_positions():
+    engine, pose, _ = make_return()
+    engine.capability.unit = "normalized"
+    pose = pose.model_copy(update={"unit": "normalized"})
+    with pytest.raises(ValueError, match="clipped"):
+        engine.validate(pose.model_copy(update={"positions": {"joint.pos": 100}}))
+    engine.start(uuid4(), pose, 100.4)
+    with pytest.raises(ValueError, match="clipped"):
+        engine.observe(Sample(np.array([100.0, 35.0]), NAMES, 100.41), 100.41)
+    assert engine.motion.state == "failed"
+    with pytest.raises(ValueError, match="fresh"):
+        engine.hold_positions(100.41)
 
 
 def test_so101_profile_requires_known_units_calibration_and_serial_identity():
@@ -165,5 +196,26 @@ def test_so101_profile_requires_known_units_calibration_and_serial_identity():
     recipe.driver["init_args"]["unit"] = "degrees"
     degrees = capability_for_so101(recipe, "serial-number")
     assert degrees is not None and degrees.fingerprint != profile.fingerprint
+    other_environment = capability_for_so101(recipe, "serial-number", environment_id=uuid4())
+    assert other_environment is not None and other_environment.fingerprint != degrees.fingerprint
     recipe.driver["init_args"]["allow_uncalibrated"] = True
     assert capability_for_so101(recipe, "serial-number") is None
+
+
+def test_late_cancel_and_renew_do_not_hold_a_subsequent_control():
+    from unittest.mock import Mock
+
+    from schemas.home_position import CancelHomeReturnCommand, RenewHomeReturnCommand
+    from workers.robot_worker import RobotWorker
+
+    engine, pose, _ = make_return()
+    operation = uuid4()
+    engine.start(operation, pose, 100.4)
+    engine.cancel(operation)
+    worker = RobotWorker.__new__(RobotWorker)
+    worker._home = engine
+    worker._hold_home = Mock()
+    worker._cancel_home(CancelHomeReturnCommand(request_id="", operation_id=operation))
+    with pytest.raises(ValueError, match="no longer active"):
+        worker._renew_home(RenewHomeReturnCommand(request_id="", operation_id=operation))
+    worker._hold_home.assert_not_called()

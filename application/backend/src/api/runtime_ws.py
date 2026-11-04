@@ -136,11 +136,32 @@ async def runtime_session_websocket(  # noqa: PLR0913, D103 - FastAPI dependenci
 
 
 async def _forward_commands(websocket: WebSocket, session: RuntimeSession) -> None:
-    """Put each command onto the bus, one at a time and in order, and ack it with the reply."""
-    while True:
-        raw = await websocket.receive_text()
+    """Keep normal commands ordered, but do not queue Stop behind a starting home return."""
+
+    async def acknowledge(raw: str) -> None:
         ack = await _request(session.bus, raw, session=session)
         await websocket.send_json(ack.model_dump(mode="json"))
+
+    send, receive = anyio.create_memory_object_stream[str](32)
+
+    async def normal_commands() -> None:
+        async with receive:
+            async for raw in receive:
+                await acknowledge(raw)
+
+    async with send, anyio.create_task_group() as tasks:
+        tasks.start_soon(normal_commands)
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                header = _CommandHeader.model_validate_json(raw)
+            except ValidationError:
+                await send.send(raw)
+                continue
+            if header.command in {"cancel_home_return", "renew_home_return"}:
+                tasks.start_soon(acknowledge, raw)
+            else:
+                await send.send(raw)
 
 
 async def _request(bus: Bus, raw: str, *, session: RuntimeSession | None = None) -> AckMessage:

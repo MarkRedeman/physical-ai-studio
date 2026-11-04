@@ -33,7 +33,9 @@ def home_key(robot_id: UUID, operation: str) -> str:
     return f"rpc/home/{robot_id}/{operation}"
 
 
-def capability_for_so101(recipe: RobotRecipe, serial_number: str) -> HomeCapability | None:  # noqa: PLR0911 - fail closed at each capability gate
+def capability_for_so101(  # noqa: PLR0911 - fail closed at each capability gate
+    recipe: RobotRecipe, serial_number: str, *, environment_id: UUID | None = None
+) -> HomeCapability | None:
     """Enable only the calibrated single-arm position adapter with a verified serial identity.
 
     Limits are derived from calibration; speeds are deliberately conservative software limits,
@@ -77,6 +79,7 @@ def capability_for_so101(recipe: RobotRecipe, serial_number: str) -> HomeCapabil
         "serial": serial_number,
         "unit": unit,
         "calibration": checked.to_dict(),
+        "environment_id": str(environment_id) if environment_id is not None else None,
     }
     fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     return HomeCapability(robot_id=recipe.robot_id, fingerprint=fingerprint, unit=unit, joints=limits)
@@ -122,11 +125,20 @@ class HomeReturn:
             or sample.value.shape != (len(self.names),)
             or not np.all(np.isfinite(sample.value))
         ):
+            self.latest = None
             self._finish("failed", "Robot returned invalid joint observations.")
             raise ValueError("Robot returned invalid joint observations.")
         if now - sample.timestamp > MAX_SAMPLE_AGE_S or sample.timestamp > now + 0.05:
+            self.latest = None
             self._finish("failed", "Robot observations are stale.")
             raise ValueError("Robot observations are stale.")
+        if self.moving:
+            try:
+                self._check_measured_positions(sample.value)
+            except ValueError as error:
+                self.latest = None
+                self._finish("failed", str(error))
+                raise
         self.latest = sample
         self.history.append(sample)
 
@@ -149,11 +161,37 @@ class HomeReturn:
             limit = capability.joints[name]
             if not math.isfinite(value) or not limit.minimum <= value <= limit.maximum:
                 raise ValueError(f"Home joint {name} is outside its calibrated limits.")
+            if (
+                capability.unit == "normalized"
+                and not limit.minimum + limit.tolerance < value < limit.maximum - limit.tolerance
+            ):
+                raise ValueError(
+                    f"Home joint {name} is at a clipped normalized boundary. Set home away from the limit."
+                )
+
+    def _check_measured_positions(self, values: np.ndarray) -> None:
+        for name, limit in self.capability.joints.items():
+            value = values[self.names.index(name)]
+            if not limit.minimum <= value <= limit.maximum:
+                raise ValueError(f"Current joint {name} is outside its calibrated limits.")
+            # Normalized SO-101 readings are clipped; at the boundary the real position is unknown.
+            if (
+                self.capability.unit == "normalized"
+                and not limit.minimum + limit.tolerance < value < limit.maximum - limit.tolerance
+            ):
+                raise ValueError(f"Joint {name} is at a clipped normalized boundary; reposition before returning home.")
+
+    def hold_positions(self, now: float) -> np.ndarray:
+        """Use only a fresh, non-clipped measured pose for a commanded hold."""
+        sample = self._sample(now)
+        self._check_measured_positions(sample.value)
+        return sample.value.copy()
 
     def capture(self, now: float) -> HomePose:
         if self.moving:
             raise ValueError("Stop the return before replacing home.")
         sample = self._sample(now)
+        self._check_measured_positions(sample.value)
         recent = [entry for entry in self.history if sample.timestamp - entry.timestamp <= SETTLE_S + 0.05]
         if not recent or sample.timestamp - recent[0].timestamp < SETTLE_S:
             raise ValueError("Hold the follower still briefly before setting home.")
@@ -179,6 +217,7 @@ class HomeReturn:
         self.validate(pose)
         sample = self._sample(now)
         start = sample.value.copy()
+        self._check_measured_positions(start)
         if not 0 <= start[self.names.index("gripper.pos")] <= 100:
             raise ValueError("Gripper observations are outside the supported range.")
         target = start.copy()  # The measured gripper stays unchanged for the entire move.
@@ -274,7 +313,7 @@ class HomeReturn:
             self._settled_at = (self._settled_at if self._settled_at is not None else now) if reached else None
             if self._settled_at is not None and now - self._settled_at >= SETTLE_S:
                 self.motion = self.motion.model_copy(update={"progress": 1.0})
-                self._finish("reached", "Home reached. The follower is held; teleoperation remains off.")
+                self._finish("reached", "Home reached; previous control was not resumed.")
                 return sample.value.copy()
         self._last_command = command.copy()
         self.motion = self.motion.model_copy(update={"progress": fraction})

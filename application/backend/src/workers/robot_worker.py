@@ -164,6 +164,9 @@ class RobotWorker(ProcessWorker["Robot"]):
                             ("return", ReturnHomeCommand, self._return_home),
                             ("renew", RenewHomeReturnCommand, self._renew_home),
                             ("cancel", CancelHomeReturnCommand, self._cancel_home),
+                            ("validate", ReturnHomeCommand, self._validate_home),
+                            ("hold", ReturnHomeCommand, self._hold_for_home),
+                            ("cancel_pending", CancelHomeReturnCommand, self._hold_pending_home),
                         ):
                             self._bus.serve(home_key(self.recipe.robot_id, operation), model, handler)
                     if not self.observe_only:
@@ -238,28 +241,70 @@ class RobotWorker(ProcessWorker["Robot"]):
     def _return_home(self, request: ReturnHomeCommand) -> HomeMotion:
         return self._home_required().start(request.operation_id, request.home, time.monotonic())
 
+    def _validate_home(self, request: ReturnHomeCommand):
+        from schemas.runtime_session import CommandDone
+
+        home = self._home_required()
+        home.validate(request.home)
+        home.hold_positions(time.monotonic())
+        return CommandDone()
+
+    def _hold_for_home(self, request: ReturnHomeCommand):
+        from schemas.runtime_session import CommandDone
+
+        try:
+            self._validate_home(request)
+            self._hold_home()
+        except Exception as error:
+            home = self._home_required()
+            home.motion = HomeMotion(
+                operation_id=request.operation_id,
+                robot_id=self.recipe.robot_id,
+                state="failed",
+                message="Could not establish a safe measured hold. Check the robot before reconnecting.",
+            )
+            home.publish_motion()
+            if self._bus is not None and self.component is not None:
+                publish_status(self._bus, self.component, "failed", str(error))
+            self.request_stop()  # Native driver disconnect holds raw encoder positions without normalized clipping.
+            raise
+        return CommandDone()
+
     def _hold_home(self) -> None:
         home = self._home_required()
-        if home.latest is None:
-            raise ValueError("No follower measurement is available to hold.")
-        self._store.write(ACTION, home.latest.value, timestamp=time.monotonic())
-        self._driver.send_action(home.latest.value, goal_time=1 / self.hz)
+        measured = home.hold_positions(time.monotonic())
+        self._store.write(ACTION, measured, timestamp=time.monotonic())
+        self._driver.send_action(measured, goal_time=1 / self.hz)
 
     def _renew_home(self, request: RenewHomeReturnCommand) -> HomeMotion:
         home = self._home_required()
+        was_moving = home.moving
         try:
             home.renew(request.operation_id, time.monotonic())
         finally:
-            if not home.moving:
-                self._hold_home()
+            if was_moving and not home.moving:
+                try:
+                    self._hold_home()
+                except Exception:
+                    if self._bus is not None and self.component is not None:
+                        publish_status(
+                            self._bus, self.component, "failed", "Could not establish hold after home-return expiry."
+                        )
+                    self.request_stop()  # Driver disconnect uses the adapter's native/raw-position hold.
+                    raise
         return home.motion
 
     def _cancel_home(self, request: CancelHomeReturnCommand) -> HomeMotion:
         home = self._home_required()
+        was_moving = home.moving
         motion = home.cancel(request.operation_id)
+        if not was_moving:
+            return motion  # A late cancellation must not disturb a subsequent model/teleop control.
         try:
             self._hold_home()
         except Exception:
+            if self._bus is not None and self.component is not None:
+                publish_status(self._bus, self.component, "failed", "Could not command hold after cancellation.")
             self.request_stop()  # Do not continue issuing actions after a failed stop command.
             home.motion = motion.model_copy(
                 update={"state": "failed", "message": "Could not command hold. Use the physical emergency stop."}
@@ -267,3 +312,22 @@ class RobotWorker(ProcessWorker["Robot"]):
             home.publish_motion()
             raise
         return motion
+
+    def _hold_pending_home(self, request: CancelHomeReturnCommand) -> HomeMotion:
+        """Only the session invokes this for a verified return that is still starting."""
+        home = self._home_required()
+        if home.moving:
+            return self._cancel_home(request)
+        try:
+            self._hold_home()
+        except Exception:
+            self.request_stop()
+            raise
+        home.motion = HomeMotion(
+            operation_id=request.operation_id,
+            robot_id=self.recipe.robot_id,
+            state="cancelled",
+            message="Return cancelled before movement started.",
+        )
+        home.publish_motion()
+        return home.motion

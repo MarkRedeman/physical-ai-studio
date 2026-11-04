@@ -127,7 +127,9 @@ async def describe_environment(
         follower=follower,
         leader=leader,
         cameras=cameras,
-        home_capability=capability_for_so101(follower, getattr(robot.payload, "serial_number", "")),
+        home_capability=capability_for_so101(
+            follower, getattr(robot.payload, "serial_number", ""), environment_id=environment.id
+        ),
     )
 
 
