@@ -17,6 +17,7 @@ import { Statuses } from '../runtime-session-provider';
 import { SessionWorkspace } from './session-workspace';
 
 const send = rs.fn();
+const act = rs.fn();
 let state = getMockedRuntimeSession();
 let statuses: Statuses = {};
 let pendingPart: string | null = null;
@@ -28,7 +29,7 @@ rs.mock('../runtime-session-provider', () => ({
 rs.mock('../session-viewer', () => ({ SessionViewer: () => <div>Live camera views</div> }));
 rs.mock('./part-controls', () => ({
     PartControlsProvider: ({ children }: { children: ReactNode }) => children,
-    usePartControls: () => ({ pendingPart, act: rs.fn() }),
+    usePartControls: () => ({ pendingPart, act }),
 }));
 
 const renderWorkspace = () =>
@@ -42,6 +43,7 @@ beforeEach(() => {
     statuses = {};
     pendingPart = null;
     send.mockReset().mockResolvedValue({ ok: true });
+    act.mockReset();
     server.use(
         http.get('/api/settings', () => HttpResponse.json(getMockedSettings())),
         http.get('/api/dataset/{dataset_id}/episodes', () => HttpResponse.json([])),
@@ -74,7 +76,7 @@ describe('SessionWorkspace', () => {
         state.dataset = getMockedSessionDataset({ episodes_recorded: 3 });
         server.use(http.get('/api/dataset/{dataset_id}/episodes', () => HttpResponse.json(getMockedEpisodes())));
         renderWorkspace();
-        const recording = await screen.findByRole('region', { name: 'Recording', exact: true });
+        const recording = await screen.findByRole('region', { name: 'Recording' });
         expect(await within(recording).findByRole('group', { name: '5 episodes in dataset' })).toBeInTheDocument();
         expect(within(recording).getByRole('button', { name: 'Recording tips' })).toBeInTheDocument();
     });
@@ -111,9 +113,39 @@ describe('SessionWorkspace', () => {
             )
         );
         renderWorkspace();
-        expect(await screen.findByRole('button', { name: 'Choose a model for inference' })).toBeEnabled();
-        expect(screen.queryByText('No model selected')).not.toBeInTheDocument();
+        const choose = await screen.findByRole('button', { name: 'Choose model…' });
+        await waitFor(() => expect(choose).toBeEnabled());
+        expect(screen.getByText('No model selected')).toBeInTheDocument();
         expect(screen.queryByText(/Once you train a model/)).not.toBeInTheDocument();
+        await userEvent.setup().click(choose);
+        expect(act).toHaveBeenCalledExactlyOnceWith('model', 'swap');
+        expect(screen.getByRole('radio', { name: 'Recording' })).toBeChecked();
+    });
+
+    it('keeps the model prerequisite outside its disabled header action', async () => {
+        state.environment = null;
+        server.use(
+            http.get('/api/projects/{project_id}/models', () =>
+                HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
+            )
+        );
+        renderWorkspace();
+        const inference = await screen.findByRole('region', { name: 'Inference' });
+        const choose = await within(inference).findByRole('button', { name: 'Choose model…' });
+        expect(choose).toBeDisabled();
+        const guidance = within(inference).getByText('Connect an environment first');
+        expect(guidance).toBeVisible();
+        expect(choose).not.toContainElement(guidance);
+        expect(within(inference).getByText('No model selected')).toHaveAttribute('data-empty', 'true');
+    });
+
+    it('shows preparation instead of a second model selector while loading', async () => {
+        pendingPart = 'model';
+        renderWorkspace();
+        const inference = await screen.findByRole('region', { name: 'Inference' });
+        expect(within(inference).getByRole('progressbar', { name: 'Preparing model' })).toBeInTheDocument();
+        expect(within(inference).getByText('Preparing…')).toBeVisible();
+        expect(within(inference).queryByRole('button', { name: 'Choose model…' })).not.toBeInTheDocument();
     });
 
     it('explains that an unexported model must be exported first', async () => {

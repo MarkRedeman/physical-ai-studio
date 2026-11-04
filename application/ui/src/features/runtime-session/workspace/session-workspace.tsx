@@ -119,6 +119,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
     const environment = state?.environment;
     const dataset = state?.dataset;
     const model = state?.model;
+    const hasRunnableModels = models?.some((candidate) => candidate.available_backends.length > 0);
     const modelFailure = failureOf(statuses, 'model');
     const environmentFailure = failureOf(statuses, 'environment');
     const isRecording = dataset?.is_recording ?? false;
@@ -138,7 +139,10 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             isLoaded={state?.[part] != null}
             isPending={pendingPart === part}
             isDisabled={isRecording || isPending || pendingPart !== null}
-            canChoose={part === 'environment' || (environment != null && environmentFailure === null)}
+            canChoose={
+                (part === 'environment' || (environment != null && environmentFailure === null)) &&
+                (part !== 'model' || model != null || hasRunnableModels === true)
+            }
             canRetry={failureOf(statuses, part) !== null || (part === 'environment' && hasDeviceFailure)}
             onAction={(action) => act(part, action)}
         />
@@ -172,7 +176,6 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             )}
         </WorkspaceSection>
     );
-    const hasRunnableModels = models?.some((candidate) => candidate.available_backends.length > 0);
     const isEmptyInference =
         model == null && models !== undefined && !hasRunnableModels && modelFailure === null && pendingPart !== 'model';
     const inference = (
@@ -182,7 +185,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
             isSelected={mode === 'inference'}
             activity={state?.control?.type === 'model' ? 'Running' : undefined}
             isQuiet={isEmptyInference}
-            actions={model != null ? actions('model') : undefined}
+            actions={model != null || !isEmptyInference ? actions('model') : undefined}
             hasError={modelFailure !== null}
         >
             {isEmptyInference ? (
@@ -199,32 +202,12 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                 </>
             ) : (
                 <>
-                    {modelFailure !== null && <Text UNSAFE_className={classes.error}>{modelFailure}</Text>}
-                    <button
-                        type='button'
-                        className={classes.modelPicker}
-                        onClick={() => act('model', 'swap')}
-                        disabled={
-                            isRecording ||
-                            isPending ||
-                            pendingPart !== null ||
-                            !hasRunnableModels ||
-                            environment == null ||
-                            environmentFailure !== null
-                        }
-                        aria-label='Choose a model for inference'
-                    >
-                        <span className={classes.modelPickerCopy}>
-                            <strong>{pendingPart === 'model' ? 'Preparing model…' : 'Select a trained model'}</strong>
-                            <span>
-                                {environment == null || environmentFailure !== null
-                                    ? 'Connect an environment first'
-                                    : 'Browse your available models'}
-                            </span>
-                        </span>
-                        <ChevronRightSmallLight aria-hidden='true' />
-                    </button>
-                    <Text UNSAFE_className={classes.hint}>The selected model will control the follower robot.</Text>
+                    <PartRow label='Model' name={undefined} error={modelFailure} isPending={pendingPart === 'model'} />
+                    <Text UNSAFE_className={classes.hint}>
+                        {environment == null || environmentFailure !== null
+                            ? 'Connect an environment first'
+                            : 'The selected model will control the follower robot.'}
+                    </Text>
                 </>
             )}
         </WorkspaceSection>
