@@ -44,10 +44,19 @@ from runtime_session.dataset import COMPONENT as DATASET
 from runtime_session.dataset import Recording, dataset_spec
 from runtime_session.environment import COMPONENT as ENVIRONMENT
 from runtime_session.environment import RELOAD, Environment, describe_environment
+from runtime_session.home_position import HOME_EVENTS, home_key
 from runtime_session.model import COMPONENT as MODEL
 from runtime_session.model import ProcessModel, model_inputs
 from runtime_session.slot import Slot
 from runtime_session.store import ACTION, STATE, FeatureSpecMismatchError, Store
+from schemas.home_position import (
+    CancelHomeReturnCommand,
+    CaptureHomePositionCommand,
+    HomeMotion,
+    HomePose,
+    RenewHomeReturnCommand,
+    ReturnHomeCommand,
+)
 from schemas.runtime_session import (
     CommandDone,
     DiscardEpisodeCommand,
@@ -153,6 +162,8 @@ class RuntimeSession:
         """Joints and frames, for the environment's devices and the dataset. Outlives a reloaded
         environment while the spec stays the same, so the dataset recording from it stays loaded."""
         self._bus: Bus | None = None
+        self._home_motion: HomeMotion | None = None
+        self._home_operation_id: UUID | None = None
         """Hosted for the session's lifetime; its parts join it."""
 
     async def __aenter__(self) -> Self:
@@ -177,6 +188,7 @@ class RuntimeSession:
         with anyio.CancelScope(shield=True):
             try:
                 async with self._lock:
+                    await self._cancel_current_home()
                     await self._control.unload()
                     await self._model.unload()
                     await self._dataset.unload()
@@ -218,6 +230,13 @@ class RuntimeSession:
         }
         for name, (model, run) in commands.items():
             bus.serve(command_key(name), model, _as_command(name, run))
+        for name, model, run in (
+            ("capture_home_position", CaptureHomePositionCommand, self.capture_home),
+            ("return_home", ReturnHomeCommand, self.return_home),
+            ("renew_home_return", RenewHomeReturnCommand, self.renew_home),
+            ("cancel_home_return", CancelHomeReturnCommand, self.cancel_home),
+        ):
+            bus.serve(command_key(name), model, run)
 
     def _listen(self, bus: Bus) -> None:
         """Deal with what the parts report about themselves on the bus."""
@@ -228,6 +247,7 @@ class RuntimeSession:
         bus.listen(status_key(DATASET), StatusMessage, self._on_dataset)
         bus.listen(status_key(MODEL), StatusMessage, self._on_model)
         bus.listen(dataset_rpc.EVENTS, RecordingStatus, self._on_recording)
+        bus.listen(HOME_EVENTS, HomeMotion, self._on_home_motion)
 
     async def _load_draft(self, draft: EnvironmentDraft, *, unload_incompatible: bool) -> None:
         await self.load_environment(await self._resolve.environment(draft), unload_incompatible=unload_incompatible)
@@ -275,6 +295,7 @@ class RuntimeSession:
             control=control.config if control else None,
             dataset=dataset.state() if dataset else None,
             model=model.state() if model else None,
+            home_motion=self._home_motion,
         )
 
     def info(self) -> RuntimeSessionInfo:
@@ -311,6 +332,9 @@ class RuntimeSession:
         async with self._lock:
             if self.closed.is_set():
                 raise RuntimeSessionCommandError("The session is closed.", error_code="session_closed")
+            self.require_home_idle()
+            self._home_motion = None
+            self._home_operation_id = None
             # Described before anything is unloaded: building drivers touches no device, and a
             # refusal must leave the session as it was.
             description = await describe_environment(environment, self._robot_factory)
@@ -456,6 +480,7 @@ class RuntimeSession:
 
     async def _switch_control(self, environment: Environment, config: ControlConfig | None) -> None:
         """Hold the lock. One control at a time, by construction: the old one is joined before the next starts."""
+        self.require_home_idle()
         # An episode records one way of driving the follower; a switch mid-episode would mix two.
         await self._stop_recording()
         await self._control.unload()
@@ -480,6 +505,7 @@ class RuntimeSession:
                 the environment stays loaded then, failed, to try again.
         """
         async with self._lock:
+            self.require_home_idle()
             self._environment.require("Load an environment first.")
             # The control borrows the leader, and the episode records the devices being replaced.
             await self._control.unload()
@@ -497,6 +523,9 @@ class RuntimeSession:
         The store and the dataset stay, until an environment with another spec needs a new store.
         """
         async with self._lock:
+            self.require_home_idle()
+            self._home_motion = None
+            self._home_operation_id = None
             if (environment := self.environment) is None:
                 return
             await self._control.unload()
@@ -513,6 +542,7 @@ class RuntimeSession:
             WorkerStartupError: The dataset could not be opened for recording.
         """
         async with self._lock:
+            self.require_home_idle()
             environment = self._environment.require("Load an environment first.")
             # Swapping: the loaded one is finished (copied back) first.
             await self._dataset.unload()
@@ -533,6 +563,7 @@ class RuntimeSession:
             WorkerStartupError: The model could not be loaded.
         """
         async with self._lock:
+            self.require_home_idle()
             environment = self._environment.require("Load an environment first.")
             await self._unload_model(environment.environment)
             await self._model.load(self._process_model(model, backend, device))
@@ -605,6 +636,7 @@ class RuntimeSession:
         """A failed environment stays loaded, to be reloaded; nothing drives or records it meanwhile."""
         if status.state == "failed":
             async with self._lock:
+                await self._cancel_current_home()
                 await self._control.unload()
                 await self._stop_recording()
             self._emit(StateMessage(data=self.state()))
@@ -631,6 +663,95 @@ class RuntimeSession:
         """The dataset worker owns its recording state; show whatever it last announced."""
         if (recording := self._dataset.value) is not None:
             recording.status = status
+            self._emit(StateMessage(data=self.state()))
+
+    def require_home_idle(self) -> None:
+        """Reject actions that could compete with a supervised return."""
+        if self._home_motion is not None and self._home_motion.state == "moving":
+            raise RuntimeSessionCommandError(
+                "Stop the home return before changing control or session setup.", error_code="home_return_active"
+            )
+
+    async def _no_open_episode(self) -> None:
+        if self._dataset.value is not None:
+            status = await self.bus.request(dataset_rpc.STATUS, dataset_rpc.Empty(), RecordingStatus, timeout=2)
+            if status.is_recording:
+                raise RuntimeSessionCommandError(
+                    "Save or discard the episode before using home position.", error_code="episode_open"
+                )
+
+    def _home_environment(self) -> LoadedEnvironment:
+        loaded = self._environment.require("Connect an environment first.")
+        if loaded.state.home_capability is None:
+            raise RuntimeSessionCommandError(
+                "Home requires a calibrated, serial-identified SO-101 follower with supported joint units.",
+                error_code="home_unsupported",
+            )
+        return loaded
+
+    async def capture_home(self, command: CaptureHomePositionCommand) -> HomePose:
+        """Capture a consistent, stationary measurement from the follower worker."""
+        async with self._lock:
+            self.require_home_idle()
+            await self._no_open_episode()
+            loaded = self._home_environment()
+            if self._control.value is not None:
+                raise RuntimeSessionCommandError(
+                    "Pause teleoperation or model control before setting home.", error_code="control_active"
+                )
+            return await self.bus.request(home_key(loaded.state.robot_id, "capture"), command, HomePose, timeout=2)
+
+    async def return_home(self, command: ReturnHomeCommand) -> HomeMotion:
+        """Stop existing control before starting a separately supervised return; ack is not completion."""
+        async with self._lock:
+            self.require_home_idle()
+            await self._no_open_episode()
+            loaded = self._home_environment()
+            await self._switch_control(loaded.environment, None)
+            self._home_operation_id = command.operation_id
+            try:
+                motion = await self.bus.request(
+                    home_key(loaded.state.robot_id, "return"), command, HomeMotion, timeout=2
+                )
+                self._on_home_motion(motion)
+                return motion
+            finally:
+                self._emit(StateMessage(data=self.state()))
+
+    async def renew_home(self, command: RenewHomeReturnCommand) -> HomeMotion:
+        """Renew the worker watchdog without holding the session's mutation lock."""
+        loaded = self._home_environment()
+        return await self.bus.request(home_key(loaded.state.robot_id, "renew"), command, HomeMotion, timeout=1)
+
+    async def cancel_home(self, command: CancelHomeReturnCommand) -> HomeMotion:
+        """Stop remains available independently of normal UI/session command locks."""
+        loaded = self._home_environment()
+        motion = await self.bus.request(home_key(loaded.state.robot_id, "cancel"), command, HomeMotion, timeout=1)
+        self._on_home_motion(motion)
+        return motion
+
+    async def _cancel_current_home(self) -> None:
+        if self._home_motion is not None and self._home_motion.state == "moving":
+            try:
+                await self.cancel_home(
+                    CancelHomeReturnCommand(request_id="", operation_id=self._home_motion.operation_id)
+                )
+            except Exception:
+                logger.exception("Could not cancel home return; worker watchdog/teardown will stop it")
+
+    def _on_home_motion(self, motion: HomeMotion) -> None:
+        if (
+            self.environment is not None
+            and self.environment.robot_id == motion.robot_id
+            and self._home_operation_id == motion.operation_id
+        ):
+            if (
+                self._home_motion is not None
+                and self._home_motion.operation_id == motion.operation_id
+                and self._home_motion.sequence > motion.sequence
+            ):
+                return
+            self._home_motion = motion
             self._emit(StateMessage(data=self.state()))
 
     def _emit(self, event: StateMessage | ErrorMessage) -> None:
