@@ -21,6 +21,7 @@ This is still a UX experiment. Prioritize visual iteration and small signed comm
 - Put editable recording rate **before Current task** for new datasets. Explain that the first saved episode locks it; show only a muted fixed-rate summary afterward.
 - Replaced empty inference's “No model selected” and header chooser with a clickable, left-aligned text resource selector and a right-hand chevron. Do not add a play icon here: it suggests playing a movie. An earlier large centered/dashed tile felt inconsistent with the rest of the screen. Projects without runnable exports retain a quiet training/export placeholder.
 - Inference shows a larger backend-logo tile with the model name and backend/device details to its right. Execution-mode radios are horizontal. The compact **Execution settings** disclosure contains action rate and request threshold, with Hz/percentage values summarized while collapsed. **Request threshold is supported in both synchronous and asynchronous execution**; do not hide it for synchronous mode.
+- A small inference footer shows the latest model-call latency and the recent average. Timing is per action chunk, excludes worker communication, and excludes the first warm-up prediction from the average. Updates are capped at four per second; stopping/restarting or switching models clears the displayed series.
 - Mode selection adds a border glow even when idle; “Recording”/“Running” text describes actual execution separately. The toolbar shows the selected workflow's actions. Selecting a mode never starts motion; switching first holds any existing robot control and waits for its acknowledgement. Switching is disabled during episodes and shared recording/model commands.
 
 ## Code map
@@ -36,8 +37,11 @@ Under `application/ui/src/features/runtime-session/workspace/`:
 - `recording-summary.tsx` / `.module.css`: dataset-progress block, persisted + session totals, and recording guidance popover.
 - `back-to-dataset-button.tsx`: waits for dataset finalization before leaving; stays on the page if it fails.
 - `inference-mode.tsx` / `.module.css`: shared inference provider, backend branding, compact settings, and inference Run/Stop toolbar.
+- `inference-latency-footer.tsx` / `.module.css`: latency, warm-up/waiting/stopped states, and measurement help. `runtime-session-provider.tsx` delivers metrics through a separate channel so telemetry does not update all setup controls.
 
 Entry points: `application/ui/src/routes/datasets/record/index.tsx` and `application/ui/src/features/models/inference/inference-page.tsx`. Shared hotkey handling is in `application/ui/src/features/hotkeys/use-hotkey.ts`; it now ignores handled events and dialog/menu/listbox interactions.
+
+Latency is measured in `application/backend/src/workers/model_worker.py`, aggregated by `runtime_session/inference_metrics.py`, and forwarded on `evt/model/metrics` by `api/runtime_ws.py`. Its standalone schema is `schemas/inference_metrics.py`; this avoids changing the shared home-return schemas. The local OpenAPI definition/types were regenerated from the backend message model without restarting the live server. They are git-ignored in this repository; regenerate against an updated backend, not an old running server that lacks the new message.
 
 ## Pay attention when continuing
 
@@ -48,12 +52,15 @@ Entry points: `application/ui/src/routes/datasets/record/index.tsx` and `applica
 5. **Rate locking:** respect `fps_fixed` and `episodes_recorded > 0`. A discarded episode is not a saved first episode. Verify failures while changing rate and the slider-to-summary transition.
 6. **Status semantics:** don't infer activity just from a connected device. Preserve failure priority and automatic expansion when a new error arrives, while allowing the user to collapse details. Camera statuses use `environment/{camera.key}`, not camera IDs.
 7. **Visual/accessibility follow-up:** check long names/tasks, many cameras, narrow screens, light theme, popover placement, keyboard focus/return, and disabled-state explanations. Current camera/robot previews use mocked devices, not real feeds.
+8. **Latency semantics:** the average contains up to 20 successful, non-warm-up predictions. A new worker reset gives a new run ID; ignore delayed results from previous runs. Use client receipt time for age, not an assumption that browser and server clocks agree. An old result is labeled “Last result,” not reported as a new prediction. Do not confuse model-call latency with robot-loop or RPC round-trip latency.
 
 ## Verification state
 
 Before the latest experimental pass, the full unit suite passed (559 passed, one skipped), the production build passed, and targeted browser checks passed. Full type-check had unrelated existing model-renaming API and settings-fixture errors.
 
 The device/task-history pass checked four mocked browser preview flows: device overview, task-history search/selection, first-episode rate setup, and model selection. The mode-selector follow-up checked radio switching, toolbar changes, stopping existing model control, keyboard switching, and disabled switching during an episode. The progress/help follow-up previewed an empty dataset, persisted + session episode totals, recording tips, and the compact model selector. **Do not assume current HEAD passes the full suite, lint, type-check, or build.** The latest shared mode/command providers and task-history/camera changes still need regression coverage and verification.
+
+The latency follow-up passed nine targeted backend tests (including fake-worker sync/async inference), six footer unit tests, and a mocked WebSocket browser flow covering early warm-up metrics, live updates, delayed results after stopping, and restart. Real hardware/backend latency was not exercised, and the live backend was not restarted.
 
 Run UI commands from `application/ui/` when ready: `npm run lint`, `npm run format:check`, `npm run type-check`, `npm run test:unit`, `npm run build`, and `npm run test:component`. Browser previews used installed Chrome via a temporary Playwright config because the bundled Chromium executable was missing.
 

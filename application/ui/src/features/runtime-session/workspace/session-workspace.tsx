@@ -9,6 +9,7 @@ import { useProjectId } from '../../projects/use-project';
 import { TeleopSwitch } from '../cells/robot-cell';
 import { failureOf, SessionPartName, useRuntimeSession } from '../runtime-session-provider';
 import { SessionViewer } from '../session-viewer';
+import { InferenceLatencyFooter } from './inference-latency-footer';
 import { InferenceMode, InferenceModelSummary, InferenceProvider, InferenceToolbar } from './inference-mode';
 import { PartControlsProvider, usePartControls } from './part-controls';
 import { EnvironmentRow, PartActions, PartRow } from './parts-panel';
@@ -178,6 +179,7 @@ const Sections = ({ initialMode }: { initialMode: ModeKey }) => {
                 <>
                     <InferenceModelSummary model={model} error={modelFailure} isPending={pendingPart === 'model'} />
                     <InferenceMode />
+                    <InferenceLatencyFooter />
                 </>
             ) : (
                 <>

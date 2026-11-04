@@ -102,6 +102,7 @@ class ProcessModel:
             store_name=store.name,
             spec=store.spec,
             images=self.inputs.images,
+            model_id=model.id,
         )
         self._session_id = session_id
         self._bus: Bus | None = None

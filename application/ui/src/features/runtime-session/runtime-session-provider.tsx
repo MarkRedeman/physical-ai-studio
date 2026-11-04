@@ -21,6 +21,7 @@ import {
     SchemaEnvironmentDraft,
     SchemaEnvironmentWithRelations,
     SchemaErrorMessage,
+    SchemaInferenceMetricsMessage,
     SchemaLoadDatasetCommand,
     SchemaLoadEnvironmentCommand,
     SchemaLoadModelCommand,
@@ -41,7 +42,14 @@ import { JointsState } from '../robots/use-robot-observations';
 /** Session errors go away by themselves; the parts panel keeps showing what is still failed. */
 export const ERROR_TOAST = { timeout: 10_000 };
 
-type JsonServerMessage = SchemaAckMessage | SchemaStateMessage | SchemaErrorMessage | SchemaStatusMessage;
+type JsonServerMessage =
+    SchemaAckMessage | SchemaStateMessage | SchemaErrorMessage | SchemaStatusMessage | SchemaInferenceMetricsMessage;
+
+export interface InferenceMetricsSample {
+    data: SchemaInferenceMetricsMessage;
+    /** Client receipt time; use it for age indicators without assuming synchronized clocks. */
+    receivedAt: number;
+}
 /** The last status of each part and device, by component: ``environment``, ``environment/cam 0``, ``control``. */
 export type Statuses = Record<string, SchemaStatusMessage>;
 type Command =
@@ -121,6 +129,7 @@ interface RuntimeSessionContextValue {
     loading: SessionPartName | null;
     isLoading: boolean;
     observations: Channel<SchemaObservationMessage>;
+    inferenceMetrics: Channel<InferenceMetricsSample | null>;
     frame: (key: string) => Channel<Blob>;
     send: (command: Command) => Promise<SchemaAckMessage>;
     /** Load what the page asked for again, after it was refused (a device a closing session still held, say). */
@@ -189,11 +198,26 @@ export const RuntimeSessionProvider = ({
     const [attempt, setAttempt] = useState(0);
     const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
     const observations = useRef(new Channel<SchemaObservationMessage>()).current;
+    const inferenceMetrics = useRef(new Channel<InferenceMetricsSample | null>()).current;
+    const ignoredInferenceRuns = useRef(new Set<string>()).current;
+    const controlStarting = useRef(false);
     const frames = useRef(new Map<string, Channel<Blob>>()).current;
     const pending = useRef(new Map<string, (ack: SchemaAckMessage) => void>()).current;
     const sessionClosed = useRef(false);
     // The latest state, for the load effect to read without rerunning on every state.
     const latestState = useRef<SchemaSessionState | null>(null);
+    const ignoreInferenceRun = (run_id: string) => {
+        ignoredInferenceRuns.add(run_id);
+        if (ignoredInferenceRuns.size > 32) {
+            const oldest = ignoredInferenceRuns.values().next().value;
+            if (oldest !== undefined) ignoredInferenceRuns.delete(oldest);
+        }
+    };
+    const clearInferenceMetrics = () => {
+        const previous = inferenceMetrics.value;
+        if (previous != null) ignoreInferenceRun(previous.data.run_id);
+        inferenceMetrics.publish(null);
+    };
     const frame = useCallback(
         (key: string) => {
             let channel = frames.get(key);
@@ -216,6 +240,9 @@ export const RuntimeSessionProvider = ({
             latestState.current = null;
             setState(null);
             setStatuses({});
+            clearInferenceMetrics();
+            ignoredInferenceRuns.clear();
+            controlStarting.current = false;
             pending.forEach((resolve, request_id) =>
                 resolve({
                     type: 'ack',
@@ -236,21 +263,60 @@ export const RuntimeSessionProvider = ({
             }
             const message = JSON.parse(event.data) as JsonServerMessage;
             switch (message.type) {
-                case 'state':
+                case 'state': {
+                    const previous = latestState.current;
+                    const next = message.data;
+                    if (
+                        previous?.model?.model_id !== next.model?.model_id ||
+                        previous?.model?.backend !== next.model?.backend ||
+                        previous?.model?.device !== next.model?.device ||
+                        (previous?.control?.type === 'model' && next.control?.type !== 'model')
+                    ) {
+                        clearInferenceMetrics();
+                    }
+                    if (next.control != null) controlStarting.current = false;
                     latestState.current = message.data;
                     setState(message.data);
                     break;
+                }
                 case 'error':
                     sessionClosed.current = !message.session_alive;
                     setError(message);
                     break;
                 case 'status':
                     setStatuses((previous) => withStatus(previous, message));
+                    if (message.component === 'control' && message.state !== 'running') {
+                        clearInferenceMetrics();
+                        controlStarting.current = message.state === 'starting';
+                    }
+                    if (message.component === 'model' && message.state !== 'running') clearInferenceMetrics();
                     if (message.component === 'control' && message.state === 'failed') {
                         // The follower holds; nothing else shows a control.
                         toast.negative(`Control stopped: ${message.error ?? 'it failed'}`, ERROR_TOAST);
                     }
                     break;
+                case 'inference_metrics': {
+                    const model = latestState.current?.model;
+                    if (
+                        model == null ||
+                        model.model_id !== message.model_id ||
+                        model.backend !== message.backend ||
+                        model.device !== message.device ||
+                        ignoredInferenceRuns.has(message.run_id) ||
+                        (latestState.current?.control?.type !== 'model' && !controlStarting.current)
+                    )
+                        break;
+                    const previous = inferenceMetrics.value;
+                    if (
+                        previous?.data.run_id === message.run_id &&
+                        previous.data.prediction_count >= message.prediction_count
+                    )
+                        break;
+                    if (previous != null && previous.data.run_id !== message.run_id)
+                        ignoreInferenceRun(previous.data.run_id);
+                    inferenceMetrics.publish({ data: message, receivedAt: Date.now() });
+                    break;
+                }
                 case 'ack':
                     pending.get(message.request_id)?.(message);
                     pending.delete(message.request_id);
@@ -318,8 +384,19 @@ export const RuntimeSessionProvider = ({
     }, [environmentKey, dataset_id, modelKey, hasSession, send, attempt]);
 
     const value = useMemo(
-        () => ({ state, error, statuses, loading, isLoading: loading !== null, observations, frame, send, retry }),
-        [state, error, statuses, loading, observations, frame, send, retry]
+        () => ({
+            state,
+            error,
+            statuses,
+            loading,
+            isLoading: loading !== null,
+            observations,
+            inferenceMetrics,
+            frame,
+            send,
+            retry,
+        }),
+        [state, error, statuses, loading, observations, inferenceMetrics, frame, send, retry]
     );
 
     return <RuntimeSessionContext.Provider value={value}>{children}</RuntimeSessionContext.Provider>;
