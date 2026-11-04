@@ -123,7 +123,10 @@ test('keeps episode actions visible and locks resource changes while recording',
     await expect(page.getByText('+1 this session')).toBeVisible();
 });
 
-test('previews mode radios and moves the glow without starting robot motion', async ({ page, network }, testInfo) => {
+test('previews mode radios and moves the selection border without starting robot motion', async ({
+    page,
+    network,
+}, testInfo) => {
     network.use(
         http.get('/api/projects/{project_id}/models', () =>
             HttpResponse.json([getMockedModel({ available_backends: ['onnx'] })])
@@ -156,6 +159,32 @@ test('previews mode radios and moves the glow without starting robot motion', as
     await page.keyboard.press('ArrowDown');
     await expect(page.getByRole('radio', { name: 'Inference', exact: true })).toBeChecked();
     await expect(page.getByRole('button', { name: 'Stop model', exact: true })).toBeHidden();
+});
+
+test('distinguishes neutral borders, selection, hover, and keyboard focus', async ({ page }) => {
+    await page.goto(RECORD_URL);
+    const environment = page.getByRole('region', { name: 'Environment' });
+    const recording = page.getByRole('region', { name: 'Recording', exact: true });
+    const inference = page.getByRole('region', { name: 'Inference', exact: true });
+    await expect(page.getByText(/Once you train a model/)).toBeVisible();
+    await expect(environment).toHaveCSS('border-top-color', 'rgb(69, 88, 115)');
+    await expect(inference).toHaveCSS('border-top-color', 'rgb(69, 88, 115)');
+    await expect(inference).toHaveCSS('border-top-style', 'dashed');
+    await expect(recording).toHaveCSS('border-top-color', 'rgb(75, 156, 245)');
+    await expect(recording).toHaveCSS('box-shadow', 'none');
+    await expect(page.getByRole('region', { name: 'Episode controls' })).toHaveCSS(
+        'border-top-color',
+        'rgb(54, 68, 89)'
+    );
+    await inference.hover();
+    await expect(inference).toHaveCSS('border-top-color', 'rgb(92, 117, 153)');
+    await page.getByRole('button', { name: 'Back to dataset' }).focus();
+    await page.getByRole('radio', { name: 'Recording', exact: true }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(inference).toHaveCSS('border-top-color', 'rgb(75, 156, 245)');
+    await expect(inference).toHaveCSS('outline-style', 'solid');
+    await expect(inference).toHaveCSS('outline-width', '2px');
+    expect(controlCommandCount).toBe(0);
 });
 
 test('stacks setup below the live views on narrower screens', async ({ page }, testInfo) => {
