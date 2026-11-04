@@ -1,10 +1,10 @@
-.robots {
+.devices {
     display: flex;
     flex-direction: column;
     gap: var(--spectrum-global-dimension-size-100);
 }
 
-.robotCard {
+.deviceCard {
     display: flex;
     flex-direction: column;
     gap: var(--spectrum-global-dimension-size-100);
@@ -14,25 +14,51 @@
     border-radius: var(--spectrum-global-dimension-size-75);
 }
 
-.robotCard[data-state='error'] {
+.deviceCard[data-state='error'] {
     border-color: var(--spectrum-global-color-red-600);
 }
 
-.robotSummary {
+.deviceSummary {
     display: flex;
     align-items: center;
     gap: var(--spectrum-global-dimension-size-100);
     min-width: 0;
 }
 
-.thumbnail {
-    width: var(--spectrum-global-dimension-size-400);
-    height: var(--spectrum-global-dimension-size-400);
+.thumbnailTile {
+    display: grid;
+    place-items: center;
+    width: var(--spectrum-global-dimension-size-500);
+    height: var(--spectrum-global-dimension-size-500);
+    border-radius: var(--spectrum-global-dimension-size-75);
+    background: color-mix(in srgb, var(--spectrum-global-color-purple-600, #a68aff) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--spectrum-global-color-purple-600, #a68aff) 40%, transparent);
+    flex: none;
+}
+
+.thumbnailTile[data-kind='leader'] {
+    background: color-mix(in srgb, var(--spectrum-global-color-blue-600) 18%, transparent);
+    border-color: color-mix(in srgb, var(--spectrum-global-color-blue-600) 40%, transparent);
+}
+
+.thumbnailTile[data-kind='leader'] img {
+    transform: scaleX(-1);
+}
+
+.thumbnailTile[data-kind='camera'] {
+    background: color-mix(in srgb, var(--spectrum-global-color-seafoam-600, #35bca5) 18%, transparent);
+    border-color: color-mix(in srgb, var(--spectrum-global-color-seafoam-600, #35bca5) 40%, transparent);
+}
+
+.thumbnail,
+.cameraIcon {
+    width: var(--spectrum-global-dimension-size-350);
+    height: var(--spectrum-global-dimension-size-350);
     object-fit: contain;
     flex: none;
 }
 
-.robotCopy {
+.deviceCopy {
     display: flex;
     flex-direction: column;
     gap: var(--spectrum-global-dimension-size-25);
@@ -40,12 +66,12 @@
     min-width: 0;
 }
 
-.robotName {
+.deviceName {
     font-weight: 500;
     overflow-wrap: anywhere;
 }
 
-.robotRole,
+.deviceRole,
 .activity {
     color: var(--spectrum-global-color-gray-700);
     font-size: var(--spectrum-global-dimension-font-size-75);

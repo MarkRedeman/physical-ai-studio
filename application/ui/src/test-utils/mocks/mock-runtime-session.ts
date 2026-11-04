@@ -1,4 +1,18 @@
-import { SchemaSessionDataset, SchemaSessionEnvironment, SchemaSessionState } from '../../api/openapi-spec';
+import {
+    SchemaSessionCamera,
+    SchemaSessionDataset,
+    SchemaSessionEnvironment,
+    SchemaSessionState,
+} from '../../api/openapi-spec';
+
+export const getMockedSessionCamera = (overrides: Partial<SchemaSessionCamera> = {}): SchemaSessionCamera => ({
+    camera_id: 'camera-1',
+    name: 'Wrist camera',
+    key: 'wrist',
+    width: 640,
+    height: 480,
+    ...overrides,
+});
 
 export const getMockedSessionEnvironment = (
     overrides: Partial<SchemaSessionEnvironment> = {}

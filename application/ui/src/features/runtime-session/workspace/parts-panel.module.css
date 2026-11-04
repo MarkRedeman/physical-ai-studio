@@ -1,0 +1,12 @@
+.resourceName {
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.resourceDetail {
+    margin-top: var(--spectrum-global-dimension-size-50);
+    color: var(--spectrum-global-color-gray-700);
+    font-size: var(--spectrum-global-dimension-font-size-75);
+    line-height: 1.5;
+}

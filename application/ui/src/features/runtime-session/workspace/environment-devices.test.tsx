@@ -9,7 +9,7 @@ import { getMockedSessionEnvironment } from '../../../test-utils/mocks/mock-runt
 import { render } from '../../../test-utils/render';
 import { TELEOP_CONTROL } from '../cells/robot-cell';
 import { Statuses } from '../runtime-session-provider';
-import { EnvironmentRobots } from './environment-robots';
+import { EnvironmentDevices } from './environment-devices';
 
 const statuses: Statuses = {
     'environment/follower': { type: 'status', component: 'environment/follower', state: 'running' },
@@ -17,7 +17,7 @@ const statuses: Statuses = {
 };
 const renderRobots = (control: SchemaSessionState['control'] = null, overrides: Statuses = {}) =>
     render(
-        <EnvironmentRobots
+        <EnvironmentDevices
             environment={getMockedSessionEnvironment({ leader_id: 'leader-1' })}
             statuses={{ ...statuses, ...overrides }}
             control={control}
