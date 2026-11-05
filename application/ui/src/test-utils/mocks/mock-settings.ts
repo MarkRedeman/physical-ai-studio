@@ -1,4 +1,4 @@
-import { SchemaRerunSettings, SchemaUserSettingsResponse, SchemaUserSettingsResponse } from '../../api/openapi-spec';
+import { SchemaRerunSettings, SchemaUserSettingsResponse } from '../../api/openapi-spec';
 
 export const getMockedRerunSettings = (overrides: Partial<SchemaRerunSettings> = {}): SchemaRerunSettings => ({
     enabled: true,
@@ -28,11 +28,10 @@ export const getMockedUserSettings = (
         trainer_shm_size_gb: 32,
     },
     hotkeys: { bindings: {} },
-    rerun: { enabled: false, mode: 'spawn', open_viewer: false, spawn_port: 9876, connect_addr: '127.0.0.1:9876' },
     rerun: getMockedRerunSettings(),
     ...overrides,
 });
 
 export const getMockedSettings = (overrides: Partial<SchemaUserSettingsResponse> = {}): SchemaUserSettingsResponse => ({
-    ...getMockedRerunSettings(overrides),
+    ...getMockedUserSettings(overrides),
 });

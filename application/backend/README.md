@@ -28,11 +28,13 @@ backend/src/
 ```
 
 `core/scheduler.py` polls SQLite in a backend thread and starts a short-lived
-process for each runnable training job or dataset-import step. Idle Studio
-instances do not run training or import workers. Local training runs one job at
-a time; remote training reserves each trainer/GPU target independently. One
-import can run alongside training, and no import worker stays alive while
-waiting for user review. The scheduler reaps completed processes, reconciles
+process for each runnable training, model-optimization, or dataset-import job.
+Idle Studio instances do not run job workers. Local training and model
+optimization share one exclusive local slot; remote training reserves each
+trainer/GPU target independently. Runnable jobs are considered in submission
+order across job types, so older optimization jobs are not overtaken by newer
+local training jobs. One import can run alongside them, and no import worker
+stays alive while waiting for user review. The scheduler reaps completed processes, reconciles
 abandoned jobs, and stops active workers during application shutdown. Per-job
 multiprocessing events handle cancellation without a manager process. Shutdown
 keeps the API event loop free to drain worker events while joining processes.
@@ -150,6 +152,78 @@ unavailable on network-exposed deployments because the Studio API has no
 authentication. See
 [`docs/explanation/ssh-remote-trainer.md`](docs/explanation/ssh-remote-trainer.md)
 before registering one.
+
+### Export Variants and Optimization
+
+In a model's **Model formats** tab, choose the **Add variant** card, select an
+OpenVINO source export, and choose **Optimize to INT8**. Studio queues an
+`optimize_model` job and compresses the policy's weights
+with NNCF's symmetric INT8 mode. The model needs a complete OpenVINO export;
+optimization does not export a missing format or require a calibration dataset.
+NNCF is included in the backend dependencies.
+
+The original model and its training history stay unchanged. New artifacts live
+under `exports/<backend>/variants/<variant>/` on the **same model**, with a
+complete `manifest.json` and all weights, tokenizers, and other dependencies in
+each package. Each published backend/variant has its own compact card with
+package-specific download actions. Choose a variant in the inference dialog or
+runtime workspace. Downloads contain only the selected package; a full model
+download includes all published variants. Unused named variants can be deleted.
+Each card's actions menu includes download, runtime export (where supported),
+and deletion for named variants. **Optimize** opens the same creation dialog
+with that card's export preselected, when further optimization is available.
+**Run** opens inference directly for that card's backend and variant, using the
+preferred compatible device. Robot motion still requires **Play** in the inference
+workspace; opening the screen does not start control automatically.
+
+Supported operations are:
+
+- **Optimize to INT8**: symmetric weight compression of an uncompressed OpenVINO
+  package, including RTC and SnapFlow exports. No checkpoint is required.
+- **Export RTC**: re-export SmolVLA or Pi05 from its matching checkpoint with RTC
+  enabled before tracing. Studio uses Runtime's RTC executor and action queue,
+  carries RTC controls through the inference worker, and measures RPC latency.
+- **Export SnapFlow**: export an existing `snapflow-model.ckpt`. This does not
+  distill ordinary weights: run SnapFlow training first when that checkpoint is
+  missing. New two-phase training runs export the ordinary checkpoint at the
+  backend root and the distilled checkpoint under `variants/snapflow/`.
+
+Canonical combinations are `int8`, `rtc`, `rtc-int8`, `snapflow`,
+`snapflow-int8`, `snapflow-rtc`, and `snapflow-rtc-int8`. Graph-changing operations
+reload a checkpoint before optionally applying INT8; they do not edit an INT8 IR
+to add RTC. Operations with missing prerequisites are disabled with a reason.
+
+Manifests record portable metadata under `studio.variant`; no database migration
+or additional model record is needed. Complete inference-only packages, full
+model folders, and `exports/` directories can be imported. Existing separately
+optimized models and their `studio.optimization` metadata remain supported;
+Studio does not merge or delete them automatically.
+
+Runtime exports flatten the chosen package under `exports/<backend>/` and include
+`runtime.yaml`. RTC downloads also include `run_rtc.py`: use
+`python run_rtc.py --duration-s=60` for shared model/executor latency tracking.
+The plain `physicalai run` recipe supports RTC with a zero-delay estimate because
+JSON/YAML recipes cannot share the same tracker object between components.
+
+Optimization runs locally, including for models trained on remote trainers.
+Its status and cancellation control appear on the source model's OpenVINO card.
+Exclusive filesystem reservations prevent duplicate active target variants. Queued
+cancellations publish job updates immediately, without waiting for a worker.
+
+NNCF cannot be interrupted during compression. Running cancellation requests are
+persisted in the job payload; publication checks that request atomically before
+publishing the variant. Cancellation that wins discards unpublished output;
+if publication wins first, a late cancellation receives a finished-job conflict.
+Failed or interrupted jobs discard unpublished files
+and can be retried; Studio reconciles abandoned jobs after a restart.
+Hidden publication markers prevent incomplete packages from appearing in the
+catalog. Completed publications whose worker died before removing the marker
+are reconciled when the model is next read. Private staging/reservation files
+are never included in downloads.
+
+This is **weight-only** compression, not full INT8 activation quantization.
+Model size, inference speed, and policy accuracy depend on the model and device.
+Validate the optimized policy before deploying it to a robot.
 
 ### Database Migrations
 

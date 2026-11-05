@@ -52,11 +52,14 @@ class TeleopControlConfig(BaseModel):
 class ExecutionConfig(BaseModel):
     """How a model's action chunks are requested, as ``physicalai.runtime`` runs them."""
 
-    mode: Literal["sync", "async"] = "sync"
+    mode: Literal["sync", "async", "rtc"] = "sync"
     """``sync`` infers in the control's tick and waits; ``async`` infers alongside, while the queue plays."""
     request_threshold: float = Field(
         default=0.5, ge=0, le=1, description="Request the next chunk once this fraction of the current one is left"
     )
+    execution_horizon: int = Field(default=1, ge=1)
+    max_guidance_weight: float = Field(default=5.0, ge=0, allow_inf_nan=False)
+    chunk_size: int | None = Field(default=None, ge=2)
 
 
 class ModelControlConfig(BaseModel):
@@ -114,6 +117,7 @@ class LoadModelCommand(BaseModel):
     backend: str
     """One of the model's ``available_backends``."""
     device: str = "auto"
+    variant: str = "original"
 
 
 class UnloadModelCommand(BaseModel):
@@ -250,6 +254,9 @@ class SessionModel(BaseModel):
     name: str
     backend: str
     device: str
+    variant: str = "original"
+    rtc_enabled: bool = False
+    chunk_size: int | None = None
 
 
 class SessionState(BaseModel):

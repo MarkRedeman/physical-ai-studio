@@ -48,7 +48,14 @@ test.beforeEach(async ({ network, page }) => {
                 leader_id: 'leader-1',
                 home_capability: getMockedHomeCapability(),
             }),
-            model: { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' },
+            model: {
+                model_id: 'model-1',
+                name: 'Cube policy',
+                backend: 'onnx',
+                device: 'cpu',
+                variant: 'original',
+                rtc_enabled: false,
+            },
         });
         const publish = () => {
             socket.send(JSON.stringify({ type: 'state', data: state }));

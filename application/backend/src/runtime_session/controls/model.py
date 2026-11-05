@@ -4,7 +4,15 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
-from physicalai.runtime import AsyncExecution, ChunkedActionQueue, LerpSmoother, PolicySource, SyncExecution
+from physicalai.runtime import (
+    AsyncExecution,
+    ChunkedActionQueue,
+    LerpSmoother,
+    PolicySource,
+    RTCActionQueue,
+    RTCExecution,
+    SyncExecution,
+)
 from physicalai.runtime.events import TickEvent
 
 from runtime_session.controls.base import Control
@@ -53,14 +61,26 @@ class ModelControl(Control):
         if model.inputs.state_size != len(store.spec.joint_names):
             raise ValueError("The loaded model does not fit the follower")
         super().__init__(store, config, name="ModelControl", hz=config.hz)
+        if bool(getattr(model, "rtc_enabled", False)) != (config.execution.mode == "rtc"):
+            raise ValueError("RTC exports require RTC execution; other exports require sync or async execution")
         execution = (
             AsyncExecution(request_threshold=config.execution.request_threshold)
             if config.execution.mode == "async"
             else SyncExecution(request_threshold=config.execution.request_threshold)
         )
-        self.source = PolicySource(
-            cast("Any", model), execution, ChunkedActionQueue(smoother=LerpSmoother()), task=config.task or None
-        )
+        queue = ChunkedActionQueue(smoother=LerpSmoother())
+        if config.execution.mode == "rtc":
+            if model.chunk_size is None:
+                raise ValueError("RTC export must declare its action chunk size")
+            execution = RTCExecution(
+                chunk_size=model.chunk_size,
+                execution_horizon=config.execution.execution_horizon,
+                max_guidance_weight=config.execution.max_guidance_weight,
+                fps=config.hz,
+                latency_tracker=model.latency_tracker,
+            )
+            queue = RTCActionQueue()
+        self.source = PolicySource(cast("Any", model), execution, queue, task=config.task or None)
         self.step = 0
         self.grace_s = config.grace_s
         self.started_at = 0.0
@@ -85,7 +105,6 @@ class ModelControl(Control):
         action = self.source.update(observation, {}, self.step)
         if self.should_stop():
             return  # A slow prediction must not publish an action after a takeover requested stop.
-        self.step += 1
         due = max(time.monotonic() + 1 / self.hz, self.started_at + self.grace_s)
         self.store.write(ACTION, action, timestamp=due)
         if self._events is not None:

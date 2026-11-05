@@ -59,6 +59,12 @@ const useInferenceState = () => {
     const [task, setTask] = useState(defaultTask);
     const [executionMode, setExecutionMode] = useState<SchemaExecutionConfig['mode']>('sync');
     const [threshold, setThreshold] = useState(0.5);
+    const [horizon, setHorizon] = useState(1);
+    const [guidance, setGuidance] = useState(5);
+    const rtcEnabled = state?.model?.rtc_enabled ?? false;
+    const maxHorizon = Math.max(1, Math.floor((state?.model?.chunk_size ?? 2) / 2));
+    const effectiveHorizon = Math.min(horizon, maxHorizon);
+    const effectiveMode = rtcEnabled ? 'rtc' : executionMode === 'rtc' ? 'sync' : executionMode;
     // Use the model's training fps once exports record it.
     const [hz, setHz] = useState(30);
     useEffect(() => setTask(defaultTask), [defaultTask]);
@@ -80,7 +86,12 @@ const useInferenceState = () => {
             type: 'model',
             task,
             hz,
-            execution: { mode: executionMode, request_threshold: threshold },
+            execution: {
+                mode: effectiveMode,
+                request_threshold: threshold,
+                execution_horizon: effectiveHorizon,
+                max_guidance_weight: guidance,
+            },
             // Ease onto model actions instead of jumping from the follower's current position.
             grace_s: 3,
         };
@@ -95,6 +106,13 @@ const useInferenceState = () => {
         task,
         setTask,
         executionMode,
+        effectiveMode,
+        rtcEnabled,
+        maxHorizon,
+        effectiveHorizon,
+        setHorizon,
+        guidance,
+        setGuidance,
         setExecutionMode,
         threshold,
         setThreshold,
@@ -144,7 +162,7 @@ export const InferenceModelSummary = ({
             <PartRow
                 label='Model'
                 name={model.name}
-                detail={`${info?.label ?? model.backend} · ${model.device}`}
+                detail={`${info?.label ?? model.backend} · ${model.variant ?? 'original'} · ${model.device}`}
                 error={error}
                 isPending={isPending}
             />
@@ -154,8 +172,23 @@ export const InferenceModelSummary = ({
 
 /** Settings stay visible while the selected mode determines the toolbar's primary action. */
 export const InferenceMode = () => {
-    const { task, setTask, executionMode, setExecutionMode, hz, setHz, threshold, setThreshold, isLocked } =
-        useInference();
+    const {
+        task,
+        setTask,
+        effectiveMode,
+        setExecutionMode,
+        rtcEnabled,
+        maxHorizon,
+        effectiveHorizon,
+        setHorizon,
+        guidance,
+        setGuidance,
+        hz,
+        setHz,
+        threshold,
+        setThreshold,
+        isLocked,
+    } = useInference();
     return (
         <Flex direction='column' gap='size-150'>
             <div data-mode-interactive>
@@ -166,15 +199,17 @@ export const InferenceMode = () => {
                     label='Execution'
                     orientation='horizontal'
                     width='100%'
-                    value={executionMode}
+                    value={effectiveMode}
                     onChange={(value) => setExecutionMode(value as SchemaExecutionConfig['mode'])}
-                    isDisabled={isLocked}
+                    isDisabled={isLocked || rtcEnabled}
                 >
-                    {EXECUTION_MODES.map((item) => (
-                        <Radio key={item.key} value={item.key}>
-                            {item.label}
-                        </Radio>
-                    ))}
+                    {(rtcEnabled ? [{ key: 'rtc', label: 'Real-time chunking (RTC)' }] : EXECUTION_MODES).map(
+                        (item) => (
+                            <Radio key={item.key} value={item.key}>
+                                {item.label}
+                            </Radio>
+                        )
+                    )}
                 </RadioGroup>
             </div>
             <div data-mode-interactive>
@@ -183,7 +218,8 @@ export const InferenceMode = () => {
                         <Flex alignItems='center' gap='size-100'>
                             <Text UNSAFE_className={settingsClasses.disclosureText}>Execution settings</Text>
                             <Text UNSAFE_className={settingsClasses.hint}>
-                                {hz} Hz · {Math.round(threshold * 100)}%
+                                {hz} Hz ·{' '}
+                                {rtcEnabled ? `RTC horizon ${effectiveHorizon}` : `${Math.round(threshold * 100)}%`}
                             </Text>
                         </Flex>
                     </DisclosureTitle>
@@ -203,22 +239,48 @@ export const InferenceMode = () => {
                                 getValueLabel={(value) => `${value} Hz`}
                                 isDisabled={isLocked}
                             />
-                            <Flex direction='column' gap='size-50'>
-                                <Slider
-                                    label='Request threshold'
-                                    width='100%'
-                                    minValue={0}
-                                    maxValue={1}
-                                    step={0.05}
-                                    value={threshold}
-                                    onChange={setThreshold}
-                                    formatOptions={{ style: 'percent' }}
-                                    isDisabled={isLocked}
-                                />
-                                <Text UNSAFE_className={settingsClasses.guidance}>
-                                    Request the next action chunk when this fraction remains.
-                                </Text>
-                            </Flex>
+                            {!rtcEnabled && (
+                                <Flex direction='column' gap='size-50'>
+                                    <Slider
+                                        label='Request threshold'
+                                        width='100%'
+                                        minValue={0}
+                                        maxValue={1}
+                                        step={0.05}
+                                        value={threshold}
+                                        onChange={setThreshold}
+                                        formatOptions={{ style: 'percent' }}
+                                        isDisabled={isLocked}
+                                    />
+                                    <Text UNSAFE_className={settingsClasses.guidance}>
+                                        Request the next action chunk when this fraction remains.
+                                    </Text>
+                                </Flex>
+                            )}
+                            {rtcEnabled && (
+                                <>
+                                    <Slider
+                                        label='RTC execution horizon'
+                                        width='100%'
+                                        minValue={1}
+                                        maxValue={maxHorizon}
+                                        step={1}
+                                        value={effectiveHorizon}
+                                        onChange={setHorizon}
+                                        isDisabled={isLocked}
+                                    />
+                                    <Slider
+                                        label='RTC guidance weight'
+                                        width='100%'
+                                        minValue={0}
+                                        maxValue={10}
+                                        step={0.5}
+                                        value={guidance}
+                                        onChange={setGuidance}
+                                        isDisabled={isLocked}
+                                    />
+                                </>
+                            )}
                         </Flex>
                     </DisclosurePanel>
                 </Disclosure>

@@ -2,7 +2,11 @@ import { rs } from '@rstest/core';
 import { screen } from '@testing-library/react';
 
 import { getMockedInferenceMetrics } from '../../../test-utils/mocks/mock-inference-metrics';
-import { getMockedRuntimeSession } from '../../../test-utils/mocks/mock-runtime-session';
+import {
+    getMockedExecutionConfig,
+    getMockedRuntimeSession,
+    getMockedSessionModel,
+} from '../../../test-utils/mocks/mock-runtime-session';
 import { render } from '../../../test-utils/render';
 import { InferenceMetricsSample, Statuses } from '../runtime-session-provider';
 import { InferenceLatencyFooter } from './inference-latency-footer';
@@ -21,13 +25,13 @@ rs.mock('../runtime-session-provider', () => ({
 beforeEach(() => {
     statuses = {};
     state = getMockedRuntimeSession({
-        model: { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' },
+        model: getMockedSessionModel(),
         control: {
             type: 'model',
             task: 'Pick',
             hz: 30,
             grace_s: 3,
-            execution: { mode: 'sync', request_threshold: 0.5 },
+            execution: getMockedExecutionConfig(),
         },
     });
     inferenceMetrics.value = { data: getMockedInferenceMetrics(), receivedAt: Date.now() };

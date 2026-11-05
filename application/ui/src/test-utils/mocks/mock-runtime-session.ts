@@ -1,9 +1,29 @@
 import {
+    SchemaExecutionConfig,
     SchemaSessionCamera,
     SchemaSessionDataset,
     SchemaSessionEnvironment,
+    SchemaSessionModel,
     SchemaSessionState,
 } from '../../api/openapi-spec';
+
+export const getMockedExecutionConfig = (overrides: Partial<SchemaExecutionConfig> = {}): SchemaExecutionConfig => ({
+    mode: 'sync',
+    request_threshold: 0.5,
+    execution_horizon: 1,
+    max_guidance_weight: 5,
+    ...overrides,
+});
+
+export const getMockedSessionModel = (overrides: Partial<SchemaSessionModel> = {}): SchemaSessionModel => ({
+    model_id: 'model-1',
+    name: 'Cube policy',
+    backend: 'onnx',
+    device: 'cpu',
+    variant: 'original',
+    rtc_enabled: false,
+    ...overrides,
+});
 
 export const getMockedSessionCamera = (overrides: Partial<SchemaSessionCamera> = {}): SchemaSessionCamera => ({
     camera_id: 'camera-1',

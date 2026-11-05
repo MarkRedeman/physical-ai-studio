@@ -6,16 +6,18 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
+
 from exceptions import InvalidArchiveError
 from schemas import Model, TrainJob
 from schemas.base_job import JobStatus
 from schemas.dataset import Dataset
 from schemas.job import LocalTrainJobPayload
+from schemas.model import ModelOptimizationInfo
+from schemas.model_variant import VARIANT_IDS, read_package, variant_info
 from settings import get_settings
 
-# Imported models must retain the checkpoint needed to resume training. Logger
-# artifacts are optional and deployment exports may target any supported backend.
-_REQUIRED_FILES = ("model.ckpt",)
+# A complete export is sufficient for inference-only imports.
 _EXPORT_BACKENDS = ("torch", "openvino", "onnx", "executorch")
 _SUPPORTED_POLICIES = frozenset({"act", "smolvla", "pi05", "rldx1", "molmoact2", "xr0"})
 
@@ -87,28 +89,82 @@ class ModelImportService:
         model_dir = settings.models_dir / str(uuid4())
 
         reader = DirectoryModelReader(source_dir)
+        standalone = reader.read_json("manifest.json")
+        standalone_backend = None
+        optimization: ModelOptimizationInfo | None = None
+        if standalone is not None:
+            standalone_backend = next(
+                (
+                    backend
+                    for backend in _EXPORT_BACKENDS
+                    if backend in standalone.get("model", {}).get("artifacts", {})
+                ),
+                None,
+            )
+            if standalone_backend is None:
+                raise InvalidArchiveError("Package does not contain a supported backend")
+            try:
+                read_package(source_dir, standalone_backend)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise InvalidArchiveError(f"Invalid standalone export: {exc}") from exc
+            policy = self._infer_policy(standalone, "manifest.json")
+            optimization = None
+        else:
+            policy = None
         source_is_exports_dir = self._is_exports_directory(reader)
-        policy = self._inspect_model(reader, source_is_exports_dir=source_is_exports_dir)
+        if policy is None:
+            policy, optimization = self._inspect_model(reader, source_is_exports_dir=source_is_exports_dir)
 
         try:
             destination = model_dir / "exports" if source_is_exports_dir else model_dir
+            if standalone_backend is not None:
+                destination = model_dir / "exports" / standalone_backend
             if move:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 await asyncio.to_thread(shutil.move, str(source_dir), str(destination))
             else:
-                await asyncio.to_thread(shutil.copytree, source_dir, destination)
+                await asyncio.to_thread(
+                    shutil.copytree, source_dir, destination, ignore=shutil.ignore_patterns(".variant-reservations")
+                )
+
+            self._validate_packages(model_dir, policy)
 
             return await self._finalize_import(
                 model_dir=model_dir,
                 dataset=dataset,
                 model_name=model_name,
                 policy=policy,
+                optimization=optimization,
                 base_model_id=base_model_id,
                 version=version,
             )
         except Exception:
             shutil.rmtree(model_dir, ignore_errors=True)
             raise
+
+    def _validate_packages(self, model_dir: Path, policy: str) -> None:
+        """Validate every included package, not just the first manifest."""
+        from schemas.model_variant import export_directory
+
+        for backend in _EXPORT_BACKENDS:
+            root = model_dir / "exports" / backend
+            directories = [root, *sorted((root / "variants").glob("*"))]
+            for directory in directories:
+                if not directory.is_dir():
+                    continue
+                if directory == root and not (directory / "manifest.json").exists():
+                    continue
+                try:
+                    variant = directory.name if directory != root else "original"
+                    export_directory(model_dir, backend, variant)
+                    if (directory / ".unpublished").exists():
+                        raise ValueError("Unpublished exports cannot be imported")
+                    manifest = read_package(directory, backend)
+                    variant_info(manifest, variant)
+                    if self._infer_policy(manifest, str(directory)) != policy:
+                        raise ValueError("Export variants must belong to the same policy")
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    raise InvalidArchiveError(f"Invalid export package: {exc}") from exc
 
     async def _finalize_import(
         self,
@@ -117,6 +173,7 @@ class ModelImportService:
         dataset: Dataset,
         model_name: str,
         policy: str,
+        optimization: ModelOptimizationInfo | None,
         base_model_id: UUID | None,
         version: int,
     ) -> Model:
@@ -151,27 +208,42 @@ class ModelImportService:
             # from what was actually used for training (possibly on another machine).
             snapshot_id=None,
             policy=policy,
-            properties={},
+            properties={"optimization": optimization.model_dump(mode="json")} if optimization is not None else {},
             train_job_id=job.id,
             parent_model_id=base_model_id,
             version=version,
             created_at=None,
         )
+        if any(
+            variant_info(read_package(directory, backend), variant).checkpoint_kind == "snapflow"
+            for (backend, variant), directory in model.export_packages().items()
+        ):
+            model.properties["snapflow_enabled"] = True
         return await self._persist_import(job, model)
 
     def _is_exports_directory(self, reader: ModelReader) -> bool:
         """Return whether the reader is rooted at an ``exports`` directory."""
-        return any(reader.file_exists(f"{backend}/manifest.json") for backend in _EXPORT_BACKENDS)
+        return any(
+            reader.file_exists(path)
+            for backend in _EXPORT_BACKENDS
+            for path in (
+                f"{backend}/manifest.json",
+                *(f"{backend}/variants/{variant}/manifest.json" for variant in VARIANT_IDS - {"original"}),
+            )
+        )
 
-    def _inspect_model(self, reader: ModelReader, *, source_is_exports_dir: bool) -> str:
-        """Validate model structure and infer policy."""
-        if not source_is_exports_dir:
-            for required in _REQUIRED_FILES:
-                if not reader.file_exists(required):
-                    raise InvalidArchiveError(f"Model is missing required file '{required}'")
-
-        for backend in _EXPORT_BACKENDS:
-            manifest_path = f"{backend}/manifest.json" if source_is_exports_dir else f"exports/{backend}/manifest.json"
+    def _inspect_model(
+        self, reader: ModelReader, *, source_is_exports_dir: bool
+    ) -> tuple[str, ModelOptimizationInfo | None]:
+        """Validate model structure and read policy identity and optimization metadata."""
+        candidates = [(backend, f"{backend}/manifest.json") for backend in _EXPORT_BACKENDS]
+        candidates += [
+            (backend, f"{backend}/variants/{variant}/manifest.json")
+            for backend in _EXPORT_BACKENDS
+            for variant in sorted(VARIANT_IDS - {"original"})
+        ]
+        for backend, relative_manifest in candidates:
+            manifest_path = relative_manifest if source_is_exports_dir else f"exports/{relative_manifest}"
             if not reader.file_exists(manifest_path):
                 continue
             manifest = self._read_manifest(reader, manifest_path)
@@ -182,7 +254,16 @@ class ModelImportService:
                 manifest_path,
                 source_is_exports_dir=source_is_exports_dir,
             )
-            return self._infer_policy(manifest, manifest_path)
+            studio = manifest.get("studio", {})
+            if not isinstance(studio, dict):
+                raise InvalidArchiveError(f"Manifest '{manifest_path}' field 'studio' must be an object")
+            optimization = None
+            if "optimization" in studio:
+                try:
+                    optimization = ModelOptimizationInfo.model_validate(studio["optimization"])
+                except ValidationError as exc:
+                    raise InvalidArchiveError(f"Manifest '{manifest_path}' has invalid optimization metadata") from exc
+            return self._infer_policy(manifest, manifest_path), optimization
 
         raise InvalidArchiveError("Model is missing a supported export manifest under 'exports/'")
 
@@ -202,11 +283,11 @@ class ModelImportService:
         backend: str,
         manifest_path: str,
         *,
-        source_is_exports_dir: bool,
+        source_is_exports_dir: bool,  # noqa: ARG002 - retained for reader compatibility
     ) -> None:
         """Validate that a manifest references an existing backend artifact."""
         artifact = self._extract_backend_artifact_path(manifest, backend, manifest_path)
-        artifact_path = f"{backend}/{artifact}" if source_is_exports_dir else f"exports/{backend}/{artifact}"
+        artifact_path = (Path(manifest_path).parent / artifact).as_posix()
         if not reader.file_exists(artifact_path):
             raise InvalidArchiveError(f"Manifest '{manifest_path}' references missing {backend} artifact '{artifact}'")
 

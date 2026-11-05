@@ -28,7 +28,6 @@ import datetime
 import time
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, cast
 from uuid import uuid4
 
@@ -268,7 +267,9 @@ class RuntimeSession:
         await self.load_dataset(await self._resolve.dataset(dataset_id), fps)
 
     async def _load_model_command(self, command: LoadModelCommand) -> None:
-        await self.load_model(await self._resolve.model(command.model_id), command.backend, command.device)
+        await self.load_model(
+            await self._resolve.model(command.model_id), command.backend, command.device, command.variant
+        )
 
     @property
     def label(self) -> str:
@@ -422,7 +423,7 @@ class RuntimeSession:
     async def _reload_model(self, model: ProcessModel) -> None:
         """Hold the lock. Load ``model`` again on a new store; a failure is reported, not raised."""
         try:
-            await self._model.load(self._process_model(model.model, model.backend, model.device))
+            await self._model.load(self._process_model(model.model, model.backend, model.device, model.variant))
         except Exception as error:
             logger.opt(exception=error).error("Session {} could not load model {!r} again", self.id, model.model.name)
             self._emit(
@@ -615,7 +616,7 @@ class RuntimeSession:
         # The store is there with any environment, even one that failed to connect.
         return Recording(dataset, self.id, cast("Store", self._store), robot_type, fps)
 
-    async def load_model(self, model: Model, backend: str, device: str) -> None:
+    async def load_model(self, model: Model, backend: str, device: str, variant: str = "original") -> None:
         """Load one of ``model``'s exports in its own process, replacing a loaded model.
 
         Raises:
@@ -626,14 +627,15 @@ class RuntimeSession:
         async with self._lock:
             self.require_home_idle()
             environment = self._environment.require("Load an environment first.")
+            candidate = self._process_model(model, backend, device, variant)
             await self._unload_model(environment.environment)
-            await self._model.load(self._process_model(model, backend, device))
+            await self._model.load(candidate)
             logger.info("Session {} loaded model {!r} ({}, {})", self.id, model.name, backend, device)
         self._emit(StateMessage(data=self.state()))
 
-    def _process_model(self, model: Model, backend: str, device: str) -> ProcessModel:
+    def _process_model(self, model: Model, backend: str, device: str, variant: str = "original") -> ProcessModel:
         # The store is there with any environment, even one that failed to connect.
-        return ProcessModel(model, self.id, cast("Store", self._store), backend=backend, device=device)
+        return ProcessModel(model, self.id, cast("Store", self._store), backend=backend, device=device, variant=variant)
 
     async def unload_model(self) -> None:
         """Stop a model control, then the model. A no-op when none is loaded."""
@@ -885,7 +887,7 @@ class RuntimeSession:
 def _model_mismatch(model: ProcessModel, spec: FeatureSpec) -> str | None:
     """Why the loaded model would not fit a store with ``spec``, or ``None``."""
     try:
-        model_inputs(Path(model.model.path) / "exports" / model.backend, spec)
+        model_inputs(model.export_dir, spec)
     except ValueError as error:
         return str(error)
     return None

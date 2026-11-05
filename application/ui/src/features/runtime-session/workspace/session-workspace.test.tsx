@@ -10,7 +10,11 @@ import { server } from '../../../msw-node-setup';
 import { getMockedDataset } from '../../../test-utils/mocks/mock-dataset';
 import { getMockedEpisodes } from '../../../test-utils/mocks/mock-episode';
 import { getMockedModel } from '../../../test-utils/mocks/mock-model';
-import { getMockedRuntimeSession, getMockedSessionDataset } from '../../../test-utils/mocks/mock-runtime-session';
+import {
+    getMockedRuntimeSession,
+    getMockedSessionDataset,
+    getMockedSessionModel,
+} from '../../../test-utils/mocks/mock-runtime-session';
 import { getMockedSettings } from '../../../test-utils/mocks/mock-settings';
 import { render } from '../../../test-utils/render';
 import { Statuses } from '../runtime-session-provider';
@@ -184,6 +188,7 @@ describe('SessionWorkspace', () => {
         await waitFor(() => expect(task).toHaveValue('Pick up the cube'));
         fireEvent.keyDown(task, { key: 'ArrowRight' });
         expect(send).not.toHaveBeenCalled();
+        expect(screen.getByRole('radio', { name: 'Recording' })).toBeChecked();
         fireEvent.keyDown(window, { key: 'ArrowRight' });
         await waitFor(() =>
             expect(send).toHaveBeenCalledExactlyOnceWith({ command: 'start_episode', task: 'Pick up the cube' })
@@ -231,7 +236,7 @@ describe('SessionWorkspace', () => {
     });
 
     it('shows loaded model controls even if the model list is empty', async () => {
-        state.model = { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' };
+        state.model = getMockedSessionModel();
         server.use(
             http.get('/api/models/{model_id}', () =>
                 HttpResponse.json({ model: getMockedModel({ dataset_id: null }), exports: [] })
@@ -252,10 +257,47 @@ describe('SessionWorkspace', () => {
     it('prevents starting model control during an episode', async () => {
         state = getMockedRuntimeSession({
             dataset: getMockedSessionDataset({ is_recording: true }),
-            model: { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' },
+            model: getMockedSessionModel(),
         });
         renderWorkspace();
         expect(await screen.findByRole('radio', { name: 'Inference' })).toBeDisabled();
         expect(screen.queryByText(/before switching modes/)).not.toBeInTheDocument();
+    });
+
+    it('runs an RTC variant through the new inference toolbar and settings panel', async () => {
+        state.model = getMockedSessionModel({
+            backend: 'openvino',
+            device: 'CPU',
+            variant: 'rtc-int8',
+            rtc_enabled: true,
+            chunk_size: 50,
+        });
+        server.use(
+            http.get('/api/models/{model_id}', () =>
+                HttpResponse.json({ model: getMockedModel({ dataset_id: null }), exports: [] })
+            )
+        );
+        const user = userEvent.setup();
+        renderWorkspace();
+        const inference = await screen.findByRole('region', { name: 'Inference' });
+        await user.click(within(inference).getByRole('radio', { name: 'Inference' }));
+        expect(within(inference).getByText('OpenVINO · rtc-int8 · CPU')).toBeVisible();
+        const execution = within(inference).getByRole('radio', { name: 'Real-time chunking (RTC)' });
+        expect(execution).toBeChecked();
+        expect(execution).toBeDisabled();
+        await user.click(within(inference).getByRole('button', { name: /Execution settings/ }));
+        expect(within(inference).getByRole('slider', { name: 'RTC execution horizon' })).toHaveAttribute('max', '25');
+        expect(within(inference).getByRole('slider', { name: 'RTC guidance weight' })).toBeVisible();
+        expect(within(inference).queryByRole('slider', { name: 'Request threshold' })).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Run model' }));
+        expect(send).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                command: 'set_control',
+                reject_open_episode: true,
+                control: expect.objectContaining({
+                    execution: expect.objectContaining({ mode: 'rtc', execution_horizon: 1, max_guidance_weight: 5 }),
+                }),
+            })
+        );
     });
 });

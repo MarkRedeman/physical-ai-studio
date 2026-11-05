@@ -10,6 +10,7 @@ from schemas.aws_auth import AwsAuthenticationIssue
 from schemas.base_job import BaseJob, JobType
 from schemas.dataset_import_job import DatasetImportJobPayload
 from schemas.hardware import DeviceType
+from schemas.model_variant import VariantOperation
 from training.job import PEFT_POLICIES, SNAPFLOW_POLICIES
 
 
@@ -407,10 +408,34 @@ class DatasetImportJob(BaseJob):
     payload: DatasetImportJobPayload
 
 
-JobPayload = LocalTrainJobPayload | RemoteTrainJobPayload | DatasetImportJobPayload
+class OptimizeModelJobPayload(BaseModel):
+    """Create an immutable backend variant without changing model identity.
+
+    ``mode`` is retained for persisted legacy jobs; ``operation`` selects work.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: UUID
+    mode: Literal["int8_sym"] = "int8_sym"
+    backend: ExportBackend = ExportBackend.OPENVINO
+    source_variant: str = "original"
+    operation: VariantOperation = "int8_sym"
+    target_variant: str = "int8"
+    cancellation_requested: bool = Field(
+        default=False, description="Persisted interruption request, checked atomically during model publication"
+    )
+
+
+class OptimizeModelJob(BaseJob):
+    type: Literal[JobType.OPTIMIZE_MODEL] = JobType.OPTIMIZE_MODEL  # type: ignore[valid-type]
+    payload: OptimizeModelJobPayload
+
+
+JobPayload = LocalTrainJobPayload | RemoteTrainJobPayload | DatasetImportJobPayload | OptimizeModelJobPayload
 
 Job = Annotated[
-    TrainJob | DatasetImportJob,
+    TrainJob | DatasetImportJob | OptimizeModelJob,
     Field(discriminator="type"),
 ]
 

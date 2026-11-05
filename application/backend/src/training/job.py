@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import json
 import logging
 import os
 import shutil
@@ -437,6 +438,13 @@ def run_training_job(
         del trainer, datamodule, policy
         _release_memory()
         export_policy = _export_policy(spec, output_dir)
+        if (output_dir / SNAPFLOW_CHECKPOINT_NAME).is_file() and (output_dir / CHECKPOINT_NAME).is_file():
+            _export(export_policy, output_dir, report, spec.export_backends, variant="snapflow")
+            del export_policy
+            _release_memory()
+            export_policy = _load_policy_from_checkpoint(
+                spec.model_copy(update={"compile_model": False}), output_dir / CHECKPOINT_NAME
+            )
         _export(export_policy, output_dir, report, spec.export_backends)
 
 
@@ -628,7 +636,9 @@ def _backend_name(backend: Any) -> str:
     return backend.value if hasattr(backend, "value") else str(backend)
 
 
-def _export(policy: Policy, output_dir: Path, report: ReportFn, requested: list[str] | None = None) -> None:
+def _export(
+    policy: Policy, output_dir: Path, report: ReportFn, requested: list[str] | None = None, *, variant: str = "original"
+) -> None:
     """Export the policy to the requested backends, or to every one it supports.
 
     A requested backend the policy cannot produce is skipped rather than
@@ -657,7 +667,23 @@ def _export(policy: Policy, output_dir: Path, report: ReportFn, requested: list[
         try:
             logger.info("Exporting model to %s format", name)
             report(99, f"Exporting to {name} format", {})
-            policy.export(output_dir / EXPORTS_DIRNAME / name, backend=backend)
+            directory = output_dir / EXPORTS_DIRNAME / name
+            if variant != "original":
+                directory = directory / "variants" / variant
+            policy.export(directory, backend=backend)
+            manifest_path = directory / "manifest.json"
+            if manifest_path.is_file():
+                from schemas.model_variant import VariantInfo
+
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest.setdefault("studio", {})["variant"] = VariantInfo(
+                    id=variant,
+                    checkpoint_kind="snapflow"
+                    if getattr(getattr(policy, "config", None), "snapflow_enabled", False)
+                    else "ordinary",
+                    rtc_enabled=bool(getattr(policy, "rtc_enabled", False)),
+                ).model_dump(mode="json")
+                manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         except ImportError as exc:
             # An optional backend dependency is missing (e.g. executorch on xpu
             # builds). Skip it without a traceback so the run isn't mistaken

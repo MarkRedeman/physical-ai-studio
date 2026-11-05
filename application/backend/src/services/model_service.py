@@ -1,14 +1,20 @@
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 import yaml
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import ResourceNotFoundError, ResourceType
+from db.schema import JobDB
+from exceptions import InvalidResourceError, ResourceInUseError, ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
+from schemas.hardware import InferenceBackend
 from schemas.job import TrainJob
-from schemas.model import BackendExportDetail, Model, TrainingSummary
+from schemas.model import BackendExportDetail, BackendIOSpec, ExportVariantDetail, Model, TrainingSummary
+from schemas.model_variant import export_directory, package_files, read_package, variant_info
 
 
 class ModelService:
@@ -17,14 +23,39 @@ class ModelService:
         self.repo = ModelRepository(session)
 
     async def get_model_list(self) -> list[Model]:
-        return await self.repo.get_all()
+        return await self._publication_state(await self.repo.get_all())
 
     async def get_model_by_id(self, model_id: UUID) -> Model:
         model = await self.repo.get_by_id(model_id)
         if model is None:
             raise ResourceNotFoundError(ResourceType.MODEL, str(model_id))
 
-        return model
+        return (await self._publication_state([model]))[0]
+
+    async def _publication_state(self, models: list[Model]) -> list[Model]:
+        # A worker can die after committing completion but before removing its
+        # publication marker. Reconcile lazily, without a new database schema.
+        for model in models:
+            for marker in (Path(model.path) / "exports").glob("*/variants/*/.unpublished"):
+                try:
+                    job_id = UUID(marker.read_text(encoding="utf-8"))
+                    backend, variant = marker.parent.parent.parent.name, marker.parent.name
+                    directory = export_directory(Path(model.path), backend, variant)
+                    metadata = variant_info(read_package(directory, backend), variant)
+                    job = await self.session.scalar(select(JobDB).where(JobDB.id == str(job_id)))
+                    payload = cast("dict[str, object]", job.payload) if job is not None else {}
+                    if (
+                        job is not None
+                        and job.status == "completed"
+                        and metadata.job_id == job_id
+                        and payload.get("model_id") == str(model.id)
+                        and payload.get("backend", "openvino") == backend
+                        and payload.get("target_variant", "int8") == variant
+                    ):
+                        marker.unlink(missing_ok=True)
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue
+        return models
 
     async def create_model(self, model: Model) -> Model:
         return await self.repo.save(model)
@@ -33,6 +64,7 @@ class ModelService:
         return await self.repo.update(model, update)
 
     async def delete_model(self, model: Model) -> None:
+        await self._require_no_active_variant_jobs(model)
         snapshot_repo = SnapshotRepository(self.session)
         await self.repo.delete_by_id(model.id)
 
@@ -42,8 +74,28 @@ class ModelService:
         model_path = Path(model.path).expanduser()
         shutil.rmtree(model_path)
 
+    async def delete_variant(self, model: Model, backend: str, variant: str) -> None:
+        """Remove an unused named package, never the original backend export."""
+        if variant == "original":
+            raise InvalidResourceError("Model", "The original export cannot be deleted independently")
+        directory = self.resolve_export(model, backend, variant)
+        await self._require_no_active_variant_jobs(model)
+        shutil.rmtree(directory)
+
+    async def _require_no_active_variant_jobs(self, model: Model) -> None:
+        active = await self.session.scalar(
+            select(JobDB.id)
+            .where(
+                JobDB.status.in_(("pending", "running")),
+                func.json_extract(JobDB.payload, "$.model_id") == str(model.id),
+            )
+            .limit(1)
+        )
+        if active is not None:
+            raise ResourceInUseError(ResourceType.MODEL, str(model.id))
+
     async def get_project_models(self, project_id: UUID) -> list[Model]:
-        return await self.repo.get_project_models(project_id)
+        return await self._publication_state(await self.repo.get_project_models(project_id))
 
     @staticmethod
     def get_backend_details(model: Model) -> list[BackendExportDetail]:
@@ -52,13 +104,57 @@ class ModelService:
         if not exports_dir.is_dir():
             return []
 
-        details: list[BackendExportDetail] = []
-        for backend_dir in sorted(exports_dir.iterdir()):
-            detail = BackendExportDetail.from_backend_dir(backend_dir)
-            if detail is not None:
-                details.append(detail)
+        from services.model_optimization_service import ModelOptimizationService
 
-        return details
+        grouped: dict[str, list[ExportVariantDetail]] = {}
+        packages = model.export_packages()
+        for (backend, variant), directory in sorted(
+            packages.items(), key=lambda item: (item[0][0], item[0][1] != "original", item[0][1])
+        ):
+            manifest = read_package(directory, backend)
+            info = variant_info(manifest, variant)
+            # Legacy roots can already contain distilled weights.
+            if variant == "original" and model.snapflow_enabled and "variant" not in manifest.get("studio", {}):
+                info.checkpoint_kind = "snapflow"
+            files = package_files(directory)
+            grouped.setdefault(backend, []).append(
+                ExportVariantDetail(
+                    **info.model_dump(),
+                    label="Original (SnapFlow)"
+                    if variant == "original" and info.checkpoint_kind == "snapflow"
+                    else "Original"
+                    if variant == "original"
+                    else " + ".join(
+                        part.upper() if part == "rtc" else "INT8" if part == "int8" else "SnapFlow"
+                        for part in variant.split("-")
+                    ),
+                    size_bytes=sum(path.stat().st_size for path in files),
+                    file_count=len(files),
+                    exported_at=info.created_at
+                    or datetime.fromtimestamp((directory / "manifest.json").stat().st_mtime, tz=UTC),
+                    io_spec=BackendIOSpec.from_manifest(manifest),
+                    can_run_in_studio=backend in {supported.value for supported in InferenceBackend},
+                    available_operations=ModelOptimizationService.operations(model, backend, info, packages),
+                )
+            )
+        return [
+            BackendExportDetail(
+                type=backend,
+                size_bytes=next((v.size_bytes for v in variants if v.id == "original"), 0),
+                file_count=next((v.file_count for v in variants if v.id == "original"), 0),
+                exported_at=next((v.exported_at for v in variants if v.id == "original"), None),
+                io_spec=next((v.io_spec for v in variants if v.id == "original"), None),
+                variants=variants,
+            )
+            for backend, variants in sorted(grouped.items())
+        ]
+
+    @staticmethod
+    def resolve_export(model: Model, backend: str, variant: str = "original") -> Path:
+        directory = model.export_packages().get((backend, variant))
+        if directory is None:
+            raise ResourceNotFoundError(ResourceType.MODEL, f"{model.id}/{backend}/{variant}")
+        return directory
 
     @staticmethod
     def get_hparams(model: Model) -> dict | None:

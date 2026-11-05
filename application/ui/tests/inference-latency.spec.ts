@@ -44,7 +44,14 @@ test('shows live chunk latency and clears it when inference stops or restarts', 
     await page.routeWebSocket('**/api/**', (socket) => {
         if (!socket.url().includes('/runtime/ws')) return;
         const state = getMockedRuntimeSession({
-            model: { model_id: 'model-1', name: 'Cube policy', backend: 'onnx', device: 'cpu' },
+            model: {
+                model_id: 'model-1',
+                name: 'Cube policy',
+                backend: 'onnx',
+                device: 'cpu',
+                variant: 'original',
+                rtc_enabled: false,
+            },
         });
         let run = 0;
         const publishState = () => socket.send(JSON.stringify({ type: 'state', data: state }));

@@ -1,6 +1,7 @@
 """Unit tests for ModelService."""
 
 import importlib.util
+import json
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ import yaml
 from lightning.pytorch.core.saving import save_hparams_to_yaml
 
 from schemas.model import Model
+from schemas.model_variant import VariantInfo, export_directory
 from services.model_service import ModelService
 
 
@@ -119,17 +121,53 @@ def test_get_hparams_parses_hparams_written_with_omegaconf(tmp_path) -> None:
     assert hparams == {"chunk_size": [384, 384], "learning_rate": 0.0001}
 
 
-def test_get_backend_details_delegates_to_backend_export_detail(tmp_path) -> None:
+def test_get_backend_details_ignores_incomplete_backend(tmp_path) -> None:
     model = _make_model()
     model.path = str(tmp_path)
     backend_dir = tmp_path / "exports" / "torch"
     backend_dir.mkdir(parents=True)
-    with patch(
-        "services.model_service.BackendExportDetail.from_backend_dir", return_value=None
-    ) as mock_from_backend_dir:
-        ModelService.get_backend_details(model)
+    assert ModelService.get_backend_details(model) == []
 
-    mock_from_backend_dir.assert_called_once_with(backend_dir)
+
+@pytest.mark.parametrize("variant", ["original", "snapflow"])
+@pytest.mark.parametrize(
+    "backend,extension,runnable",
+    [
+        ("torch", ".pt", True),
+        ("openvino", ".xml", True),
+        ("onnx", ".onnx", False),
+        ("executorch", ".pte", False),
+    ],
+)
+def test_export_runnability_matches_studio_backend_support(tmp_path, backend, extension, runnable, variant) -> None:
+    model = _make_model()
+    model.path = str(tmp_path)
+    model.policy = "smolvla"
+    directory = export_directory(tmp_path, backend, variant)
+    directory.mkdir(parents=True)
+    artifact = f"model{extension}"
+    (directory / artifact).write_bytes(b"export")
+    if backend == "openvino":
+        (directory / "model.bin").write_bytes(b"weights")
+    (directory / "manifest.json").write_text(
+        json.dumps(
+            {
+                "format": "policy_package",
+                "policy": {"name": model.policy},
+                "model": {"artifacts": {backend: artifact}},
+                "studio": {
+                    "variant": VariantInfo(
+                        id=variant, checkpoint_kind="snapflow" if variant == "snapflow" else "ordinary"
+                    ).model_dump(mode="json")
+                },
+            }
+        )
+    )
+
+    detail = ModelService.get_backend_details(model)[0]
+    assert detail.type == backend
+    assert detail.variants[0].id == variant
+    assert detail.variants[0].can_run_in_studio is runnable
 
 
 @pytest.mark.anyio
@@ -142,6 +180,7 @@ async def test_delete_model_deletes_snapshot_when_snapshot_id_set() -> None:
     mock_snapshot_repo = AsyncMock()
 
     mock_session = AsyncMock()
+    mock_session.scalar.return_value = None
 
     with (
         patch("services.model_service.ModelRepository", return_value=mock_model_repo),
@@ -163,6 +202,7 @@ async def test_delete_model_skips_snapshot_delete_when_no_snapshot_id() -> None:
     mock_snapshot_repo = AsyncMock()
 
     mock_session = AsyncMock()
+    mock_session.scalar.return_value = None
 
     with (
         patch("services.model_service.ModelRepository", return_value=mock_model_repo),

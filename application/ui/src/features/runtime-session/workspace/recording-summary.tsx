@@ -19,7 +19,8 @@ const RecordingTips = () => (
                 </Text>
                 <ul className={classes.tips}>
                     <li>
-                        <strong>Check camera views.</strong> Keep the robot's actions and task objects clearly visible.
+                        <strong>Check camera views.</strong> Keep the robot&apos;s actions and task objects clearly
+                        visible.
                     </li>
                     <li>
                         <strong>Capture variation.</strong> Keep the task consistent, but vary starting positions and
@@ -30,8 +31,8 @@ const RecordingTips = () => (
                         unintended movements.
                     </li>
                     <li>
-                        <strong>Finish the session.</strong> Use Back to dataset when you're done to finish saving your
-                        episodes.
+                        <strong>Finish the session.</strong> Use Back to dataset when you&apos;re done to finish saving
+                        your episodes.
                     </li>
                 </ul>
                 <Link href='https://github.com/open-edge-platform/physical-ai-studio/issues/358'>

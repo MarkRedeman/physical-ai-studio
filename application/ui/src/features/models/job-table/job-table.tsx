@@ -20,6 +20,7 @@ import { ElapsedDuration } from '../../../components/elapsed-duration.component'
 import { showIssueError } from '../../../components/notification/issue-toasts';
 import { notify } from '../../../components/notification/notification.component';
 import { Table } from '../../../components/table/table';
+import { SchemaJob } from '../../jobs/use-job-cache';
 import { useRemoteTrainerHealth } from '../../training-targets/use-remote-trainer-health';
 import { useDatasetQuery, useEnvironmentQuery } from '../api/queries';
 import { durationBetween } from '../shared/duration';
@@ -141,7 +142,7 @@ const TrainJobStatus = ({ job }: { job: SchemaTrainJob }) => {
     }
 };
 
-const JobMenu = ({ trainJob, onViewLogs }: { trainJob: SchemaTrainJob; onViewLogs: () => void }) => {
+export const JobMenu = ({ job, onViewLogs }: { job: SchemaJob; onViewLogs: () => void }) => {
     const queryClient = useQueryClient();
     const deleteJobMutation = $api.useMutation('delete', '/api/jobs/{job_id}', {
         meta: {
@@ -150,12 +151,12 @@ const JobMenu = ({ trainJob, onViewLogs }: { trainJob: SchemaTrainJob; onViewLog
         onSuccess: () => {
             // Remove the job from the cache immediately instead of waiting on the
             // fire-and-forget invalidation refetch, so the row disappears right away.
-            queryClient.setQueryData<SchemaTrainJob[]>(['get', '/api/jobs'], (old = []) =>
-                old.filter((job) => job.id !== trainJob.id)
+            queryClient.setQueryData<SchemaJob[]>(['get', '/api/jobs'], (old = []) =>
+                old.filter((cached) => cached.id !== job.id)
             );
         },
         onError: () => {
-            notify('error', `Failed to delete ${trainJob.payload.model_name}`);
+            notify('error', `Failed to delete ${job.type === 'training' ? job.payload.model_name : 'job'}`);
         },
     });
     const onAction = (key: Key) => {
@@ -164,16 +165,16 @@ const JobMenu = ({ trainJob, onViewLogs }: { trainJob: SchemaTrainJob; onViewLog
             onViewLogs();
         }
         if (action === 'issues') {
-            trainJob.issues.forEach(showIssueError);
+            job.issues.forEach(showIssueError);
         }
         if (action === 'delete') {
             deleteJobMutation.mutate({
-                params: { path: { job_id: trainJob.id! } },
+                params: { path: { job_id: job.id! } },
             });
         }
     };
 
-    const isDeletable = trainJob.status === 'failed' || trainJob.status === 'canceled';
+    const isDeletable = job.status === 'failed' || job.status === 'canceled';
     const disabledKeys = isDeletable ? [] : ['delete'];
 
     return (
@@ -183,7 +184,7 @@ const JobMenu = ({ trainJob, onViewLogs }: { trainJob: SchemaTrainJob; onViewLog
             </ActionButton>
             <Menu onAction={onAction} disabledKeys={disabledKeys}>
                 <Item key='logs'>Logs</Item>
-                {trainJob.issues.length > 0 ? <Item key='issues'>Issue details</Item> : null}
+                {job.issues.length > 0 ? <Item key='issues'>Issue details</Item> : null}
                 <Item key='delete'>Delete</Item>
             </Menu>
         </MenuTrigger>
@@ -216,7 +217,7 @@ export const TrainingRow = ({
                 <TrainerCell job={trainJob} />
                 <div />
                 <View>
-                    <JobMenu trainJob={trainJob} onViewLogs={onViewLogs} />
+                    <JobMenu job={trainJob} onViewLogs={onViewLogs} />
                 </View>
             </Table.Row>
         );
@@ -270,7 +271,7 @@ export const TrainingRow = ({
                 )}
             </div>
             <View>
-                <JobMenu trainJob={trainJob} onViewLogs={onViewLogs} />
+                <JobMenu job={trainJob} onViewLogs={onViewLogs} />
             </View>
         </Table.ExpandableRow>
     );

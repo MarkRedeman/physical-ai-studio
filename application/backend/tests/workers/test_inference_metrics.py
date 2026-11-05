@@ -92,3 +92,27 @@ def test_failed_predictions_do_not_emit_latency(timing, monkeypatch) -> None:
     with pytest.raises(RuntimeError, match="Prediction failed"):
         inference.infer(InferRequest(state=[0.0]))
     assert messages == []
+
+
+def test_rtc_inputs_are_preserved_while_reporting_inference_latency(timing, monkeypatch) -> None:
+    metrics, messages, _clock = timing
+    monkeypatch.setattr(model_worker, "time", SimpleNamespace(perf_counter=Mock(side_effect=[2.0, 2.025])))
+    predictor = Mock(predict_action_chunk=Mock(return_value=np.array([[1.0, 2.0]])))
+    inference = Inference(predictor, Mock(), {}, metrics=metrics)
+    result = inference.infer(
+        InferRequest(
+            state=[0.0, 0.0],
+            prev_chunk_left_over=[[[1.0, 2.0], [3.0, 4.0]]],
+            inference_delay=1,
+            execution_horizon=2,
+            max_guidance_weight=5.0,
+        )
+    )
+    observation = predictor.predict_action_chunk.call_args.args[0]
+    assert observation["prev_chunk_left_over"].shape == (1, 2, 2)
+    assert observation["prev_chunk_left_over"].dtype == np.float32
+    assert observation["inference_delay"].dtype == np.int64
+    assert observation["execution_horizon"].dtype == np.int64
+    assert observation["max_guidance_weight"].dtype == np.float32
+    assert result.actions == [[1.0, 2.0]]
+    assert messages[-1].latency_ms == pytest.approx(25.0)

@@ -84,6 +84,13 @@ const WorkspaceSection = ({
             data-error={hasError || undefined}
             data-selectable={(modeKey != null && canSwitch && !isSelected) || undefined}
             aria-label={title}
+            onKeyDown={(event) => {
+                // Nested task fields, sliders and execution radios handle their
+                // own keys; they must not navigate the outer session-mode radios.
+                if (event.target instanceof Element && event.target.closest('[data-mode-interactive]')) {
+                    event.stopPropagation();
+                }
+            }}
             {...(modeKey == null ? {} : surfaceEvents)}
         >
             <div className={classes.sectionHeading}>

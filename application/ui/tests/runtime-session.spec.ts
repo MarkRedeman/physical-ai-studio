@@ -59,6 +59,8 @@ test.beforeEach(async ({ network, page }) => {
                 name: 'Cube policy',
                 backend: new URL(page.url()).searchParams.get('backend') ?? 'onnx',
                 device: 'cpu',
+                variant: 'original',
+                rtc_enabled: false,
             };
         const publish = () => {
             socket.send(JSON.stringify({ type: 'state', data: state }));
@@ -381,7 +383,7 @@ test('previews backend branding and compact inference execution settings', async
     await page.goto(`${RECORD_URL}?modePreview=true&backend=openvino`);
     await page.getByRole('radio', { name: 'Inference', exact: true }).click();
     const inference = page.getByRole('region', { name: 'Inference', exact: true });
-    await expect(inference.getByText('OpenVINO · cpu')).toBeVisible();
+    await expect(inference.getByText('OpenVINO · original · cpu')).toBeVisible();
     const syncBounds = await inference.getByRole('radio', { name: 'Synchronous', exact: true }).boundingBox();
     const asyncBounds = await inference.getByRole('radio', { name: 'Asynchronous', exact: true }).boundingBox();
     expect(asyncBounds?.y).toBe(syncBounds?.y);

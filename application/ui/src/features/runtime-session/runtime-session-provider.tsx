@@ -280,6 +280,7 @@ export const RuntimeSessionProvider = ({
                     if (
                         previous?.model?.model_id !== next.model?.model_id ||
                         previous?.model?.backend !== next.model?.backend ||
+                        (previous?.model?.variant ?? 'original') !== (next.model?.variant ?? 'original') ||
                         previous?.model?.device !== next.model?.device ||
                         (previous?.control?.type === 'model' && next.control?.type !== 'model')
                     ) {
@@ -307,12 +308,12 @@ export const RuntimeSessionProvider = ({
                     }
                     break;
                 case 'inference_metrics': {
-                    const model = latestState.current?.model;
+                    const loadedModel = latestState.current?.model;
                     if (
-                        model == null ||
-                        model.model_id !== message.model_id ||
-                        model.backend !== message.backend ||
-                        model.device !== message.device ||
+                        loadedModel == null ||
+                        loadedModel.model_id !== message.model_id ||
+                        loadedModel.backend !== message.backend ||
+                        loadedModel.device !== message.device ||
                         ignoredInferenceRuns.has(message.run_id) ||
                         (latestState.current?.control?.type !== 'model' && !controlStarting.current)
                     )
@@ -380,6 +381,7 @@ export const RuntimeSessionProvider = ({
             toLoad !== null &&
             (loaded?.model_id !== toLoad.model_id ||
                 loaded.backend !== toLoad.backend ||
+                (loaded.variant ?? 'original') !== (toLoad.variant ?? 'original') ||
                 loaded.device !== toLoad.device);
         const reload = async () => {
             setLoading('environment');

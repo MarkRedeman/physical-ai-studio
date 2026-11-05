@@ -5,7 +5,7 @@ import { SchemaSessionState } from '../../../api/openapi-spec';
 import { http } from '../../../api/utils';
 import { server } from '../../../msw-node-setup';
 import { getMockedFollowerRobot, getMockedLeaderRobot } from '../../../test-utils/mocks/mock-robot';
-import { getMockedSessionEnvironment } from '../../../test-utils/mocks/mock-runtime-session';
+import { getMockedExecutionConfig, getMockedSessionEnvironment } from '../../../test-utils/mocks/mock-runtime-session';
 import { render } from '../../../test-utils/render';
 import { TELEOP_CONTROL } from '../cells/robot-cell';
 import { Statuses } from '../runtime-session-provider';
@@ -52,7 +52,7 @@ it('marks only the follower active during model control', () => {
         type: 'model',
         task: 'Pick',
         hz: 30,
-        execution: { mode: 'sync', request_threshold: 0.5 },
+        execution: getMockedExecutionConfig(),
         grace_s: 3,
     });
     expect(within(screen.getByRole('group', { name: 'Follower robot' })).getByText('Active')).toBeInTheDocument();

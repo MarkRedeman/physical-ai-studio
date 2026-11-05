@@ -1,0 +1,36 @@
+.addCard {
+    display: flex;
+    min-height: 170px;
+    padding: var(--spectrum-global-dimension-size-300);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spectrum-global-dimension-size-150);
+    border: 1px dashed var(--spectrum-global-color-gray-500);
+    border-radius: var(--spectrum-alias-border-radius-medium);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.addCard:hover:not(:disabled),
+.addCard:focus-visible {
+    border-color: var(--energy-blue);
+    background: var(--spectrum-global-color-gray-100);
+}
+
+.addCard:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.addTitle {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.variantDescription {
+    font-size: 12px;
+    color: var(--spectrum-global-color-gray-700);
+}

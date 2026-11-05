@@ -764,8 +764,10 @@ class TestSnapFlowDistillation:
                 checkpoint_loader=reload,
             )
 
-        reload.assert_called_once()
-        assert reload.call_args.args[1] == tmp_path / "model" / SNAPFLOW_CHECKPOINT_NAME
+        assert [call.args[1] for call in reload.call_args_list] == [
+            tmp_path / "model" / SNAPFLOW_CHECKPOINT_NAME,
+            tmp_path / "model" / CHECKPOINT_NAME,
+        ]
 
     def test_a_flow_matching_run_reloads_the_selected_checkpoint_for_export(self, tmp_path: Path) -> None:
         policy = _ExportablePolicy([ExportBackend.OPENVINO])

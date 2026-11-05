@@ -1,16 +1,33 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from schemas.base import BaseIDModel, Field, UTCDatetime
+from schemas.model_variant import (
+    BACKENDS,
+    VARIANT_IDS,
+    VariantInfo,
+    VariantOperationDetail,
+    export_directory,
+    package_files,
+    read_package,
+    variant_info,
+)
 
 LORA_PROPERTY = "lora_enabled"
 DORA_PROPERTY = "lora_use_dora"
 SNAPFLOW_PROPERTY = "snapflow_enabled"
+
+
+class ModelOptimizationInfo(BaseModel):
+    """Compatibility metadata for legacy separately stored optimized models."""
+
+    source_model_id: UUID
+    mode: Literal["int8_sym"] = "int8_sym"
 
 
 class Model(BaseIDModel):
@@ -28,23 +45,34 @@ class Model(BaseIDModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
+    def optimization(self) -> ModelOptimizationInfo | None:
+        """Return typed optimization metadata stored in properties."""
+        metadata = self.properties.get("optimization")
+        return ModelOptimizationInfo.model_validate(metadata) if metadata is not None else None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def available_backends(self) -> list[str]:
         exports_dir = Path(self.path) / "exports"
         if not exports_dir.is_dir():
             return []
 
-        backends: list[str] = []
-        for backend_dir in exports_dir.iterdir():
-            if not backend_dir.is_dir():
-                continue
+        return sorted({backend for backend, _ in self.export_packages()})
 
-            # Backend exports folder may be empty if export failed
-            if not any(backend_dir.iterdir()):
-                continue
-
-            backends.append(backend_dir.name)
-
-        return sorted(backends)
+    def export_packages(self) -> dict[tuple[str, str], Path]:
+        """Return complete, published exports only, including variant-only backends."""
+        packages = {}
+        for backend in BACKENDS:
+            for variant in VARIANT_IDS:
+                try:
+                    directory = export_directory(Path(self.path), backend, variant)
+                    if (directory / ".unpublished").exists():
+                        continue
+                    variant_info(read_package(directory, backend), variant)
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue
+                packages[backend, variant] = directory
+        return packages
 
     @computed_field  # type: ignore[prop-decorator]
     @computed_field  # type: ignore[prop-decorator]
@@ -174,19 +202,30 @@ class BackendIOSpec(BaseModel):
         return cls.from_manifest(manifest)
 
 
+class ExportVariantDetail(VariantInfo):
+    label: str
+    size_bytes: int
+    file_count: int
+    exported_at: UTCDatetime | None = None
+    io_spec: BackendIOSpec | None = None
+    can_run_in_studio: bool = False
+    available_operations: list[VariantOperationDetail] = []
+
+
 class BackendExportDetail(BaseModel):
     type: str
     size_bytes: int
     file_count: int
     exported_at: UTCDatetime | None = None
     io_spec: BackendIOSpec | None = None
+    variants: list[ExportVariantDetail] = []
 
     @classmethod
     def from_backend_dir(cls, backend_dir: Path) -> "BackendExportDetail | None":
         if not backend_dir.is_dir():
             return None
 
-        files = [f for f in backend_dir.rglob("*") if f.is_file()]
+        files = package_files(backend_dir)
 
         if len(files) == 0:
             return None

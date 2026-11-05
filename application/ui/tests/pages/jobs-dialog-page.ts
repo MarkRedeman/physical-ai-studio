@@ -29,6 +29,21 @@ export class JobsDialogPage {
     async openJobs() {
         await this.jobsButton.click();
         await this.dialog.waitFor();
+        await this.showAllJobs();
+    }
+
+    async showAllJobs() {
+        await this.selectTab('All jobs');
+    }
+
+    /** Training, dataset-import, and optimization rows share the same job menu. */
+    get rows() {
+        return this.dialog
+            .getByTestId('table')
+            .locator(':scope > [data-testid]')
+            .filter({
+                has: this.page.getByRole('button', { name: 'Job options' }),
+            });
     }
 
     async closeJobs() {
