@@ -24,8 +24,8 @@ export const RuntimeExportDialog = ({
     fixedVariant = false,
 }: RuntimeExportDialogProps) => {
     const selection = useVariantSelection(model.id, backend, initialVariant);
-    const [horizon, setHorizon] = useState(1);
-    const [guidance, setGuidance] = useState(5);
+    const [horizon, setHorizon] = useState(15);
+    const [guidance, setGuidance] = useState(7);
     const chunkSize =
         selection.selected?.io_spec?.output_features.find((feature) => feature.name === 'action')?.shape?.[0] ?? 2;
     const maxHorizon = Math.max(1, Math.floor(chunkSize / 2));

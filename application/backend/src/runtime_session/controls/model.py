@@ -61,8 +61,11 @@ class ModelControl(Control):
         if model.inputs.state_size != len(store.spec.joint_names):
             raise ValueError("The loaded model does not fit the follower")
         super().__init__(store, config, name="ModelControl", hz=config.hz)
-        if bool(getattr(model, "rtc_enabled", False)) != (config.execution.mode == "rtc"):
-            raise ValueError("RTC exports require RTC execution; other exports require sync or async execution")
+        supported_modes = getattr(model, "supported_execution_modes", ["sync", "async"])
+        if config.execution.mode not in supported_modes:
+            raise ValueError(f"The loaded model does not support {config.execution.mode} execution")
+        self._model = model
+        self._execution_mode = config.execution.mode
         execution = (
             AsyncExecution(request_threshold=config.execution.request_threshold)
             if config.execution.mode == "async"
@@ -70,11 +73,21 @@ class ModelControl(Control):
         )
         queue = ChunkedActionQueue(smoother=LerpSmoother())
         if config.execution.mode == "rtc":
-            if model.chunk_size is None:
+            if model.chunk_size is None or model.chunk_size < 2:
                 raise ValueError("RTC export must declare its action chunk size")
+            horizon = config.execution.execution_horizon
+            if "execution_horizon" not in config.execution.model_fields_set:
+                horizon = min(15, model.chunk_size // 2)
+                self.config = config.model_copy(
+                    update={
+                        "execution": config.execution.model_copy(update={"execution_horizon": horizon}),
+                    }
+                )
+            if horizon > model.chunk_size // 2:
+                raise ValueError("RTC execution horizon must not exceed half the action chunk size")
             execution = RTCExecution(
                 chunk_size=model.chunk_size,
-                execution_horizon=config.execution.execution_horizon,
+                execution_horizon=horizon,
                 max_guidance_weight=config.execution.max_guidance_weight,
                 fps=config.hz,
                 latency_tracker=model.latency_tracker,
@@ -88,6 +101,9 @@ class ModelControl(Control):
         self._events: _ModelEvents | None = None
 
     def on_start(self) -> None:
+        prepare = getattr(self._model, "prepare_execution", None)
+        if callable(prepare):
+            prepare(self._execution_mode)
         self.started_at = time.monotonic()
         self._events = self._observer.control_events(self.hz, self.grace_s) if self._observer is not None else None
         session_id = self._observer.session_id if self._observer is not None else ""

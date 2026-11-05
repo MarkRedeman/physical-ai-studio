@@ -27,6 +27,7 @@ import classes from './record-mode.module.css';
 const EXECUTION_MODES: { key: SchemaExecutionConfig['mode']; label: string }[] = [
     { key: 'sync', label: 'Synchronous' },
     { key: 'async', label: 'Asynchronous' },
+    { key: 'rtc', label: 'RTC' },
 ];
 
 /** The default task of the dataset the loaded model was trained on, or none. */
@@ -57,14 +58,31 @@ const useInferenceState = () => {
     const { mode: selectedMode, run, isPending } = useSessionMode();
     const defaultTask = useDefaultTask(state?.model?.model_id);
     const [task, setTask] = useState(defaultTask);
-    const [executionMode, setExecutionMode] = useState<SchemaExecutionConfig['mode']>('sync');
+    const model = state?.model;
+    const modelKey = JSON.stringify([model?.model_id, model?.backend, model?.variant]);
+    const supportedModes: SchemaExecutionConfig['mode'][] = model?.supported_execution_modes ?? ['sync', 'async'];
+    const defaultMode =
+        model?.rtc_enabled && supportedModes.includes('rtc')
+            ? 'rtc'
+            : supportedModes.includes('sync')
+              ? 'sync'
+              : (supportedModes[0] ?? 'sync');
+    const [selection, setSelection] = useState<{ key: string; mode: SchemaExecutionConfig['mode'] }>();
+    const setExecutionMode = (mode: SchemaExecutionConfig['mode']) => setSelection({ key: modelKey, mode });
+    const executionMode =
+        selection?.key === modelKey && supportedModes.includes(selection.mode) ? selection.mode : defaultMode;
     const [threshold, setThreshold] = useState(0.5);
-    const [horizon, setHorizon] = useState(1);
-    const [guidance, setGuidance] = useState(5);
-    const rtcEnabled = state?.model?.rtc_enabled ?? false;
+    const [horizon, setHorizon] = useState(15);
+    const [guidance, setGuidance] = useState(7);
+    const activeControl = state?.control?.type === 'model' ? state.control : undefined;
+    const effectiveMode = activeControl?.execution.mode ?? executionMode;
+    const rtcEnabled = effectiveMode === 'rtc';
     const maxHorizon = Math.max(1, Math.floor((state?.model?.chunk_size ?? 2) / 2));
-    const effectiveHorizon = Math.min(horizon, maxHorizon);
-    const effectiveMode = rtcEnabled ? 'rtc' : executionMode === 'rtc' ? 'sync' : executionMode;
+    const effectiveHorizon = Math.min(activeControl?.execution.execution_horizon ?? horizon, maxHorizon);
+    useEffect(() => {
+        setHorizon(15);
+        setGuidance(7);
+    }, [modelKey]);
     // Use the model's training fps once exports record it.
     const [hz, setHz] = useState(30);
     useEffect(() => setTask(defaultTask), [defaultTask]);
@@ -78,6 +96,7 @@ const useInferenceState = () => {
         failureOf(statuses, 'environment') === null &&
         state.model != null &&
         failureOf(statuses, 'model') === null &&
+        supportedModes.includes(effectiveMode) &&
         !isLocked;
 
     const play = () => {
@@ -103,20 +122,21 @@ const useInferenceState = () => {
     };
 
     return {
-        task,
+        task: activeControl?.task ?? task,
         setTask,
         executionMode,
         effectiveMode,
+        supportedModes,
         rtcEnabled,
         maxHorizon,
         effectiveHorizon,
         setHorizon,
-        guidance,
+        guidance: activeControl?.execution.max_guidance_weight ?? guidance,
         setGuidance,
         setExecutionMode,
-        threshold,
+        threshold: activeControl?.execution.request_threshold ?? threshold,
         setThreshold,
-        hz,
+        hz: activeControl?.hz ?? hz,
         setHz,
         isRunning,
         isRecording,
@@ -176,6 +196,7 @@ export const InferenceMode = () => {
         task,
         setTask,
         effectiveMode,
+        supportedModes,
         setExecutionMode,
         rtcEnabled,
         maxHorizon,
@@ -201,15 +222,17 @@ export const InferenceMode = () => {
                     width='100%'
                     value={effectiveMode}
                     onChange={(value) => setExecutionMode(value as SchemaExecutionConfig['mode'])}
-                    isDisabled={isLocked || rtcEnabled}
+                    isDisabled={isLocked}
                 >
-                    {(rtcEnabled ? [{ key: 'rtc', label: 'Real-time chunking (RTC)' }] : EXECUTION_MODES).map(
-                        (item) => (
-                            <Radio key={item.key} value={item.key}>
-                                {item.label}
-                            </Radio>
-                        )
-                    )}
+                    {EXECUTION_MODES.filter((item) => supportedModes.includes(item.key)).map((item) => (
+                        <Radio
+                            key={item.key}
+                            value={item.key}
+                            aria-label={item.key === 'rtc' ? 'Real-time chunking (RTC)' : undefined}
+                        >
+                            {item.label}
+                        </Radio>
+                    ))}
                 </RadioGroup>
             </div>
             <div data-mode-interactive>

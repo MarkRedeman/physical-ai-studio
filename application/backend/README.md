@@ -225,6 +225,32 @@ This is **weight-only** compression, not full INT8 activation quantization.
 Model size, inference speed, and policy accuracy depend on the model and device.
 Validate the optimized policy before deploying it to a robot.
 
+### Inference execution modes
+
+The loaded model reports its supported execution modes to the workspace. Ordinary
+compiled exports offer synchronous and asynchronous execution. Validated RTC
+OpenVINO exports additionally offer **RTC** when their loaded graph declares the
+full RTC input/output contract. Ordinary exports cannot acquire RTC just by
+switching execution mode: create an RTC export first. No RTC-specific training is
+required. Policy names and variant folder names alone do not enable RTC.
+
+Stop model control before changing execution mode. RTC uses Runtime's
+`RTCExecution` and `RTCActionQueue`, with one shared 100-sample latency tracker
+measuring the complete inference-worker round trip. The execution horizon defaults
+to 15 actions, bounded to half the model's chunk size; guidance defaults to 7.0.
+Tune both in **Execution settings** and validate policy accuracy and robot motion.
+
+In synchronous/asynchronous execution, compiled RTC graphs receive neutral,
+zero-guidance RTC inputs from Runtime's `InferenceModel`. Capability validation and
+model-side execution configuration also belong to Runtime, not Studio. Preparation is
+serialized in the inference worker and never rewrites checkpoints or manifests.
+The model's action rate remains independent of the robot worker's interpolation
+rate; Studio does not instantiate a second `RobotRuntime` or command devices twice.
+
+This integration requires Runtime's `InferenceModel.execution_capabilities` and
+`configure_execution(mode)` APIs. It does not change `physicalai-train` or add
+training-time RTC configuration.
+
 ### Database Migrations
 
 ```bash

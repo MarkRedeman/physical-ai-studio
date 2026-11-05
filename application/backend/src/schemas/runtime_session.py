@@ -49,16 +49,27 @@ class TeleopControlConfig(BaseModel):
     )
 
 
+ExecutionMode = Literal["sync", "async", "rtc"]
+
+
+class ModelExecutionCapabilities(BaseModel):
+    """Verified capabilities of the model loaded in the inference worker."""
+
+    supported_execution_modes: list[ExecutionMode] = Field(default_factory=lambda: ["sync", "async"])
+    chunk_size: int | None = Field(default=None, ge=2)
+    action_dim: int | None = Field(default=None, ge=1)
+
+
 class ExecutionConfig(BaseModel):
     """How a model's action chunks are requested, as ``physicalai.runtime`` runs them."""
 
-    mode: Literal["sync", "async", "rtc"] = "sync"
-    """``sync`` infers in the control's tick and waits; ``async`` infers alongside, while the queue plays."""
+    mode: ExecutionMode = "sync"
+    """Sync waits in the control tick; async and RTC predict alongside queue playback."""
     request_threshold: float = Field(
         default=0.5, ge=0, le=1, description="Request the next chunk once this fraction of the current one is left"
     )
-    execution_horizon: int = Field(default=1, ge=1)
-    max_guidance_weight: float = Field(default=5.0, ge=0, allow_inf_nan=False)
+    execution_horizon: int = Field(default=15, ge=1)
+    max_guidance_weight: float = Field(default=7.0, ge=0, allow_inf_nan=False)
     chunk_size: int | None = Field(default=None, ge=2)
 
 
@@ -256,7 +267,9 @@ class SessionModel(BaseModel):
     device: str
     variant: str = "original"
     rtc_enabled: bool = False
+    """Export metadata; the active execution mode belongs to ``control.execution``."""
     chunk_size: int | None = None
+    supported_execution_modes: list[ExecutionMode] | None = None
 
 
 class SessionState(BaseModel):

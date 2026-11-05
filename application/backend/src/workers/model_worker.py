@@ -14,16 +14,16 @@ from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from runtime_session.bus import Bus
 from runtime_session.inference_metrics import METRICS, InferenceMetrics
 from runtime_session.store import FeatureSpec, Store
-from schemas.runtime_session import CommandDone
+from schemas.runtime_session import CommandDone, ExecutionMode, ModelExecutionCapabilities
 from workers.base import ProcessWorker
 
 if TYPE_CHECKING:
@@ -31,9 +31,12 @@ if TYPE_CHECKING:
     from pathlib import Path
     from uuid import UUID
 
+    from physicalai.inference import ExecutionCapabilities
+
 INFER = "rpc/model/infer"
 RESET = "rpc/model/reset"
 READY = "rpc/model/ready"
+PREPARE_EXECUTION = "rpc/model/prepare_execution"
 
 # The model input names physicalai.inference expects.
 STATE = "state"
@@ -42,6 +45,11 @@ TASK = "task"
 
 class Empty(BaseModel):
     pass
+
+
+class PrepareExecutionRequest(BaseModel):
+    mode: ExecutionMode
+    generation: int = Field(default=1, ge=1)
 
 
 class InferRequest(BaseModel):
@@ -61,6 +69,9 @@ class ActionChunk(BaseModel):
 class Predictor(Protocol):
     """What the worker needs of a loaded model; ``physicalai.inference.InferenceModel`` is one."""
 
+    @property
+    def execution_capabilities(self) -> ExecutionCapabilities: ...
+    def configure_execution(self, mode: ExecutionMode) -> None: ...
     def predict_action_chunk(self, observation: dict[str, Any]) -> np.ndarray: ...
     def reset(self) -> None: ...
 
@@ -74,6 +85,7 @@ class Inference:
     images: Mapping[str, str]
     """Model input name to the store camera it reads, such as ``images.gripper`` to ``gripper``."""
     metrics: InferenceMetrics | None = None
+    _execution_generation: int = field(default=0, init=False)
 
     def infer(self, request: InferRequest) -> ActionChunk:
         observation: dict[str, Any] = {STATE: np.array([request.state], dtype=np.float32)}
@@ -97,6 +109,25 @@ class Inference:
         if self.metrics is not None:
             self.metrics.record(latency_ms)
         return result
+
+    def prepare_execution(self, request: PrepareExecutionRequest) -> CommandDone:
+        """Prepare a stopped model for one execution strategy."""
+        if request.generation <= self._execution_generation:
+            raise ValueError("Stale execution configuration")
+        self.model.configure_execution(request.mode)
+        self._execution_generation = request.generation
+        if self.metrics is not None:
+            self.metrics.reset()
+        return CommandDone()
+
+    def ready(self, _request: Empty) -> ModelExecutionCapabilities:
+        """Report capabilities verified against the loaded adapter."""
+        capabilities = self.model.execution_capabilities
+        return ModelExecutionCapabilities(
+            supported_execution_modes=list(capabilities.supported_execution_modes),
+            chunk_size=capabilities.chunk_size,
+            action_dim=capabilities.action_dim,
+        )
 
     def reset(self, _request: Empty) -> CommandDone:
         self.model.reset()
@@ -155,10 +186,15 @@ class ModelWorker(ProcessWorker[Inference]):
                         device=self.device,
                         publish=lambda message: bus.publish(METRICS, message),
                     )
-                inference = Inference(self.open_model(), store, self.images, metrics=metrics)
+                model = self.open_model()
+                capabilities = model.execution_capabilities
+                if capabilities.action_dim is not None and capabilities.action_dim != len(self.spec.joint_names):
+                    raise ValueError("Model action dimensions must match the follower's joints")
+                inference = Inference(model, store, self.images, metrics=metrics)
                 bus.serve(INFER, InferRequest, inference.infer)
                 bus.serve(RESET, Empty, inference.reset)
-                bus.serve(READY, Empty, lambda _request: CommandDone())
+                bus.serve(READY, Empty, inference.ready)
+                bus.serve(PREPARE_EXECUTION, PrepareExecutionRequest, inference.prepare_execution)
                 yield inference
         finally:
             store.close()
