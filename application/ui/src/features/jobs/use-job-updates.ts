@@ -73,11 +73,13 @@ export const useJobUpdates = (project_id?: string) => {
                 ],
             });
             if (job.type === 'optimize_model') {
-                for (const model_id of [job.payload.model_id, job.id]) {
-                    client.invalidateQueries({
-                        queryKey: ['get', '/api/models/{model_id}', { params: { path: { model_id } } }],
-                    });
-                }
+                client.invalidateQueries({
+                    queryKey: [
+                        'get',
+                        '/api/models/{model_id}',
+                        { params: { path: { model_id: job.payload.model_id } } },
+                    ],
+                });
             }
         }
     };

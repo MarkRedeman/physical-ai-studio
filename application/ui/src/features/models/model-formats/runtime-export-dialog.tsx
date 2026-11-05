@@ -1,19 +1,28 @@
 import { useState } from 'react';
 
-import { Button, ButtonGroup, Content, Dialog, Divider, Heading, Item, Picker } from '@geti-ui/ui';
+import { Button, ButtonGroup, Content, Dialog, Divider, Heading, Item, Picker, Slider } from '@geti-ui/ui';
 
 import { $api } from '../../../api/client';
 import { SchemaModel } from '../../../api/openapi-spec';
 import { getDefaultInferenceDevice, getSupportedInferenceDevices } from '../backend-selection/backend-selection';
 import { runtimeExportUrl } from '../runtime-export';
+import { useVariantSelection, VariantSelection } from './variant-selection';
 
 interface RuntimeExportDialogProps {
     close: () => void;
     model: SchemaModel;
     backend: string;
+    initialVariant?: string;
 }
 
-export const RuntimeExportDialog = ({ close, model, backend }: RuntimeExportDialogProps) => {
+export const RuntimeExportDialog = ({ close, model, backend, initialVariant }: RuntimeExportDialogProps) => {
+    const selection = useVariantSelection(model.id, backend, initialVariant);
+    const [horizon, setHorizon] = useState(1);
+    const [guidance, setGuidance] = useState(5);
+    const chunkSize =
+        selection.selected?.io_spec?.output_features.find((feature) => feature.name === 'action')?.shape?.[0] ?? 2;
+    const maxHorizon = Math.max(1, Math.floor(chunkSize / 2));
+    const effectiveHorizon = Math.min(horizon, maxHorizon);
     const { data: environments = [] } = $api.useQuery('get', '/api/projects/{project_id}/environments', {
         params: { path: { project_id: model.project_id } },
     });
@@ -51,6 +60,9 @@ export const RuntimeExportDialog = ({ close, model, backend }: RuntimeExportDial
                   backend,
                   device: selectedDevice,
                   task: selectedTask,
+                  variant: selection.variant,
+                  executionHorizon: selection.selected?.rtc_enabled ? effectiveHorizon : undefined,
+                  maxGuidanceWeight: selection.selected?.rtc_enabled ? guidance : undefined,
               })
             : undefined;
 
@@ -59,6 +71,33 @@ export const RuntimeExportDialog = ({ close, model, backend }: RuntimeExportDial
             <Heading>Download runtime export</Heading>
             <Divider />
             <Content>
+                {selection.variants.length > 0 && (
+                    <VariantSelection
+                        variants={selection.variants}
+                        variant={selection.variant}
+                        onChange={selection.setVariant}
+                    />
+                )}
+                {selection.selected?.rtc_enabled && (
+                    <>
+                        <Slider
+                            label='RTC execution horizon'
+                            minValue={1}
+                            maxValue={maxHorizon}
+                            step={1}
+                            value={effectiveHorizon}
+                            onChange={setHorizon}
+                        />
+                        <Slider
+                            label='RTC guidance weight'
+                            minValue={0}
+                            maxValue={10}
+                            step={0.5}
+                            value={guidance}
+                            onChange={setGuidance}
+                        />
+                    </>
+                )}
                 <Picker
                     isRequired
                     label='Environment'
@@ -95,7 +134,7 @@ export const RuntimeExportDialog = ({ close, model, backend }: RuntimeExportDial
                 <Button
                     variant='accent'
                     href={downloadUrl}
-                    isDisabled={downloadUrl === undefined}
+                    isDisabled={downloadUrl === undefined || selection.isPending || selection.isError}
                     onPress={close}
                     target='_blank'
                     rel='noopener noreferrer'

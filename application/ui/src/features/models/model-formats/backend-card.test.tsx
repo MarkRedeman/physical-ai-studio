@@ -8,6 +8,7 @@ import { HttpResponse } from 'msw';
 import { http } from '../../../api/utils';
 import { server } from '../../../msw-node-setup';
 import { createQueryClient } from '../../../query-client/query-client';
+import { getMockedExportVariant } from '../../../test-utils/mocks/mock-export-variant';
 import { getMockedModel } from '../../../test-utils/mocks/mock-model';
 import { getMockedModelDetailResponse } from '../../../test-utils/mocks/mock-model-detail-response';
 import { getMockedOptimizeModelJob } from '../../../test-utils/mocks/mock-optimize-model-job';
@@ -34,6 +35,38 @@ describe('BackendCard optimization', () => {
         server.use(http.get('/api/jobs', () => HttpResponse.json([])));
     });
 
+    it('downloads the selected variant rather than its siblings', async () => {
+        const user = userEvent.setup();
+        const modelDetail = getMockedModelDetailResponse({
+            exports: [
+                {
+                    type: 'openvino',
+                    size_bytes: 1048576,
+                    file_count: 2,
+                    variants: [
+                        getMockedExportVariant(),
+                        getMockedExportVariant({
+                            id: 'int8',
+                            label: 'INT8',
+                            weight_compression: 'int8_sym',
+                            size_bytes: 524288,
+                            available_operations: [],
+                        }),
+                    ],
+                },
+            ],
+        });
+        renderCard({ modelDetail });
+        await user.click(screen.getByRole('button', { name: /Variant/ }));
+        await user.click(await screen.findByRole('option', { name: 'INT8' }));
+        expect(screen.getByRole('button', { name: 'Download OpenVINO export' })).toHaveAttribute(
+            'href',
+            expect.stringContaining('variant=int8')
+        );
+        expect(screen.getByText('INT8 symmetric weights')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Delete variant' })).toBeInTheDocument();
+    });
+
     it('submits the source model id once, caches the queued job and prevents duplicates', async () => {
         const user = userEvent.setup();
         const job = getMockedOptimizeModelJob();
@@ -43,7 +76,7 @@ describe('BackendCard optimization', () => {
         });
         const submit = rs.fn();
         server.use(
-            http.post('/api/models/{model_id}/optimize', async ({ params }) => {
+            http.post('/api/models/{model_id}/exports/{backend}/variants', async ({ params }) => {
                 submit(params.model_id);
                 await gate;
                 return HttpResponse.json(job, { status: 202 });
@@ -74,7 +107,7 @@ describe('BackendCard optimization', () => {
     it('surfaces the backend error and permits retry', async () => {
         const user = userEvent.setup();
         server.use(
-            http.post('/api/models/{model_id}/optimize', ({ response }) =>
+            http.post('/api/models/{model_id}/exports/{backend}/variants', ({ response }) =>
                 response.untyped(
                     HttpResponse.json(
                         { message: 'OpenVINO export is missing. Export this model first.' },
@@ -152,7 +185,7 @@ describe('BackendCard optimization', () => {
                     getMockedTrainJob(),
                     getMockedOptimizeModelJob({
                         id: 'other-model-job',
-                        payload: { model_id: 'other-model', mode: 'int8_sym', cancellation_requested: false },
+                        payload: { ...getMockedOptimizeModelJob().payload, model_id: 'other-model' },
                         created_at: '2026-07-14T14:00:00Z',
                     }),
                     getMockedOptimizeModelJob({
@@ -185,20 +218,30 @@ describe('BackendCard optimization', () => {
     });
 
     it('labels optimized precision and does not offer reoptimization', () => {
-        renderCard({ model: getMockedModel({ optimization: { source_model_id: 'source', mode: 'int8_sym' } }) });
+        renderCard({
+            model: getMockedModel({ optimization: { source_model_id: 'source', mode: 'int8_sym' } }),
+            modelDetail: getMockedModelDetailResponse({
+                exports: [
+                    {
+                        type: 'openvino',
+                        size_bytes: 1,
+                        file_count: 1,
+                        variants: [
+                            getMockedExportVariant({ weight_compression: 'int8_sym', available_operations: [] }),
+                        ],
+                    },
+                ],
+            }),
+        });
         expect(screen.getByText('INT8 symmetric weights')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Optimize to INT8' })).not.toBeInTheDocument();
     });
 
     it('explains weight-only compression and validation without falsely labeling original precision as FP16', () => {
         renderCard();
-        expect(screen.getByText('Original')).toBeInTheDocument();
+        expect(screen.getAllByText('Original').length).toBeGreaterThan(0);
         expect(screen.queryByText('FP16')).not.toBeInTheDocument();
-        expect(
-            screen.getByText(
-                'Compresses weights to symmetric INT8, not activations. The original model remains available. Validate policy accuracy before deployment.'
-            )
-        ).toBeInTheDocument();
+        expect(screen.getByText(/INT8 compresses weights, not activations/)).toBeInTheDocument();
     });
 
     it('does not offer optimization for a missing OpenVINO export', () => {
@@ -209,7 +252,9 @@ describe('BackendCard optimization', () => {
     it('does not offer optimization for other backends', () => {
         renderCard({
             backendType: 'torch',
-            modelDetail: getMockedModelDetailResponse({ exports: [{ type: 'torch', size_bytes: 1, file_count: 1 }] }),
+            modelDetail: getMockedModelDetailResponse({
+                exports: [{ type: 'torch', size_bytes: 1, file_count: 1, variants: [] }],
+            }),
         });
         expect(screen.queryByRole('button', { name: 'Optimize to INT8' })).not.toBeInTheDocument();
     });

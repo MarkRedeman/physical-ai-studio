@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -12,10 +13,10 @@ from sqlalchemy import func, update
 from core.logging.utils import job_logging_ctx
 from db import get_async_db_session_ctx
 from db.schema import JobDB
-from repositories.mappers.model_mapper import ModelMapper
 from schemas.base_job import JobStatus, JobType
 from schemas.job import OptimizeModelJob
 from schemas.model import Model
+from schemas.model_variant import export_directory
 from services.event_processor import EventType
 from services.job_service import JobService
 from services.model_optimization_service import ModelOptimizationService
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 
 
 class ModelOptimizationWorker(ProcessWorker[None]):
-    """Compress one assigned model in a short-lived, memory-isolated process."""
+    """Build one export variant in a short-lived, memory-isolated process."""
 
     ROLE = "ModelOptimizationWorker"
 
@@ -49,7 +50,7 @@ class ModelOptimizationWorker(ProcessWorker[None]):
         return super().should_stop() or self.shutdown_event.is_set()
 
     async def run_loop(self, context: None = None) -> None:  # noqa: ARG002
-        """Claim the job and publish a separate model only after compression succeeds."""
+        """Claim the job and attach a variant only after its complete package succeeds."""
         if self.should_stop():
             return
         async with get_async_db_session_ctx() as session:
@@ -64,7 +65,8 @@ class ModelOptimizationWorker(ProcessWorker[None]):
                 logger.exception("Model optimization worker failed")
                 if self._published:
                     return
-                ModelOptimizationService.cleanup(job.id)
+                async with get_async_db_session_ctx() as session:
+                    await ModelOptimizationService(session).cleanup(job)
                 await self._finish(job, JobStatus.FAILED, f"Model optimization failed: {exc}")
                 return
             if result is not None:
@@ -77,38 +79,31 @@ class ModelOptimizationWorker(ProcessWorker[None]):
             source = await ModelService(session).get_model_by_id(job.payload.model_id)
         models_dir = get_settings().models_dir
         models_dir.mkdir(parents=True, exist_ok=True)
-        staging = models_dir / f".optimize-{job.id}"
-        destination = models_dir / str(job.id)
+        staging = ModelOptimizationService.staging(job.id)
+        destination = export_directory(Path(source.path), job.payload.backend, job.payload.target_variant)
         if self.should_stop() or self.cancel_event.is_set():
+            async with get_async_db_session_ctx() as session:
+                await ModelOptimizationService(session).cleanup(job)
             await self._finish(job, JobStatus.CANCELED, "Model optimization canceled")
             return None
-        metadata = ModelOptimizationService.optimize_export(source, staging)
+        ModelOptimizationService.build_variant(source, job.payload, staging, job.id)
         # NNCF cannot be interrupted mid-call; never publish its output after cancellation.
         if self.should_stop() or self.cancel_event.is_set():
-            ModelOptimizationService.cleanup(job.id)
+            async with get_async_db_session_ctx() as session:
+                await ModelOptimizationService(session).cleanup(job)
             await self._finish(job, JobStatus.CANCELED, "Model optimization canceled")
             return None
-        staging.rename(destination)
-        model = Model(
-            id=job.id,
-            name=f"{source.name} (INT8)",
-            path=str(destination),
-            policy=source.policy,
-            project_id=source.project_id,
-            dataset_id=source.dataset_id,
-            # The optimized model owns no checkpoint or dataset snapshot.
-            properties={**source.properties, "optimization": metadata.model_dump(mode="json")},
-        )
+        (staging / ".unpublished").write_text(str(job.id), encoding="utf-8")
         completed = job.model_copy(
             update={
                 "status": JobStatus.COMPLETED,
-                "message": "INT8 model optimization completed",
+                "message": f"{job.payload.target_variant} variant created",
                 "progress": 100,
                 "end_time": datetime.now(UTC),
             }
         )
         async with get_async_db_session_ctx() as session:
-            # Cancellation and publication compete for the same RUNNING row before inserting the model.
+            # Cancellation and publication compete for the same RUNNING row.
             publication = await session.execute(
                 update(JobDB)
                 .where(
@@ -129,15 +124,19 @@ class ModelOptimizationWorker(ProcessWorker[None]):
             if canceled:
                 await session.rollback()
             else:
-                session.add(ModelMapper.to_schema(model))
-                # Commit last: a failing refresh must not trigger cleanup of published artifacts.
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.exists():
+                    raise FileExistsError(f"Export variant already exists: {destination.name}")
+                staging.rename(destination)
                 await session.commit()
                 self._published = True
         if canceled:
-            ModelOptimizationService.cleanup(job.id)
+            async with get_async_db_session_ctx() as session:
+                await ModelOptimizationService(session).cleanup(job)
             await self._finish(job, JobStatus.CANCELED, "Model optimization canceled")
             return None
-        return model, completed
+        (destination / ".unpublished").unlink(missing_ok=True)
+        return source, completed
 
     async def _finish(self, job: OptimizeModelJob, status: JobStatus, message: str) -> None:
         async with get_async_db_session_ctx() as session:

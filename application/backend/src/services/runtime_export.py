@@ -101,6 +101,17 @@ def policy_source_fragment(
     }
     if task:
         init_args["task"] = task
+    if execution.mode == "rtc":
+        init_args["execution"] = Config(
+            "physicalai.runtime.RTCExecution",
+            {
+                "chunk_size": execution.chunk_size,
+                "execution_horizon": execution.execution_horizon,
+                "max_guidance_weight": execution.max_guidance_weight,
+                "fps": RUNTIME_FPS,
+            },
+        ).to_dict()
+        init_args["action_queue"] = Config("physicalai.runtime.RTCActionQueue", {}).to_dict()
     return Config("physicalai.runtime.PolicySource", init_args).to_dict()
 
 
@@ -117,6 +128,21 @@ def runtime_export_readme(document: dict[str, Any], *, unresolved: list[str]) ->
         "```",
         "",
     ]
+    source = document.get("init_args", {}).get("action_source", {}).get("init_args", {})
+    if source.get("execution", {}).get("class_path") == "physicalai.runtime.RTCExecution":
+        lines.extend(
+            [
+                "## Real-time chunking",
+                "",
+                "For latency-aware RTC, run `python run_rtc.py --duration-s=60` instead.",
+                "The launcher reads runtime.yaml and shares one latency tracker between",
+                "the model and executor. The plain CLI recipe runs RTC with a zero-delay",
+                "estimate because YAML recipes cannot express shared object identity.",
+                "Tune execution_horizon and max_guidance_weight in runtime.yaml.",
+                "Validate motion and policy accuracy before deploying to a robot.",
+                "",
+            ]
+        )
     if unresolved:
         lines.extend(
             [

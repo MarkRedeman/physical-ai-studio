@@ -128,7 +128,7 @@ authentication. See
 [`docs/explanation/ssh-remote-trainer.md`](docs/explanation/ssh-remote-trainer.md)
 before registering one.
 
-### OpenVINO Weight Optimization
+### Export Variants and Optimization
 
 In a model's **Model formats** tab, choose **Optimize to INT8** on its OpenVINO
 card. Studio queues an `optimize_model` job and compresses the policy's weights
@@ -136,32 +136,57 @@ with NNCF's symmetric INT8 mode. The model needs a complete OpenVINO export;
 optimization does not export a missing format or require a calibration dataset.
 NNCF is included in the backend dependencies.
 
-The original stays unchanged. A separate **(INT8)** model appears when the job
-completes; use **Run model** on either entry to choose the original or optimized
-policy. Both use the standard OpenVINO backend and support export downloads.
-The optimized entry contains inference artifacts, not a training checkpoint or
-an owned dataset snapshot, so retraining is available only on the original.
-Training submission also rejects optimized models as a base through the API.
+The original model and its training history stay unchanged. New artifacts live
+under `exports/<backend>/variants/<variant>/` on the **same model**, with a
+complete `manifest.json` and all weights, tokenizers, and other dependencies in
+each package. Choose the **Variant** in the backend card, inference dialog, or
+runtime workspace. Downloads contain only the selected package; a full model
+download includes all published variants. Unused named variants can be deleted.
 
-The OpenVINO manifest records provenance and compression mode under
-`studio.optimization`, a Runtime-compatible application extension. Model
-imports restore this marker, preserving the INT8 label and inference-only
-restrictions. Both an extracted optimized model download and its `exports/`
-directory can be imported without a checkpoint; unmarked full training-model
-packages still require one.
+Supported operations are:
+
+- **Optimize to INT8**: symmetric weight compression of an uncompressed OpenVINO
+  package, including RTC and SnapFlow exports. No checkpoint is required.
+- **Export RTC**: re-export SmolVLA or Pi05 from its matching checkpoint with RTC
+  enabled before tracing. Studio uses Runtime's RTC executor and action queue,
+  carries RTC controls through the inference worker, and measures RPC latency.
+- **Export SnapFlow**: export an existing `snapflow-model.ckpt`. This does not
+  distill ordinary weights: run SnapFlow training first when that checkpoint is
+  missing. New two-phase training runs export the ordinary checkpoint at the
+  backend root and the distilled checkpoint under `variants/snapflow/`.
+
+Canonical combinations are `int8`, `rtc`, `rtc-int8`, `snapflow`,
+`snapflow-int8`, `snapflow-rtc`, and `snapflow-rtc-int8`. Graph-changing operations
+reload a checkpoint before optionally applying INT8; they do not edit an INT8 IR
+to add RTC. Operations with missing prerequisites are disabled with a reason.
+
+Manifests record portable metadata under `studio.variant`; no database migration
+or additional model record is needed. Complete inference-only packages, full
+model folders, and `exports/` directories can be imported. Existing separately
+optimized models and their `studio.optimization` metadata remain supported;
+Studio does not merge or delete them automatically.
+
+Runtime exports flatten the chosen package under `exports/<backend>/` and include
+`runtime.yaml`. RTC downloads also include `run_rtc.py`: use
+`python run_rtc.py --duration-s=60` for shared model/executor latency tracking.
+The plain `physicalai run` recipe supports RTC with a zero-delay estimate because
+JSON/YAML recipes cannot share the same tracker object between components.
 
 Optimization runs locally, including for models trained on remote trainers.
 Its status and cancellation control appear on the source model's OpenVINO card.
-Submissions are serialized within the single API process, so concurrent requests
-for the same model cannot queue duplicate active optimization jobs. Queued
+Exclusive filesystem reservations prevent duplicate active target variants. Queued
 cancellations publish job updates immediately, without waiting for a worker.
 
 NNCF cannot be interrupted during compression. Running cancellation requests are
 persisted in the job payload; publication checks that request atomically before
-committing the optimized model. Cancellation that wins discards unpublished output;
+publishing the variant. Cancellation that wins discards unpublished output;
 if publication wins first, a late cancellation receives a finished-job conflict.
 Failed or interrupted jobs discard unpublished files
 and can be retried; Studio reconciles abandoned jobs after a restart.
+Hidden publication markers prevent incomplete packages from appearing in the
+catalog. Completed publications whose worker died before removing the marker
+are reconciled when the model is next read. Private staging/reservation files
+are never included in downloads.
 
 This is **weight-only** compression, not full INT8 activation quantization.
 Model size, inference speed, and policy accuracy depend on the model and device.

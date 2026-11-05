@@ -177,7 +177,7 @@ describe('useJobUpdates', () => {
         expect(queryClient.getQueryState(currentProjectModels)?.isInvalidated).toBe(false);
     });
 
-    it('invalidates the optimization project list, source details and new model details on completion', () => {
+    it('invalidates the existing model after variant creation, not a model named after the job', () => {
         const queryClient = createQueryClient();
         const job = getMockedOptimizeModelJob({ project_id: OTHER_PROJECT_ID, status: 'running' });
         const sourceDetails = [
@@ -187,8 +187,8 @@ describe('useJobUpdates', () => {
         ];
         const resultDetails = ['get', '/api/models/{model_id}', { params: { path: { model_id: job.id } } }];
         const unrelatedDetails = ['get', '/api/models/{model_id}', { params: { path: { model_id: 'unrelated' } } }];
-        const affected = [modelsQueryKey(OTHER_PROJECT_ID), sourceDetails, resultDetails];
-        const unaffected = [modelsQueryKey(PROJECT_ID), unrelatedDetails];
+        const affected = [modelsQueryKey(OTHER_PROJECT_ID), sourceDetails];
+        const unaffected = [modelsQueryKey(PROJECT_ID), unrelatedDetails, resultDetails];
         for (const queryKey of [...affected, ...unaffected]) {
             queryClient.setQueryData(queryKey, {});
         }

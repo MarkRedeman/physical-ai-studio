@@ -44,6 +44,10 @@ class Empty(BaseModel):
 class InferRequest(BaseModel):
     state: list[float]
     task: str | None = None
+    prev_chunk_left_over: list[list[list[float]]] | None = None
+    inference_delay: int | None = None
+    execution_horizon: int | None = None
+    max_guidance_weight: float | None = None
 
 
 class ActionChunk(BaseModel):
@@ -76,6 +80,12 @@ class Inference:
             observation[name] = frame.value[np.newaxis]
         if request.task is not None:
             observation[TASK] = [request.task]
+        if request.prev_chunk_left_over is not None:
+            observation["prev_chunk_left_over"] = np.asarray(request.prev_chunk_left_over, dtype=np.float32)
+        for key in ("inference_delay", "execution_horizon", "max_guidance_weight"):
+            value = getattr(request, key)
+            if value is not None:
+                observation[key] = np.asarray(value, dtype=np.float32 if key == "max_guidance_weight" else np.int64)
         return ActionChunk(actions=np.asarray(self.model.predict_action_chunk(observation)).tolist())
 
     def reset(self, _request: Empty) -> CommandDone:
@@ -98,7 +108,12 @@ class ModelWorker(ProcessWorker[Inference]):
         spec: FeatureSpec,
         images: Mapping[str, str],
     ) -> None:
-        super().__init__(name=f"ModelWorker-{export_dir.parent.parent.name}")
+        identity = (
+            f"{export_dir.parents[3].name}-{export_dir.name}"
+            if export_dir.parent.name == "variants"
+            else export_dir.parent.parent.name
+        )
+        super().__init__(name=f"ModelWorker-{identity}")
         self.export_dir = export_dir
         self.backend = backend
         self.device = device

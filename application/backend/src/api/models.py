@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse
 from physicalai.config import Config
@@ -25,14 +25,18 @@ from api.dependencies import (
     get_robot_catalog_service,
     get_robot_client_factory,
     get_robot_manager_service,
+    get_runtime_session_registry,
 )
 from api.utils import safe_archive_name
-from exceptions import ResourceNotFoundError, ResourceType
+from exceptions import InvalidResourceError, ResourceInUseError, ResourceNotFoundError, ResourceType
 from internal_datasets.utils import get_internal_read_dataset
 from robots.robot_client_factory import RobotClientFactory
+from runtime_session.registry import RuntimeSessionRegistry
 from schemas import Model, ModelDetailResponse
 from schemas.job import OptimizeModelJob, TrainJob
 from schemas.job_response import JobResponse
+from schemas.model_variant import VariantRequest, action_chunk_size, read_package, variant_info
+from schemas.runtime_session import ExecutionConfig
 from services import DatasetService, JobService, ModelDownloadService, ModelMetricsService, ModelService
 from services.environment_service import EnvironmentService
 from services.model_optimization_service import ModelOptimizationService
@@ -47,13 +51,14 @@ from services.runtime_export import (
 router = APIRouter(prefix="/api/models", tags=["Models"])
 
 
-async def _runtime_recipe_texts(
+async def _runtime_recipe_texts(  # noqa: PLR0913
     *,
     model: Model,
     environment_id: UUID,
     backend: ExportBackend,
     device: str,
     task: str | None,
+    execution: ExecutionConfig | None = None,
     environment_service: EnvironmentService,
     robot_client_factory: RobotClientFactory,
 ) -> tuple[str, str]:
@@ -76,6 +81,7 @@ async def _runtime_recipe_texts(
         backend=backend.value,
         device=device,
         task=(task.strip() or None) if task else None,
+        execution=execution,
     )
     try:
         document = await build_runtime_config(
@@ -123,8 +129,41 @@ async def get_model_by_id(
 
 @router.post("/{model_id}/optimize", status_code=status.HTTP_202_ACCEPTED, response_model=JobResponse)
 async def optimize_model(model_id: UUID, session: AsyncSessionDep) -> OptimizeModelJob:
-    """Queue a separate OpenVINO model with symmetric INT8-compressed weights."""
+    """Queue an INT8 variant of the original OpenVINO export."""
     return await ModelOptimizationService(session).submit(model_id)
+
+
+@router.post("/{model_id}/exports/{backend}/variants", status_code=status.HTTP_202_ACCEPTED, response_model=JobResponse)
+async def create_model_variant(
+    model_id: UUID, backend: ExportBackend, payload: VariantRequest, session: AsyncSessionDep
+) -> OptimizeModelJob:
+    """Create a standalone export variant within an existing model."""
+    return await ModelOptimizationService(session).submit(model_id, backend.value, payload)
+
+
+@router.delete("/{model_id}/exports/{backend}/variants/{variant}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_model_variant(
+    model_id: UUID,
+    backend: ExportBackend,
+    variant: str,
+    session: AsyncSessionDep,
+    registry: Annotated[RuntimeSessionRegistry, Depends(get_runtime_session_registry)],
+) -> None:
+    """Remove an unused named package without changing the model or original export."""
+    if variant == "original":
+        raise InvalidResourceError("Model", "The original export cannot be deleted independently")
+    service = ModelService(session)
+    model = await service.get_model_by_id(model_id)
+    for runtime_session in registry.sessions():
+        loaded = runtime_session.state().model
+        if (
+            loaded is not None
+            and loaded.model_id == model_id
+            and loaded.backend == backend.value
+            and loaded.variant == variant
+        ):
+            raise ResourceInUseError(ResourceType.MODEL, str(model_id))
+    await service.delete_variant(model, backend.value, variant)
 
 
 class ModelNameUpdate(BaseModel):
@@ -199,6 +238,9 @@ async def download_model_backend(  # noqa: PLR0913
     environment_id: UUID | None = None,
     device: str | None = None,
     task: str | None = None,
+    variant: str = "original",
+    execution_horizon: Annotated[int | None, Query(ge=1)] = None,
+    max_guidance_weight: Annotated[float, Query(ge=0, allow_inf_nan=False)] = 5.0,
 ) -> FileResponse:
     """Download a single backend export as a zip archive.
 
@@ -213,7 +255,11 @@ async def download_model_backend(  # noqa: PLR0913
             detail=f"Backend '{backend.value}' is not available for this model.",
         )
 
-    export_dir = Path(model.path) / "exports" / backend.value
+    export_dir = ModelService.resolve_export(model, backend.value, variant)
+    info = variant_info(read_package(export_dir, backend.value), variant)
+    chunk_size = action_chunk_size(read_package(export_dir, backend.value))
+    if info.rtc_enabled and (chunk_size is None or (execution_horizon or 1) > chunk_size // 2):
+        raise InvalidResourceError("Model", "RTC execution horizon must not exceed half the declared action chunk size")
     if not export_dir.is_dir():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -222,7 +268,7 @@ async def download_model_backend(  # noqa: PLR0913
 
     if environment_id is None:
         archive_path = await asyncio.to_thread(model_download_service.create_backend_archive, export_dir, backend.value)
-        filename = f"{safe_archive_name(model.name, fallback='model')}_{backend.value}.zip"
+        filename = f"{safe_archive_name(model.name, fallback='model')}_{backend.value}_{variant}.zip"
     else:
         if device is None or not device.strip():
             raise HTTPException(
@@ -245,6 +291,12 @@ async def download_model_backend(  # noqa: PLR0913
             backend=backend,
             device=device,
             task=task,
+            execution=ExecutionConfig(
+                mode="rtc" if info.rtc_enabled else "sync",
+                execution_horizon=execution_horizon or 1,
+                max_guidance_weight=max_guidance_weight,
+                chunk_size=chunk_size,
+            ),
             environment_service=environment_service,
             robot_client_factory=robot_client_factory,
         )
@@ -254,6 +306,7 @@ async def download_model_backend(  # noqa: PLR0913
             backend.value,
             runtime_yaml=runtime_yaml,
             readme=readme,
+            rtc=info.rtc_enabled,
         )
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         filename = f"studio-runtime-{safe_archive_name(model.name, fallback='model')}-{stamp}.zip"
@@ -284,9 +337,14 @@ async def stream_metrics(
 async def remove_model(
     model_id: UUID,
     model_service: Annotated[ModelService, Depends(get_model_service)],
+    registry: Annotated[RuntimeSessionRegistry, Depends(get_runtime_session_registry)],
 ) -> None:
     """Fetch all projects."""
     model = await model_service.get_model_by_id(model_id)
+    for runtime_session in registry.sessions():
+        loaded = runtime_session.state().model
+        if loaded is not None and loaded.model_id == model_id:
+            raise ResourceInUseError(ResourceType.MODEL, str(model_id))
     if model is None:
         raise ResourceNotFoundError(ResourceType.MODEL, model_id)
     await model_service.delete_model(model)

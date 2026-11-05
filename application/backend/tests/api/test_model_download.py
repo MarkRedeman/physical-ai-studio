@@ -164,6 +164,8 @@ def test_openvino_export_download_is_weights_only_without_recipe(tmp_path: Path)
     export_dir = model_dir / "exports" / "openvino"
     export_dir.mkdir(parents=True)
     (export_dir / "model.xml").write_text("<net/>")
+    (export_dir / "model.bin").write_bytes(b"weights")
+    (export_dir / "manifest.json").write_text('{"model":{"artifacts":{"openvino":"model.xml"}}}')
     model = _make_model(model_dir)
     # Weights-only must not require a robot manager / client factory.
     _override_model_service(model)
@@ -178,7 +180,7 @@ def test_openvino_export_download_is_weights_only_without_recipe(tmp_path: Path)
     assert response.status_code == 200
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         names = set(archive.namelist())
-        assert names == {"model.xml"}
+        assert names == {"model.xml", "model.bin", "manifest.json"}
         assert "runtime.yaml" not in names
 
 
@@ -187,6 +189,8 @@ def test_openvino_export_download_with_recipe_includes_yaml_and_exports(tmp_path
     export_dir = model_dir / "exports" / "openvino"
     export_dir.mkdir(parents=True)
     (export_dir / "model.xml").write_text("<net/>")
+    (export_dir / "model.bin").write_bytes(b"weights")
+    (export_dir / "manifest.json").write_text('{"model":{"artifacts":{"openvino":"model.xml"}}}')
     model = _make_model(model_dir)
     environment = _environment()
     document = Config(
@@ -245,6 +249,10 @@ def test_openvino_export_download_recipe_400_when_device_missing(tmp_path) -> No
     model_dir = tmp_path / "model"
     (model_dir / "exports" / "openvino").mkdir(parents=True)
     (model_dir / "exports" / "openvino" / "model.xml").write_text("<net/>")
+    (model_dir / "exports" / "openvino" / "model.bin").write_bytes(b"weights")
+    (model_dir / "exports" / "openvino" / "manifest.json").write_text(
+        '{"model":{"artifacts":{"openvino":"model.xml"}}}'
+    )
     model = _make_model(model_dir)
     _override_export_download(model)
     try:

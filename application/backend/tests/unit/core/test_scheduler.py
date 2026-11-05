@@ -415,7 +415,7 @@ async def test_recovery_cleans_only_abandoned_optimization_output_and_notifies(s
     jobs.get_job_list.return_value = [active, orphan]
     with patch("services.model_optimization_service.ModelOptimizationService.cleanup") as cleanup:
         await scheduler._recover_jobs()
-        cleanup.assert_called_once_with(orphan.id)
+    cleanup.assert_awaited_once_with(orphan)
     jobs.update_job_status.assert_awaited_once_with(
         orphan.id, JobStatus.FAILED, message="Model optimization worker stopped before completing the job"
     )

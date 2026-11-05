@@ -21,6 +21,45 @@ from services.runtime_export import (
 )
 
 
+def test_rtc_recipe_uses_runtime_executor_and_dual_track_queue() -> None:
+    from physicalai.runtime import RTCActionQueue, RTCExecution
+
+    fragment = policy_source_fragment(
+        export_dir="./exports/openvino",
+        backend="openvino",
+        device="CPU",
+        execution=ExecutionConfig(mode="rtc", chunk_size=50, execution_horizon=15, max_guidance_weight=3.0),
+    )
+    args = fragment["init_args"]
+    execution = Config.from_dict(args["execution"]).instantiate()
+    queue = Config.from_dict(args["action_queue"]).instantiate()
+    assert isinstance(execution, RTCExecution)
+    assert execution.chunk_size == 50
+    assert isinstance(queue, RTCActionQueue)
+
+
+def test_rtc_runtime_archive_includes_portable_latency_aware_launcher(tmp_path) -> None:
+    import zipfile
+
+    from services.model_download_service import ModelDownloadService
+
+    export = tmp_path / "rtc"
+    export.mkdir()
+    (export / "manifest.json").write_text("{}")
+    archive_path = ModelDownloadService().create_runtime_export(
+        export, "openvino", runtime_yaml="recipe", readme="RTC", rtc=True
+    )
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            source = archive.read("run_rtc.py").decode()
+            compile(source, "run_rtc.py", "exec")
+            assert "latency_tracker=tracker" in source
+            assert "from services" not in source
+            assert "exports/openvino/manifest.json" in archive.namelist()
+    finally:
+        archive_path.unlink()
+
+
 class FakePortFinder:
     def __init__(self, *, discovers: bool = True) -> None:
         self._discovers = discovers

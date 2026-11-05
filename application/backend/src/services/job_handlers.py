@@ -224,6 +224,9 @@ class ModelOptimizationJobHandler(JobHandler):
     async def interrupt(self, job: Job, service: JobService, signal_cancel: Callable[[UUID], None]) -> Job | None:
         canceled = await service.cancel_pending_job(job.id, self.job_type)
         if canceled is not None:
+            from services.model_optimization_service import ModelOptimizationService
+
+            await ModelOptimizationService(service.session).cleanup(canceled)
             return canceled
         requested = await service.repo.update_job_if_status(
             job.id,
@@ -246,7 +249,7 @@ class ModelOptimizationJobHandler(JobHandler):
     async def recover(self, job: Job, service: JobService) -> Job:
         from services.model_optimization_service import ModelOptimizationService
 
-        ModelOptimizationService.cleanup(job.id)
+        await ModelOptimizationService(service.session).cleanup(job)
         return await super().recover(job, service)
 
 

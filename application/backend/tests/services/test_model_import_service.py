@@ -108,6 +108,8 @@ def _create_model_directory(base_path: Path, files: dict[str, str]) -> Path:
         file_path = model_dir / name
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content)
+        if file_path.suffix == ".xml":
+            file_path.with_suffix(".bin").write_bytes(b"weights")
     return model_dir
 
 
@@ -267,7 +269,7 @@ async def test_import_rejects_invalid_optimization_metadata(
 
 
 @pytest.mark.anyio
-async def test_unmarked_full_model_still_requires_checkpoint(tmp_path, project_id, dataset_id, settings, dataset):
+async def test_complete_export_can_be_imported_without_checkpoint(tmp_path, project_id, dataset_id, settings, dataset):
     source_dir = _create_model_directory(
         tmp_path,
         {
@@ -275,10 +277,11 @@ async def test_unmarked_full_model_still_requires_checkpoint(tmp_path, project_i
             "exports/openvino/act.xml": "graph",
         },
     )
-    with _mock_services(settings, dataset) as service, pytest.raises(InvalidArchiveError, match=r"model\.ckpt"):
-        await service.import_model_directory(
+    with _mock_services(settings, dataset) as service:
+        model = await service.import_model_directory(
             source_dir=source_dir, project_id=project_id, dataset_id=dataset_id, model_name="Missing checkpoint"
         )
+    assert model.available_backends == ["openvino"]
 
 
 @pytest.mark.anyio

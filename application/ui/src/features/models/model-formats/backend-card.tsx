@@ -16,8 +16,10 @@ import { DownloadIcon } from '@geti-ui/ui/icons';
 import { fetchClient } from '../../../api/client';
 import type { components, SchemaModel } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS, type InferenceBackendConfig } from '../inference-backends';
+import { DeleteVariant } from './delete-variant';
 import { OptimizeModel } from './optimize-model';
 import { RuntimeExportDialog } from './runtime-export-dialog';
+import { useVariantSelection, VariantSelection } from './variant-selection';
 
 type BackendExportDetail = components['schemas']['BackendExportDetail'];
 type ExportBackend = components['schemas']['physicalai__export__backends__ExportBackend'];
@@ -81,7 +83,7 @@ const formatSize = (bytes: number): string => {
     return `${mb.toFixed(1)} MB`;
 };
 
-const ModelFormatSize = ({ exportDetail }: { exportDetail: BackendExportDetail | undefined }) => {
+const ModelFormatSize = ({ exportDetail }: { exportDetail: Pick<BackendExportDetail, 'size_bytes'> | undefined }) => {
     if (exportDetail === undefined) {
         return (
             <Flex direction='column' gap='size-10'>
@@ -103,7 +105,7 @@ const ModelPrecision = ({
     exportDetail,
     isOptimized,
 }: {
-    exportDetail: BackendExportDetail | undefined;
+    exportDetail: Pick<BackendExportDetail, 'size_bytes'> | undefined;
     isOptimized: boolean;
 }) => {
     if (exportDetail === undefined) {
@@ -133,8 +135,10 @@ export const BackendCard = ({ modelDetail, backendType, model }: BackendCardProp
     const exportDetail = modelDetail.exports.find(({ type }) => type === backendType);
     const isAvailable = exportDetail !== undefined;
     const backend = INFERENCE_BACKENDS[backendType];
+    const selection = useVariantSelection(model.id, backendType, undefined, modelDetail);
+    const selectedDetail = selection.selected ?? exportDetail;
     const downloadUrl = fetchClient.PATH('/api/models/{model_id}/exports/{backend}/download', {
-        params: { path: { model_id: model.id!, backend: backendType } },
+        params: { path: { model_id: model.id!, backend: backendType }, query: { variant: selection.variant } },
     });
 
     return (
@@ -159,12 +163,32 @@ export const BackendCard = ({ modelDetail, backendType, model }: BackendCardProp
                 <Divider size='S' />
 
                 <View paddingX='size-200'>
+                    {selection.variants.length > 0 && (
+                        <VariantSelection
+                            variants={selection.variants}
+                            variant={selection.variant}
+                            onChange={selection.setVariant}
+                        />
+                    )}
                     <Flex gap='size-400' marginTop='size-100' width='100%' wrap='wrap'>
-                        <ModelFormatSize exportDetail={exportDetail} />
-                        <ModelPrecision exportDetail={exportDetail} isOptimized={model.optimization !== null} />
+                        <ModelFormatSize exportDetail={selectedDetail} />
+                        <ModelPrecision
+                            exportDetail={selectedDetail}
+                            isOptimized={
+                                selection.selected?.weight_compression === 'int8_sym' || model.optimization !== null
+                            }
+                        />
                         {isAvailable && (
                             <View marginStart='auto' alignSelf={'center'}>
                                 <Flex gap='size-100'>
+                                    {selection.variant !== 'original' && (
+                                        <DeleteVariant
+                                            modelId={model.id!}
+                                            projectId={model.project_id}
+                                            backend={backendType}
+                                            variant={selection.variant}
+                                        />
+                                    )}
                                     {backendType === 'openvino' && (
                                         <DialogTrigger>
                                             <Button
@@ -178,6 +202,7 @@ export const BackendCard = ({ modelDetail, backendType, model }: BackendCardProp
                                                     close={close}
                                                     model={model}
                                                     backend={backendType}
+                                                    initialVariant={selection.variant}
                                                 />
                                             )}
                                         </DialogTrigger>
@@ -205,9 +230,14 @@ export const BackendCard = ({ modelDetail, backendType, model }: BackendCardProp
                             </View>
                         )}
                     </Flex>
-                    {isAvailable && backendType === 'openvino' && model.optimization === null && (
+                    {isAvailable && (
                         <View marginTop='size-200'>
-                            <OptimizeModel modelId={model.id!} />
+                            <OptimizeModel
+                                modelId={model.id!}
+                                backend={backendType}
+                                variant={selection.variant}
+                                operations={selection.selected?.available_operations ?? []}
+                            />
                         </View>
                     )}
                 </View>

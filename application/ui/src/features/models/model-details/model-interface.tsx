@@ -1,4 +1,6 @@
-import { Divider, Flex, Text, View } from '@geti-ui/ui';
+import { useState } from 'react';
+
+import { Divider, Flex, Item, Picker, Text, View } from '@geti-ui/ui';
 
 import type { components } from '../../../api/openapi-spec';
 import { Box } from '../shared/box';
@@ -34,12 +36,33 @@ const ModelOutputInterface = ({ outputFeatures }: { outputFeatures: IOFeature[] 
 };
 
 export const ModelInterface = ({ exports }: { exports: ExportDetail[] }) => {
-    const exportsWithIoSpec = exports.filter(({ io_spec }) => io_spec !== null && io_spec !== undefined);
+    const [selected, setSelected] = useState<string>();
+    const exportsWithIoSpec = exports
+        .flatMap((backend) =>
+            backend.variants?.length
+                ? backend.variants.map((variant) => ({
+                      id: `${backend.type}/${variant.id}`,
+                      type: backend.type,
+                      label: `${backend.type} · ${variant.label}`,
+                      io_spec: variant.io_spec,
+                  }))
+                : [
+                      {
+                          id: `${backend.type}/original`,
+                          type: backend.type,
+                          label: `${backend.type} · Original`,
+                          io_spec: backend.io_spec,
+                      },
+                  ]
+        )
+        .filter(({ io_spec }) => io_spec != null);
 
     const mainFormat =
+        exportsWithIoSpec.find((entry) => entry.id === selected) ??
         exportsWithIoSpec.find((e) => {
             return e.type === 'torch';
-        }) ?? exportsWithIoSpec.at(0);
+        }) ??
+        exportsWithIoSpec.at(0);
 
     if (exportsWithIoSpec.length === 0 || mainFormat === undefined) {
         return null;
@@ -53,12 +76,24 @@ export const ModelInterface = ({ exports }: { exports: ExportDetail[] }) => {
             <Box
                 title='Model interface'
                 content={
-                    <Flex direction='row' gap='size-400'>
-                        <ModelInputInterface inputFeatures={inputFeatures} />
+                    <Flex direction='column' gap='size-200'>
+                        {exportsWithIoSpec.length > 1 && (
+                            <Picker
+                                label='Export interface'
+                                items={exportsWithIoSpec}
+                                selectedKey={mainFormat.id}
+                                onSelectionChange={(key) => key !== null && setSelected(String(key))}
+                            >
+                                {(entry) => <Item key={entry.id}>{entry.label}</Item>}
+                            </Picker>
+                        )}
+                        <Flex direction='row' gap='size-400'>
+                            <ModelInputInterface inputFeatures={inputFeatures} />
 
-                        <Divider size='S' orientation='vertical' />
+                            <Divider size='S' orientation='vertical' />
 
-                        <ModelOutputInterface outputFeatures={outputFeatures} />
+                            <ModelOutputInterface outputFeatures={outputFeatures} />
+                        </Flex>
                     </Flex>
                 }
             />
