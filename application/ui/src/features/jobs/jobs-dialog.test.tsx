@@ -2,12 +2,15 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 
-import { SchemaTrainJob } from '../../api/openapi-spec';
 import { http } from '../../api/utils';
 import { server } from '../../msw-node-setup';
+import { getMockedDatasetImportJob } from '../../test-utils/mocks/mock-dataset-import-job';
+import { getMockedModelDetailResponse } from '../../test-utils/mocks/mock-model-detail-response';
+import { getMockedOptimizeModelJob } from '../../test-utils/mocks/mock-optimize-model-job';
 import { getMockedTrainJob } from '../../test-utils/mocks/mock-train-job';
 import { render } from '../../test-utils/render';
 import { JobsDialog } from './jobs-dialog';
+import { SchemaJob } from './use-job-cache';
 
 const PROJECT_A = 'project-a';
 const PROJECT_B = 'project-b';
@@ -35,7 +38,7 @@ const otherProjectJob = getMockedTrainJob({
     payload: { model_name: 'other-project-model' } as never,
 });
 
-const mockJobs = (jobs: SchemaTrainJob[]) => {
+const mockJobs = (jobs: SchemaJob[]) => {
     server.use(http.get('/api/jobs', () => HttpResponse.json(jobs)));
 };
 
@@ -46,6 +49,82 @@ const renderDialog = (props: Partial<Parameters<typeof JobsDialog>[0]> = {}) =>
     });
 
 describe('JobsDialog', () => {
+    it('shows and counts training, import and optimization jobs together', async () => {
+        const user = userEvent.setup();
+        const optimize = getMockedOptimizeModelJob({ id: 'optimize-job', project_id: PROJECT_A, status: 'running' });
+        const imported = getMockedDatasetImportJob({
+            id: 'dataset-job',
+            project_id: PROJECT_A,
+            status: 'pending',
+            payload: {
+                step: 'queued_for_import',
+                archive_staging_id: 'staging',
+                format_hint: 'auto',
+                dataset_name: 'Imported demonstrations',
+            },
+        });
+        mockJobs([completedJob, optimize, imported]);
+        server.use(http.get('/api/models/{model_id}', () => HttpResponse.json(getMockedModelDetailResponse())));
+        renderDialog({ projectId: PROJECT_A });
+        expect(await screen.findByTestId('optimize-job')).toHaveTextContent('Model optimization');
+        expect(screen.getByTestId('dataset-job')).toHaveTextContent('Dataset import');
+        expect(screen.getByTestId('job-completed')).toHaveTextContent('completed-model');
+        expect(within(screen.getByRole('tab', { name: /all jobs/i })).getByText('3')).toBeInTheDocument();
+        await user.click(screen.getByRole('tab', { name: /running jobs/i }));
+        expect(screen.getByTestId('optimize-job')).toBeInTheDocument();
+        expect(screen.queryByTestId('dataset-job')).not.toBeInTheDocument();
+        await user.click(screen.getByRole('tab', { name: /scheduled jobs/i }));
+        expect(screen.getByTestId('dataset-job')).toBeInTheDocument();
+        expect(screen.queryByTestId('optimize-job')).not.toBeInTheDocument();
+    });
+
+    it('scopes non-training jobs to their projects too', async () => {
+        mockJobs([
+            getMockedOptimizeModelJob({ project_id: PROJECT_A }),
+            getMockedDatasetImportJob({ project_id: PROJECT_B }),
+        ]);
+        server.use(http.get('/api/models/{model_id}', () => HttpResponse.json(getMockedModelDetailResponse())));
+        renderDialog({ projectId: PROJECT_A });
+        expect(await screen.findByText('Model optimization')).toBeInTheDocument();
+        expect(screen.queryByText('Dataset import')).not.toBeInTheDocument();
+    });
+
+    it('opens logs for an optimization job using the same menu as training', async () => {
+        const user = userEvent.setup();
+        const job = getMockedOptimizeModelJob();
+        const viewed: SchemaJob[] = [];
+        mockJobs([job]);
+        server.use(http.get('/api/models/{model_id}', () => HttpResponse.json(getMockedModelDetailResponse())));
+        renderDialog({ onViewLogs: (selected) => viewed.push(selected) });
+        const row = within(await screen.findByTestId(job.id ?? ''));
+        await user.click(row.getByRole('button', { name: 'Job options' }));
+        await user.click(await screen.findByRole('menuitem', { name: 'Logs' }));
+        expect(viewed).toEqual([job]);
+    });
+
+    it('cancels a running optimization but does not offer cancellation for an executing import', async () => {
+        const user = userEvent.setup();
+        const job = getMockedOptimizeModelJob({ status: 'running' });
+        const imported = getMockedDatasetImportJob({ status: 'running' });
+        mockJobs([job, imported]);
+        server.use(
+            http.get('/api/models/{model_id}', () => HttpResponse.json(getMockedModelDetailResponse())),
+            http.post('/api/jobs/{job_id}:interrupt', ({ params }) => {
+                expect(params.job_id).toBe(job.id);
+                mockJobs([{ ...job, status: 'canceled' }, imported]);
+                return HttpResponse.json(null);
+            })
+        );
+        renderDialog();
+        const row = within(await screen.findByTestId(job.id ?? ''));
+        expect(
+            within(screen.getByTestId(imported.id ?? '')).queryByRole('button', { name: 'Stop' })
+        ).not.toBeInTheDocument();
+        await user.click(row.getByRole('button', { name: 'Stop' }));
+        const confirmation = within(await screen.findByRole('alertdialog'));
+        await user.click(confirmation.getByRole('button', { name: 'Stop' }));
+        expect(await within(screen.getByTestId(job.id ?? '')).findByText('canceled')).toBeInTheDocument();
+    });
     it('renders all six status tabs in the agreed order with the exact labels', async () => {
         mockJobs([runningJob, completedJob]);
 

@@ -13,9 +13,16 @@ interface RuntimeExportDialogProps {
     model: SchemaModel;
     backend: string;
     initialVariant?: string;
+    fixedVariant?: boolean;
 }
 
-export const RuntimeExportDialog = ({ close, model, backend, initialVariant }: RuntimeExportDialogProps) => {
+export const RuntimeExportDialog = ({
+    close,
+    model,
+    backend,
+    initialVariant,
+    fixedVariant = false,
+}: RuntimeExportDialogProps) => {
     const selection = useVariantSelection(model.id, backend, initialVariant);
     const [horizon, setHorizon] = useState(1);
     const [guidance, setGuidance] = useState(5);
@@ -71,7 +78,7 @@ export const RuntimeExportDialog = ({ close, model, backend, initialVariant }: R
             <Heading>Download runtime export</Heading>
             <Divider />
             <Content>
-                {selection.variants.length > 0 && (
+                {!fixedVariant && selection.variants.length > 0 && (
                     <VariantSelection
                         variants={selection.variants}
                         variant={selection.variant}

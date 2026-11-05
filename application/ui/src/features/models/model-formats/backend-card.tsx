@@ -1,247 +1,90 @@
-import {
-    Badge,
-    Button,
-    Content,
-    ContextualHelp,
-    DialogTrigger,
-    Divider,
-    Flex,
-    Heading,
-    Icon,
-    Text,
-    View,
-} from '@geti-ui/ui';
-import { DownloadIcon } from '@geti-ui/ui/icons';
+import { Divider, Flex, Heading, Text, View } from '@geti-ui/ui';
 
-import { fetchClient } from '../../../api/client';
 import type { components, SchemaModel } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS, type InferenceBackendConfig } from '../inference-backends';
-import { DeleteVariant } from './delete-variant';
-import { OptimizeModel } from './optimize-model';
-import { RuntimeExportDialog } from './runtime-export-dialog';
-import { useVariantSelection, VariantSelection } from './variant-selection';
+import { VariantActions } from './variant-actions';
+import { ExportVariant } from './variant-selection';
 
-type BackendExportDetail = components['schemas']['BackendExportDetail'];
 type ExportBackend = components['schemas']['physicalai__export__backends__ExportBackend'];
-type ModelDetailResponse = components['schemas']['ModelDetailResponse'];
 
 export const InferenceBackendLogo = ({
     backend,
     isAvailable,
+    compact = false,
 }: {
     backend: InferenceBackendConfig;
     isAvailable: boolean;
+    compact?: boolean;
 }) => {
     const Logo = backend.logo;
-    const unavailableStyle = isAvailable ? undefined : { opacity: 0.4 };
-
     return (
-        <Flex alignItems='center' gap='size-200' UNSAFE_style={unavailableStyle}>
-            <Flex>
-                <Logo height={'50px'} width={'50px'} />
-            </Flex>
-            <Flex direction='column' gap='size-10' justifyContent={'center'}>
-                <Heading level={4} marginBottom={0}>
+        <Flex alignItems='center' gap='size-200' UNSAFE_style={isAvailable ? undefined : { opacity: 0.4 }}>
+            <Logo height={compact ? '32px' : '50px'} width={compact ? '32px' : '50px'} />
+            <Flex direction='column' gap='size-10'>
+                <Heading level={4} margin={0}>
                     {backend.label}
                 </Heading>
-                <Text
-                    UNSAFE_style={{
-                        fontSize: '11px',
-                    }}
-                >
-                    {backend.description}
-                </Text>
+                {!compact && <Text UNSAFE_style={{ fontSize: '11px' }}>{backend.description}</Text>}
             </Flex>
         </Flex>
     );
 };
 
-export const Unavailable = ({ backend }: { backend: InferenceBackendConfig }) => {
-    return (
-        <Flex direction='column' gap='size-100' alignItems={'end'}>
-            <Badge variant={'negative'} UNSAFE_style={{ padding: 0, opacity: 0.9 }}>
-                Unavailable
-            </Badge>
-            <ContextualHelp variant='help'>
-                <Heading>Export missing</Heading>
-                <Content>
-                    <Text>
-                        This model does not include an exported model for {backend.label}. Try retraining the model to
-                        restart the model export.
-                    </Text>
-                </Content>
-            </ContextualHelp>
-        </Flex>
-    );
-};
-
-const formatSize = (bytes: number): string => {
+const formatSize = (bytes: number) => {
     const mb = bytes / (1024 * 1024);
-    if (mb >= 1024) {
-        return `${(mb / 1024).toFixed(1)} GB`;
-    }
-    return `${mb.toFixed(1)} MB`;
-};
-
-const ModelFormatSize = ({ exportDetail }: { exportDetail: Pick<BackendExportDetail, 'size_bytes'> | undefined }) => {
-    if (exportDetail === undefined) {
-        return (
-            <Flex direction='column' gap='size-10'>
-                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Size</Text>
-                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>—</Text>
-            </Flex>
-        );
-    }
-
-    return (
-        <Flex direction='column' gap='size-10'>
-            <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Size</Text>
-            <Text>{formatSize(exportDetail.size_bytes)}</Text>
-        </Flex>
-    );
-};
-
-const ModelPrecision = ({
-    exportDetail,
-    isOptimized,
-}: {
-    exportDetail: Pick<BackendExportDetail, 'size_bytes'> | undefined;
-    isOptimized: boolean;
-}) => {
-    if (exportDetail === undefined) {
-        return (
-            <Flex direction='column' gap='size-10'>
-                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Precision</Text>
-                <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>—</Text>
-            </Flex>
-        );
-    }
-
-    return (
-        <Flex direction='column' gap='size-10'>
-            <Text UNSAFE_style={{ color: 'var(--spectrum-global-color-gray-700)' }}>Precision</Text>
-            <Text>{isOptimized ? 'INT8 symmetric weights' : 'Original'}</Text>
-        </Flex>
-    );
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
 };
 
 interface BackendCardProps {
-    modelDetail: ModelDetailResponse;
     backendType: ExportBackend;
     model: SchemaModel;
+    variant: ExportVariant;
+    onOptimize: () => void;
 }
 
-export const BackendCard = ({ modelDetail, backendType, model }: BackendCardProps) => {
-    const exportDetail = modelDetail.exports.find(({ type }) => type === backendType);
-    const isAvailable = exportDetail !== undefined;
+export const BackendCard = ({ backendType, model, variant, onOptimize }: BackendCardProps) => {
     const backend = INFERENCE_BACKENDS[backendType];
-    const selection = useVariantSelection(model.id, backendType, undefined, modelDetail);
-    const selectedDetail = selection.selected ?? exportDetail;
-    const downloadUrl = fetchClient.PATH('/api/models/{model_id}/exports/{backend}/download', {
-        params: { path: { model_id: model.id!, backend: backendType }, query: { variant: selection.variant } },
-    });
 
     return (
-        <View
-            backgroundColor={'gray-50'}
-            paddingY='size-200'
-            borderRadius={'medium'}
-            borderWidth='thin'
-            borderColor={'gray-100'}
-        >
-            <Flex direction='column' justifyContent='space-between' gap='size-200'>
-                <View paddingX='size-200'>
-                    <Flex justifyContent={'space-between'}>
-                        <Flex direction='column' gap='size-100' marginEnd='size-200' justifyContent='center'>
-                            <InferenceBackendLogo backend={backend} isAvailable={isAvailable} />
-                        </Flex>
-
-                        {isAvailable === false && <Unavailable backend={backend} />}
-                    </Flex>
-                </View>
-
-                <Divider size='S' />
-
-                <View paddingX='size-200'>
-                    {selection.variants.length > 0 && (
-                        <VariantSelection
-                            variants={selection.variants}
-                            variant={selection.variant}
-                            onChange={selection.setVariant}
-                        />
-                    )}
-                    <Flex gap='size-400' marginTop='size-100' width='100%' wrap='wrap'>
-                        <ModelFormatSize exportDetail={selectedDetail} />
-                        <ModelPrecision
-                            exportDetail={selectedDetail}
-                            isOptimized={
-                                selection.selected?.weight_compression === 'int8_sym' || model.optimization !== null
-                            }
-                        />
-                        {isAvailable && (
-                            <View marginStart='auto' alignSelf={'center'}>
-                                <Flex gap='size-100'>
-                                    {selection.variant !== 'original' && (
-                                        <DeleteVariant
-                                            modelId={model.id!}
-                                            projectId={model.project_id}
-                                            backend={backendType}
-                                            variant={selection.variant}
-                                        />
-                                    )}
-                                    {backendType === 'openvino' && (
-                                        <DialogTrigger>
-                                            <Button
-                                                aria-label={`Download ${backend.label} runtime export`}
-                                                variant='secondary'
-                                            >
-                                                Runtime export
-                                            </Button>
-                                            {(close) => (
-                                                <RuntimeExportDialog
-                                                    close={close}
-                                                    model={model}
-                                                    backend={backendType}
-                                                    initialVariant={selection.variant}
-                                                />
-                                            )}
-                                        </DialogTrigger>
-                                    )}
-                                    <Button
-                                        href={downloadUrl}
-                                        aria-label={`Download ${backend.label} export`}
-                                        UNSAFE_style={{
-                                            color: 'inherit',
-                                            display: 'inline-flex',
-                                            textDecoration: 'none',
-                                            paddingInline: 'var(--spectrum-global-dimension-size-200)',
-                                            alignItems: 'center',
-                                        }}
-                                        target='_blank'
-                                        rel='noopener noreferrer'
-                                        variant='secondary'
-                                    >
-                                        <Icon marginEnd='size-100'>
-                                            <DownloadIcon />
-                                        </Icon>
-                                        <span>Download</span>
-                                    </Button>
-                                </Flex>
-                            </View>
-                        )}
-                    </Flex>
-                    {isAvailable && (
-                        <View marginTop='size-200'>
-                            <OptimizeModel
-                                modelId={model.id!}
+        <section aria-label={`${backend.label} · ${variant.label}`}>
+            <View
+                backgroundColor='gray-50'
+                padding='size-200'
+                borderRadius='medium'
+                borderWidth='thin'
+                borderColor='gray-100'
+                height='100%'
+            >
+                <Flex direction='column' justifyContent='space-between' gap='size-200' height='100%'>
+                    <Flex direction='column' gap='size-150'>
+                        <Flex justifyContent='space-between' alignItems='center' gap='size-100'>
+                            <InferenceBackendLogo backend={backend} isAvailable compact />
+                            <VariantActions
+                                model={model}
                                 backend={backendType}
-                                variant={selection.variant}
-                                operations={selection.selected?.available_operations ?? []}
+                                variant={variant}
+                                onOptimize={onOptimize}
                             />
-                        </View>
-                    )}
-                </View>
-            </Flex>
-        </View>
+                        </Flex>
+                        <Heading level={4} margin={0}>
+                            {variant.label}
+                        </Heading>
+                        <Divider size='S' />
+                        <Flex gap='size-300' wrap>
+                            <Flex direction='column' gap='size-50'>
+                                <Text>Size</Text>
+                                <Text>{formatSize(variant.size_bytes)}</Text>
+                            </Flex>
+                            <Flex direction='column' gap='size-50'>
+                                <Text>Weights</Text>
+                                <Text>
+                                    {variant.weight_compression === 'int8_sym' ? 'INT8 symmetric weights' : 'Original'}
+                                </Text>
+                            </Flex>
+                        </Flex>
+                    </Flex>
+                </Flex>
+            </View>
+        </section>
     );
 };

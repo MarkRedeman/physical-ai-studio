@@ -3,6 +3,9 @@
 
 import { HttpResponse } from 'msw';
 
+import { getMockedDatasetImportJob } from '../src/test-utils/mocks/mock-dataset-import-job';
+import { getMockedModelDetailResponse } from '../src/test-utils/mocks/mock-model-detail-response';
+import { getMockedOptimizeModelJob } from '../src/test-utils/mocks/mock-optimize-model-job';
 import { getMockedTrainJob } from '../src/test-utils/mocks/mock-train-job';
 import { expect, http, test } from './fixtures';
 
@@ -22,16 +25,44 @@ const jobB = getMockedTrainJob({
     end_time: '2026-08-01T01:00:00Z',
     payload: { model_name: 'project-b-model' } as never,
 });
+const optimizationJob = getMockedOptimizeModelJob({ id: 'optimization-job', project_id: PROJECT_A, status: 'running' });
+const importJob = getMockedDatasetImportJob({ id: 'dataset-import-job', project_id: PROJECT_B, status: 'pending' });
 
 test.describe('Jobs footer entry point', () => {
     test.beforeEach(({ network }) => {
         network.use(
-            http.get('/api/jobs', () => HttpResponse.json([jobA, jobB])),
+            http.get('/api/jobs', () => HttpResponse.json([jobA, jobB, optimizationJob, importJob])),
+            http.get('/api/models/{model_id}', () => HttpResponse.json(getMockedModelDetailResponse())),
             http.get('/api/logs/sources', () =>
                 HttpResponse.json([{ id: 'application', name: 'Application', type: 'application', created_at: null }])
             ),
             http.get('/api/logs/{source_id}/stream', () => new HttpResponse('data: "DONE"\n\n' as never))
         );
+    });
+
+    test('lists every job type globally and filters them using the same status tabs', async ({ jobsDialogPage }) => {
+        await jobsDialogPage.gotoGlobal();
+        await jobsDialogPage.openJobs();
+        await expect(jobsDialogPage.rows).toHaveCount(4);
+        await expect(jobsDialogPage.row(optimizationJob.id!)).toContainText('Model optimization');
+        await expect(jobsDialogPage.row(importJob.id!)).toContainText('Dataset import');
+        await jobsDialogPage.selectTab('Running jobs');
+        await expect(jobsDialogPage.rows).toHaveCount(2);
+        await expect(jobsDialogPage.row(importJob.id!)).toBeHidden();
+        await jobsDialogPage.selectTab('Scheduled jobs');
+        await expect(jobsDialogPage.rows).toHaveCount(1);
+        await expect(jobsDialogPage.row(importJob.id!)).toBeVisible();
+        await jobsDialogPage.showAllJobs();
+        await expect(jobsDialogPage.rows).toHaveCount(4);
+    });
+
+    test('opens logs for a non-training job', async ({ jobsDialogPage }) => {
+        await jobsDialogPage.gotoGlobal();
+        await jobsDialogPage.openJobs();
+        await jobsDialogPage.viewLogsFor(optimizationJob.id!);
+        await expect(jobsDialogPage.logsHeading).toBeVisible();
+        await jobsDialogPage.closeLogs();
+        await expect(jobsDialogPage.row(optimizationJob.id!)).toBeVisible();
     });
 
     test('scopes Jobs to the current project on a project subpage', async ({ jobsDialogPage }) => {
@@ -41,6 +72,8 @@ test.describe('Jobs footer entry point', () => {
         await expect(jobsDialogPage.dialog.getByRole('heading', { name: 'Current project jobs' })).toBeVisible();
         await expect(jobsDialogPage.dialog.getByText('project-a-model')).toBeVisible();
         await expect(jobsDialogPage.dialog.getByText('project-b-model')).toBeHidden();
+        await expect(jobsDialogPage.row(optimizationJob.id!)).toBeVisible();
+        await expect(jobsDialogPage.row(importJob.id!)).toBeHidden();
     });
 
     test("shows every project's jobs on the global Projects page", async ({ jobsDialogPage }) => {

@@ -18,13 +18,13 @@ import {
 } from '@geti-ui/ui';
 
 import { $api } from '../../api/client';
-import { SchemaTrainJob } from '../../api/openapi-spec';
 import { ReactComponent as EmptyIllustration } from '../../assets/illustration.svg';
-import { TrainingJobsTable } from '../models/job-table/training-jobs-table';
+import { JobsTable } from './jobs-table';
+import { SchemaJob } from './use-job-cache';
 
 import classes from './jobs-dialog.module.css';
 
-export type JobStatusTabKey = SchemaTrainJob['status'] | 'all';
+export type JobStatusTabKey = SchemaJob['status'] | 'all';
 
 interface StatusTab {
     key: JobStatusTabKey;
@@ -41,7 +41,7 @@ const STATUS_TABS: StatusTab[] = [
     { key: 'failed', label: 'Failed jobs', emptyMessage: 'No failed jobs.' },
 ];
 
-const tabStatus = (key: JobStatusTabKey): SchemaTrainJob['status'] | undefined => (key === 'all' ? undefined : key);
+const tabStatus = (key: JobStatusTabKey): SchemaJob['status'] | undefined => (key === 'all' ? undefined : key);
 
 const JobsEmptyState = ({ message }: { message: string }) => (
     <IllustratedMessage>
@@ -52,7 +52,7 @@ const JobsEmptyState = ({ message }: { message: string }) => (
 
 interface JobsDialogProps {
     projectId?: string;
-    onViewLogs: (job: SchemaTrainJob) => void;
+    onViewLogs: (job: SchemaJob) => void;
     close: () => void;
     selectedTab?: JobStatusTabKey;
     onSelectedTabChange?: (tab: JobStatusTabKey) => void;
@@ -71,17 +71,14 @@ export const JobsDialog = ({ projectId, onViewLogs, close, selectedTab, onSelect
 
     const { data, isPending, isError, refetch } = $api.useQuery('get', '/api/jobs');
 
-    const trainingJobs = (data ?? [])
-        .filter((job): job is SchemaTrainJob => job.type === 'training')
-        .filter((job) => projectId === undefined || job.project_id === projectId);
+    const jobs = (data ?? []).filter((job) => projectId === undefined || job.project_id === projectId);
 
     const heading = projectId === undefined ? 'All projects jobs' : 'Current project jobs';
 
     const counts = STATUS_TABS.reduce<Record<JobStatusTabKey, number>>(
         (acc, tab) => {
             const status = tabStatus(tab.key);
-            acc[tab.key] =
-                status === undefined ? trainingJobs.length : trainingJobs.filter((job) => job.status === status).length;
+            acc[tab.key] = status === undefined ? jobs.length : jobs.filter((job) => job.status === status).length;
             return acc;
         },
         {} as Record<JobStatusTabKey, number>
@@ -149,8 +146,8 @@ export const JobsDialog = ({ projectId, onViewLogs, close, selectedTab, onSelect
                             <TabPanels minHeight={0} UNSAFE_className={classes.tabPanels}>
                                 {STATUS_TABS.map((tab) => (
                                     <Item key={tab.key}>
-                                        <TrainingJobsTable
-                                            jobs={trainingJobs.filter((job) => {
+                                        <JobsTable
+                                            jobs={jobs.filter((job) => {
                                                 const status = tabStatus(tab.key);
                                                 return status === undefined || job.status === status;
                                             })}

@@ -130,8 +130,9 @@ before registering one.
 
 ### Export Variants and Optimization
 
-In a model's **Model formats** tab, choose **Optimize to INT8** on its OpenVINO
-card. Studio queues an `optimize_model` job and compresses the policy's weights
+In a model's **Model formats** tab, choose the **Add variant** card, select an
+OpenVINO source export, and choose **Optimize to INT8**. Studio queues an
+`optimize_model` job and compresses the policy's weights
 with NNCF's symmetric INT8 mode. The model needs a complete OpenVINO export;
 optimization does not export a missing format or require a calibration dataset.
 NNCF is included in the backend dependencies.
@@ -139,9 +140,13 @@ NNCF is included in the backend dependencies.
 The original model and its training history stay unchanged. New artifacts live
 under `exports/<backend>/variants/<variant>/` on the **same model**, with a
 complete `manifest.json` and all weights, tokenizers, and other dependencies in
-each package. Choose the **Variant** in the backend card, inference dialog, or
+each package. Each published backend/variant has its own compact card with
+package-specific download actions. Choose a variant in the inference dialog or
 runtime workspace. Downloads contain only the selected package; a full model
 download includes all published variants. Unused named variants can be deleted.
+Each card's actions menu includes download, runtime export (where supported),
+and deletion for named variants. **Optimize** opens the same creation dialog
+with that card's export preselected, when further optimization is available.
 
 Supported operations are:
 

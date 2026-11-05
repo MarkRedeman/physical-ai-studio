@@ -47,7 +47,7 @@ export const OptimizeModel = ({
                 requires a checkpoint; SnapFlow requires already-distilled weights. Validate policy accuracy before
                 deployment.
             </Text>
-            <Flex gap='size-100'>
+            <Flex gap='size-150' direction='column'>
                 {operations.map((operation) => (
                     <div key={operation.operation} title={operation.reason ?? undefined}>
                         <Button
@@ -73,6 +73,7 @@ export const OptimizeModel = ({
                                   ? 'Export RTC'
                                   : 'Export SnapFlow'}
                         </Button>
+                        {operation.reason && <Text> {operation.reason}</Text>}
                     </div>
                 ))}
                 {activeJob?.id && (
