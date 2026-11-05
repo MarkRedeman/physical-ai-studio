@@ -147,6 +147,9 @@ download includes all published variants. Unused named variants can be deleted.
 Each card's actions menu includes download, runtime export (where supported),
 and deletion for named variants. **Optimize** opens the same creation dialog
 with that card's export preselected, when further optimization is available.
+**Run** opens inference directly for that card's backend and variant, using the
+preferred compatible device. Robot motion still requires **Play** in the inference
+workspace; opening the screen does not start control automatically.
 
 Supported operations are:
 

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 
 import { ActionButton, DialogContainer, Item, Menu, MenuTrigger } from '@geti-ui/ui';
 import { MoreMenu } from '@geti-ui/ui/icons';
@@ -50,25 +50,27 @@ export const VariantActions = ({
                     {variant.id !== 'original' ? <Item key='delete'>Delete</Item> : null}
                 </Menu>
             </MenuTrigger>
-            <DialogContainer onDismiss={() => setDialog(null)}>
-                {dialog === 'runtime' ? (
-                    <RuntimeExportDialog
-                        model={model}
-                        backend={backend}
-                        initialVariant={variant.id}
-                        fixedVariant
-                        close={() => setDialog(null)}
-                    />
-                ) : dialog === 'delete' ? (
-                    <DeleteVariantDialog
-                        modelId={model.id!}
-                        projectId={model.project_id}
-                        backend={backend}
-                        variant={variant.id}
-                        close={() => setDialog(null)}
-                    />
-                ) : null}
-            </DialogContainer>
+            <Suspense fallback={null}>
+                <DialogContainer onDismiss={() => setDialog(null)}>
+                    {dialog === 'runtime' ? (
+                        <RuntimeExportDialog
+                            model={model}
+                            backend={backend}
+                            initialVariant={variant.id}
+                            fixedVariant
+                            close={() => setDialog(null)}
+                        />
+                    ) : dialog === 'delete' ? (
+                        <DeleteVariantDialog
+                            modelId={model.id!}
+                            projectId={model.project_id}
+                            backend={backend}
+                            variant={variant.id}
+                            close={() => setDialog(null)}
+                        />
+                    ) : null}
+                </DialogContainer>
+            </Suspense>
         </>
     );
 };

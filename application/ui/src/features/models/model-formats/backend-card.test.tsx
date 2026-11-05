@@ -13,6 +13,16 @@ import { render } from '../../../test-utils/render';
 import { BackendCard } from './backend-card';
 
 describe('BackendCard', () => {
+    beforeEach(() =>
+        server.use(
+            http.get('/api/system/devices/inference', () =>
+                HttpResponse.json([
+                    { type: 'cpu', name: 'CPU', backend: 'openvino', device: 'CPU' },
+                    { type: 'cpu', name: 'CPU', backend: 'torch', device: 'cpu' },
+                ])
+            )
+        )
+    );
     it('keeps variant actions in a compact menu and downloads precisely that package', async () => {
         const user = userEvent.setup();
         const optimize = rs.fn();
@@ -29,8 +39,13 @@ describe('BackendCard', () => {
             />
         );
         const card = within(screen.getByRole('region', { name: 'OpenVINO · RTC + INT8' }));
+        const backendName = card.getByRole('heading', { name: 'OpenVINO' });
+        expect(backendName.parentElement).toContainElement(card.getByText('RTC + INT8'));
+        expect(card.queryByRole('heading', { name: 'RTC + INT8' })).not.toBeInTheDocument();
         expect(card.getByText('INT8 symmetric weights')).toBeInTheDocument();
-        expect(card.getAllByRole('button')).toHaveLength(1);
+        expect(card.getByRole('button', { name: 'Run' })).toBeInTheDocument();
+        await user.click(card.getByRole('button', { name: 'Optimize' }));
+        expect(optimize).toHaveBeenCalledTimes(1);
         await user.click(card.getByRole('button', { name: 'Actions for OpenVINO RTC + INT8' }));
         expect(screen.getByRole('menuitem', { name: 'Download' })).toHaveAttribute(
             'href',
@@ -39,7 +54,7 @@ describe('BackendCard', () => {
         expect(screen.getByRole('menuitem', { name: 'Runtime export' })).toBeInTheDocument();
         expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument();
         await user.click(screen.getByRole('menuitem', { name: 'Optimize' }));
-        expect(optimize).toHaveBeenCalledTimes(1);
+        expect(optimize).toHaveBeenCalledTimes(2);
     });
 
     it('does not offer optimization when no operation is available and never deletes the original', async () => {
@@ -52,6 +67,9 @@ describe('BackendCard', () => {
                 onOptimize={rs.fn()}
             />
         );
+        expect(screen.getByRole('heading', { name: 'OpenVINO' }).parentElement).toHaveTextContent(/^OpenVINO$/);
+        expect(screen.queryByRole('heading', { name: 'Original' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Optimize' })).not.toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: 'Actions for OpenVINO Original' }));
         expect(screen.queryByRole('menuitem', { name: 'Optimize' })).not.toBeInTheDocument();
         expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();

@@ -52,6 +52,9 @@ test('model rows show separate export cards and create variants through the empt
     });
     let submitted: unknown;
     network.use(
+        http.get('/api/system/devices/inference', () =>
+            HttpResponse.json([{ type: 'cpu', name: 'CPU', backend: 'openvino', device: 'CPU' }])
+        ),
         http.get('/api/projects/{project_id}/models', () => HttpResponse.json([model])),
         http.get('/api/models/{model_id}', () => HttpResponse.json(detail)),
         http.get('/api/jobs', () => HttpResponse.json([])),
@@ -68,6 +71,32 @@ test('model rows show separate export cards and create variants through the empt
     const int8 = page.getByRole('region', { name: 'OpenVINO · INT8' });
     await expect(original).toBeVisible();
     await expect(int8).toBeVisible();
+    const backendName = int8.getByRole('heading', { name: 'OpenVINO', exact: true });
+    const description = int8.getByText('INT8', { exact: true });
+    await expect(original.getByRole('heading', { name: 'OpenVINO', exact: true }).locator('..')).toHaveText('OpenVINO');
+    const nameStyle = await backendName.evaluate((element) => ({
+        fontSize: getComputedStyle(element).fontSize,
+        color: getComputedStyle(element).color,
+    }));
+    const descriptionStyle = await description.evaluate((element) => ({
+        fontSize: getComputedStyle(element).fontSize,
+        color: getComputedStyle(element).color,
+    }));
+    expect(Number.parseFloat(descriptionStyle.fontSize)).toBeLessThan(Number.parseFloat(nameStyle.fontSize));
+    expect(descriptionStyle.color).not.toBe(nameStyle.color);
+    const nameBox = await backendName.boundingBox();
+    const descriptionBox = await description.boundingBox();
+    if (!nameBox || !descriptionBox) throw new Error('Expected backend name and description to be visible');
+    expect(descriptionBox.x).toBeGreaterThan(nameBox.x + nameBox.width);
+    expect(Math.abs(descriptionBox.y + descriptionBox.height / 2 - nameBox.y - nameBox.height / 2)).toBeLessThan(4);
+    const weights = await int8.getByText('Weights', { exact: true }).locator('..').boundingBox();
+    const optimize = await int8.getByRole('button', { name: 'Optimize', exact: true }).boundingBox();
+    const run = await int8.getByRole('button', { name: 'Run', exact: true }).boundingBox();
+    if (!weights || !optimize || !run) throw new Error('Expected weights, Optimize and Run to be visible');
+    expect(optimize.x).toBeGreaterThan(weights.x + weights.width);
+    expect(run.x).toBeGreaterThan(optimize.x + optimize.width);
+    expect(Math.abs(run.y + run.height - weights.y - weights.height)).toBeLessThan(3);
+    await expect(original.getByRole('button', { name: 'Optimize', exact: true })).toHaveCount(0);
     await original.getByRole('button', { name: 'Actions for OpenVINO Original' }).click();
     const originalMenu = page.getByRole('menu', { name: 'Actions for OpenVINO Original' });
     await expect(originalMenu.getByRole('menuitem', { name: 'Download', exact: true })).toHaveAttribute(
@@ -102,8 +131,55 @@ test('model rows show separate export cards and create variants through the empt
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('status')).toHaveText('1 variant job in progress');
-    await int8.getByRole('button', { name: 'Actions for OpenVINO INT8' }).click();
-    await page.getByRole('menuitem', { name: 'Optimize', exact: true }).click();
+    await int8.getByRole('button', { name: 'Optimize', exact: true }).click();
     await expect(dialog.getByRole('button', { name: /Source export/ })).toContainText('OpenVINO · INT8');
     await expect(dialog.getByRole('status')).toContainText('Optimization pending');
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    // Keep this navigation test isolated from physical hardware and real sessions.
+    await page.routeWebSocket('**/api/projects/*/runtime/ws', (socket) => socket.close());
+    await int8.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/models/${model.id}/inference/openvino\\?device=CPU&variant=int8$`));
+    await expect(page.getByText(`${model.name} · openvino · int8`)).toBeVisible();
+});
+
+test('PyTorch variants can run directly on a Torch device', async ({ page, network }) => {
+    const model = getMockedModel({ dataset_id: null, policy: 'smolvla', available_backends: ['torch'] });
+    const detail = getMockedModelDetailResponse({
+        model,
+        exports: [
+            {
+                type: 'torch',
+                size_bytes: 1048576,
+                file_count: 2,
+                variants: [
+                    getMockedExportVariant({ can_run_in_studio: true }),
+                    getMockedExportVariant({
+                        id: 'snapflow',
+                        label: 'SnapFlow',
+                        checkpoint_kind: 'snapflow',
+                        can_run_in_studio: true,
+                    }),
+                ],
+            },
+        ],
+    });
+    network.use(
+        http.get('/api/projects/{project_id}/models', () => HttpResponse.json([model])),
+        http.get('/api/models/{model_id}', () => HttpResponse.json(detail)),
+        http.get('/api/jobs', () => HttpResponse.json([])),
+        http.get('/api/system/devices/inference', () =>
+            HttpResponse.json([{ type: 'cpu', name: 'CPU', backend: 'torch', device: 'cpu' }])
+        )
+    );
+    await page.routeWebSocket('**/api/projects/*/runtime/ws', (socket) => socket.close());
+    await page.goto(`/projects/${model.project_id}/models`);
+    await page.getByRole('button', { name: `Show details for ${model.name}` }).click();
+    const original = page.getByRole('region', { name: 'PyTorch · Original' });
+    const distilled = page.getByRole('region', { name: 'PyTorch · SnapFlow' });
+    await expect(original.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
+    await expect(distilled.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
+    await distilled.getByRole('button', { name: 'Run', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/models/${model.id}/inference/torch\\?device=cpu&variant=snapflow$`));
+    await expect(page.getByText(`${model.name} · torch · snapflow`)).toBeVisible();
 });

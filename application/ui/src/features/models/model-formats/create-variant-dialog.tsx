@@ -1,9 +1,21 @@
 // Copyright (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 
-import { Button, ButtonGroup, Content, Dialog, Divider, Flex, Heading, Item, Picker, Text } from '@geti-ui/ui';
+import {
+    Button,
+    ButtonGroup,
+    Content,
+    Dialog,
+    Divider,
+    Flex,
+    Heading,
+    Item,
+    Picker,
+    ProgressCircle,
+    Text,
+} from '@geti-ui/ui';
 
 import type { SchemaModelDetailResponse } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS, isExportBackend } from '../inference-backends';
@@ -37,28 +49,36 @@ export const CreateVariantDialog = ({
             <Heading>Create model variant</Heading>
             <Divider />
             <Content>
-                <Flex direction='column' gap='size-250'>
-                    <Picker
-                        label='Source export'
-                        items={sources}
-                        selectedKey={source?.id}
-                        onSelectionChange={(key) => key !== null && setSourceId(String(key))}
-                        width='100%'
-                    >
-                        {(item) => <Item key={item.id}>{item.label}</Item>}
-                    </Picker>
-                    {source ? (
-                        <OptimizeModel
-                            key={source.id}
-                            modelId={modelDetail.model.id!}
-                            backend={source.backend}
-                            variant={source.variant.id}
-                            operations={source.variant.available_operations}
-                        />
-                    ) : (
-                        <Text>A complete export is required before creating a variant.</Text>
-                    )}
-                </Flex>
+                <Suspense
+                    fallback={
+                        <Flex alignItems='center' justifyContent='center' minHeight='size-1600'>
+                            <ProgressCircle aria-label='Loading variant options' isIndeterminate />
+                        </Flex>
+                    }
+                >
+                    <Flex direction='column' gap='size-250'>
+                        <Picker
+                            label='Source export'
+                            items={sources}
+                            selectedKey={source?.id}
+                            onSelectionChange={(key) => key !== null && setSourceId(String(key))}
+                            width='100%'
+                        >
+                            {(item) => <Item key={item.id}>{item.label}</Item>}
+                        </Picker>
+                        {source ? (
+                            <OptimizeModel
+                                key={source.id}
+                                modelId={modelDetail.model.id!}
+                                backend={source.backend}
+                                variant={source.variant.id}
+                                operations={source.variant.available_operations}
+                            />
+                        ) : (
+                            <Text>A complete export is required before creating a variant.</Text>
+                        )}
+                    </Flex>
+                </Suspense>
             </Content>
             <ButtonGroup>
                 <Button variant='secondary' onPress={close}>

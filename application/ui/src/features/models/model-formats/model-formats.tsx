@@ -78,16 +78,18 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                     )}
                 </button>
             </Grid>
-            <DialogContainer onDismiss={() => setCreation(null)}>
-                {creation !== null && (
-                    <CreateVariantDialog
-                        key={creation.sourceId ?? 'new'}
-                        modelDetail={modelDetail}
-                        initialSourceId={creation.sourceId}
-                        close={() => setCreation(null)}
-                    />
-                )}
-            </DialogContainer>
+            <Suspense fallback={null}>
+                <DialogContainer onDismiss={() => setCreation(null)}>
+                    {creation !== null && (
+                        <CreateVariantDialog
+                            key={creation.sourceId ?? 'new'}
+                            modelDetail={modelDetail}
+                            initialSourceId={creation.sourceId}
+                            close={() => setCreation(null)}
+                        />
+                    )}
+                </DialogContainer>
+            </Suspense>
         </>
     );
 };

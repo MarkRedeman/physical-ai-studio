@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.schema import JobDB
 from exceptions import InvalidResourceError, ResourceInUseError, ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
+from schemas.hardware import InferenceBackend
 from schemas.job import TrainJob
 from schemas.model import BackendExportDetail, BackendIOSpec, ExportVariantDetail, Model, TrainingSummary
 from schemas.model_variant import export_directory, package_files, read_package, variant_info
@@ -132,7 +133,7 @@ class ModelService:
                     exported_at=info.created_at
                     or datetime.fromtimestamp((directory / "manifest.json").stat().st_mtime, tz=UTC),
                     io_spec=BackendIOSpec.from_manifest(manifest),
-                    can_run_in_studio=backend in {"openvino", "onnx"},
+                    can_run_in_studio=backend in {supported.value for supported in InferenceBackend},
                     available_operations=ModelOptimizationService.operations(model, backend, info, packages),
                 )
             )

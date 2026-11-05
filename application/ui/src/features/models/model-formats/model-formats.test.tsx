@@ -97,8 +97,7 @@ describe('ModelFormats variant cards', () => {
         const user = userEvent.setup();
         render(<ModelFormats model={getMockedModel()} />);
         const card = within(await screen.findByRole('region', { name: 'OpenVINO · INT8' }));
-        await user.click(card.getByRole('button', { name: 'Actions for OpenVINO INT8' }));
-        await user.click(await screen.findByRole('menuitem', { name: 'Optimize' }));
+        await user.click(card.getByRole('button', { name: 'Optimize' }));
         const dialog = within(await screen.findByRole('dialog', { name: 'Create model variant' }));
         expect(dialog.getByRole('button', { name: /Source export/ })).toHaveTextContent('OpenVINO · INT8');
         expect(dialog.getByRole('button', { name: 'Export RTC' })).toBeInTheDocument();

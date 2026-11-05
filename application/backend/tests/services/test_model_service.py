@@ -1,6 +1,7 @@
 """Unit tests for ModelService."""
 
 import importlib.util
+import json
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ import yaml
 from lightning.pytorch.core.saving import save_hparams_to_yaml
 
 from schemas.model import Model
+from schemas.model_variant import VariantInfo, export_directory
 from services.model_service import ModelService
 
 
@@ -125,6 +127,47 @@ def test_get_backend_details_ignores_incomplete_backend(tmp_path) -> None:
     backend_dir = tmp_path / "exports" / "torch"
     backend_dir.mkdir(parents=True)
     assert ModelService.get_backend_details(model) == []
+
+
+@pytest.mark.parametrize("variant", ["original", "snapflow"])
+@pytest.mark.parametrize(
+    "backend,extension,runnable",
+    [
+        ("torch", ".pt", True),
+        ("openvino", ".xml", True),
+        ("onnx", ".onnx", False),
+        ("executorch", ".pte", False),
+    ],
+)
+def test_export_runnability_matches_studio_backend_support(tmp_path, backend, extension, runnable, variant) -> None:
+    model = _make_model()
+    model.path = str(tmp_path)
+    model.policy = "smolvla"
+    directory = export_directory(tmp_path, backend, variant)
+    directory.mkdir(parents=True)
+    artifact = f"model{extension}"
+    (directory / artifact).write_bytes(b"export")
+    if backend == "openvino":
+        (directory / "model.bin").write_bytes(b"weights")
+    (directory / "manifest.json").write_text(
+        json.dumps(
+            {
+                "format": "policy_package",
+                "policy": {"name": model.policy},
+                "model": {"artifacts": {backend: artifact}},
+                "studio": {
+                    "variant": VariantInfo(
+                        id=variant, checkpoint_kind="snapflow" if variant == "snapflow" else "ordinary"
+                    ).model_dump(mode="json")
+                },
+            }
+        )
+    )
+
+    detail = ModelService.get_backend_details(model)[0]
+    assert detail.type == backend
+    assert detail.variants[0].id == variant
+    assert detail.variants[0].can_run_in_studio is runnable
 
 
 @pytest.mark.anyio
