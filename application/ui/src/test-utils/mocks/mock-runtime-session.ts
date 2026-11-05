@@ -10,8 +10,8 @@ import {
 export const getMockedExecutionConfig = (overrides: Partial<SchemaExecutionConfig> = {}): SchemaExecutionConfig => ({
     mode: 'sync',
     request_threshold: 0.5,
-    execution_horizon: 15,
-    max_guidance_weight: 7,
+    execution_horizon: 1,
+    max_guidance_weight: 5,
     ...overrides,
 });
 
@@ -22,7 +22,6 @@ export const getMockedSessionModel = (overrides: Partial<SchemaSessionModel> = {
     device: 'cpu',
     variant: 'original',
     rtc_enabled: false,
-    supported_execution_modes: overrides.rtc_enabled ? ['sync', 'async', 'rtc'] : ['sync', 'async'],
     ...overrides,
 });
 

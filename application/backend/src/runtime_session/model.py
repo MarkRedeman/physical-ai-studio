@@ -20,7 +20,7 @@ import numpy as np
 
 from runtime_session.bus import Bus, publish_status, until_serving
 from schemas.model_variant import action_chunk_size, read_package, variant_info
-from schemas.runtime_session import CommandDone, ExecutionMode, ModelExecutionCapabilities, SessionModel
+from schemas.runtime_session import CommandDone, SessionModel
 from services.model_service import ModelService
 from workers import model_worker as model_rpc
 from workers.model_worker import ActionChunk, InferRequest, ModelWorker
@@ -102,8 +102,7 @@ class ProcessModel:
         self.chunk_size = action_chunk_size(manifest)
         from physicalai.inference.callbacks import RTCLatencyTracker
 
-        self.latency_tracker = RTCLatencyTracker(window_size=100)
-        self.supported_execution_modes: list[ExecutionMode] = ["sync", "async"]
+        self.latency_tracker = RTCLatencyTracker()
         self.model = model
         self.backend = backend
         self.device = device
@@ -122,7 +121,6 @@ class ProcessModel:
         self._bus: Bus | None = None
         self._stack: AsyncExitStack | None = None
         self._started = False
-        self._execution_generation = 0
 
     def state(self) -> SessionModel:
         return SessionModel(
@@ -133,7 +131,6 @@ class ProcessModel:
             variant=self.variant,
             rtc_enabled=self.rtc_enabled,
             chunk_size=self.chunk_size,
-            supported_execution_modes=self.supported_execution_modes,
         )
 
     async def __aenter__(self) -> Self:
@@ -148,12 +145,7 @@ class ProcessModel:
             stack.callback(self._report_stopped, bus)
             try:
                 await stack.enter_async_context(self._worker)
-                capabilities = await until_serving(
-                    bus, model_rpc.READY, model_rpc.Empty(), ModelExecutionCapabilities, within=_READY_S
-                )
-                self.supported_execution_modes = capabilities.supported_execution_modes
-                if "rtc" in self.supported_execution_modes:
-                    self.chunk_size = capabilities.chunk_size
+                await until_serving(bus, model_rpc.READY, model_rpc.Empty(), CommandDone, within=_READY_S)
             except Exception as error:
                 publish_status(bus, COMPONENT, "failed", str(error))
                 raise
@@ -171,17 +163,6 @@ class ProcessModel:
             await stack.aclose()
 
     # What an executor calls, from its own thread.
-
-    def prepare_execution(self, mode: ExecutionMode) -> None:
-        """Configure the worker between runs, before an executor starts."""
-        self._execution_generation += 1
-        self._loaded_bus().request_sync(
-            model_rpc.PREPARE_EXECUTION,
-            model_rpc.PrepareExecutionRequest(mode=mode, generation=self._execution_generation),
-            CommandDone,
-            timeout=_INFER_S,
-        )
-        self.latency_tracker.on_reset()
 
     def predict_action_chunk(self, observation: dict[str, Any]) -> np.ndarray:
         """The action chunk for ``observation``'s state and task, with the store's latest frames.

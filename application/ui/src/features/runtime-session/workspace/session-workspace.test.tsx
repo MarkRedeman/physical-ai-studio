@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 
 import { rs } from '@rstest/core';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -252,6 +252,7 @@ describe('SessionWorkspace', () => {
         expect(within(inference).getAllByRole('slider')).toHaveLength(2);
         await user.click(within(inference).getByRole('radio', { name: 'Asynchronous' }));
         expect(within(inference).getAllByRole('slider')).toHaveLength(2);
+        expect(within(inference).queryByRole('radio', { name: 'Real-time chunking (RTC)' })).not.toBeInTheDocument();
     });
 
     it('prevents starting model control during an episode', async () => {
@@ -285,8 +286,8 @@ describe('SessionWorkspace', () => {
         const execution = within(inference).getByRole('radio', { name: 'Real-time chunking (RTC)' });
         expect(execution).toBeChecked();
         expect(execution).toBeEnabled();
-        expect(within(inference).getByRole('radio', { name: 'Synchronous' })).toBeEnabled();
-        expect(within(inference).getByRole('radio', { name: 'Asynchronous' })).toBeEnabled();
+        expect(within(inference).queryByRole('radio', { name: 'Synchronous' })).not.toBeInTheDocument();
+        expect(within(inference).queryByRole('radio', { name: 'Asynchronous' })).not.toBeInTheDocument();
         await user.click(within(inference).getByRole('button', { name: /Execution settings/ }));
         expect(within(inference).getByRole('slider', { name: 'RTC execution horizon' })).toHaveAttribute('max', '25');
         expect(within(inference).getByRole('slider', { name: 'RTC guidance weight' })).toBeVisible();
@@ -297,76 +298,9 @@ describe('SessionWorkspace', () => {
                 command: 'set_control',
                 reject_open_episode: true,
                 control: expect.objectContaining({
-                    execution: expect.objectContaining({ mode: 'rtc', execution_horizon: 15, max_guidance_weight: 7 }),
+                    execution: expect.objectContaining({ mode: 'rtc', execution_horizon: 1, max_guidance_weight: 5 }),
                 }),
             })
         );
-    });
-
-    it('offers RTC for a verified OpenVINO export and clears it when an unsupported model is loaded', async () => {
-        state.model = getMockedSessionModel({
-            backend: 'openvino',
-            device: 'cpu',
-            variant: 'rtc',
-            rtc_enabled: true,
-            chunk_size: 50,
-            supported_execution_modes: ['sync', 'async', 'rtc'],
-        });
-        server.use(
-            http.get('/api/models/{model_id}', () =>
-                HttpResponse.json({ model: getMockedModel({ dataset_id: null }), exports: [] })
-            )
-        );
-        const user = userEvent.setup();
-        const Workspace = () => {
-            const [, refresh] = useState(0);
-            return (
-                <>
-                    <button onClick={() => refresh((value) => value + 1)}>Apply model change</button>
-                    <SessionWorkspace initialMode='record' cancelHref='/projects' />
-                </>
-            );
-        };
-        render(<Workspace />, {
-            route: '/projects/project-1/datasets/dataset-1/record',
-            path: '/projects/:project_id/datasets/:dataset_id/record',
-        });
-        const inference = await screen.findByRole('region', { name: 'Inference' });
-        await user.click(within(inference).getByRole('radio', { name: 'Synchronous' }));
-        expect(within(inference).getByRole('radio', { name: 'Synchronous' })).toBeChecked();
-        await user.click(within(inference).getByRole('radio', { name: 'Real-time chunking (RTC)' }));
-        expect(within(inference).getByRole('radio', { name: 'Real-time chunking (RTC)' })).toBeChecked();
-        await user.click(within(inference).getByRole('button', { name: /Execution settings/ }));
-        expect(within(inference).getByRole('slider', { name: 'RTC execution horizon' })).toBeVisible();
-        state.model = getMockedSessionModel({ model_id: 'unsupported', backend: 'torch', device: 'cpu' });
-        await user.click(screen.getByRole('button', { name: 'Apply model change' }));
-        expect(within(inference).queryByRole('radio', { name: 'Real-time chunking (RTC)' })).not.toBeInTheDocument();
-        expect(within(inference).getByRole('radio', { name: 'Synchronous' })).toBeChecked();
-        expect(within(inference).getByRole('slider', { name: 'Request threshold' })).toBeVisible();
-    });
-
-    it('allows sync and async on an RTC export without showing RTC tuning for those modes', async () => {
-        state.model = getMockedSessionModel({ rtc_enabled: true, chunk_size: 50 });
-        const user = userEvent.setup();
-        renderWorkspace();
-        const inference = await screen.findByRole('region', { name: 'Inference' });
-        await user.click(within(inference).getByRole('button', { name: /Execution settings/ }));
-        await user.click(within(inference).getByRole('radio', { name: 'Asynchronous' }));
-        expect(within(inference).getByRole('radio', { name: 'Asynchronous' })).toBeChecked();
-        expect(within(inference).getByRole('slider', { name: 'Request threshold' })).toBeVisible();
-        expect(within(inference).queryByRole('slider', { name: 'RTC execution horizon' })).not.toBeInTheDocument();
-    });
-
-    it('does not offer RTC based on variant metadata without loaded-model capability', async () => {
-        state.model = getMockedSessionModel({
-            backend: 'openvino',
-            variant: 'rtc',
-            rtc_enabled: true,
-            supported_execution_modes: ['sync', 'async'],
-        });
-        renderWorkspace();
-        const inference = await screen.findByRole('region', { name: 'Inference' });
-        expect(within(inference).queryByRole('radio', { name: 'Real-time chunking (RTC)' })).not.toBeInTheDocument();
-        expect(within(inference).getByRole('radio', { name: 'Synchronous' })).toBeChecked();
     });
 });

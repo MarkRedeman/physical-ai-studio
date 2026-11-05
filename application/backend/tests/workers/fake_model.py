@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from physicalai.inference import ExecutionCapabilities, ExecutionMode
 
 from workers.model_worker import ModelWorker
 
@@ -17,13 +16,6 @@ CHUNK = 10
 
 class Oracle:
     """Commands ``state + 1 .. state + CHUNK``, so a follower that follows it keeps climbing."""
-
-    execution_capabilities = ExecutionCapabilities()
-
-    def configure_execution(self, mode: ExecutionMode) -> None:
-        if mode not in self.execution_capabilities.supported_execution_modes:
-            raise ValueError(f"Unsupported mode: {mode}")
-        self.reset()
 
     def __init__(self, images: list[str]) -> None:
         self.images = images

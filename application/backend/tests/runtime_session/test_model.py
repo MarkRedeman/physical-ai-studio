@@ -179,7 +179,20 @@ def test_selected_variant_drives_compatibility_and_worker_path(tmp_path) -> None
 def test_non_rtc_model_cannot_run_with_rtc_execution() -> None:
     store = Store.create(FeatureSpec(("a", "b")), uuid4().hex)
     try:
-        with pytest.raises(ValueError, match="does not support rtc execution"):
+        with pytest.raises(ValueError, match="RTC exports require RTC execution"):
             ModelControl(store, _FarModel(), ModelControlConfig(execution=ExecutionConfig(mode="rtc")))
+    finally:
+        store.unlink()
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_rtc_export_cannot_run_with_non_rtc_execution(mode) -> None:
+    class RTCModel(_FarModel):
+        rtc_enabled = True
+
+    store = Store.create(FeatureSpec(("a", "b")), uuid4().hex)
+    try:
+        with pytest.raises(ValueError, match="RTC exports require RTC execution"):
+            ModelControl(store, RTCModel(), ModelControlConfig(execution=ExecutionConfig(mode=mode)))
     finally:
         store.unlink()

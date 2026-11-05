@@ -240,7 +240,7 @@ async def download_model_backend(  # noqa: PLR0913
     task: str | None = None,
     variant: str = "original",
     execution_horizon: Annotated[int | None, Query(ge=1)] = None,
-    max_guidance_weight: Annotated[float, Query(ge=0, allow_inf_nan=False)] = 7.0,
+    max_guidance_weight: Annotated[float, Query(ge=0, allow_inf_nan=False)] = 5.0,
 ) -> FileResponse:
     """Download a single backend export as a zip archive.
 
@@ -258,8 +258,7 @@ async def download_model_backend(  # noqa: PLR0913
     export_dir = ModelService.resolve_export(model, backend.value, variant)
     info = variant_info(read_package(export_dir, backend.value), variant)
     chunk_size = action_chunk_size(read_package(export_dir, backend.value))
-    horizon = execution_horizon if execution_horizon is not None else max(1, min(15, (chunk_size or 2) // 2))
-    if info.rtc_enabled and (chunk_size is None or horizon > chunk_size // 2):
+    if info.rtc_enabled and (chunk_size is None or (execution_horizon or 1) > chunk_size // 2):
         raise InvalidResourceError("Model", "RTC execution horizon must not exceed half the declared action chunk size")
     if not export_dir.is_dir():
         raise HTTPException(
@@ -294,7 +293,7 @@ async def download_model_backend(  # noqa: PLR0913
             task=task,
             execution=ExecutionConfig(
                 mode="rtc" if info.rtc_enabled else "sync",
-                execution_horizon=horizon,
+                execution_horizon=execution_horizon or 1,
                 max_guidance_weight=max_guidance_weight,
                 chunk_size=chunk_size,
             ),
