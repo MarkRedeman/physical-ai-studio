@@ -193,6 +193,14 @@ Canonical combinations are `int8`, `rtc`, `rtc-int8`, `snapflow`,
 reload a checkpoint before optionally applying INT8; they do not edit an INT8 IR
 to add RTC. Operations with missing prerequisites are disabled with a reason.
 
+Graph-changing variant exports memory-map modern checkpoints and discard
+optimizer/scheduler state before building a disposable CPU policy. LoRA/DoRA
+weights are merged without restoration snapshots because the export worker does
+not reuse that policy. ONNX intermediate files and external weight sidecars stay
+inside the job's staging directory and are removed after export or by failed-job
+cleanup, rather than consuming a RAM-backed `/tmp`. Pi05 conversion still needs
+substantial memory for model construction and the ONNX/OpenVINO graphs.
+
 Manifests record portable metadata under `studio.variant`; no database migration
 or additional model record is needed. Complete inference-only packages, full
 model folders, and `exports/` directories can be imported. Existing separately

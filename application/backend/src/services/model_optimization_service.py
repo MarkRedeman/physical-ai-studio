@@ -26,6 +26,7 @@ from schemas.model_variant import (
     target_variant,
     variant_info,
 )
+from services.export_checkpoint import export_temporary_files, load_export_policy
 from services.model_service import ModelService
 from settings import get_settings
 
@@ -217,9 +218,7 @@ class ModelOptimizationService:
 
         kind = "snapflow" if payload.operation == "snapflow" else info.checkpoint_kind
         checkpoint = Path(model.path) / ("snapflow-model.ckpt" if kind == "snapflow" else "model.ckpt")
-        policy = get_physicalai_policy_class(model.policy).load_from_checkpoint(
-            str(checkpoint), map_location="cpu", compile_model=False
-        )
+        policy = load_export_policy(checkpoint, get_physicalai_policy_class(model.policy))
         if not isinstance(policy, ExportablePolicyMixin):
             raise InvalidResourceError("Model", "Policy does not support export")
         if kind == "snapflow" and not getattr(getattr(policy, "config", None), "snapflow_enabled", False):
@@ -233,7 +232,18 @@ class ModelOptimizationService:
         elif rtc:
             raise InvalidResourceError("Model", "Policy does not support RTC")
         policy.eval()
-        policy.export(destination, backend=payload.backend)
+        # This policy lives only for this export. Merge irreversibly instead of
+        # retaining CPU restoration snapshots throughout ONNX/OV conversion.
+        from physicalai.policies.mixins.peft import PeftPolicyMixin
+        from physicalai.policies.mixins.peft.functions import merge_lora_
+
+        if isinstance(policy, PeftPolicyMixin) and getattr(config, "use_lora", False) and policy.model is not None:
+            merge_lora_(policy.model)
+        # Keep temporary weights inside the job's staging tree so worker-crash
+        # cleanup owns them too, and never place the large ONNX sidecar on /tmp.
+        destination.mkdir(parents=True, exist_ok=True)
+        with export_temporary_files(destination):
+            policy.export(destination, backend=payload.backend)
         info.checkpoint_kind = kind
         info.rtc_enabled = rtc
 

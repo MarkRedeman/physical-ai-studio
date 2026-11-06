@@ -123,9 +123,7 @@ def test_graph_variants_reload_the_matching_checkpoint_before_compression(
 
     policy.export = MagicMock(side_effect=export)
     loader = MagicMock(return_value=policy)
-    monkeypatch.setattr(
-        "physicalai.policies.get_physicalai_policy_class", lambda name: SimpleNamespace(load_from_checkpoint=loader)
-    )
+    monkeypatch.setattr("services.model_optimization_service.load_export_policy", loader)
     compress = MagicMock()
     monkeypatch.setattr("physicalai.export.hooks.compress_weights_openvino_int8_sym", compress)
     payload = OptimizeModelJobPayload(
