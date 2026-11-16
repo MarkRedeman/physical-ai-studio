@@ -178,7 +178,7 @@ class RobotWorker(ProcessWorker["Robot"]):
         while not self.should_stop():
             observation = context.get_observation()
             if self.efforts is not None:
-                sensor_data = getattr(observation, "sensor_data", None)
+                sensor_data = observation.sensor_data
                 self.efforts.publish(
                     sensor_data.get("efforts") if sensor_data else None, timestamp=observation.timestamp
                 )

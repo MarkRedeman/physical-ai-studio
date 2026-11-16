@@ -43,7 +43,7 @@ def test_efforts_are_forwarded_with_gain_and_no_second_negation(store: Store) ->
     control, leader, efforts = _control(store)
     control.on_start()
     np.testing.assert_array_equal(leader.set_external_efforts.call_args.args[0], [0, 0])
-    efforts.publish([2, -4], timestamp=time.monotonic())
+    efforts.publish(np.array([2, -4]), timestamp=time.monotonic())
     control.on_tick()
     np.testing.assert_array_equal(leader.set_external_efforts.call_args.args[0], [2, -4])
     assert leader.set_external_efforts.call_args.kwargs == {"gain": 0.1}
@@ -56,16 +56,17 @@ def test_efforts_are_forwarded_with_gain_and_no_second_negation(store: Store) ->
 def test_unavailable_efforts_clear_the_leader(store: Store, unavailable: str) -> None:
     control, leader, efforts = _control(store)
     control.on_start()
-    efforts.publish([1, 2], timestamp=time.monotonic())
+    efforts.publish(np.array([1, 2]), timestamp=time.monotonic())
     control.on_tick()
     if unavailable == "missing":
         efforts.invalidate()
     elif unavailable == "stale":
-        efforts.publish([1, 2], timestamp=time.monotonic() - 1)
+        efforts.publish(np.array([1, 2]), timestamp=time.monotonic() - 1)
     elif unavailable == "future":
-        efforts.publish([1, 2], timestamp=time.monotonic() + 1)
+        efforts.publish(np.array([1, 2]), timestamp=time.monotonic() + 1)
     elif unavailable == "invalid":
-        efforts.publish([np.nan, 2], timestamp=time.monotonic())
+        with pytest.raises(ValueError, match="finite joint vector"):
+            efforts.publish(np.array([np.nan, 2]), timestamp=time.monotonic())
     if unavailable == "busy":
         with efforts._lock:
             control.on_tick()
@@ -77,7 +78,7 @@ def test_unavailable_efforts_clear_the_leader(store: Store, unavailable: str) ->
 def test_feedback_is_suppressed_during_the_grace_move(store: Store) -> None:
     control, leader, efforts = _control(store, grace_s=3)
     control.on_start()
-    efforts.publish([1, 2], timestamp=time.monotonic())
+    efforts.publish(np.array([1, 2]), timestamp=time.monotonic())
     control.on_tick()
     assert leader.set_external_efforts.call_count == 1  # only clearing at startup
     control.started_at -= 4
@@ -88,6 +89,7 @@ def test_feedback_is_suppressed_during_the_grace_move(store: Store) -> None:
 def test_feedback_is_opt_in_and_does_not_require_a_capable_leader(store: Store) -> None:
     leader = FakeRobot("unused", ["shoulder_pan", "gripper"], [0, 0])
     control = TeleopControl(store, leader, TeleopControlConfig(grace_s=0))
+    assert control.feedback is None
     control.on_start()
     control.on_tick()
     control.on_stop()
@@ -97,16 +99,22 @@ def test_feedback_is_opt_in_and_does_not_require_a_capable_leader(store: Store) 
 
 def test_disabled_feedback_never_writes_to_a_capable_leader(store: Store) -> None:
     control, leader, efforts = _control(store, gain=0)
-    efforts.publish([1, 2], timestamp=time.monotonic())
+    efforts.publish(np.array([1, 2]), timestamp=time.monotonic())
     control.on_start()
     control.on_tick()
     control.on_stop()
     leader.set_external_efforts.assert_not_called()
 
 
+def test_enabled_feedback_requires_a_channel(store: Store) -> None:
+    _unused, leader, _efforts = _control(store)
+    with pytest.raises(ValueError, match="matching the follower's joints"):
+        TeleopControl(store, leader, TeleopControlConfig(force_feedback_gain=0.1))
+
+
 def test_a_misordered_effort_channel_is_refused(store: Store) -> None:
     _unused, leader, _efforts = _control(store)
-    with pytest.raises(ValueError, match="channel's joints"):
+    with pytest.raises(ValueError, match="matching the follower's joints"):
         TeleopControl(
             store,
             leader,
@@ -118,7 +126,7 @@ def test_a_misordered_effort_channel_is_refused(store: Store) -> None:
 async def test_a_partial_effort_write_failure_is_reported_and_cleared(store: Store) -> None:
     control, leader, efforts = _control(store)
     leader.set_external_efforts.side_effect = [None, OSError("second arm failed"), None]
-    efforts.publish([1, 2], timestamp=time.monotonic())
+    efforts.publish(np.array([1, 2]), timestamp=time.monotonic())
     async with control:
         await control.wait_stopped()
     assert "second arm failed" in control.failure
@@ -131,7 +139,7 @@ async def test_leader_read_failure_still_clears_feedback(store: Store) -> None:
     # First tick succeeds; the second leader read fails.
     observation = FakeRobot("unused", leader.joint_names, [5, 6]).get_observation()
     leader.get_observation.side_effect = [observation, ConnectionError("leader lost")]
-    efforts.publish([1, 2], timestamp=time.monotonic())
+    efforts.publish(np.array([1, 2]), timestamp=time.monotonic())
     async with control:
         await control.wait_stopped()
     assert "leader lost" in control.failure

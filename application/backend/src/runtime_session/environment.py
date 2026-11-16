@@ -206,7 +206,6 @@ class Environment:
             WorkerStartupError: A device failed to connect.
         """
         description, store = self.description, self.store
-        self.efforts.invalidate()
         publish_status(self.bus, COMPONENT, "starting")
         async with AsyncExitStack() as stack:
             try:
@@ -245,7 +244,6 @@ class Environment:
 
     async def _disconnect(self) -> None:
         """Release the devices, if they are connected."""
-        self.efforts.invalidate()
         devices, self._devices, self.leader = self._devices, None, None
         if devices is not None:
             await devices.aclose()

@@ -155,22 +155,23 @@ This uses an optional driver contract, not a Trossen type check:
 - Leader and follower joint names/order must match, as for position teleop.
   Other drivers can implement the same contract without Studio-specific code.
 
-The follower worker publishes efforts from its existing observation read into
-an `EffortChannel` (`runtime_session/efforts.py`). This is a separate, small
-multiprocessing shared-memory vector, **not** a policy input or dataset feature.
-A spawn-safe lock makes each value/timestamp snapshot coherent. Reads and writes
-are nonblocking: a busy or abandoned lock means feedback is unavailable, rather
-than blocking robot control. The channel is passed explicitly to the follower
-worker and borrowed by teleop; it is not attached through the named store.
+The follower worker publishes its existing observation's efforts into an
+`EffortChannel`, passed explicitly to the spawned worker and borrowed by teleop.
+It is a separate shared-memory vector, **not** a policy input or dataset feature.
+A lock protects each vector/timestamp snapshot and waits up to `1 ms` for
+contention. Reads return `None` on timeout; publishing and invalidation return
+`False`, so withdrawal is best-effort. Reload replaces the channel in case a dead
+worker abandoned its lock. Malformed driver arrays or nonfinite measurements
+raise through the worker's existing failure reporting instead of disappearing
+silently. Missing efforts invalidate the reading normally.
 
-Teleop clears residual feedback at startup, suppresses it during the grace move,
-and applies only samples captured within the last `100 ms`. Missing, malformed,
-nonfinite, future-dated, or stale samples clear the last applied feedback.
-Normal stop, switching controls, environment reload/unload, and control errors
-attempt to clear it before the leader is released. An effort-command failure
-fails teleop through the normal control status/error path; it is not silently
-ignored. Unsupported leaders are refused when feedback is requested, but remain
-usable with feedback disabled.
+Only enabled feedback creates a `ForceFeedback` helper. It checks freshness
+(`100 ms`, no future timestamps), clears unavailable readings, and suppresses
+feedback during alignment. Startup, stop, control errors and environment changes
+attempt to clear external efforts. Driver failures use the normal error path;
+unsupported leaders remain usable with feedback disabled. Bimanual drivers must
+attempt to clear both arms even if one fails; this requires the corresponding
+Trossen plugin fix, not just the Studio changes.
 
 **This is not a hardware safety watchdog.** A dead backend, blocked driver, or
 lost leader connection can prevent a zero-effort command from being delivered.

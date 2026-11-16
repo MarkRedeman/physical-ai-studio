@@ -109,17 +109,27 @@ async def test_worker_publishes_measured_efforts_and_invalidates_them_on_exit(lo
     recipe = RobotRecipe.from_driver(uuid.uuid4(), robot)
     efforts = EffortChannel(store.spec.joint_names)
     async with RobotWorker(recipe, store.name, store.spec, hz=HZ, efforts=efforts):
-        await _until(lambda: efforts.read(max_age_s=0.1) is not None)
-        np.testing.assert_array_equal(efforts.read(max_age_s=0.1).value, [3.0, -4.0])
-    assert efforts.read(max_age_s=0.1) is None
+        await _until(lambda: efforts.read() is not None)
+        np.testing.assert_array_equal(efforts.read().value, [3.0, -4.0])
+    assert efforts.read() is None
 
 
 async def test_a_robot_without_efforts_invalidates_an_old_reading(log: Path, store: Store) -> None:
     efforts = EffortChannel(store.spec.joint_names)
-    efforts.publish([3, 4], timestamp=time.monotonic())
+    efforts.publish(np.array([3, 4]), timestamp=time.monotonic())
     async with RobotWorker(_recipe(log), store.name, store.spec, hz=HZ, efforts=efforts):
         await _until(lambda: store.read(STATE) is not None)
-        assert efforts.read(max_age_s=10) is None
+        assert efforts.read() is None
+
+
+async def test_malformed_driver_efforts_fail_the_worker_instead_of_disappearing(log: Path, store: Store) -> None:
+    robot = FakeRobot(str(log), JOINTS, [1.0, 2.0], efforts=[3.0])
+    recipe = RobotRecipe.from_driver(uuid.uuid4(), robot)
+    efforts = EffortChannel(store.spec.joint_names)
+    async with RobotWorker(recipe, store.name, store.spec, hz=HZ, efforts=efforts) as worker:
+        await worker.wait_stopped()
+        assert "finite joint vector" in worker.failure
+    assert efforts.read() is None
 
 
 def test_a_claimed_robot_cannot_be_claimed_again(log: Path) -> None:
