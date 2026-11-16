@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from physicalai.robot import Robot
 
     from runtime_session.bus import Bus
+    from runtime_session.efforts import EffortChannel
     from runtime_session.model import ProcessModel
     from runtime_session.rerun import RerunObserver
     from runtime_session.store import Store
@@ -28,6 +29,8 @@ def build_control(
     model: ProcessModel | None = None,
     bus: Bus | None = None,
     observer: RerunObserver | None = None,
+    *,
+    efforts: EffortChannel | None = None,
 ) -> Control:
     """Raises ``ValueError`` when the session cannot run ``config``.
 
@@ -39,4 +42,4 @@ def build_control(
         return ModelControl(store, model, config, observer=observer)
     if leader is None:
         raise ValueError("Teleoperation needs a connected leader arm; connect one and reload the environment")
-    return TeleopControl(store, leader, config, bus)
+    return TeleopControl(store, leader, config, bus, efforts=efforts)

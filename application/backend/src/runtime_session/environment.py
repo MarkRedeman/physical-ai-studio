@@ -29,6 +29,7 @@ from loguru import logger
 from exceptions import RuntimeSessionCommandError
 from robots.features import sanitize_camera_name
 from runtime_session.bus import Bus, Subscription, publish_status, status_key
+from runtime_session.efforts import EffortChannel
 from runtime_session.store import FeatureSpec, Store
 from schemas.runtime_session import CommandDone, ReloadEnvironment, SessionCamera, SessionEnvironment, StatusMessage
 from workers.base import WorkerStartupError
@@ -148,6 +149,7 @@ class Environment:
         self.description = description
         self.session_id = session_id
         self.store = store
+        self.efforts = EffortChannel(store.spec.joint_names)
         self.leader: Robot | None = None
         """Connected, for controls to borrow; ``None`` while the devices are not connected."""
         self._bus: Bus | None = None
@@ -187,6 +189,9 @@ class Environment:
             RuntimeSessionCommandError: A device failed to connect.
         """
         await self._disconnect()
+        # A hard-killed follower can abandon the old channel's lock. Controls
+        # have stopped borrowing it before reload, so replace it with a fresh one.
+        self.efforts = EffortChannel(self.store.spec.joint_names)
         try:
             await self._connect()
         except Exception as error:
@@ -201,6 +206,7 @@ class Environment:
             WorkerStartupError: A device failed to connect.
         """
         description, store = self.description, self.store
+        self.efforts.invalidate()
         publish_status(self.bus, COMPONENT, "starting")
         async with AsyncExitStack() as stack:
             try:
@@ -218,6 +224,7 @@ class Environment:
                     hz=DEFAULT_ROBOT_HZ,
                     session_id=self.session_id,
                     component=f"{COMPONENT}/follower",
+                    efforts=self.efforts,
                 )
                 managers: dict[str, AbstractAsyncContextManager[Any]] = {"follower": follower}
                 for key, row in description.cameras.items():
@@ -238,6 +245,7 @@ class Environment:
 
     async def _disconnect(self) -> None:
         """Release the devices, if they are connected."""
+        self.efforts.invalidate()
         devices, self._devices, self.leader = self._devices, None, None
         if devices is not None:
             await devices.aclose()

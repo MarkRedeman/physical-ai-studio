@@ -485,7 +485,13 @@ class RuntimeSession:
             if isinstance(config, ModelControlConfig):
                 await self._start_observer(environment.store, hz=config.hz)
             control = build_control(
-                config, environment.store, environment.leader, self._model.value, self.bus, observer=self._observer
+                config,
+                environment.store,
+                environment.leader,
+                self._model.value,
+                self.bus,
+                observer=self._observer,
+                efforts=environment.efforts,
             )
             async with self._reported(_CONTROL, control):
                 yield control

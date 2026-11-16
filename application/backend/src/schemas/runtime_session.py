@@ -33,6 +33,13 @@ class TeleopControlConfig(BaseModel):
 
     type: Literal["teleop"] = "teleop"
     hz: float = Field(100, gt=0, le=500, description="How often the leader is read; each reading is one command")
+    force_feedback_gain: float = Field(
+        0,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        description="Opt-in leader force feedback gain; 0 disables it. Requires a compatible effort-feedback driver.",
+    )
     grace_s: float = Field(
         3,
         ge=0,

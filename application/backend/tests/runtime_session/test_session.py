@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 
 import pytest
@@ -16,6 +17,45 @@ async def _until(condition, within: float = 5.0) -> None:
     while not condition():
         assert time.monotonic() < deadline, "condition never held"
         await asyncio.sleep(0.02)
+
+
+@pytest.mark.parametrize("finish", ["stop", "reload", "unload", "close", "leader_failure"])
+async def test_force_feedback_crosses_the_worker_boundary_and_clears_on_exit(
+    new_session, robot_factory, tmp_path, finish
+) -> None:
+    from schemas.runtime_session import TeleopControlConfig
+    from tests.workers.fake_robot import FakeRobot, FeedbackRobot
+
+    async def build(robot, _port_finder):
+        driver = FeedbackRobot if robot.id == LEADER_ID else FakeRobot
+        return driver(str(tmp_path / str(robot.id)), ["shoulder_pan", "gripper"], [1, 2], efforts=[3, -4]), object()
+
+    robot_factory.build_robot_driver.side_effect = build
+    session = await new_session()
+    await session.load_environment(make_environment(cameras=0))
+    log = tmp_path / f"{LEADER_ID}.efforts"
+
+    def feedback():
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+    await session.set_control(TeleopControlConfig(grace_s=0, force_feedback_gain=0.1))
+    await _until(lambda: any(call["efforts"] == [3, -4] and call["gain"] == 0.1 for call in feedback()))
+    if finish == "stop":
+        await session.set_control(None)
+    elif finish == "reload":
+        await session.reload_environment()
+    elif finish == "unload":
+        await session.unload_environment()
+    elif finish == "close":
+        await session.stop()
+    else:
+
+        def disconnected():
+            raise ConnectionError("leader unplugged")
+
+        session.leader.get_observation = disconnected
+        await _until(lambda: session.state().control is None)
+    assert feedback()[-1]["efforts"] == [0, 0]
 
 
 async def test_loading_connects_everything_and_publishes_state(new_session, registry, fake_cameras) -> None:
