@@ -136,6 +136,50 @@ A worker that dies is reported `failed` with its reason. Nothing retries silentl
 
 Combinations such as a human taking over from a policy get a control of their own when they are designed, rather than two controls fighting over `action`.
 
+### Optional leader force feedback
+
+Teleoperation can return the follower's measured external efforts to a compatible
+leader. Feedback is **off by default**. Before starting teleoperation, enable
+**Force feedback (compatible leaders)** to use gain `0.1`. Stop teleoperation
+before changing this setting. API clients can set `force_feedback_gain` in
+`TeleopControlConfig` to a finite value between `0` (disabled) and `1`.
+
+This uses an optional driver contract, not a Trossen type check:
+
+- The follower exposes `observation.sensor_data["efforts"]`, one finite value
+  per joint in `joint_names` order, timestamped with `time.monotonic()` at capture.
+- The leader implements `set_external_efforts(efforts, gain=...)`. Its driver
+  applies the opposing direction and gain exactly once, in its hardware's native
+  effort units. A zero vector clears the external effort command. Both single
+  and bimanual Trossen WidowX AI drivers implement this contract.
+- Leader and follower joint names/order must match, as for position teleop.
+  Other drivers can implement the same contract without Studio-specific code.
+
+The follower worker publishes efforts from its existing observation read into
+an `EffortChannel` (`runtime_session/efforts.py`). This is a separate, small
+multiprocessing shared-memory vector, **not** a policy input or dataset feature.
+A spawn-safe lock makes each value/timestamp snapshot coherent. Reads and writes
+are nonblocking: a busy or abandoned lock means feedback is unavailable, rather
+than blocking robot control. The channel is passed explicitly to the follower
+worker and borrowed by teleop; it is not attached through the named store.
+
+Teleop clears residual feedback at startup, suppresses it during the grace move,
+and applies only samples captured within the last `100 ms`. Missing, malformed,
+nonfinite, future-dated, or stale samples clear the last applied feedback.
+Normal stop, switching controls, environment reload/unload, and control errors
+attempt to clear it before the leader is released. An effort-command failure
+fails teleop through the normal control status/error path; it is not silently
+ignored. Unsupported leaders are refused when feedback is requested, but remain
+usable with feedback disabled.
+
+**This is not a hardware safety watchdog.** A dead backend, blocked driver, or
+lost leader connection can prevent a zero-effort command from being delivered.
+Use controller-side watchdogs and emergency-stop facilities, and validate gain,
+joint/gripper effort limits, signs, and fault behavior on the actual hardware
+before relying on feedback. The gain bound is not a hardware-specific absolute
+torque/force limit. The current downloadable standalone Runtime teleop recipe
+does not include Studio's feedback loop.
+
 ## Models
 
 A loaded model is a `ModelWorker` process (`workers/model_worker.py`) that loads one of the model's exports with `InferenceModel`. In the session, `ProcessModel` stands in for the model: to `ModelControl`'s executor it is a local model, with `predict_action_chunk` and `reset`.

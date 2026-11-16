@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { Flex, ProgressCircle, Switch, toast, View } from '@geti-ui/ui';
 import { useMutation } from '@tanstack/react-query';
 
@@ -16,16 +18,25 @@ import { ERROR_TOAST, failureOf, useRuntimeSession, useSessionJoints } from '../
  * Teleoperation as the UI starts it. The leader is read at 100 Hz, each reading one command, and on every
  * start the follower takes 3 s to reach the leader instead of jumping to it.
  */
-export const TELEOP_CONTROL = { type: 'teleop', hz: 100, grace_s: 2 } as const satisfies SchemaTeleopControlConfig;
+export const TELEOP_CONTROL = {
+    type: 'teleop',
+    hz: 100,
+    grace_s: 2,
+    force_feedback_gain: 0,
+} as const satisfies SchemaTeleopControlConfig;
 
 /** Drive the follower from the leader, or hold it where it is. */
 export const TeleopSwitch = () => {
     const { state, statuses, send } = useRuntimeSession();
+    const [forceFeedback, setForceFeedback] = useState(false);
+    useEffect(() => setForceFeedback(false), [state?.environment?.leader_id]);
+    const teleop = state?.control?.type === 'teleop' ? state.control : undefined;
+    const isTeleop = teleop !== undefined;
     const { mutate: setTeleop, isPending } = useMutation({
         mutationFn: async (teleoperate: boolean) => {
             const ack = await send({
                 command: 'set_control',
-                control: teleoperate ? TELEOP_CONTROL : null,
+                control: teleoperate ? { ...TELEOP_CONTROL, force_feedback_gain: forceFeedback ? 0.1 : 0 } : null,
             });
             if (!ack.ok) {
                 toast.negative(ack.error?.message ?? 'Could not switch teleoperation.', ERROR_TOAST);
@@ -34,16 +45,25 @@ export const TeleopSwitch = () => {
     });
 
     return (
-        <Switch
-            isEmphasized
-            isSelected={state?.control?.type === 'teleop'}
-            // A failed environment stays loaded until it is loaded again, with nothing to drive;
-            // switching the control mid-episode discards the episode.
-            isDisabled={isPending || failureOf(statuses, 'environment') !== null || state?.dataset?.is_recording}
-            onChange={setTeleop}
-        >
-            Teleoperate
-        </Switch>
+        <Flex direction='column'>
+            <Switch
+                isEmphasized
+                isSelected={isTeleop}
+                // A failed environment stays loaded until it is loaded again, with nothing to drive;
+                // switching the control mid-episode discards the episode.
+                isDisabled={isPending || failureOf(statuses, 'environment') !== null || state?.dataset?.is_recording}
+                onChange={setTeleop}
+            >
+                Teleoperate
+            </Switch>
+            <Switch
+                isSelected={teleop !== undefined ? teleop.force_feedback_gain > 0 : forceFeedback}
+                isDisabled={isTeleop || isPending || state?.dataset?.is_recording}
+                onChange={setForceFeedback}
+            >
+                Force feedback (compatible leaders)
+            </Switch>
+        </Flex>
     );
 };
 
