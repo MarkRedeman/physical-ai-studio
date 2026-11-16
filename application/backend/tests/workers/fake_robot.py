@@ -19,16 +19,25 @@ from physicalai.config import export_config
 class FakeObservation:
     joint_positions: np.ndarray
     timestamp: float
+    sensor_data: dict[str, np.ndarray] | None = None
 
 
 @export_config
 class FakeRobot:
-    def __init__(self, log: str, joints: list[str], start: list[float], fail_connect: bool = False) -> None:
+    def __init__(
+        self,
+        log: str,
+        joints: list[str],
+        start: list[float],
+        fail_connect: bool = False,
+        efforts: list[float] | None = None,
+    ) -> None:
         self.log = log
         self._joints = joints
         self._position = np.asarray(start, dtype=np.float64)
         self._fail_connect = fail_connect
         self._connected = False
+        self.efforts = efforts
 
     @property
     def joint_names(self) -> list[str]:
@@ -50,7 +59,8 @@ class FakeRobot:
         return self._connected
 
     def get_observation(self) -> FakeObservation:
-        return FakeObservation(self._position.copy(), time.monotonic())
+        sensors = {"efforts": np.asarray(self.efforts)} if self.efforts is not None else None
+        return FakeObservation(self._position.copy(), time.monotonic(), sensors)
 
     def send_action(self, action: np.ndarray, *, goal_time: float = 0.1) -> None:
         self._position = np.asarray(action, dtype=np.float64)
@@ -60,3 +70,11 @@ class FakeRobot:
 
 def sent_actions(log: Path) -> list[dict]:
     return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+class FeedbackRobot(FakeRobot):
+    """A leader implementing the optional effort-feedback contract."""
+
+    def set_external_efforts(self, efforts: np.ndarray, gain: float = 1.0) -> None:
+        with Path(self.log + ".efforts").open("a") as log:
+            log.write(json.dumps({"efforts": efforts.tolist(), "gain": gain}) + "\n")

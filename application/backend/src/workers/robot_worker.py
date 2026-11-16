@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
     from physicalai.robot import Robot
 
+    from runtime_session.efforts import EffortChannel
+
 DEFAULT_ROBOT_HZ = 100.0
 
 
@@ -109,7 +111,7 @@ class RobotWorker(ProcessWorker["Robot"]):
     """Disconnecting can park the arm first (the reBot B601 at 30 deg/s), which takes longer than the
     default 10 s; a worker killed partway through leaves the arm powered and its driver not torn down."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - worker configuration and optional session reporting
         self,
         recipe: RobotRecipe,
         store_name: str,
@@ -119,6 +121,7 @@ class RobotWorker(ProcessWorker["Robot"]):
         observe_only: bool = False,
         session_id: str | None = None,
         component: str | None = None,
+        efforts: EffortChannel | None = None,
     ) -> None:
         """Pass ``session_id`` and ``component`` to report a failure on that session's bus."""
         super().__init__(name=f"RobotWorker-{recipe.robot_id}")
@@ -129,6 +132,7 @@ class RobotWorker(ProcessWorker["Robot"]):
         self.observe_only = observe_only
         self.session_id = session_id
         self.component = component
+        self.efforts = efforts
         self._bus: Bus | None = None
 
     @asynccontextmanager
@@ -147,6 +151,8 @@ class RobotWorker(ProcessWorker["Robot"]):
                         self._store.write(ACTION, observation.joint_positions, timestamp=observation.timestamp)
                     yield driver
                 finally:
+                    if self.efforts is not None:
+                        self.efforts.invalidate()
                     driver.disconnect()
         finally:
             self._store.close()
@@ -171,6 +177,11 @@ class RobotWorker(ProcessWorker["Robot"]):
         command = None  # the last one sent, not measured: measuring would feed tracking lag back in
         while not self.should_stop():
             observation = context.get_observation()
+            if self.efforts is not None:
+                sensor_data = getattr(observation, "sensor_data", None)
+                self.efforts.publish(
+                    sensor_data.get("efforts") if sensor_data else None, timestamp=observation.timestamp
+                )
             self._store.write(STATE, observation.joint_positions, timestamp=observation.timestamp)
             action = None if self.observe_only else self._store.read(ACTION)
             if action is not None:

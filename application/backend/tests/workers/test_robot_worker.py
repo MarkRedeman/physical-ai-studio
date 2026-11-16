@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from exceptions import RobotDeviceAlreadyOwnedError
+from runtime_session.efforts import EffortChannel
 from runtime_session.store import ACTION, STATE, FeatureSpec, Store
 from workers.base import WorkerStartupError
 from workers.robot_worker import RobotRecipe, RobotWorker, claim_robot
@@ -101,6 +102,24 @@ async def test_a_connect_failure_fails_startup(log: Path, store: Store) -> None:
     with pytest.raises(WorkerStartupError, match="Failed to open serial port"):
         async with RobotWorker(recipe, store.name, store.spec, hz=HZ):
             pass
+
+
+async def test_worker_publishes_measured_efforts_and_invalidates_them_on_exit(log: Path, store: Store) -> None:
+    robot = FakeRobot(str(log), JOINTS, [1.0, 2.0], efforts=[3.0, -4.0])
+    recipe = RobotRecipe.from_driver(uuid.uuid4(), robot)
+    efforts = EffortChannel(store.spec.joint_names)
+    async with RobotWorker(recipe, store.name, store.spec, hz=HZ, efforts=efforts):
+        await _until(lambda: efforts.read(max_age_s=0.1) is not None)
+        np.testing.assert_array_equal(efforts.read(max_age_s=0.1).value, [3.0, -4.0])
+    assert efforts.read(max_age_s=0.1) is None
+
+
+async def test_a_robot_without_efforts_invalidates_an_old_reading(log: Path, store: Store) -> None:
+    efforts = EffortChannel(store.spec.joint_names)
+    efforts.publish([3, 4], timestamp=time.monotonic())
+    async with RobotWorker(_recipe(log), store.name, store.spec, hz=HZ, efforts=efforts):
+        await _until(lambda: store.read(STATE) is not None)
+        assert efforts.read(max_age_s=10) is None
 
 
 def test_a_claimed_robot_cannot_be_claimed_again(log: Path) -> None:
