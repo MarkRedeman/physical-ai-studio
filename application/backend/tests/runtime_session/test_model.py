@@ -12,7 +12,7 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from exceptions import ResourceInUseError, RuntimeSessionCommandError
+from exceptions import ResourceInUseError, ResourceNotFoundError, RuntimeSessionCommandError
 from runtime_session.controls.model import ModelControl
 from runtime_session.model import ModelInputs, ProcessModel, model_inputs
 from runtime_session.session import RuntimeSession
@@ -34,7 +34,14 @@ def _export(
     features += [{"init_args": {"ftype": "VISUAL", "shape": [3, 120, 160], "name": name}} for name in cameras]
     features.append({"init_args": {"ftype": "LANGUAGE", "shape": [48], "name": "task"}})
     path.mkdir(parents=True)
-    manifest: dict = {"model": {"input_features": features, "preprocessors": [{"type": "to_float_tensor"}]}}
+    (path / "model.pt").write_bytes(b"fake")
+    manifest: dict = {
+        "model": {
+            "input_features": features,
+            "preprocessors": [{"type": "to_float_tensor"}],
+            "artifacts": {"torch": "model.pt"},
+        }
+    }
     if tasks is not None:
         manifest["model"]["preprocessors"].append({"type": "task_index", "tasks": tasks})
     (path / "manifest.json").write_text(json.dumps(manifest))
@@ -148,6 +155,7 @@ async def test_export_is_leased_during_startup_loaded_lifetime_and_teardown(
     await unloading
     with session._registry.deleting_model_export(model.id, "torch"):
         pass
+    assert session.state().control is None
 
 
 async def test_a_model_needs_an_environment_it_fits(new_session, fake_cameras, fake_model_worker, tmp_path) -> None:
@@ -172,6 +180,8 @@ async def test_a_model_that_fails_to_load_is_not_loaded(new_session, fake_camera
     with pytest.raises(WorkerStartupError, match="does not load"):
         await session.load_model(model, "torch", "cpu")
     assert session.state().model is None
+    with session._registry.deleting_model_export(model.id, "torch"):
+        pass
 
 
 async def test_a_dead_model_worker_unloads_the_model_and_holds(
@@ -217,3 +227,44 @@ def test_the_models_actions_are_due_at_the_end_of_the_grace_period() -> None:
         control.on_stop()
     finally:
         store.unlink()
+
+
+def test_selected_variant_drives_compatibility_and_worker_path(tmp_path: Path) -> None:
+    model = _model(tmp_path)
+    variant = Path(model.path) / "exports/torch/variants/int8"
+    _export(variant, joints=3)
+    store = Store.create(FeatureSpec(("a", "b", "c"), SPEC.observations), uuid4().hex)
+    try:
+        proxy = ProcessModel(model, uuid4().hex, store, backend="torch", device="cpu", variant="int8")
+        assert proxy.inputs.state_size == 3
+        assert proxy._worker.export_dir == variant
+        assert proxy.state().variant == "int8"
+    finally:
+        store.unlink()
+
+
+async def test_invalid_variant_keeps_the_loaded_model(
+    new_session, fake_cameras, fake_model_worker, tmp_path: Path
+) -> None:
+    session = await new_session()
+    await session.load_environment(make_environment())
+    model = _model(tmp_path)
+    await session.load_model(model, "torch", "cpu")
+    loaded = session._model.value
+    with pytest.raises(ResourceNotFoundError):
+        await session.load_model(model, "torch", "cpu", "int8")
+    assert session._model.value is loaded
+    assert session.state().model.variant == "original"
+
+
+async def test_environment_reload_keeps_selected_variant(
+    new_session, fake_cameras, fake_model_worker, tmp_path: Path
+) -> None:
+    session = await new_session()
+    await session.load_environment(make_environment())
+    model = _model(tmp_path)
+    _export(Path(model.path) / "exports/torch/variants/int8")
+    await session.load_model(model, "torch", "cpu", "int8")
+    await session.reload_environment()
+    assert session.state().model.variant == "int8"
+    assert session._model.value._worker.export_dir.name == "int8"

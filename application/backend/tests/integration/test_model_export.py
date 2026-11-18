@@ -117,7 +117,10 @@ def worker(job):
 async def test_missing_backend_export_preserves_original_and_model_identity(exports):
     before = {path.name: path.read_bytes() for path in exports.original.iterdir()}
     detail = (await exports.client.get(f"/api/models/{exports.source.id}")).json()
-    assert {item["backend"] for item in detail["available_actions"]} == {"torch", "onnx"}
+    assert {item["backend"] for item in detail["available_actions"] if item["operation"] == "export"} == {
+        "torch",
+        "onnx",
+    }
     response = await exports.client.post(f"/api/models/{exports.source.id}/exports/torch")
     assert response.status_code == 202
     assert response.json()["type"] == "model_export"
@@ -132,7 +135,7 @@ async def test_missing_backend_export_preserves_original_and_model_identity(expo
     detail = (await exports.client.get(f"/api/models/{exports.source.id}")).json()
     assert detail["model"]["id"] == str(exports.source.id)
     assert {item["type"] for item in detail["exports"]} == {"torch", "openvino"}
-    assert {item["backend"] for item in detail["available_actions"]} == {"onnx"}
+    assert {item["backend"] for item in detail["available_actions"] if item["operation"] == "export"} == {"onnx"}
     assert (await exports.client.post(f"/api/models/{exports.source.id}/exports/torch")).status_code == 409
 
 
@@ -149,7 +152,9 @@ async def test_unavailable_exports_are_not_offered_or_queued(exports, monkeypatc
         backend = "executorch"
     else:
         backend = "openvino"
-    assert backend not in {action.backend for action in ModelService.get_export_actions(exports.source)}
+    assert backend not in {
+        action.backend for action in ModelService.get_export_actions(exports.source) if action.operation == "export"
+    }
     assert (await exports.client.post(f"/api/models/{exports.source.id}/exports/{backend}")).status_code == 409
 
 
@@ -303,7 +308,7 @@ async def test_distilled_checkpoint_symlinks_are_rejected(exports, tmp_path):
     outside = tmp_path / "outside.ckpt"
     outside.write_bytes(b"untrusted weights")
     (exports.root / "snapflow-model.ckpt").symlink_to(outside)
-    assert ModelService.get_export_actions(exports.source) == []
+    assert all(action.operation != "export" for action in ModelService.get_export_actions(exports.source))
     assert (await exports.client.post(f"/api/models/{exports.source.id}/exports/torch")).status_code == 409
     job = ModelExportJob(
         project_id=exports.source.project_id,
@@ -382,6 +387,18 @@ async def test_canceled_retry_leaves_incomplete_output_untouched(exports):
     await process.run_loop()
     assert partial.read_bytes() == b"partial weights"
     assert (await submit(exports)).id != job.id
+
+
+async def test_retrying_an_incomplete_original_preserves_existing_variants(exports):
+    variant = exports.target / "variants/int8"
+    variant.mkdir(parents=True)
+    (variant / "model.pt").write_bytes(b"compressed weights")
+    (variant / "manifest.json").write_text(json.dumps({"model": {"artifacts": {"torch": "model.pt"}}}))
+    before = {path.name: path.read_bytes() for path in variant.iterdir()}
+    job = await submit(exports)
+    await worker(job).run_loop()
+    assert ExportPackage(exports.target, "torch").info.job_id == job.id
+    assert {path.name: path.read_bytes() for path in variant.iterdir()} == before
 
 
 @pytest.mark.parametrize("winner", ["delete", "export"])

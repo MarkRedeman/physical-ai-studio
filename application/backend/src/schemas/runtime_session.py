@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from schemas.base import UTCDatetime
 from schemas.environment import CameraEnvironmentConfiguration, RobotEnvironmentConfiguration
+from schemas.model_export import VariantId
 
 
 class EnvironmentDraft(BaseModel):
@@ -106,6 +107,7 @@ class LoadModelCommand(BaseModel):
     backend: str
     """One of the model's ``available_backends``."""
     device: str = "auto"
+    variant: VariantId = "original"
 
 
 class UnloadModelCommand(BaseModel):
@@ -229,6 +231,7 @@ class SessionModel(BaseModel):
     device: str
     tasks: list[str] = []
     """The tasks the model takes, when it only knows a fixed set; empty if it takes any text."""
+    variant: VariantId = "original"
 
 
 class SessionState(BaseModel):
