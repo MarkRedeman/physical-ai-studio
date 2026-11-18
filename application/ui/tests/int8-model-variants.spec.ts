@@ -6,8 +6,11 @@ import { getMockedModelDetailResponse } from '../src/test-utils/mocks/mock-model
 import { getMockedOptimizeModelJob } from '../src/test-utils/mocks/mock-optimize-model-job';
 import { expect, http, test } from './fixtures';
 
-for (const scope of ['export', 'backend'] as const) {
-    test(`removes a ${scope} only after confirmation and refreshes available cards`, async ({ page, network }) => {
+for (const variant of ['int8', 'original'] as const) {
+    test(`removes the ${variant} model only after confirmation and refreshes available cards`, async ({
+        page,
+        network,
+    }) => {
         const model = getMockedModel({ available_backends: ['openvino'], dataset_id: null });
         const detail = getMockedModelDetailResponse({ model, available_actions: [] });
         detail.exports[0].variants = [getMockedExportVariant(), getMockedExportVariant({ id: 'int8' })];
@@ -20,41 +23,33 @@ for (const scope of ['export', 'backend'] as const) {
             http.get('/api/jobs', () => HttpResponse.json([])),
             http.get('/api/system/devices/inference', () => HttpResponse.json([])),
             http.delete('/api/models/{model_id}/exports/{backend}/variants/{variant}', ({ params }) => {
-                expect(scope).toBe('export');
-                expect(params.variant).toBe('int8');
+                expect(params.variant).toBe(variant);
                 removed = true;
-                detail.exports[0].variants = [getMockedExportVariant()];
-                detail.available_actions = [{ backend: 'openvino', operation: 'int8_sym' }];
-                return new HttpResponse(null, { status: 204 });
-            }),
-            http.delete('/api/models/{model_id}/exports/{backend}', () => {
-                expect(scope).toBe('backend');
-                removed = true;
-                detail.exports = [];
-                detail.model = { ...model, available_backends: [] };
-                detail.available_actions = [{ backend: 'openvino', operation: 'export' }];
+                detail.exports[0].variants = [getMockedExportVariant({ id: variant === 'int8' ? 'original' : 'int8' })];
+                detail.available_actions = variant === 'int8' ? [{ backend: 'openvino', operation: 'int8_sym' }] : [];
                 return new HttpResponse(null, { status: 204 });
             })
         );
         await page.goto(`/projects/${model.project_id}/models`);
         await page.getByRole('button', { name: `Show details for ${model.name}` }).click();
-        const card = page.getByRole('region', { name: 'OpenVINO · INT8' });
-        await card.getByRole('button', { name: 'Actions for OpenVINO INT8' }).click();
-        await page.getByRole('menuitem', { name: `Remove ${scope}…` }).click();
+        const label = variant === 'int8' ? 'INT8' : 'Original';
+        const card = page.getByRole('region', { name: `OpenVINO · ${label}` });
+        await card.getByRole('button', { name: `Actions for OpenVINO ${label}` }).click();
+        await expect(page.getByRole('menuitem', { name: /Remove (export|backend)/ })).toHaveCount(0);
+        await page.getByRole('menuitem', { name: 'Remove model' }).click();
         const dialog = page.getByRole('dialog');
         await expect(dialog).toContainText('training checkpoint, training history, and other backends are kept');
         expect(removed).toBe(false);
         await dialog.getByRole('button', { name: 'Cancel' }).click();
         await expect(card).toBeVisible();
-        await card.getByRole('button', { name: 'Actions for OpenVINO INT8' }).click();
-        await page.getByRole('menuitem', { name: `Remove ${scope}…` }).click();
-        await page
-            .getByRole('dialog')
-            .getByRole('button', { name: `Remove ${scope}`, exact: true })
-            .click();
+        await card.getByRole('button', { name: `Actions for OpenVINO ${label}` }).click();
+        await page.getByRole('menuitem', { name: 'Remove model' }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Remove model', exact: true }).click();
         await expect(card).toHaveCount(0);
-        await expect(page.getByRole('region', { name: 'OpenVINO · Original' })).toHaveCount(scope === 'export' ? 1 : 0);
-        await expect(page.getByRole('button', { name: 'Add variant' })).toBeVisible();
+        await expect(
+            page.getByRole('region', { name: `OpenVINO · ${variant === 'int8' ? 'Original' : 'INT8'}` })
+        ).toBeVisible();
+        if (variant === 'int8') await expect(page.getByRole('button', { name: 'Add variant' })).toBeVisible();
         expect(removed).toBe(true);
     });
 }

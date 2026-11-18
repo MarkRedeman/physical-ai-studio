@@ -149,6 +149,22 @@ async def test_removal_preserves_checkpoint_history_and_unselected_exports(optim
         assert not context.root.exists()
 
 
+@pytest.mark.parametrize("order", [("original", "int8"), ("int8", "original")])
+async def test_last_model_removal_cleans_backend_directory(optimization, order):
+    await worker(await submit(optimization)).run_loop()
+    # Empty artifact and variant directories must not strand the backend folder.
+    (optimization.root / "empty/nested").mkdir(parents=True)
+    (optimization.root / "variants/empty").mkdir()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for index, variant in enumerate(order):
+            response = await client.delete(f"/api/models/{optimization.source.id}/exports/openvino/variants/{variant}")
+            assert response.status_code == 204
+            assert optimization.root.exists() == (index == 0)
+        detail = (await client.get(f"/api/models/{optimization.source.id}")).json()
+    assert detail["exports"] == []
+    assert detail["model"]["available_backends"] == []
+
+
 @pytest.mark.parametrize("status", [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.COMPLETED])
 async def test_removal_rejects_active_or_unpublished_export_jobs(optimization, status):
     job = await submit(optimization)

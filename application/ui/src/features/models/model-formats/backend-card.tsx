@@ -18,7 +18,7 @@ import { MoreMenu } from '@geti-ui/ui/icons';
 import { fetchClient } from '../../../api/client';
 import { SchemaExportVariantDetail, SchemaModel, SchemaModelVariantAction } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS, InferenceBackendConfig } from '../inference-backends';
-import { DeleteExportDialog } from './delete-export-dialog';
+import { RemoveModelDialog } from './remove-model-dialog';
 import { RunVariant } from './run-variant';
 import { RuntimeExportDialog } from './runtime-export-dialog';
 
@@ -56,18 +56,16 @@ export const BackendCard = ({
     backendType,
     model,
     variant,
-    variants = [variant],
     action,
     onCreate,
 }: {
     backendType: SchemaModelVariantAction['backend'];
     model: SchemaModel;
     variant: SchemaExportVariantDetail;
-    variants?: SchemaExportVariantDetail[];
     action?: SchemaModelVariantAction;
     onCreate: (action: SchemaModelVariantAction) => void;
 }) => {
-    const [dialog, setDialog] = useState<'runtime' | 'export' | 'backend' | null>(null);
+    const [dialog, setDialog] = useState<'runtime' | 'remove' | null>(null);
     const backend = INFERENCE_BACKENDS[backendType];
     const label = variant.id === 'int8' ? 'INT8' : 'Original';
     const megabytes = variant.size_bytes / 1024 ** 2;
@@ -99,15 +97,14 @@ export const BackendCard = ({
                             </ActionButton>
                             <Menu
                                 onAction={(key) => {
-                                    if (key === 'runtime' || key === 'export' || key === 'backend') setDialog(key);
+                                    if (key === 'runtime' || key === 'remove') setDialog(key);
                                 }}
                             >
                                 <Item key='download' href={downloadUrl} target='_blank' rel='noopener noreferrer'>
                                     Download
                                 </Item>
                                 {backendType === 'openvino' ? <Item key='runtime'>Runtime export</Item> : null}
-                                <Item key='export'>Remove export…</Item>
-                                <Item key='backend'>Remove backend…</Item>
+                                <Item key='remove'>Remove model</Item>
                             </Menu>
                         </MenuTrigger>
                     </Flex>
@@ -143,12 +140,11 @@ export const BackendCard = ({
                         close={() => setDialog(null)}
                     />
                 )}
-                {(dialog === 'export' || dialog === 'backend') && (
-                    <DeleteExportDialog
+                {dialog === 'remove' && (
+                    <RemoveModelDialog
                         model={model}
                         backend={backendType}
-                        variants={variants}
-                        variant={dialog === 'export' ? variant : undefined}
+                        variant={variant}
                         close={() => setDialog(null)}
                     />
                 )}

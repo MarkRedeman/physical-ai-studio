@@ -1,5 +1,4 @@
 import shutil
-from contextlib import suppress
 from datetime import UTC, datetime
 from importlib.util import find_spec
 from pathlib import Path
@@ -99,22 +98,13 @@ class ModelService:
                 files = package.files
                 if not files:
                     raise ResourceNotFoundError(ResourceType.MODEL, f"{model_id}/{backend}/original")
-                parents = {
-                    parent for path in files for parent in path.parents if parent.is_relative_to(package.directory)
-                }
                 for path in files:
                     path.unlink()
-                for parent in sorted(parents, key=lambda path: len(path.parts), reverse=True):
-                    with suppress(OSError):
-                        parent.rmdir()
             else:
                 _ = tuple(FileTree(package.directory).files())
                 shutil.rmtree(package.directory)
-                if variant is not None:
-                    with suppress(OSError):
-                        package.directory.parent.rmdir()
-                    with suppress(OSError):
-                        package.directory.parent.parent.rmdir()
+            backend_directory = ExportPackage.for_model(Path(model.path), backend).directory
+            FileTree(backend_directory).prune_empty_directories()
             await self.session.commit()
         except ValueError as exc:
             await self.session.rollback()

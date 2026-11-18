@@ -36,7 +36,6 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                                   backendType={type}
                                   model={detail.model}
                                   variant={variant}
-                                  variants={backend.variants ?? []}
                                   action={
                                       variant.id === 'original'
                                           ? actions.find(
