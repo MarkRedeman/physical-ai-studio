@@ -7,7 +7,9 @@ import { http } from '../../../api/utils';
 import { server } from '../../../msw-node-setup';
 import { getMockedOptimizeModelJob } from '../../../test-utils/mocks/mock-optimize-model-job';
 import { render } from '../../../test-utils/render';
-import { OptimizeModel } from './optimize-model';
+import { VariantJobControls } from './variant-job-controls';
+
+const action = { backend: 'openvino', operation: 'int8_sym' } as const;
 
 it('queues an INT8 job, shows its status, and cancels it', async () => {
     let jobs: SchemaOptimizeModelJob[] = [];
@@ -24,28 +26,28 @@ it('queues an INT8 job, shows its status, and cancels it', async () => {
         })
     );
     const user = userEvent.setup();
-    render(<OptimizeModel modelId='model-1' hasInt8={false} />);
+    render(<VariantJobControls modelId='model-1' action={action} targetExists={false} />);
     const button = screen.getByRole('button', { name: 'Optimize to INT8' });
     await waitFor(() => expect(button).toBeEnabled());
     await user.click(button);
-    expect(await screen.findByRole('status')).toHaveTextContent('Optimization pending');
+    expect(await screen.findByRole('status')).toHaveTextContent('Export pending');
     expect(button).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Cancel optimization' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Optimization canceled'));
+    await user.click(screen.getByRole('button', { name: 'Cancel job' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Export canceled'));
     await waitFor(() => expect(button).toBeEnabled());
 });
 
 it('does not queue a duplicate when an INT8 export already exists', async () => {
     server.use(http.get('/api/jobs', () => HttpResponse.json([])));
-    render(<OptimizeModel modelId='model-1' hasInt8 />);
+    render(<VariantJobControls modelId='model-1' action={action} targetExists />);
     expect(screen.getByRole('button', { name: 'Optimize to INT8' })).toBeDisabled();
 });
 
 it('blocks submission while job status is unavailable and supports retry', async () => {
     server.use(http.get('/api/jobs', () => HttpResponse.error()));
     const user = userEvent.setup();
-    render(<OptimizeModel modelId='model-1' hasInt8={false} />);
-    const retry = await screen.findByRole('button', { name: 'Retry optimization status' });
+    render(<VariantJobControls modelId='model-1' action={action} targetExists={false} />);
+    const retry = await screen.findByRole('button', { name: 'Retry job status' });
     expect(screen.getByRole('button', { name: 'Optimize to INT8' })).toBeDisabled();
     server.use(http.get('/api/jobs', () => HttpResponse.json([])));
     await user.click(retry);

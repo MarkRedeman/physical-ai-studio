@@ -7,5 +7,6 @@ export const getMockedModelDetailResponse = (
 ): SchemaModelDetailResponse => ({
     model: getMockedModel({ available_backends: ['openvino'] }),
     exports: [{ type: 'openvino', size_bytes: 4096, file_count: 3, variants: [getMockedExportVariant()] }],
+    available_actions: [{ backend: 'openvino', operation: 'int8_sym' }],
     ...overrides,
 });
