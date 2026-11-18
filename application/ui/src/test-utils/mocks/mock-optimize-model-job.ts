@@ -6,6 +6,6 @@ export const getMockedOptimizeModelJob = (overrides: Partial<SchemaOptimizeModel
     type: 'optimize_model',
     status: 'pending',
     message: 'Creating INT8 export',
-    payload: { model_id: 'model-1', cancellation_requested: false },
+    payload: { model_id: 'model-1', cancellation_requested: false, backend: 'openvino', operation: 'int8_sym' },
     ...overrides,
 });

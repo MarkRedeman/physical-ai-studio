@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from utils.filesystem import FileTree
 
 VariantId = Literal["original", "int8"]
+VariantOperation = Literal["int8_sym", "export"]
 VARIANT_IDS: frozenset[VariantId] = frozenset({"original", "int8"})
 BACKENDS = frozenset({"openvino", "onnx", "torch", "executorch"})
 

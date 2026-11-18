@@ -33,6 +33,7 @@ from robots.robot_client_factory import RobotClientFactory
 from schemas import Model, ModelDetailResponse
 from schemas.job import OptimizeModelJob, TrainJob
 from schemas.job_response import JobResponse
+from schemas.model import ModelVariantAction
 from schemas.model_variant import VariantId
 from services import DatasetService, JobService, ModelDownloadService, ModelMetricsService, ModelService
 from services.environment_service import EnvironmentService
@@ -119,6 +120,7 @@ async def get_model_by_id(
         exports=exports,
         training_summary=training_summary,
         hparams=hparams,
+        available_actions=ModelService.get_variant_actions(model),
     )
 
 
@@ -126,6 +128,14 @@ async def get_model_by_id(
 async def optimize_model(model_id: UUID, session: AsyncSessionDep) -> OptimizeModelJob:
     """Queue symmetric INT8 weight compression of the original OpenVINO export."""
     return await ModelOptimizationService(session).submit(model_id)
+
+
+@router.post("/{model_id}/exports/{backend}", status_code=status.HTTP_202_ACCEPTED, response_model=JobResponse)
+async def export_model_backend(model_id: UUID, backend: ExportBackend, session: AsyncSessionDep) -> OptimizeModelJob:
+    """Export the stored checkpoint to a missing supported backend."""
+    return await ModelOptimizationService(session).submit(
+        model_id, ModelVariantAction.model_validate({"backend": backend.value, "operation": "export"})
+    )
 
 
 class ModelNameUpdate(BaseModel):

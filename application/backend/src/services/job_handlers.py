@@ -265,7 +265,7 @@ class ModelOptimizationJobHandler(JobHandler):
             except ResourceNotFoundError:
                 await ModelOptimizationService(service.session).cleanup(job)
             else:
-                ModelOptimizationService.publish(model, job.id)
+                ModelOptimizationService.publish(model, job.id, job.payload.backend, job.payload.target_variant)
             return job
         await ModelOptimizationService(service.session).cleanup(job)
         return await super().recover(job, service)

@@ -24,7 +24,8 @@ from exceptions import DuplicateJobException
 from main import app
 from schemas.base_job import JobStatus
 from schemas.dataset import Dataset
-from schemas.model import Model
+from schemas.job import ExportBackend
+from schemas.model import Model, ModelVariantAction
 from schemas.model_variant import ExportPackage
 from services.job_service import JobService
 from services.model_download_service import ModelDownloadService
@@ -113,6 +114,122 @@ def worker(job):
 async def submit(context):
     async with context.sessions() as session:
         return await ModelOptimizationService(session).submit(context.source.id)
+
+
+@pytest.fixture
+def checkpoint_export(optimization, monkeypatch):
+    from physicalai.export import ExportablePolicyMixin
+
+    checkpoint = Path(optimization.source.path) / "model.ckpt"
+    checkpoint.write_bytes(b"trusted checkpoint")
+    loaded = []
+
+    class FakePolicy(ExportablePolicyMixin):
+        @staticmethod
+        def get_supported_export_backends():
+            return ["torch", "onnx"]
+
+        @classmethod
+        def load_from_checkpoint(cls, path, **kwargs):
+            loaded.append((path, kwargs))
+            return cls()
+
+        def eval(self):
+            return self
+
+        def export(self, directory, backend):
+            artifact = "model.pt" if backend == "torch" else "model.onnx"
+            (directory / artifact).write_bytes(b"exported weights")
+            (directory / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "format": "policy_package",
+                        "policy": {"name": "act"},
+                        "model": {"artifacts": {backend: artifact}},
+                    }
+                )
+            )
+
+    monkeypatch.setattr("physicalai.policies.get_physicalai_policy_class", lambda _name: FakePolicy)
+    optimization.loaded = loaded
+    optimization.export_policy = FakePolicy
+    return ModelVariantAction(backend=ExportBackend.TORCH, operation="export")
+
+
+async def test_exports_missing_backend_without_touching_existing_packages(optimization, checkpoint_export):
+    before = {path.name: path.read_bytes() for path in optimization.root.iterdir()}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        detail = (await client.get(f"/api/models/{optimization.source.id}")).json()
+        assert {(item["backend"], item["operation"]) for item in detail["available_actions"]} == {
+            ("openvino", "int8_sym"),
+            ("torch", "export"),
+            ("onnx", "export"),
+        }
+        response = await client.post(f"/api/models/{optimization.source.id}/exports/torch")
+        assert response.status_code == 202
+        async with optimization.sessions() as session:
+            job = await JobService(session).get_job_by_id(response.json()["id"])
+        await worker(job).run_loop()
+        detail = (await client.get(f"/api/models/{optimization.source.id}")).json()
+        assert {backend["type"] for backend in detail["exports"]} == {"openvino", "torch"}
+        assert {"backend": "torch", "operation": "export"} not in detail["available_actions"]
+        assert (await client.post(f"/api/models/{optimization.source.id}/exports/torch")).status_code == 409
+    assert optimization.loaded == [
+        (str(Path(optimization.source.path) / "model.ckpt"), {"map_location": "cpu", "compile_model": False})
+    ]
+    assert {name: (optimization.root / name).read_bytes() for name in before} == before
+    package = ExportPackage(Path(optimization.source.path) / "exports/torch", "torch")
+    assert package.artifact.read_bytes() == b"exported weights"
+    assert package.info.job_id == job.id
+    assert not ModelOptimizationService.staging(job.id).exists()
+
+
+async def test_missing_checkpoint_is_not_offered_or_queued(optimization):
+    actions = ModelService.get_variant_actions(optimization.source)
+    assert [action.operation for action in actions] == ["int8_sym"]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post(f"/api/models/{optimization.source.id}/exports/torch")).status_code == 409
+
+
+async def test_unsupported_and_existing_backends_are_rejected(optimization, checkpoint_export):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post(f"/api/models/{optimization.source.id}/exports/executorch")).status_code == 409
+        assert (await client.post(f"/api/models/{optimization.source.id}/exports/openvino")).status_code == 409
+
+
+async def test_checkpoint_export_cancellation_keeps_originals(optimization, checkpoint_export, monkeypatch):
+    async with optimization.sessions() as session:
+        job = await ModelOptimizationService(session).submit(optimization.source.id, checkpoint_export)
+    process = worker(job)
+    export = optimization.export_policy.export
+
+    def cancel_during_export(self, *args, **kwargs):
+        export(self, *args, **kwargs)
+        process.cancel_event.set()
+
+    monkeypatch.setattr(optimization.export_policy, "export", cancel_during_export)
+    await process.run_loop()
+    assert not (Path(optimization.source.path) / "exports/torch").exists()
+    assert not ModelOptimizationService.staging(job.id).exists()
+    assert (optimization.root / "act.bin").read_bytes() == b"original weights"
+
+
+async def test_checkpoint_publication_is_recovered_for_the_correct_backend(
+    optimization, checkpoint_export, monkeypatch
+):
+    from services.job_handlers import get_job_handler
+
+    async with optimization.sessions() as session:
+        job = await ModelOptimizationService(session).submit(optimization.source.id, checkpoint_export)
+    with monkeypatch.context() as patcher:
+        patcher.setattr(ModelOptimizationService, "publish", MagicMock(side_effect=RuntimeError("exited")))
+        await worker(job).run_loop()
+    async with optimization.sessions() as session:
+        completed = await JobService(session).get_job_by_id(job.id)
+        assert completed.status == JobStatus.COMPLETED
+        await get_job_handler(job.type).recover(completed, JobService(session))
+    assert (Path(optimization.source.path) / "exports/torch/model.pt").exists()
+    assert not (optimization.root / "variants/int8").exists()
 
 
 async def test_variant_preserves_model_identity_original_and_package_dependencies(optimization):

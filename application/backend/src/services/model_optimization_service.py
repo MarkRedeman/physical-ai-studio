@@ -3,6 +3,7 @@
 
 import json
 import shutil
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -14,8 +15,8 @@ from db.schema import JobDB, ModelDB
 from exceptions import DuplicateJobException, InsufficientDiskSpaceError, InvalidResourceError
 from repositories.mappers import JobMapper
 from schemas.job import Job, OptimizeModelJob, OptimizeModelJobPayload
-from schemas.model import Model
-from schemas.model_variant import ExportPackage, VariantInfo
+from schemas.model import Model, ModelVariantAction
+from schemas.model_variant import ExportPackage, VariantId, VariantInfo
 from services.model_service import ModelService
 from settings import get_settings
 from utils.filesystem import FileTree
@@ -25,14 +26,15 @@ class ModelOptimizationService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def submit(self, model_id: UUID) -> OptimizeModelJob:
+    async def submit(self, model_id: UUID, action: ModelVariantAction | None = None) -> OptimizeModelJob:
+        action = action or ModelVariantAction.model_validate({"backend": "openvino", "operation": "int8_sym"})
+        payload = OptimizeModelJobPayload(model_id=model_id, backend=action.backend, operation=action.operation)
         try:
             # Acquire the database write lock before checking for concurrent submissions.
             await self.session.execute(update(ModelDB).where(ModelDB.id == str(model_id)).values(id=ModelDB.id))
             model = await ModelService(self.session).get_model_by_id(model_id)
-            source = ExportPackage(ModelService.resolve_export(model, "openvino"), "openvino")
-            if source.info.weight_compression is not None:
-                raise InvalidResourceError("Model", "INT8 compression requires an uncompressed OpenVINO export")
+            if action not in ModelService.get_variant_actions(model):
+                raise InvalidResourceError("Model", "This export is unavailable, unsupported, or already exists")
             jobs = await self.session.execute(
                 select(JobDB.id, JobDB.status).where(
                     JobDB.type == "optimize_model",
@@ -41,12 +43,13 @@ class ModelOptimizationService:
                 )
             )
             pending = any(status != "completed" or self.staging(UUID(job_id)).exists() for job_id, status in jobs)
-            if pending or ExportPackage.for_model(Path(model.path), "openvino", "int8").directory.exists():
-                raise DuplicateJobException("An INT8 export already exists or is being created")
+            target = ExportPackage.for_model(Path(model.path), payload.backend, payload.target_variant)
+            if pending or target.directory.exists():
+                raise DuplicateJobException("An export already exists or is being created")
             job = OptimizeModelJob(
                 project_id=model.project_id,
-                payload=OptimizeModelJobPayload(model_id=model.id),
-                message="Creating INT8 export",
+                payload=payload,
+                message=f"Creating {payload.backend} {payload.target_variant} export",
             )
             self.session.add(JobMapper.to_schema(job))
             await self.session.commit()
@@ -81,16 +84,47 @@ class ModelOptimizationService:
         return FileTree(get_settings().models_dir).resolve(Path("optimization") / str(job_id))
 
     @staticmethod
-    def publish(model: Model, job_id: UUID) -> None:
+    def export_checkpoint(model: Model, destination: Path, job: OptimizeModelJob) -> None:
+        from physicalai.export import ExportablePolicyMixin
+        from physicalai.policies import get_physicalai_policy_class
+
+        from services.training_backends.local import resolve_hf_token
+        from training.job import _hf_token_env
+
+        checkpoint = FileTree(Path(model.path)).resolve(Path("model.ckpt"))
+        destination.mkdir(parents=True)
+        with _hf_token_env(resolve_hf_token()):
+            policy = get_physicalai_policy_class(model.policy).load_from_checkpoint(
+                str(checkpoint), map_location="cpu", compile_model=False
+            )
+            if not isinstance(policy, ExportablePolicyMixin):
+                raise InvalidResourceError("Model", "Policy does not support export")
+            policy.eval()
+            # Export workers are isolated processes; keep ONNX sidecars inside their staging tree.
+            with tempfile.TemporaryDirectory(prefix="export-", dir=destination) as temporary:
+                previous = tempfile.tempdir
+                try:
+                    tempfile.tempdir = temporary
+                    policy.export(destination, backend=job.payload.backend.value)
+                finally:
+                    tempfile.tempdir = previous
+        manifest = ExportPackage(destination, job.payload.backend).manifest
+        manifest.setdefault("studio", {})["variant"] = VariantInfo(
+            id="original", created_at=datetime.now(UTC), job_id=job.id
+        ).model_dump(mode="json")
+        (destination / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    @staticmethod
+    def publish(model: Model, job_id: UUID, backend: str = "openvino", variant: VariantId = "int8") -> None:
         """Publish an already-committed job's complete package with one rename."""
         staging = ModelOptimizationService.staging(job_id)
-        destination = ExportPackage.for_model(Path(model.path), "openvino", "int8")
+        destination = ExportPackage.for_model(Path(model.path), backend, variant)
         if destination.directory.exists():
             if destination.info.job_id != job_id:
-                raise FileExistsError("An INT8 export from another job already exists")
+                raise FileExistsError("An export from another job already exists")
             shutil.rmtree(staging, ignore_errors=True)
             return
-        if ExportPackage(staging, "openvino", "int8").info.job_id != job_id:
+        if ExportPackage(staging, backend, variant).info.job_id != job_id:
             raise ValueError("The staged export does not belong to this job")
         staging.rename(destination.directory)
 

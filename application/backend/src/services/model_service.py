@@ -1,5 +1,6 @@
 import shutil
 from datetime import UTC, datetime
+from importlib.util import find_spec
 from pathlib import Path
 from uuid import UUID
 
@@ -10,9 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.schema import JobDB
 from exceptions import ResourceInUseError, ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
-from schemas.job import TrainJob
-from schemas.model import BackendExportDetail, BackendIOSpec, ExportVariantDetail, Model, TrainingSummary
+from schemas.job import ExportBackend, TrainJob
+from schemas.model import (
+    BackendExportDetail,
+    BackendIOSpec,
+    ExportVariantDetail,
+    Model,
+    ModelVariantAction,
+    TrainingSummary,
+)
 from schemas.model_variant import ExportPackage, VariantId
+from utils.filesystem import FileTree
 
 
 class ModelService:
@@ -98,6 +107,40 @@ class ModelService:
         if directory is None:
             raise ResourceNotFoundError(ResourceType.MODEL, f"{model.id}/{backend}/{variant}")
         return directory
+
+    @staticmethod
+    def get_variant_actions(model: Model) -> list[ModelVariantAction]:
+        packages = model.export_packages()
+        actions = []
+        original = packages.get(("openvino", "original"))
+        if (
+            original is not None
+            and ("openvino", "int8") not in packages
+            and ExportPackage(original, "openvino").info.weight_compression is None
+        ):
+            actions.append(ModelVariantAction(backend=ExportBackend.OPENVINO, operation="int8_sym"))
+        try:
+            checkpoint = FileTree(Path(model.path)).resolve(Path("model.ckpt"))
+            if not checkpoint.is_file():
+                return actions
+            from physicalai.export import ExportablePolicyMixin
+            from physicalai.policies import get_physicalai_policy_class
+
+            from training.policy_catalog import missing_policy_dependencies
+
+            if missing_policy_dependencies(model.policy):
+                return actions
+            policy = get_physicalai_policy_class(model.policy)
+            if not issubclass(policy, ExportablePolicyMixin):
+                return actions
+            supported = policy.get_supported_export_backends()
+        except (ImportError, ValueError, OSError):
+            return actions
+        for backend in ExportBackend:
+            destination = ExportPackage.for_model(Path(model.path), backend).directory
+            if backend in supported and not destination.exists() and find_spec(backend.value) is not None:
+                actions.append(ModelVariantAction(backend=backend, operation="export"))
+        return actions
 
     @staticmethod
     def get_hparams(model: Model) -> dict | None:

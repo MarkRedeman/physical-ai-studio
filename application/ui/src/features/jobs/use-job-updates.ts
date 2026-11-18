@@ -55,6 +55,13 @@ export const useJobUpdates = (project_id?: string) => {
             client.invalidateQueries({
                 queryKey: ['get', '/api/models/{model_id}', { params: { path: { model_id: job.payload.model_id } } }],
             });
+            client.invalidateQueries({
+                queryKey: [
+                    'get',
+                    '/api/projects/{project_id}/models',
+                    { params: { path: { project_id: job.project_id } } },
+                ],
+            });
         }
 
         if (!isTrainJob(job)) {

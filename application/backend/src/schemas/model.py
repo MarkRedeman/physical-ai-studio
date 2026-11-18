@@ -7,7 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from schemas.base import BaseIDModel, Field, UTCDatetime
-from schemas.model_variant import BACKENDS, VARIANT_IDS, ExportPackage, VariantId, VariantInfo
+from schemas.job import ExportBackend
+from schemas.model_variant import BACKENDS, VARIANT_IDS, ExportPackage, VariantId, VariantInfo, VariantOperation
 
 LORA_PROPERTY = "lora_enabled"
 DORA_PROPERTY = "lora_use_dora"
@@ -234,8 +235,14 @@ class TrainingSummary(BaseModel):
     snapflow_distill_epochs: int | None = None
 
 
+class ModelVariantAction(BaseModel):
+    backend: ExportBackend
+    operation: VariantOperation
+
+
 class ModelDetailResponse(BaseModel):
     model: Model
     exports: list[BackendExportDetail]
     training_summary: TrainingSummary | None = None
     hparams: dict | None = None
+    available_actions: list[ModelVariantAction] = Field(default_factory=list)

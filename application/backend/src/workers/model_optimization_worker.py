@@ -77,14 +77,19 @@ class ModelOptimizationWorker(ProcessWorker[None]):
         async with get_async_db_session_ctx() as session:
             source = await ModelService(session).get_model_by_id(job.payload.model_id)
         staging = ModelOptimizationService.staging(job.id)
-        destination = ExportPackage.for_model(Path(source.path), "openvino", "int8").directory
+        destination = ExportPackage.for_model(
+            Path(source.path), job.payload.backend, job.payload.target_variant
+        ).directory
         if self.should_stop() or self.cancel_event.is_set():
             async with get_async_db_session_ctx() as session:
                 await ModelOptimizationService(session).cleanup(job)
             await self._finish(job, JobStatus.CANCELED, "Model optimization canceled")
             return None
-        ModelOptimizationService.compress(source, staging, job.id)
-        # NNCF cannot be interrupted mid-call; never publish its output after cancellation.
+        if job.payload.operation == "export":
+            ModelOptimizationService.export_checkpoint(source, staging, job)
+        else:
+            ModelOptimizationService.compress(source, staging, job.id)
+        # Conversion cannot be interrupted mid-call; never publish after cancellation.
         if self.should_stop() or self.cancel_event.is_set():
             async with get_async_db_session_ctx() as session:
                 await ModelOptimizationService(session).cleanup(job)
@@ -93,7 +98,7 @@ class ModelOptimizationWorker(ProcessWorker[None]):
         completed = job.model_copy(
             update={
                 "status": JobStatus.COMPLETED,
-                "message": "INT8 export created",
+                "message": f"{job.payload.backend} {job.payload.target_variant} export created",
                 "progress": 100,
                 "end_time": datetime.now(UTC),
             }
@@ -129,7 +134,7 @@ class ModelOptimizationWorker(ProcessWorker[None]):
                 await ModelOptimizationService(session).cleanup(job)
             await self._finish(job, JobStatus.CANCELED, "Model optimization canceled")
             return None
-        ModelOptimizationService.publish(source, job.id)
+        ModelOptimizationService.publish(source, job.id, job.payload.backend, job.payload.target_variant)
         return source, completed
 
     async def _finish(self, job: OptimizeModelJob, status: JobStatus, message: str) -> None:
