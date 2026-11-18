@@ -17,11 +17,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.sql.dml import Update
 
-from api.dependencies import get_scheduler
+from api.dependencies import get_runtime_session_registry, get_scheduler
 from db.engine import get_async_db_session
 from db.schema import Base, ProjectDB
 from exceptions import DuplicateJobException
 from main import app
+from runtime_session.registry import RuntimeSessionRegistry
 from schemas.base_job import JobStatus
 from schemas.dataset import Dataset
 from schemas.job import ExportBackend
@@ -62,6 +63,8 @@ async def optimization(tmp_path, monkeypatch):
     monkeypatch.setitem(app.dependency_overrides, get_async_db_session, dependency)
     monkeypatch.setitem(app.dependency_overrides, get_settings, lambda: settings)
     scheduler = MagicMock()
+    registry = RuntimeSessionRegistry()
+    monkeypatch.setitem(app.dependency_overrides, get_runtime_session_registry, lambda: registry)
     monkeypatch.setitem(app.dependency_overrides, get_scheduler, lambda: scheduler)
     source = Model(
         name="Test policy", path=str(models_dir / str(uuid4())), project_id=uuid4(), policy="act", properties={}
@@ -103,6 +106,7 @@ async def optimization(tmp_path, monkeypatch):
         compressed=compressed,
         compress=compress,
         scheduler=scheduler,
+        registry=registry,
     )
     await engine.dispose()
 
@@ -114,6 +118,84 @@ def worker(job):
 async def submit(context):
     async with context.sessions() as session:
         return await ModelOptimizationService(session).submit(context.source.id)
+
+
+@pytest.mark.parametrize("scope", ["variants/original", "variants/int8", ""])
+async def test_removal_preserves_checkpoint_history_and_unselected_exports(optimization, scope):
+    context = optimization
+    await worker(await submit(context)).run_loop()
+    model_path = Path(context.source.path)
+    (model_path / "model.ckpt").write_bytes(b"checkpoint")
+    (model_path / "version_0").mkdir()
+    (model_path / "version_0/metrics.csv").write_bytes(b"history")
+    sibling = model_path / "exports/onnx"
+    sibling.mkdir()
+    (sibling / "model.onnx").write_bytes(b"sibling")
+    variant = context.root / "variants/int8"
+    url = f"/api/models/{context.source.id}/exports/openvino" + (f"/{scope}" if scope else "")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.delete(url)).status_code == 204
+        assert (await client.delete(url)).status_code == 404
+    assert (model_path / "model.ckpt").read_bytes() == b"checkpoint"
+    assert (model_path / "version_0/metrics.csv").read_bytes() == b"history"
+    assert (sibling / "model.onnx").read_bytes() == b"sibling"
+    assert (context.root / "act.bin").exists() == (scope == "variants/int8")
+    assert (variant / "act.bin").exists() == (scope == "variants/original")
+    if scope == "variants/int8":
+        # A removed optimized package can be created again.
+        await worker(await submit(context)).run_loop()
+        assert (variant / "act.bin").read_bytes() == b"INT8"
+    if not scope:
+        assert not context.root.exists()
+
+
+@pytest.mark.parametrize("status", [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.COMPLETED])
+async def test_removal_rejects_active_or_unpublished_export_jobs(optimization, status):
+    job = await submit(optimization)
+    async with optimization.sessions() as session:
+        job = await JobService(session).get_job_by_id(job.id)
+        await JobService(session).update_job(job, {"status": status})
+    if status == JobStatus.COMPLETED:
+        ModelOptimizationService.staging(job.id).mkdir(parents=True)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete(f"/api/models/{optimization.source.id}/exports/openvino")
+    assert response.status_code == 409
+    assert (optimization.root / "act.bin").read_bytes() == b"original weights"
+
+
+@pytest.mark.parametrize("scope", ["", "/variants/original"])
+async def test_removal_rejects_inference_readers(optimization, scope):
+    with optimization.registry.reading_model_export(optimization.source.id, "openvino", "original"):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.delete(f"/api/models/{optimization.source.id}/exports/openvino{scope}")
+    assert response.status_code == 409
+    assert (optimization.root / "act.bin").exists()
+
+
+@pytest.mark.parametrize("scope", ["", "/variants/original"])
+async def test_removal_validates_all_paths_before_deleting_anything(optimization, tmp_path, scope):
+    outside = tmp_path / "precious.bin"
+    outside.write_bytes(b"keep")
+    (optimization.root / "unsafe").symlink_to(outside)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete(f"/api/models/{optimization.source.id}/exports/openvino{scope}")
+    assert response.status_code == 409
+    assert outside.read_bytes() == b"keep"
+    assert (optimization.root / "act.bin").exists()
+
+
+async def test_backend_can_be_reexported_after_removal(optimization, checkpoint_export):
+    async with optimization.sessions() as session:
+        job = await ModelOptimizationService(session).submit(optimization.source.id, checkpoint_export)
+    await worker(job).run_loop()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.delete(f"/api/models/{optimization.source.id}/exports/torch")).status_code == 204
+        response = await client.post(f"/api/models/{optimization.source.id}/exports/torch")
+        assert response.status_code == 202
+    async with optimization.sessions() as session:
+        job = await JobService(session).get_job_by_id(response.json()["id"])
+    await worker(job).run_loop()
+    assert (Path(optimization.source.path) / "exports/torch/model.pt").exists()
 
 
 @pytest.fixture
@@ -343,6 +425,23 @@ async def test_concurrent_submissions_reserve_only_one_target(optimization):
     assert sorted(result.status_code for result in results) == [202, 409, 409]
     async with optimization.sessions() as session:
         assert len(await JobService(session).get_job_list()) == 1
+
+
+async def test_removal_and_job_submission_serialize_their_filesystem_decisions(optimization):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        submitted, removed = await asyncio.gather(
+            client.post(f"/api/models/{optimization.source.id}/optimize"),
+            client.delete(f"/api/models/{optimization.source.id}/exports/openvino"),
+        )
+    assert (submitted.status_code, removed.status_code) in {(202, 409), (409, 204)}
+    assert (optimization.root / "act.bin").exists() == (submitted.status_code == 202)
+
+
+@pytest.mark.parametrize("suffix", ["torch", "openvino/variants/int8"])
+async def test_removal_of_missing_exports_is_not_found(optimization, suffix):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.delete(f"/api/models/{optimization.source.id}/exports/{suffix}")).status_code == 404
+    assert (optimization.root / "act.bin").exists()
 
 
 async def test_selected_download_and_full_model_roundtrip(optimization, tmp_path, monkeypatch):

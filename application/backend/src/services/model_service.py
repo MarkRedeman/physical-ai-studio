@@ -1,15 +1,16 @@
 import shutil
+from contextlib import suppress
 from datetime import UTC, datetime
 from importlib.util import find_spec
 from pathlib import Path
 from uuid import UUID
 
 import yaml
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.schema import JobDB
-from exceptions import ResourceInUseError, ResourceNotFoundError, ResourceType
+from db.schema import JobDB, ModelDB
+from exceptions import InvalidResourceError, ResourceInUseError, ResourceNotFoundError, ResourceType
 from repositories import ModelRepository, SnapshotRepository
 from schemas.job import ExportBackend, TrainJob
 from schemas.model import (
@@ -68,6 +69,59 @@ class ModelService:
 
     async def get_project_models(self, project_id: UUID) -> list[Model]:
         return await self.repo.get_project_models(project_id)
+
+    async def delete_export(self, model_id: UUID, backend: str, variant: VariantId | None = None) -> None:
+        """Remove one export or an entire backend, keeping checkpoint and training data."""
+        from services.model_optimization_service import ModelOptimizationService
+
+        try:
+            # Serialize removal with export submissions and publication decisions.
+            await self.session.execute(update(ModelDB).where(ModelDB.id == str(model_id)).values(id=ModelDB.id))
+            model = await self.get_model_by_id(model_id)
+            jobs = await self.session.execute(
+                select(JobDB.id, JobDB.status).where(
+                    JobDB.type == "optimize_model",
+                    JobDB.status.in_(("pending", "running", "completed")),
+                    func.json_extract(JobDB.payload, "$.model_id") == str(model_id),
+                )
+            )
+            if any(
+                status != "completed" or ModelOptimizationService.staging(UUID(job_id)).exists()
+                for job_id, status in jobs
+            ):
+                raise ResourceInUseError(
+                    ResourceType.MODEL, model_id, "Wait for this model's export jobs to finish before removing files."
+                )
+            package = ExportPackage.for_model(Path(model.path), backend, variant or "original")
+            if not package.directory.is_dir():
+                raise ResourceNotFoundError(ResourceType.MODEL, f"{model_id}/{backend}/{variant or 'all'}")
+            if variant == "original":
+                files = package.files
+                if not files:
+                    raise ResourceNotFoundError(ResourceType.MODEL, f"{model_id}/{backend}/original")
+                parents = {
+                    parent for path in files for parent in path.parents if parent.is_relative_to(package.directory)
+                }
+                for path in files:
+                    path.unlink()
+                for parent in sorted(parents, key=lambda path: len(path.parts), reverse=True):
+                    with suppress(OSError):
+                        parent.rmdir()
+            else:
+                _ = tuple(FileTree(package.directory).files())
+                shutil.rmtree(package.directory)
+                if variant is not None:
+                    with suppress(OSError):
+                        package.directory.parent.rmdir()
+                    with suppress(OSError):
+                        package.directory.parent.parent.rmdir()
+            await self.session.commit()
+        except ValueError as exc:
+            await self.session.rollback()
+            raise InvalidResourceError("Model", str(exc)) from exc
+        except Exception:
+            await self.session.rollback()
+            raise
 
     @staticmethod
     def get_backend_details(model: Model) -> list[BackendExportDetail]:
