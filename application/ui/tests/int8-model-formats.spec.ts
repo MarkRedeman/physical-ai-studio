@@ -7,7 +7,7 @@ import { getMockedOptimizeModelJob } from '../src/test-utils/mocks/mock-optimize
 import { expect, http, test } from './fixtures';
 
 for (const variant of ['int8', 'original'] as const) {
-    test(`removes the ${variant} model only after confirmation and refreshes available cards`, async ({
+    test(`removes the ${variant} model format only after confirmation and refreshes available cards`, async ({
         page,
         network,
     }) => {
@@ -38,15 +38,15 @@ for (const variant of ['int8', 'original'] as const) {
         });
         await card.getByRole('button', { name: `Actions for OpenVINO ${label}` }).click();
         await expect(page.getByRole('menuitem', { name: /Remove (export|backend)/ })).toHaveCount(0);
-        await page.getByRole('menuitem', { name: 'Remove model' }).click();
+        await page.getByRole('menuitem', { name: 'Remove model format' }).click();
         const dialog = page.getByRole('dialog');
         await expect(dialog).toContainText('training checkpoint, training history, and other backends are kept');
         expect(removed).toBe(false);
         await dialog.getByRole('button', { name: 'Cancel' }).click();
         await expect(card).toBeVisible();
         await card.getByRole('button', { name: `Actions for OpenVINO ${label}` }).click();
-        await page.getByRole('menuitem', { name: 'Remove model' }).click();
-        await page.getByRole('dialog').getByRole('button', { name: 'Remove model', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Remove model format' }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Remove model format', exact: true }).click();
         await expect(card).toHaveCount(0);
         await expect(
             page.getByRole('region', { name: variant === 'int8' ? 'OpenVINO model format' : 'OpenVINO · INT8' })

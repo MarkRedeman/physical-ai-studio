@@ -26,17 +26,17 @@ interface ModelExportsProps {
 const cardGridColumns = 'repeat(auto-fill, minmax(min(100%, var(--spectrum-global-dimension-size-4600)), 1fr))';
 const backendOrder = ['torch', 'openvino', 'onnx', 'executorch'];
 
-interface VariantTarget {
+interface ModelFormatTarget {
     backend: SchemaModelExportAction['backend'];
     variant: SchemaExportVariantDetail['id'];
 }
 
-const actionTarget = (action: SchemaModelExportAction): VariantTarget => ({
+const actionTarget = (action: SchemaModelExportAction): ModelFormatTarget => ({
     backend: action.backend,
     variant: action.operation === 'int8_sym' ? 'int8' : 'original',
 });
 
-const targetKey = ({ backend, variant }: VariantTarget) => `${backend}/${variant}`;
+const targetKey = ({ backend, variant }: ModelFormatTarget) => `${backend}/${variant}`;
 
 const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
     const [creation, setCreation] = useState<{
@@ -72,7 +72,7 @@ const ModelFormatsContents = ({ model }: { model: SchemaModel }) => {
                 ({ payload }) => targetKey(actionTarget(payload)) === targetKey(actionTarget(job.payload))
             ) === index
     );
-    const candidates: VariantTarget[] = [
+    const candidates: ModelFormatTarget[] = [
         ...modelDetail.exports.flatMap(({ type, variants }) =>
             isExportBackend(type) ? (variants ?? []).map(({ id }) => ({ backend: type, variant: id })) : []
         ),

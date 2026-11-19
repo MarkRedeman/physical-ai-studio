@@ -26,7 +26,11 @@ import {
     getSupportedInferenceDevices,
     InferenceDevice,
 } from '../../models/backend-selection/backend-selection';
-import { ModelVariant, useVariantSelection, VariantSelection } from '../../models/model-formats/variant-selection';
+import {
+    ModelFormatId,
+    ModelFormatSelection,
+    useModelFormatSelection,
+} from '../../models/model-formats/model-format-selection';
 import { useProject, useProjectId } from '../../projects/use-project';
 import { SessionPartName, useRuntimeSession } from '../runtime-session-provider';
 import { PendingConfirmation, SessionCommand, usePartCommand } from './use-part-command';
@@ -103,8 +107,8 @@ const LoadModelDialog = ({
 }: {
     models: SchemaModel[];
     datasetNames: Map<string, string>;
-    current: { model_id: string; backend: string; device: string; variant?: ModelVariant } | null | undefined;
-    onPick: (model_id: string, backend: string, device: string, variant: ModelVariant) => void;
+    current: { model_id: string; backend: string; device: string; variant?: ModelFormatId } | null | undefined;
+    onPick: (model_id: string, backend: string, device: string, variant: ModelFormatId) => void;
     close: () => void;
 }) => {
     const [selected, setSelected] = useState<string | null>(current?.model_id ?? null);
@@ -126,7 +130,7 @@ const LoadModelDialog = ({
         getSupportedInferenceDevices(inferenceDevices, backend).find(
             (candidate) => candidate.device === inferenceDevice?.device
         ) ?? getDefaultInferenceDevice(inferenceDevices, backend);
-    const selection = useVariantSelection(
+    const selection = useModelFormatSelection(
         picked?.id,
         backend,
         current?.model_id === picked?.id ? current?.variant : undefined
@@ -171,11 +175,11 @@ const LoadModelDialog = ({
                                 inferenceDevices={inferenceDevices}
                                 setInferenceDevice={setInferenceDevice}
                             />
-                            {selection.variants.length > 1 && (
-                                <VariantSelection
-                                    variants={selection.variants}
-                                    variant={selection.variant}
-                                    onChange={selection.setVariant}
+                            {selection.formats.length > 1 && (
+                                <ModelFormatSelection
+                                    formats={selection.formats}
+                                    formatId={selection.formatId}
+                                    onChange={selection.setFormatId}
                                 />
                             )}
                         </Suspense>
@@ -198,7 +202,7 @@ const LoadModelDialog = ({
                     onPress={() => {
                         close();
                         if (picked?.id !== undefined && device !== undefined) {
-                            onPick(picked.id, backend, device.device, selection.variant);
+                            onPick(picked.id, backend, device.device, selection.formatId);
                         }
                     }}
                 >

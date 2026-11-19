@@ -15,7 +15,7 @@ const Location = () => {
     return <output aria-label='Current location'>{pathname + search}</output>;
 };
 
-it('downloads and runs the fixed package without a variant picker', async () => {
+it('downloads and runs the fixed package without a model format picker', async () => {
     server.use(
         http.get('/api/system/devices/inference', () =>
             HttpResponse.json([{ type: 'cpu', name: 'CPU', backend: 'openvino', device: 'CPU' }])
@@ -35,7 +35,7 @@ it('downloads and runs the fixed package without a variant picker', async () => 
         { path: '*', route: '/projects/project-1/models' }
     );
     expect(screen.getByRole('region', { name: 'OpenVINO · INT8' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Variant/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Model format/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Actions for OpenVINO INT8' }));
     expect(await screen.findByRole('menuitem', { name: 'Download' })).toHaveAttribute(
         'href',

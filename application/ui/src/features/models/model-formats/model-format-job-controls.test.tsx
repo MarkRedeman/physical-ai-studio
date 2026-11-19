@@ -91,7 +91,7 @@ it('blocks optimization while job status is unavailable and supports retry', asy
     await waitFor(() => expect(screen.getByRole('button', { name: 'Optimize' })).toBeEnabled());
 });
 
-it('keeps failure history separate for original and INT8 packages on the same backend', async () => {
+it('keeps failure history separate for original and INT8 model formats on the same backend', async () => {
     server.use(
         http.get('/api/jobs', () =>
             HttpResponse.json([

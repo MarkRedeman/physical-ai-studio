@@ -5,12 +5,12 @@ import { Item, Picker } from '@geti-ui/ui';
 import { $api } from '../../../api/client';
 import { SchemaExportVariantDetail, SchemaModelDetailResponse } from '../../../api/openapi-spec';
 
-export type ModelVariant = SchemaExportVariantDetail['id'];
+export type ModelFormatId = SchemaExportVariantDetail['id'];
 
-export const useVariantSelection = (
+export const useModelFormatSelection = (
     modelId: string | undefined,
     backend: string,
-    initialVariant: ModelVariant = 'original',
+    initialFormatId: ModelFormatId = 'original',
     detail?: SchemaModelDetailResponse
 ) => {
     const query = $api.useQuery(
@@ -20,33 +20,33 @@ export const useVariantSelection = (
         { enabled: modelId !== undefined && detail === undefined }
     );
     const key = `${modelId}/${backend}`;
-    const [selection, setSelection] = useState<{ key: string; variant: ModelVariant }>();
-    const variants = (detail ?? query.data)?.exports.find((item) => item.type === backend)?.variants ?? [];
-    const requested = selection?.key === key ? selection.variant : initialVariant;
-    const selected = variants.find((variant) => variant.id === requested) ?? variants[0];
+    const [selection, setSelection] = useState<{ key: string; formatId: ModelFormatId }>();
+    const formats = (detail ?? query.data)?.exports.find((item) => item.type === backend)?.variants ?? [];
+    const requested = selection?.key === key ? selection.formatId : initialFormatId;
+    const selected = formats.find((format) => format.id === requested) ?? formats[0];
     return {
-        variants,
+        formats,
         selected,
-        variant: selected?.id ?? 'original',
+        formatId: selected?.id ?? 'original',
         isPending: detail === undefined && query.isPending,
         isError: detail === undefined && query.isError,
-        setVariant: (variant: ModelVariant) => setSelection({ key, variant }),
+        setFormatId: (formatId: ModelFormatId) => setSelection({ key, formatId }),
     };
 };
 
-export const VariantSelection = ({
-    variants,
-    variant,
+export const ModelFormatSelection = ({
+    formats,
+    formatId,
     onChange,
 }: {
-    variants: SchemaExportVariantDetail[];
-    variant: ModelVariant;
-    onChange: (variant: ModelVariant) => void;
+    formats: SchemaExportVariantDetail[];
+    formatId: ModelFormatId;
+    onChange: (formatId: ModelFormatId) => void;
 }) => (
     <Picker
-        label='Variant'
-        items={variants}
-        selectedKey={variant}
+        label='Model format'
+        items={formats}
+        selectedKey={formatId}
         onSelectionChange={(key) => {
             if (key === 'original' || key === 'int8') onChange(key);
         }}

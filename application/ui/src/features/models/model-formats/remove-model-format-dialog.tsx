@@ -5,7 +5,7 @@ import { getApiErrorMessage } from '../../../api/errors';
 import { SchemaExportVariantDetail, SchemaModel, SchemaModelExportAction } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS } from '../inference-backends';
 
-export const RemoveModelDialog = ({
+export const RemoveModelFormatDialog = ({
     model,
     backend,
     variant,
@@ -30,22 +30,24 @@ export const RemoveModelDialog = ({
     const label = INFERENCE_BACKENDS[backend].label;
     return (
         <Dialog>
-            <Heading>Remove model</Heading>
+            <Heading>Remove model format</Heading>
             <Divider />
             <Content>
                 <Flex direction='column' gap='size-200'>
                     <Text>
-                        Permanently remove {label} · {variant.id === 'int8' ? 'INT8' : 'Original'}? Other models stay
-                        available.
+                        Permanently remove {label} · {variant.id === 'int8' ? 'INT8' : 'Original'}? Other model formats
+                        stay available.
                     </Text>
                     <Text>
                         Approximately {size} will be freed. The training checkpoint, training history, and other
                         backends are kept.
                     </Text>
-                    <Text>Unload this model from inference and wait for export jobs to finish before removing it.</Text>
+                    <Text>
+                        Unload this model format from inference and wait for export jobs to finish before removing it.
+                    </Text>
                     {remove.error && (
                         <div role='alert'>
-                            {getApiErrorMessage(remove.error) ?? 'Could not remove the model. Please try again.'}
+                            {getApiErrorMessage(remove.error) ?? 'Could not remove the model format. Please try again.'}
                         </div>
                     )}
                 </Flex>
@@ -61,7 +63,7 @@ export const RemoveModelDialog = ({
                         remove.mutate({ params: { path: { model_id: model.id!, backend, variant: variant.id } } });
                     }}
                 >
-                    Remove model
+                    Remove model format
                 </Button>
             </ButtonGroup>
         </Dialog>
