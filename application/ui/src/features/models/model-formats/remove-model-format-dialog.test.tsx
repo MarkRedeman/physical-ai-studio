@@ -37,7 +37,7 @@ it.each([original, int8])('confirms removal of $id and refreshes model queries',
     render(<BackendCard model={model} backendType='openvino' variant={variant} onCreate={() => {}} />, { queryClient });
     await user.click(screen.getByRole('button', { name: /Actions for OpenVINO/ }));
     expect(screen.queryByRole('menuitem', { name: /Remove (export|backend)/ })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('menuitem', { name: 'Remove model' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove model format' }));
     const dialog = screen.getByRole('dialog');
     expect(removed).toBe(false);
     expect(
@@ -46,7 +46,7 @@ it.each([original, int8])('confirms removal of $id and refreshes model queries',
     expect(
         within(dialog).getByText(variant.id === 'original' ? /Approximately 1.0 MB/ : /Approximately 0.5 MB/)
     ).toBeInTheDocument();
-    await user.click(within(dialog).getByRole('button', { name: 'Remove model' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Remove model format' }));
     await waitFor(() => expect(removed).toBe(true));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(queryClient.getQueryState(detailKey)?.isInvalidated).toBe(true);
@@ -68,8 +68,8 @@ it('keeps the confirmation open on conflicts and allows canceling without deleti
     const user = userEvent.setup();
     render(<BackendCard model={getMockedModel()} backendType='openvino' variant={original} onCreate={() => {}} />);
     await user.click(screen.getByRole('button', { name: 'Actions for OpenVINO Original' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Remove model' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove model' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove model format' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove model format' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Unload the model first.');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));

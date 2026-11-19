@@ -6,13 +6,13 @@ import { $api } from '../../../api/client';
 import { SchemaModel } from '../../../api/openapi-spec';
 import { getDefaultInferenceDevice, getSupportedInferenceDevices } from '../backend-selection/backend-selection';
 import { runtimeExportUrl } from '../runtime-export';
-import { ModelVariant } from './variant-selection';
+import { ModelFormatId } from './model-format-selection';
 
 interface RuntimeExportDialogProps {
     close: () => void;
     model: SchemaModel;
     backend: string;
-    variant?: ModelVariant;
+    variant?: ModelFormatId;
 }
 
 export const RuntimeExportDialog = ({ close, model, backend, variant = 'original' }: RuntimeExportDialogProps) => {

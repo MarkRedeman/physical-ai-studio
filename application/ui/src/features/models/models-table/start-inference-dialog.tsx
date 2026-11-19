@@ -13,7 +13,7 @@ import {
     getSupportedInferenceDevices,
     InferenceDevice,
 } from '../backend-selection/backend-selection';
-import { useVariantSelection, VariantSelection } from '../model-formats/variant-selection';
+import { ModelFormatSelection, useModelFormatSelection } from '../model-formats/model-format-selection';
 
 const getDefaultbackend = (model: SchemaModel) => {
     if (model.available_backends.includes(defaultBackend)) {
@@ -34,7 +34,7 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
 
     const { data: inferenceDevices = [], isLoading } = $api.useQuery('get', '/api/system/devices/inference');
     const backend = selectedInferenceDevice?.backend ?? initialBackend;
-    const selection = useVariantSelection(model.id, backend);
+    const selection = useModelFormatSelection(model.id, backend);
 
     const selectedDevice = getSupportedInferenceDevices(inferenceDevices, backend).find(
         (inferenceDevice) => inferenceDevice.device === selectedInferenceDevice?.device
@@ -54,7 +54,7 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
                 model_id: model.id!,
                 backend,
             }),
-            search: createSearchParams({ device: inferenceDevice.device, variant: selection.variant }).toString(),
+            search: createSearchParams({ device: inferenceDevice.device, variant: selection.formatId }).toString(),
         });
     };
 
@@ -70,11 +70,11 @@ export const StartInferenceDialog = ({ close, model }: StartInferenceDialogProps
                         inferenceDevices={inferenceDevices}
                         setInferenceDevice={setSelectedInferenceDevice}
                     />
-                    {selection.variants.length > 1 && (
-                        <VariantSelection
-                            variants={selection.variants}
-                            variant={selection.variant}
-                            onChange={selection.setVariant}
+                    {selection.formats.length > 1 && (
+                        <ModelFormatSelection
+                            formats={selection.formats}
+                            formatId={selection.formatId}
+                            onChange={selection.setFormatId}
                         />
                     )}
                 </Suspense>

@@ -18,8 +18,8 @@ import { MoreMenu } from '@geti-ui/ui/icons';
 import { fetchClient } from '../../../api/client';
 import { SchemaExportVariantDetail, SchemaModel, SchemaModelExportAction } from '../../../api/openapi-spec';
 import { INFERENCE_BACKENDS, InferenceBackendConfig } from '../inference-backends';
-import { RemoveModelDialog } from './remove-model-dialog';
-import { RunVariant } from './run-variant';
+import { RemoveModelFormatDialog } from './remove-model-format-dialog';
+import { RunModelFormat } from './run-model-format';
 import { RuntimeExportDialog } from './runtime-export-dialog';
 
 import classes from './model-formats.module.css';
@@ -28,12 +28,12 @@ export const InferenceBackendLogo = ({
     backend,
     isAvailable,
     compact = false,
-    variantLabel,
+    formatLabel,
 }: {
     backend: InferenceBackendConfig;
     isAvailable: boolean;
     compact?: boolean;
-    variantLabel?: string;
+    formatLabel?: string;
 }) => {
     const Logo = backend.logo;
     return (
@@ -44,7 +44,7 @@ export const InferenceBackendLogo = ({
                     <Heading level={4} margin={0}>
                         {backend.label}
                     </Heading>
-                    {variantLabel && <Text UNSAFE_className={classes.variantDescription}>{variantLabel}</Text>}
+                    {formatLabel && <Text UNSAFE_className={classes.formatDescription}>{formatLabel}</Text>}
                 </Flex>
                 {!compact && <Text UNSAFE_style={{ fontSize: '11px' }}>{backend.description}</Text>}
             </Flex>
@@ -108,7 +108,7 @@ export const BackendCard = ({
                                 backend={backend}
                                 isAvailable={variant !== undefined || isExporting}
                                 compact
-                                variantLabel={variantId === 'int8' ? label : undefined}
+                                formatLabel={variantId === 'int8' ? label : undefined}
                             />
                         </View>
                         {variant && (
@@ -125,7 +125,7 @@ export const BackendCard = ({
                                         Download
                                     </Item>
                                     {backendType === 'openvino' ? <Item key='runtime'>Runtime export</Item> : null}
-                                    <Item key='remove'>Remove model</Item>
+                                    <Item key='remove'>Remove model format</Item>
                                 </Menu>
                             </MenuTrigger>
                         )}
@@ -153,7 +153,9 @@ export const BackendCard = ({
                                             Optimize
                                         </Button>
                                     )}
-                                    {variant && <RunVariant model={model} backend={backendType} variant={variantId} />}
+                                    {variant && (
+                                        <RunModelFormat model={model} backend={backendType} formatId={variantId} />
+                                    )}
                                 </Flex>
                             </View>
                         </Flex>
@@ -170,7 +172,7 @@ export const BackendCard = ({
                     />
                 )}
                 {dialog === 'remove' && variant && (
-                    <RemoveModelDialog
+                    <RemoveModelFormatDialog
                         model={model}
                         backend={backendType}
                         variant={variant}

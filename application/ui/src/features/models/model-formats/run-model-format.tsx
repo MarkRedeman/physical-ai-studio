@@ -5,16 +5,16 @@ import { $api } from '../../../api/client';
 import { SchemaModel, SchemaModelExportAction } from '../../../api/openapi-spec';
 import { paths } from '../../../paths';
 import { getDefaultInferenceDevice } from '../backend-selection/backend-selection';
-import { ModelVariant } from './variant-selection';
+import { ModelFormatId } from './model-format-selection';
 
-export const RunVariant = ({
+export const RunModelFormat = ({
     model,
     backend,
-    variant,
+    formatId,
 }: {
     model: SchemaModel;
     backend: SchemaModelExportAction['backend'];
-    variant: ModelVariant;
+    formatId: ModelFormatId;
 }) => {
     const navigate = useNavigate();
     const runnable = backend === 'openvino' || backend === 'torch';
@@ -45,7 +45,7 @@ export const RunVariant = ({
                             model_id: model.id,
                             backend,
                         }),
-                        search: createSearchParams({ device: device.device, variant }).toString(),
+                        search: createSearchParams({ device: device.device, variant: formatId }).toString(),
                     });
                 }}
             >

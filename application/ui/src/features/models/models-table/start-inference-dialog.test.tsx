@@ -38,7 +38,7 @@ it.each([false, true])('starts the selected export and resets it when changing b
         </>,
         { path: '*', route: '/projects/project-1/models' }
     );
-    await user.click(await screen.findByRole('button', { name: /Variant/ }));
+    await user.click(await screen.findByRole('button', { name: /Model format/ }));
     await user.click(await screen.findByRole('option', { name: 'INT8' }));
     if (switchBackend) await user.click(screen.getByRole('radio', { name: /PyTorch/ }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled());

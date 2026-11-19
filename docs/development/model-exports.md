@@ -1,19 +1,21 @@
-# Model exports and variants
+# Model formats and exports
 
 Model exports are delivered in three sequential changes:
 
 1. Re-export a stored checkpoint to a missing, supported backend.
 2. Remove a backend export without deleting its checkpoint or training history.
-3. Create OpenVINO INT8 variants, select them for inference/download, and remove individual variants.
+3. Create OpenVINO INT8 model formats, select them for inference/download, and remove individual model formats.
 
-RTC and additional SnapFlow variants are follow-up work, not part of this implementation.
+RTC and additional SnapFlow model formats are follow-up work, not part of this implementation.
 
 ## Identity and storage
 
 A training model retains one model ID, checkpoint, dataset provenance, and training history.
 Exporting or compressing it does not create another training-model database row.
 
-An exported package is identified by **model ID, backend, and variant ID**:
+Use **model format** in UI labels and workflow descriptions, including original and INT8 packages.
+API fields, query parameters, manifest metadata, and storage paths retain the technical name `variant`
+for compatibility. An exported package is identified by **model ID, backend, and variant ID**:
 
 ```text
 <model>/model.ckpt
@@ -24,15 +26,15 @@ An exported package is identified by **model ID, backend, and variant ID**:
 ```
 
 Existing packages without Studio metadata remain original exports. Re-export jobs initially
-recorded publication metadata under `studio.export`; variant-aware readers also accept that
+recorded publication metadata under `studio.export`; readers supporting multiple model formats also accept that
 metadata. New packages use versioned `studio.variant` metadata, including the variant ID,
 compression method, creation time, and producing job ID. Runtime's artifact manifest remains
 the source of truth for artifact paths and IO specifications.
 
 `ExportPackage` in `application/backend/src/schemas/model_export.py` centralizes package paths,
 manifest validation, and dependency enumeration. Original-package downloads and compression
-exclude the `variants/` subtree. Full-model downloads include every published variant.
-Variant-only backends remain discoverable after their original package is removed.
+exclude the `variants/` subtree. Full-model downloads include every published model format.
+Backends with only optimized model formats remain discoverable after their original package is removed.
 
 ## Export jobs and removal
 
@@ -47,24 +49,24 @@ before renaming the complete package into place. If the process exits between th
 the scheduler finishes publication using the recorded job ID. A persisted cancellation request
 competes with completion on the same job row, so losing a process signal cannot publish canceled work.
 
-Submission and backend/variant removal serialize their filesystem decisions using the model's
+Submission and backend/model-format removal serialize their filesystem decisions using the model's
 database row. Removal rejects pending/running jobs and committed-but-unpublished output.
 Inference holds an export lease from loading through teardown; backend deletion excludes every
-variant's lease, while variant deletion only excludes that package. Checkpoints, training history,
+model format's lease, while individual model-format deletion only excludes that package. Checkpoints, training history,
 and unrelated packages are preserved.
 
-The public routes keep format and variant separate:
+The public routes retain separate backend and `variant` identifiers:
 
 - `POST /api/models/{model_id}/exports/{backend}`: export a missing backend from its checkpoint.
-- `DELETE /api/models/{model_id}/exports/{backend}`: remove the backend and all its variants.
+- `DELETE /api/models/{model_id}/exports/{backend}`: remove the backend and all its model formats.
 - `POST /api/models/{model_id}/optimize`: create the OpenVINO INT8 package.
 - `DELETE /api/models/{model_id}/exports/{backend}/variants/{variant}`: remove one package.
-- Backend downloads and runtime-session model loading accept a variant, defaulting to `original`.
+- Backend downloads and runtime-session model loading accept a `variant` ID, defaulting to `original`.
 
 Model details advertise supported `available_actions`; the UI does not infer export capability
 from a missing directory alone. Checkpoint exports require the policy and backend dependencies
 to be installed. Existing nonempty or empty backend directories are not overwritten by checkpoint
-export; remove the backend first to retry it. A backend with retained variants is likewise not
+export; remove the backend first to retry it. A backend with retained model formats is likewise not
 offered for original re-export until that backend is removed.
 
 ## RTC and SnapFlow follow-ups
@@ -79,7 +81,7 @@ For features that produce another package:
 - Extend the validated variant-ID and operation allowlists; do not accept arbitrary filesystem paths.
 - Keep package identity separate from transformation metadata. `int8` is a package ID;
   `int8_sym` describes its weight-compression recipe. Additional recipe dimensions can describe RTC,
-  SnapFlow, and supported combinations without treating every variant as an INT8 model.
+  SnapFlow, and supported combinations without treating every model format as an INT8 model.
 - Replace the current two-operation target selection with an explicit recipe-to-target mapping when
   adding a third operation. Define source package/checkpoint selection and collision rules explicitly.
 - Add capabilities only for policy/backend combinations the library actually supports. Reuse the
@@ -114,5 +116,5 @@ uv run physicalai-studio gen-api --target-path ../ui/src/api/openapi-spec.json
 npm run build:api
 npm run type-check
 npm run test:unit
-npm run test:component -- tests/int8-model-variants.spec.ts
+npm run test:component -- tests/int8-model-formats.spec.ts
 ```
