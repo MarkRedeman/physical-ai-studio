@@ -16,6 +16,7 @@ class ValidationDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
     split: float = Field(default=0.1, ge=0, lt=1, description="Fraction of episodes held out for validation.")
+    seed: int | None = Field(default=None, description="Validation split RNG seed; null uses the global RNG.")
 
 
 class LoraDefaults(BaseModel):
@@ -50,6 +51,9 @@ class PolicyTrainingDefaults(BaseModel):
         description="Policy-recommended precision; null keeps the device-based recommendation.",
     )
     compile_model: bool = Field(default=False, description="Enable torch.compile for the policy.")
+    gradient_checkpointing: bool | None = Field(
+        default=None, description="Recompute activations to save memory; null keeps the library default."
+    )
     auto_scale_batch_size: bool = Field(default=False, description="Find a fitting batch size before training.")
     augment_images: bool = Field(default=False, description="Apply Studio's default training-only image augmentations.")
     validation: ValidationDefaults = Field(default_factory=ValidationDefaults, description="Episode validation split.")

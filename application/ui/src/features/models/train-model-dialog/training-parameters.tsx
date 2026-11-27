@@ -61,6 +61,8 @@ interface TrainingParametersProps {
     onPrecisionChange: (value: Key | null) => void;
     compileModel: boolean;
     onCompileModelChange: (value: boolean) => void;
+    gradientCheckpointing: boolean | null;
+    onGradientCheckpointingChange: (value: boolean) => void;
     augmentImages: boolean;
     onAugmentImagesChange: (value: boolean) => void;
     isAutoScaleBatchDisabled: boolean;
@@ -101,6 +103,8 @@ export const TrainingParameters = ({
     onPrecisionChange,
     compileModel,
     onCompileModelChange,
+    gradientCheckpointing,
+    onGradientCheckpointingChange,
     augmentImages,
     onAugmentImagesChange,
     isAutoScaleBatchDisabled,
@@ -298,6 +302,22 @@ export const TrainingParameters = ({
                     </Content>
                 </ContextualHelp>
             </Flex>
+            {gradientCheckpointing !== null && (
+                <Flex direction='row' gap='size-100' alignItems='center'>
+                    <Checkbox isEmphasized isSelected={gradientCheckpointing} onChange={onGradientCheckpointingChange}>
+                        Gradient checkpointing
+                    </Checkbox>
+                    <ContextualHelp variant='info'>
+                        <Heading>Gradient checkpointing</Heading>
+                        <Content>
+                            <Text>
+                                {help['gradient_checkpointing'] ??
+                                    'Recomputes activations to save memory, using extra compute.'}
+                            </Text>
+                        </Content>
+                    </ContextualHelp>
+                </Flex>
+            )}
             <Flex direction='row' gap='size-100' alignItems='center'>
                 <Checkbox isEmphasized isSelected={augmentImages} onChange={onAugmentImagesChange}>
                     Augment images

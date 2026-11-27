@@ -48,6 +48,7 @@ def test_defaults_are_valid_persistable_payloads() -> None:
         **values,
         **({"precision": defaults.precision} if defaults.precision is not None else {}),
         val_split=defaults.validation.split,
+        val_split_seed=defaults.validation.seed,
         lora_enabled=defaults.lora is not None,
         lora_rank=lora.rank,
         lora_alpha=lora.alpha,

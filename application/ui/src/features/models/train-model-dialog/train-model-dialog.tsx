@@ -161,7 +161,9 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
     // Once the user picks a precision, changing the training device must not reset it.
     const [precisionTouched, setPrecisionTouched] = useState(false);
     const [compileModel, setCompileModel] = useState<boolean>(false);
+    const [gradientCheckpointing, setGradientCheckpointing] = useState<boolean | null>(null);
     const [valSplit, setValSplit] = useState(0.1);
+    const [valSplitSeed, setValSplitSeed] = useState<number | null>(null);
     const [loraEnabled, setLoraEnabled] = useState<boolean>(false);
     const [loraRank, setLoraRank] = useState<number>(32);
     const [loraAlpha, setLoraAlpha] = useState<number | null>(null);
@@ -266,8 +268,10 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
         setPrecision(defaults.precision ?? (activeDevice?.type === 'cuda' ? 'bf16-mixed' : '32-true'));
         setPrecisionTouched(defaults.precision !== null);
         setCompileModel(defaults.compile_model);
+        setGradientCheckpointing(defaults.gradient_checkpointing);
         setAugmentImages(defaults.augment_images);
         setValSplit(defaults.validation.split);
+        setValSplitSeed(defaults.validation.seed);
         setLoraEnabled(defaults.lora !== null);
         setLoraRank(defaults.lora?.rank ?? 32);
         setLoraAlpha(defaults.lora?.alpha ?? null);
@@ -432,6 +436,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                 auto_scale_batch_size: autoScaleBatchSize,
                 precision: (precision?.toString() ?? 'bf16-mixed') as SchemaJob['payload']['precision'],
                 compile_model: compileModel,
+                gradient_checkpointing: baseModel ? null : gradientCheckpointing,
                 // Empty without a mapping step (no fixed camera order, or retraining),
                 // which the training side reads as "keep the order it already has".
                 image_key_reorder_map: hasFeatureMapping ? featureMapping.imageKeyReorderMap : {},
@@ -451,6 +456,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                 snapflow_distill_epochs: snapflowDistillEpochs,
                 augment_images: augmentImages,
                 val_split: valSplit,
+                val_split_seed: valSplitSeed,
                 ...(submissionDevice ? { device: { type: submissionDevice.type, index: submissionDevice.index } } : {}),
                 ...extraPayload,
             } as const;
@@ -584,6 +590,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
                                 }}
                                 compileModel={compileModel}
                                 onCompileModelChange={setCompileModel}
+                                gradientCheckpointing={baseModel ? null : gradientCheckpointing}
+                                onGradientCheckpointingChange={setGradientCheckpointing}
                                 augmentImages={augmentImages}
                                 onAugmentImagesChange={setAugmentImages}
                                 isAutoScaleBatchDisabled={activeDevice?.type !== 'cuda'}

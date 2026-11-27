@@ -383,8 +383,9 @@ describe('TrainModelDialog', () => {
             num_workers: 4,
             precision: '32-true',
             compile_model: true,
+            gradient_checkpointing: false,
             augment_images: true,
-            validation: { split: 0.25 },
+            validation: { split: 0.25, seed: 42 },
         };
         let submitted: Record<string, unknown> | undefined;
         server.use(
@@ -398,10 +399,13 @@ describe('TrainModelDialog', () => {
         renderDialog();
         await user.click(await screen.findByRole('button', { name: /select…/i }));
         await user.click(await screen.findByRole('option', { name: 'Test dataset' }));
+        await user.click(screen.getByLabelText('Select XR0 policy'));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
         await user.click(screen.getByRole('button', { name: 'Next' }));
 
         expect(await screen.findByLabelText('Max Epochs', { selector: 'input' })).toHaveValue('12');
         expect(screen.getByRole('checkbox', { name: 'Compile model' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Gradient checkpointing' })).not.toBeChecked();
         expect(screen.getByRole('checkbox', { name: 'Augment images' })).toBeChecked();
 
         await goToLastStep(user);
@@ -413,8 +417,10 @@ describe('TrainModelDialog', () => {
             num_workers: 4,
             precision: '32-true',
             compile_model: true,
+            gradient_checkpointing: false,
             augment_images: true,
             val_split: 0.25,
+            val_split_seed: 42,
             lora_enabled: false,
             snapflow_enabled: false,
         });
