@@ -15,6 +15,8 @@ from training.policy_catalog import (
     ACTTrainingDefaults,
     MolmoAct2LoraDefaults,
     MolmoAct2TrainingDefaults,
+    Pi05LoraDefaults,
+    Pi05TrainingDefaults,
     SmolVLATrainingDefaults,
 )
 from training.policy_training_configuration import (
@@ -40,7 +42,7 @@ def test_act_recipe_matches_the_reference_defaults() -> None:
     assert configuration.defaults.precision == "32-true"
     assert configuration.defaults.validation.seed == 42
     assert configuration.help["batch_size"] == ACTTrainingDefaults.model_fields["batch_size"].description
-    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2", "smolvla"}
+    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2", "smolvla", "pi05"}
 
 
 def test_molmoact2_recipe_matches_the_reference_defaults() -> None:
@@ -66,6 +68,20 @@ def test_smolvla_recipe_matches_the_reference_defaults() -> None:
     assert configuration.defaults.precision == "32-true"
     assert configuration.defaults.validation.seed == 42
     assert configuration.help["max_steps"] == SmolVLATrainingDefaults.model_fields["max_steps"].description
+
+
+def test_pi05_recipe_matches_the_reference_defaults() -> None:
+    configuration = _default_configuration("pi05")
+    assert configuration.defaults.batch_size == 16
+    assert configuration.defaults.max_epochs == 25
+    assert configuration.defaults.compile_model is True
+    assert configuration.defaults.gradient_checkpointing is False
+    assert configuration.defaults.lora is not None
+    assert configuration.defaults.lora.rank == 32
+    assert configuration.defaults.lora.alpha == 32
+    assert configuration.defaults.validation.seed == 42
+    assert configuration.help["lora"] == Pi05TrainingDefaults.model_fields["lora"].description
+    assert configuration.help["lora.rank"] == Pi05LoraDefaults.model_fields["rank"].description
 
 
 def test_recipe_can_select_steps_without_default_epochs() -> None:
@@ -140,7 +156,7 @@ def test_lookup_does_not_load_policy_dependencies() -> None:
             "-c",
             (
                 "import asyncio, sys; from api.policies import get_default_training_configuration; "
-                "assert asyncio.run(get_default_training_configuration('pi05')).defaults.batch_size == 8; "
+                "assert asyncio.run(get_default_training_configuration('pi05')).defaults.batch_size == 16; "
                 "assert 'physicalai.policies' not in sys.modules"
             ),
         ],

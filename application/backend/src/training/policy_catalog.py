@@ -95,6 +95,39 @@ class SmolVLATrainingDefaults(PolicyTrainingDefaults):
     )
 
 
+class Pi05LoraDefaults(LoraDefaults):
+    """Pi0.5 adapter defaults from the native LoRA recipe."""
+
+    rank: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        description="Start at 32; try 16 if a small dataset overfits, or 64 for more capacity with plenty of data.",
+    )
+    alpha: int | None = Field(default=32, ge=1, description="Scaling numerator; null uses the rank.")
+
+
+class Pi05TrainingDefaults(PolicyTrainingDefaults):
+    """Pi0.5 native LoRA defaults; provisional until validated on real hardware."""
+
+    batch_size: BatchSize = Field(
+        default=16,
+        description="Batch 16 is a provisional native LoRA starting point. Reduce it if memory is insufficient.",
+    )
+    max_epochs: EpochCount | None = Field(
+        default=25,
+        description="25 epochs is provisional; a real SO101/Trossen rollout has not validated this native recipe.",
+    )
+    gradient_checkpointing: bool | None = Field(
+        default=False,
+        description="Enable checkpointing to save memory at extra compute cost.",
+    )
+    lora: Pi05LoraDefaults | None = Field(
+        default_factory=Pi05LoraDefaults,
+        description="LoRA fine-tuning. The library automatically applies a 10x learning-rate multiplier.",
+    )
+
+
 POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     "act": PolicyTrainingConfiguration.from_defaults(
         ACTTrainingDefaults(num_workers=4, validation=ValidationDefaults(seed=42))
@@ -109,6 +142,9 @@ POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     ),
     "smolvla": PolicyTrainingConfiguration.from_defaults(
         SmolVLATrainingDefaults(num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42))
+    ),
+    "pi05": PolicyTrainingConfiguration.from_defaults(
+        Pi05TrainingDefaults(compile_model=True, validation=ValidationDefaults(seed=42))
     ),
 }
 """Per-policy recipe overrides; absent policies use the shared defaults."""
