@@ -13,20 +13,13 @@ from loguru import logger
 from core.security import require_aws_feature_active
 from schemas.aws_auth import AwsAuthenticationIssue
 from schemas.remote_trainer import AwsBatchConnection, AwsBatchProviderConfiguration, HealthStatus, RemoteTrainerHealth
-from training.policy_catalog import PolicyCatalog
+from training.policy_catalog import AWS_POLICY_EXPORT_BACKENDS, AWS_POLICY_INSTANCE_TYPES, PolicyCatalog
 
 if TYPE_CHECKING:
     from datetime import datetime
     from uuid import UUID
 
 _PROBE_TIMEOUT_S = 10.0
-
-POLICY_INSTANCE_TYPES = {
-    "act": "g4dn.2xlarge",
-    "pi05": "g6e.2xlarge",
-    "smolvla": "g4dn.2xlarge",
-    "molmoact2": "g7e.8xlarge",
-}
 
 
 def aws_batch_trainer_url(connection: AwsBatchConnection) -> str:
@@ -73,8 +66,8 @@ def batch_policy_catalog(connection: AwsBatchConnection) -> PolicyCatalog:
 
     return declared_policy_catalog(
         {
-            policy: ["torch", "openvino", "onnx", "executorch"] if policy == "act" else ["torch", "openvino"]
-            for policy, instance_type in POLICY_INSTANCE_TYPES.items()
+            policy: AWS_POLICY_EXPORT_BACKENDS[policy]
+            for policy, instance_type in AWS_POLICY_INSTANCE_TYPES.items()
             if instance_type in connection.targets
         }
     )

@@ -18,5 +18,6 @@ export const getMockedPolicyTrainingConfiguration = (
         snapflow: null,
     },
     help: {},
+    camera_slots: [],
     ...overrides,
 });

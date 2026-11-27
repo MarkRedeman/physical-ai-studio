@@ -13,6 +13,7 @@ from services.remote_trainer_service import RemoteTrainerService
 from services.training_backends.local import resolve_hf_token
 from training.policy_catalog import (
     DEFAULT_POLICY_TRAINING_CONFIGURATION,
+    HUGGINGFACE_REQUIREMENTS,
     POLICY_TRAINING_CONFIGURATIONS,
     AvailablePolicy,
     available_policy_classes,
@@ -24,26 +25,6 @@ from training.policy_training_configuration import PolicyTrainingConfiguration
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
 
 _AccessStatus = Literal["granted", "missing_token", "denied", "unavailable", "not_required"]
-
-
-_HUGGINGFACE_REQUIREMENTS = {
-    # Hub dependencies are lazy and can vary with a policy's configuration, so
-    # there is no library API that can discover them safely without starting a
-    # download. When adding/changing a policy, inspect its `from_pretrained`,
-    # `hf_hub_download`, and `Auto*from_pretrained` calls and list every default
-    # repository that Studio training needs here.
-    "molmoact2": (("allenai/MolmoAct2", False),),
-    "pi05": (
-        ("lerobot/pi05_base", True),
-        ("google/paligemma-3b-pt-224", True),
-    ),
-    "smolvla": (("lerobot/smolvla_base", False),),
-    "rldx1": (("RLWRLD/RLDX-1-PT", False),),
-    "xr0": (
-        ("XiaomiRobotics/Xiaomi-Robotics-0-Pretrain", False),
-        ("Qwen/Qwen3-VL-4B-Instruct", False),
-    ),
-}
 
 
 class HuggingFaceRequirementAccess(BaseModel):
@@ -102,7 +83,7 @@ async def check_huggingface_access(policy: str) -> HuggingFaceAccessResponse:
     if policy not in list_physicalai_policies():
         raise HTTPException(status_code=404, detail="Unknown policy")
 
-    requirements = _HUGGINGFACE_REQUIREMENTS.get(policy, ())
+    requirements = HUGGINGFACE_REQUIREMENTS.get(policy, ())
     if not requirements:
         return HuggingFaceAccessResponse(requirements=[])
     token = resolve_hf_token()

@@ -11,6 +11,7 @@ from training.policy_training_configuration import (
     BatchSize,
     EpochCount,
     LoraDefaults,
+    PolicyCameraSlot,
     PolicyTrainingConfiguration,
     PolicyTrainingDefaults,
     Precision,
@@ -162,7 +163,38 @@ POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
         )
     ),
     "smolvla": PolicyTrainingConfiguration.from_defaults(
-        SmolVLATrainingDefaults(num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42))
+        SmolVLATrainingDefaults(num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42)),
+        camera_slots=[
+            PolicyCameraSlot(
+                id="camera1",
+                name="Overview",
+                is_required=True,
+                description=(
+                    "The scene view: a fixed camera that sees the workspace and the robot in it. "
+                    "SmolVLA is pretrained with this view in its first camera slot, so mapping a wrist "
+                    "camera here means the policy sees something quite different from what it was trained on."
+                ),
+            ),
+            PolicyCameraSlot(
+                id="camera2",
+                name="Gripper",
+                is_required=False,
+                description=(
+                    "The wrist or gripper view: a camera mounted on the arm that sees what the gripper is "
+                    "about to grasp. Leave it empty when the robot has no wrist camera — the slot is then "
+                    "filled with a masked empty image."
+                ),
+            ),
+            PolicyCameraSlot(
+                id="camera3",
+                name="Extra",
+                is_required=False,
+                description=(
+                    "A third view — a second scene angle or a second wrist camera. Leave it empty when the "
+                    "setup has only two cameras."
+                ),
+            ),
+        ],
     ),
     "pi05": PolicyTrainingConfiguration.from_defaults(
         Pi05TrainingDefaults(compile_model=True, validation=ValidationDefaults(seed=42))
@@ -178,6 +210,30 @@ POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
 """Per-policy recipe overrides; absent policies use the shared defaults."""
 
 DEFAULT_POLICY_TRAINING_CONFIGURATION = PolicyTrainingConfiguration.from_defaults(PolicyTrainingDefaults())
+
+# Hub dependencies are lazy and configuration-dependent. Inspect each policy's
+# from_pretrained/hf_hub_download/Auto* calls when changing its default repositories.
+HUGGINGFACE_REQUIREMENTS = {
+    "molmoact2": (("allenai/MolmoAct2", False),),
+    "pi05": (("lerobot/pi05_base", True), ("google/paligemma-3b-pt-224", True)),
+    "smolvla": (("lerobot/smolvla_base", False),),
+    "rldx1": (("RLWRLD/RLDX-1-PT", False),),
+    "xr0": (("XiaomiRobotics/Xiaomi-Robotics-0-Pretrain", False), ("Qwen/Qwen3-VL-4B-Instruct", False)),
+}
+
+# These describe the provisioned AWS image, not locally installed capabilities.
+AWS_POLICY_INSTANCE_TYPES = {
+    "act": "g4dn.2xlarge",
+    "pi05": "g6e.2xlarge",
+    "smolvla": "g4dn.2xlarge",
+    "molmoact2": "g7e.8xlarge",
+}
+AWS_POLICY_EXPORT_BACKENDS = {
+    "act": ["torch", "openvino", "onnx", "executorch"],
+    "pi05": ["torch", "openvino"],
+    "smolvla": ["torch", "openvino"],
+    "molmoact2": ["torch", "openvino"],
+}
 
 
 class AvailablePolicy(BaseModel):

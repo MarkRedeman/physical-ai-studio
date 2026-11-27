@@ -4,7 +4,12 @@ import { Button, ButtonGroup, Content, Dialog, Divider, Flex, Heading, Key, Text
 
 import { $api } from '../../../api/client';
 import { getApiErrorMessage } from '../../../api/errors';
-import { SchemaDeviceInfo, SchemaTrainJob as SchemaJob, SchemaModel } from '../../../api/openapi-spec';
+import {
+    SchemaDeviceInfo,
+    SchemaTrainJob as SchemaJob,
+    SchemaModel,
+    SchemaPolicyCameraSlot,
+} from '../../../api/openapi-spec';
 import { isOperationalIssue, issueToasts, showIssueError } from '../../../components/notification/issue-toasts';
 import { useProject } from '../../projects/use-project';
 import { InlineAlert } from '../../robots/setup-wizard/shared/inline-alert';
@@ -50,6 +55,7 @@ export type TrainingTargetOption = {
 };
 
 const LOCAL_TARGET_ID = 'local';
+const EMPTY_CAMERA_SLOTS: SchemaPolicyCameraSlot[] = [];
 
 /** Mirrors `_DEFAULT_SNAPFLOW_DISTILL_EPOCHS` in the backend payload schema. */
 const DEFAULT_SNAPFLOW_DISTILL_EPOCHS = 3;
@@ -318,7 +324,8 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
 
     // Cameras are mapped onto the policy's fixed camera slots; the mapping lives
     // here so the step can be left and re-entered without losing it.
-    const featureMapping = useFeatureMapping(selectedPolicy, selectedDataset?.toString());
+    const cameraSlots = policyConfiguration?.camera_slots ?? EMPTY_CAMERA_SLOTS;
+    const featureMapping = useFeatureMapping(cameraSlots, selectedDataset?.toString());
 
     // Which formats the trained model is exported to; the policy decides what is
     // on offer.
@@ -360,7 +367,7 @@ export const TrainModelDialog = ({ baseModel, close, defaultMaxEpochs }: TrainMo
     // and neither does retraining, so the steps -- and their numbering -- follow
     // the selected policy.
     const isRetraining = baseModel !== undefined;
-    const steps = useMemo(() => getWizardSteps(selectedPolicy, isRetraining), [selectedPolicy, isRetraining]);
+    const steps = getWizardSteps(cameraSlots.length > 0, isRetraining);
     const hasFeatureMapping = steps.includes('feature-mapping');
     // Switching to a policy that skips a step can leave `currentStep` behind, and
     // the setup step is the only one every policy has.

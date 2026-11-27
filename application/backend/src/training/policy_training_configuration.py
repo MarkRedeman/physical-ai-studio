@@ -138,8 +138,19 @@ def describe_help_overrides(model: type[BaseModel], base: type[BaseModel], prefi
     return descriptions
 
 
+class PolicyCameraSlot(BaseModel):
+    """One camera slot in the pretrained policy's fixed camera order."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(description="Stable pretrained camera slot identifier.")
+    name: str = Field(description="Display name describing the camera view.")
+    description: str = Field(description="Guidance for assigning a dataset camera to this slot.")
+    is_required: bool = Field(description="Whether a camera must fill this slot for sensible training.")
+
+
 class PolicyTrainingConfiguration(BaseModel):
-    """Recommended training values with policy guidance."""
+    """Recommended training values with policy guidance and camera metadata."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
@@ -148,11 +159,20 @@ class PolicyTrainingConfiguration(BaseModel):
         default_factory=dict,
         description="Policy-specific field guidance keyed by dotted field path; absent keys use generic UI help.",
     )
+    camera_slots: list[PolicyCameraSlot] = Field(
+        default_factory=list, description="Pretrained camera slots in order; empty means dataset order is used."
+    )
 
     @classmethod
-    def from_defaults(cls, defaults: PolicyTrainingDefaults) -> "PolicyTrainingConfiguration":
+    def from_defaults(
+        cls,
+        defaults: PolicyTrainingDefaults,
+        *,
+        camera_slots: list[PolicyCameraSlot] | None = None,
+    ) -> "PolicyTrainingConfiguration":
         """Build a response with guidance derived from the policy's field descriptions."""
         return cls(
             defaults=defaults,
             help=describe_help_overrides(type(defaults), PolicyTrainingDefaults),
+            camera_slots=camera_slots or [],
         )

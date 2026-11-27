@@ -72,6 +72,13 @@ def test_smolvla_recipe_matches_the_reference_defaults() -> None:
     assert configuration.help["max_steps"] == SmolVLATrainingDefaults.model_fields["max_steps"].description
 
 
+def test_smolvla_camera_slots_are_ordered_and_documented() -> None:
+    configuration = _default_configuration("smolvla")
+    assert [slot.id for slot in configuration.camera_slots] == ["camera1", "camera2", "camera3"]
+    assert [slot.is_required for slot in configuration.camera_slots] == [True, False, False]
+    assert all(slot.description for slot in configuration.camera_slots)
+
+
 def test_pi05_recipe_matches_the_reference_defaults() -> None:
     configuration = _default_configuration("pi05")
     assert configuration.defaults.batch_size == 16

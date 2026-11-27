@@ -104,8 +104,19 @@ const mockProjectWithRemoteTrainer = (datasets = [testDataset, otherDataset]) =>
                 xr0: ['torch', 'openvino'],
             })
         ),
-        http.get('/api/policies/{policy}/default-training-config', () =>
-            HttpResponse.json(getMockedPolicyTrainingConfiguration())
+        http.get('/api/policies/{policy}/default-training-config', ({ params }) =>
+            HttpResponse.json(
+                getMockedPolicyTrainingConfiguration({
+                    camera_slots:
+                        params.policy === 'smolvla'
+                            ? [
+                                  { id: 'camera1', name: 'Overview', description: 'Scene view', is_required: true },
+                                  { id: 'camera2', name: 'Gripper', description: 'Wrist view', is_required: false },
+                                  { id: 'camera3', name: 'Extra', description: 'Additional view', is_required: false },
+                              ]
+                            : [],
+                })
+            )
         ),
         http.get('/api/dataset/{dataset_id}/episodes', () =>
             HttpResponse.json([getMockedEpisode({ episode_index: 0, tasks: ['Test task'], length: 100 })])
