@@ -128,6 +128,15 @@ class Pi05TrainingDefaults(PolicyTrainingDefaults):
     )
 
 
+class Rldx1TrainingDefaults(PolicyTrainingDefaults):
+    """RLDX-1 starting defaults; no matching library recipe has validated them."""
+
+    max_epochs: EpochCount | None = Field(
+        default=5,
+        description="Five epochs is a starting budget, not a validated recipe. Review validation loss for your task.",
+    )
+
+
 POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     "act": PolicyTrainingConfiguration.from_defaults(
         ACTTrainingDefaults(num_workers=4, validation=ValidationDefaults(seed=42))
@@ -146,6 +155,7 @@ POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     "pi05": PolicyTrainingConfiguration.from_defaults(
         Pi05TrainingDefaults(compile_model=True, validation=ValidationDefaults(seed=42))
     ),
+    "rldx1": PolicyTrainingConfiguration.from_defaults(Rldx1TrainingDefaults(gradient_checkpointing=True)),
 }
 """Per-policy recipe overrides; absent policies use the shared defaults."""
 
