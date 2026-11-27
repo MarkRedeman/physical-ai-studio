@@ -14,6 +14,7 @@ from training.policy_training_configuration import (
     PolicyTrainingConfiguration,
     PolicyTrainingDefaults,
     Precision,
+    StepCount,
     ValidationDefaults,
 )
 
@@ -70,6 +71,30 @@ class MolmoAct2TrainingDefaults(PolicyTrainingDefaults):
     )
 
 
+class SmolVLATrainingDefaults(PolicyTrainingDefaults):
+    """SmolVLA defaults validated against the SO100 pick-and-place reference."""
+
+    batch_size: BatchSize = Field(
+        default=64,
+        description="The SO100 pick-and-place reference uses batch 64. Reduce it if GPU memory is insufficient.",
+    )
+    max_epochs: EpochCount | None = Field(
+        default=None,
+        description=(
+            "In epoch mode, roughly 75 epochs on the 50-episode reference or 15 on the 200-episode SO101 "
+            "dataset approximates 20k updates at batch 64. Adjust for your training split."
+        ),
+    )
+    max_steps: StepCount | None = Field(
+        default=20_000,
+        description="The SO100 pick-and-place reference uses 20,000 optimizer updates. Validate on your robot.",
+    )
+    augment_images: bool = Field(
+        default=False,
+        description="Disabled in the baseline; some real SO101 runs enable it. Compare physical rollouts.",
+    )
+
+
 POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     "act": PolicyTrainingConfiguration.from_defaults(
         ACTTrainingDefaults(num_workers=4, validation=ValidationDefaults(seed=42))
@@ -81,6 +106,9 @@ POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
             gradient_checkpointing=True,
             validation=ValidationDefaults(seed=42),
         )
+    ),
+    "smolvla": PolicyTrainingConfiguration.from_defaults(
+        SmolVLATrainingDefaults(num_workers=4, precision="32-true", validation=ValidationDefaults(seed=42))
     ),
 }
 """Per-policy recipe overrides; absent policies use the shared defaults."""

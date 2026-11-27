@@ -15,6 +15,7 @@ from training.policy_catalog import (
     ACTTrainingDefaults,
     MolmoAct2LoraDefaults,
     MolmoAct2TrainingDefaults,
+    SmolVLATrainingDefaults,
 )
 from training.policy_training_configuration import (
     BatchSize,
@@ -39,7 +40,7 @@ def test_act_recipe_matches_the_reference_defaults() -> None:
     assert configuration.defaults.precision == "32-true"
     assert configuration.defaults.validation.seed == 42
     assert configuration.help["batch_size"] == ACTTrainingDefaults.model_fields["batch_size"].description
-    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2"}
+    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2", "smolvla"}
 
 
 def test_molmoact2_recipe_matches_the_reference_defaults() -> None:
@@ -54,6 +55,17 @@ def test_molmoact2_recipe_matches_the_reference_defaults() -> None:
     assert configuration.defaults.validation.seed == 42
     assert configuration.help["lora"] == MolmoAct2TrainingDefaults.model_fields["lora"].description
     assert configuration.help["lora.rank"] == MolmoAct2LoraDefaults.model_fields["rank"].description
+
+
+def test_smolvla_recipe_matches_the_reference_defaults() -> None:
+    configuration = _default_configuration("smolvla")
+    assert configuration.defaults.batch_size == 64
+    assert configuration.defaults.max_epochs is None
+    assert configuration.defaults.max_steps == 20_000
+    assert configuration.defaults.num_workers == 4
+    assert configuration.defaults.precision == "32-true"
+    assert configuration.defaults.validation.seed == 42
+    assert configuration.help["max_steps"] == SmolVLATrainingDefaults.model_fields["max_steps"].description
 
 
 def test_recipe_can_select_steps_without_default_epochs() -> None:
