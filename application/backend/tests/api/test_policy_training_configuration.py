@@ -2,14 +2,17 @@
 
 import subprocess
 import sys
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from pydantic import Field, ValidationError
 
 from main import app
 from schemas.job import LocalTrainJobPayload
+from training.job import PRETRAINED_BASE_CHECKPOINTS
 from training.policy_catalog import (
     POLICY_TRAINING_CONFIGURATIONS,
     ACTTrainingDefaults,
@@ -171,6 +174,67 @@ def test_step_budgeted_defaults_are_valid_persistable_payloads() -> None:
     assert payload.max_steps == 250
     assert payload.max_epochs is None
     assert payload.snapflow_start_step == 250
+    assert LocalTrainJobPayload.model_validate_json(payload.model_dump_json()) == payload
+
+
+@pytest.mark.parametrize(
+    ("policy", "recipe"),
+    [
+        ("act", "act/so101/default.yaml"),
+        ("smolvla", "smolvla/so100/default.yaml"),
+        ("molmoact2", "molmoact2/single_robot.yaml"),
+    ],
+)
+def test_single_robot_recipe_matches_studio_defaults(policy: str, recipe: str) -> None:
+    root = Path(__file__).resolve().parents[4] / "library/configs/physicalai"
+    configuration = yaml.safe_load((root / recipe).read_text())
+    defaults = POLICY_TRAINING_CONFIGURATIONS[policy].defaults
+    model = configuration["model"]["init_args"]
+    data = configuration["data"]["init_args"]
+    trainer = configuration["trainer"]
+
+    if checkpoint := model.get("pretrained_name_or_path"):
+        assert checkpoint == PRETRAINED_BASE_CHECKPOINTS[policy]
+    assert defaults.batch_size == data["train_batch_size"]
+    assert defaults.num_workers == data["num_workers"]
+    assert defaults.max_epochs == trainer.get("max_epochs")
+    assert defaults.max_steps == trainer.get("max_steps")
+    if defaults.precision is not None:
+        assert defaults.precision == trainer["precision"]
+    assert defaults.validation.split == data["val_split"]
+    assert defaults.validation.seed == data["val_split_seed"]
+    assert defaults.compile_model == model["compile_model"]
+    assert defaults.gradient_checkpointing == model.get("gradient_checkpointing")
+    assert defaults.augment_images == ("image_transforms" in data)
+    assert (defaults.lora is not None) == model.get("lora_enabled", False)
+    if defaults.lora is not None:
+        assert defaults.lora.model_dump() == {key: model[f"lora_{key}"] for key in defaults.lora.model_dump()}
+    assert defaults.snapflow is None
+
+
+@pytest.mark.parametrize("policy", POLICY_TRAINING_CONFIGURATIONS)
+def test_every_recipe_is_a_valid_persistable_payload(policy: str) -> None:
+    defaults = _default_configuration(policy).defaults
+    values = defaults.model_dump(exclude={"validation", "lora", "snapflow", "precision"})
+    lora = defaults.lora or LoraDefaults()
+    payload = LocalTrainJobPayload(
+        project_id=uuid4(),
+        dataset_id=uuid4(),
+        policy=policy,
+        model_name=policy,
+        **values,
+        **({"precision": defaults.precision} if defaults.precision is not None else {}),
+        val_split=defaults.validation.split,
+        val_split_seed=defaults.validation.seed,
+        lora_enabled=defaults.lora is not None,
+        lora_rank=lora.rank,
+        lora_alpha=lora.alpha,
+        lora_dropout=lora.dropout,
+        lora_use_dora=lora.use_dora,
+        snapflow_enabled=defaults.snapflow is not None,
+        snapflow_distill_epochs=defaults.snapflow.distill_epochs if defaults.snapflow else 3,
+        snapflow_distill_steps=defaults.snapflow.distill_steps if defaults.snapflow else None,
+    )
     assert LocalTrainJobPayload.model_validate_json(payload.model_dump_json()) == payload
 
 

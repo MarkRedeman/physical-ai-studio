@@ -1,0 +1,34 @@
+# Studio-compatible LoRA baseline for one robot and a small task dataset.
+# Use the general checkpoint: SO101 frame corrections must not apply to Trossen.
+# For the specialized SO101 checkpoint/frame, use so101.yaml instead.
+# Candidate for validation, not a measured PhysicalAI rollout result.
+# Usage: physicalai fit --config configs/physicalai/molmoact2/single_robot.yaml
+model:
+  class_path: physicalai.policies.MolmoAct2
+  init_args:
+    pretrained_name_or_path: allenai/MolmoAct2
+    lora_enabled: true
+    lora_rank: 64
+    lora_alpha: 16
+    lora_dropout: 0.05
+    lora_use_dora: false
+    gradient_checkpointing: true
+    compile_model: false
+
+data:
+  class_path: physicalai.data.lerobot.LeRobotDataModule
+  init_args:
+    repo_id: Daankrol/pick-and-place-multi-obj
+    revision: abf1f62b51dd3441b827478829e0d559fa4a96ac
+    data_format: physicalai
+    train_batch_size: 16
+    num_workers: 8
+    val_split: 0.1
+    val_split_seed: 42
+
+trainer:
+  max_epochs: 8
+  accelerator: gpu
+  devices: 1
+  precision: bf16-mixed
+  check_val_every_n_epoch: 1

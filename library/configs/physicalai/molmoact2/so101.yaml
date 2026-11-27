@@ -17,8 +17,10 @@ model:
     # Start each generated action trajectory from fresh Gaussian noise.
     use_random_input_noise: true
 
-    # Add low-rank adapters to the VLM and action expert while freezing base weights.
+    # Adapt the VLM with LoRA while keeping the full action expert trainable.
     lora_enabled: true
+    lora_rank: 64
+    lora_alpha: 16
 
     # Recompute intermediate activations during backward passes to save GPU memory.
     gradient_checkpointing: true
@@ -53,6 +55,7 @@ data:
   init_args:
     # Convert the SO101 LeRobot dataset into PhysicalAI Observation/Action objects.
     repo_id: Daankrol/pick-and-place-multi-obj
+    revision: abf1f62b51dd3441b827478829e0d559fa4a96ac
     train_batch_size: 16
     val_batch_size: 16
     # Hold out 10% of episodes reproducibly for validation-loss evaluation.
