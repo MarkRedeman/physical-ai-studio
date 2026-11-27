@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from training.policy_training_configuration import (
     BatchSize,
     EpochCount,
+    LoraDefaults,
     PolicyTrainingConfiguration,
     PolicyTrainingDefaults,
     Precision,
@@ -41,9 +42,45 @@ class ACTTrainingDefaults(PolicyTrainingDefaults):
     )
 
 
+class MolmoAct2LoraDefaults(LoraDefaults):
+    """MolmoAct2 VLM adapter defaults from the native baseline."""
+
+    rank: int = Field(
+        default=64,
+        ge=1,
+        le=256,
+        description="Rank 64 and alpha 16 match the native MolmoAct2 baseline.",
+    )
+    alpha: int | None = Field(default=16, ge=1, description="Scaling numerator; null uses the rank.")
+
+
+class MolmoAct2TrainingDefaults(PolicyTrainingDefaults):
+    """MolmoAct2 single-robot defaults; a candidate, not a validated rollout result."""
+
+    max_epochs: EpochCount | None = Field(
+        default=8,
+        description=(
+            "The single-robot baseline uses 8 epochs on 200 SO101 episodes. This is a candidate, "
+            "not a validated rollout result. Adjust the budget for your dataset."
+        ),
+    )
+    lora: MolmoAct2LoraDefaults | None = Field(
+        default_factory=MolmoAct2LoraDefaults,
+        description="VLM LoRA with a fully trainable action expert, initialized from the general checkpoint.",
+    )
+
+
 POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     "act": PolicyTrainingConfiguration.from_defaults(
         ACTTrainingDefaults(num_workers=4, validation=ValidationDefaults(seed=42))
+    ),
+    "molmoact2": PolicyTrainingConfiguration.from_defaults(
+        MolmoAct2TrainingDefaults(
+            batch_size=16,
+            num_workers=8,
+            gradient_checkpointing=True,
+            validation=ValidationDefaults(seed=42),
+        )
     ),
 }
 """Per-policy recipe overrides; absent policies use the shared defaults."""

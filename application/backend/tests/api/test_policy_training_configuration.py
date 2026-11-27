@@ -10,7 +10,12 @@ from pydantic import Field, ValidationError
 
 from main import app
 from schemas.job import LocalTrainJobPayload
-from training.policy_catalog import POLICY_TRAINING_CONFIGURATIONS, ACTTrainingDefaults
+from training.policy_catalog import (
+    POLICY_TRAINING_CONFIGURATIONS,
+    ACTTrainingDefaults,
+    MolmoAct2LoraDefaults,
+    MolmoAct2TrainingDefaults,
+)
 from training.policy_training_configuration import (
     BatchSize,
     LoraDefaults,
@@ -34,7 +39,21 @@ def test_act_recipe_matches_the_reference_defaults() -> None:
     assert configuration.defaults.precision == "32-true"
     assert configuration.defaults.validation.seed == 42
     assert configuration.help["batch_size"] == ACTTrainingDefaults.model_fields["batch_size"].description
-    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act"}
+    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2"}
+
+
+def test_molmoact2_recipe_matches_the_reference_defaults() -> None:
+    configuration = _default_configuration("molmoact2")
+    assert configuration.defaults.batch_size == 16
+    assert configuration.defaults.max_epochs == 8
+    assert configuration.defaults.num_workers == 8
+    assert configuration.defaults.gradient_checkpointing is True
+    assert configuration.defaults.lora is not None
+    assert configuration.defaults.lora.rank == 64
+    assert configuration.defaults.lora.alpha == 16
+    assert configuration.defaults.validation.seed == 42
+    assert configuration.help["lora"] == MolmoAct2TrainingDefaults.model_fields["lora"].description
+    assert configuration.help["lora.rank"] == MolmoAct2LoraDefaults.model_fields["rank"].description
 
 
 def test_recipe_can_select_steps_without_default_epochs() -> None:
