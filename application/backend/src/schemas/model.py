@@ -221,6 +221,7 @@ class TrainingSummary(BaseModel):
     lora_use_dora: bool | None = None
     snapflow_enabled: bool | None = None
     snapflow_distill_epochs: int | None = None
+    snapflow_distill_steps: int | None = None
 
 
 class ModelDetailResponse(BaseModel):

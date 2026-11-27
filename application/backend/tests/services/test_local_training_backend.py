@@ -39,7 +39,7 @@ def _payload(**overrides) -> TrainJobPayload:
             "dataset_id": uuid4(),
             "policy": "act",
             "model_name": "m",
-            "max_steps": 100,
+            "max_epochs": 5,
             "batch_size": 8,
             "num_workers": 0,
             "auto_scale_batch_size": False,
@@ -113,6 +113,21 @@ class TestBuildSpec:
             val_split=0.2,
             precision="bf16-mixed",
         )
+
+    @pytest.mark.parametrize("distill", [False, True])
+    def test_step_budget_is_forwarded(self, tmp_path: Path, distill: bool) -> None:
+        payload = _payload(
+            policy="pi05",
+            max_epochs=None,
+            max_steps=100,
+            snapflow_enabled=distill,
+            snapflow_distill_steps=25 if distill else None,
+        )
+        spec = build_spec(_context(tmp_path, payload, model_policy="pi05"))
+        assert spec.max_epochs is None
+        assert spec.max_steps == (125 if distill else 100)
+        assert spec.snapflow_start_step == (100 if distill else None)
+        assert spec.snapflow_start_epoch is None
 
     @pytest.mark.parametrize(
         ("precision", "expected"),

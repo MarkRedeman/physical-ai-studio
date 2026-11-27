@@ -365,6 +365,10 @@ class RemoteTrainingBackend:
         excluded = {"run_options"}
         if spec.snapflow_start_epoch is None:
             excluded.add("snapflow_start_epoch")
+        if spec.snapflow_start_step is None:
+            excluded.add("snapflow_start_step")
+        if spec.max_steps is None:
+            excluded.add("max_steps")
         body: dict[str, Any] = {
             "spec": spec.model_dump(mode="json", exclude=excluded),
             "dataset_transfer": "http",

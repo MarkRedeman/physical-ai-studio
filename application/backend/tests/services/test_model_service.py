@@ -1,15 +1,33 @@
 """Unit tests for ModelService."""
 
 import importlib.util
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 import yaml
 from lightning.pytorch.core.saving import save_hparams_to_yaml
 
+from schemas.job import LocalTrainJobPayload
 from schemas.model import Model
 from services.model_service import ModelService
+
+
+def test_step_budget_summary_uses_matching_distillation_unit() -> None:
+    payload = LocalTrainJobPayload(
+        project_id=uuid4(),
+        dataset_id=uuid4(),
+        policy="pi05",
+        model_name="test",
+        max_steps=100,
+        snapflow_enabled=True,
+        snapflow_distill_steps=25,
+    )
+    summary = ModelService.get_training_summary(MagicMock(payload=payload))
+    assert summary.max_epochs is None
+    assert summary.max_steps == 100
+    assert summary.snapflow_distill_epochs is None
+    assert summary.snapflow_distill_steps == 25
 
 
 def _make_model(snapshot_id=None) -> Model:

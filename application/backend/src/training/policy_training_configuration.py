@@ -2,12 +2,24 @@
 
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 BatchSize = Annotated[int, Field(ge=1, le=256)]
 EpochCount = Annotated[int, Field(ge=1, le=10_000)]
+StepCount = Annotated[int, Field(ge=1, le=100_000)]
 NumWorkers = Annotated[int, Field(ge=0, le=16)] | Literal["auto"]
 Precision = Literal["32-true", "bf16-mixed", "bf16-true"]
+
+
+def resolve_training_limit(
+    max_epochs: int | None, max_steps: int | None, *, default_epochs: int = 5
+) -> tuple[int | None, int | None]:
+    """Keep one active limit, preferring epochs for compatibility with older jobs."""
+    if max_epochs is not None:
+        return max_epochs, None
+    if max_steps is not None:
+        return None, max_steps
+    return default_epochs, None
 
 
 class ValidationDefaults(BaseModel):
@@ -35,7 +47,20 @@ class SnapflowDefaults(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
-    distill_epochs: EpochCount = Field(default=3, description="Additional training epochs.")
+    distill_epochs: EpochCount | None = Field(default=3, description="Additional training epochs.")
+    distill_steps: StepCount | None = Field(default=None, description="Additional optimizer updates.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_limit(cls, data: Any) -> Any:
+        """Keep one active distillation limit; omitted values use the field defaults."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("distill_steps") is not None:
+            return {**data, "distill_epochs": None}
+        if data.get("distill_epochs") is not None:
+            return {**data, "distill_steps": None}
+        return {key: value for key, value in data.items() if key not in {"distill_epochs", "distill_steps"}}
 
 
 class PolicyTrainingDefaults(BaseModel):
@@ -44,7 +69,8 @@ class PolicyTrainingDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, json_schema_serialization_defaults_required=True)
 
     batch_size: BatchSize = Field(default=8, description="Samples per training step.")
-    max_epochs: EpochCount = Field(default=5, description="Dataset passes.")
+    max_epochs: EpochCount | None = Field(default=5, description="Dataset passes; preferred over steps.")
+    max_steps: StepCount | None = Field(default=None, description="Optimizer updates; null uses epochs.")
     num_workers: NumWorkers = Field(default="auto", description="DataLoader workers (0-16); auto uses available CPUs.")
     precision: Precision | None = Field(
         default=None,
@@ -61,6 +87,27 @@ class PolicyTrainingDefaults(BaseModel):
     snapflow: SnapflowDefaults | None = Field(
         default=None, description="Distillation settings; null disables SnapFlow."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_limit(cls, data: Any) -> Any:
+        """Keep one active limit; omitted values use the policy's field defaults."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("max_steps") is not None:
+            return {**data, "max_epochs": None}
+        if data.get("max_epochs") is not None:
+            return {**data, "max_steps": None}
+        return {key: value for key, value in data.items() if key not in {"max_epochs", "max_steps"}}
+
+    @model_validator(mode="after")
+    def validate_distillation_unit(self) -> "PolicyTrainingDefaults":
+        """Require the teacher and distillation to use the same unit."""
+        if self.snapflow is not None:
+            budget = self.snapflow.distill_epochs if self.max_epochs is not None else self.snapflow.distill_steps
+            if budget is None:
+                raise ValueError("SnapFlow distillation must use the same unit as the training limit.")
+        return self
 
 
 def _model_class(annotation: Any) -> type[BaseModel] | None:

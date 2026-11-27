@@ -15,7 +15,8 @@ from schemas.job import RemoteTrainJobPayload, TrainJob
 from services.job_service import JobService
 
 
-def test_duplicate_remote_job_payload_with_uuids_is_json_serializable() -> None:
+@pytest.mark.parametrize("use_steps", [False, True])
+def test_duplicate_remote_job_payload_with_uuids_is_json_serializable(use_steps: bool) -> None:
     """Duplicate detection matches the persisted JSON representation of UUID fields."""
 
     async def check_duplicate() -> None:
@@ -25,8 +26,18 @@ def test_duplicate_remote_job_payload_with_uuids_is_json_serializable() -> None:
         payload = RemoteTrainJobPayload(
             project_id=project_id,
             dataset_id=uuid4(),
-            policy="act",
+            policy="pi05",
             model_name="test-model",
+            max_epochs=None if use_steps else 27,
+            max_steps=100 if use_steps else None,
+            batch_size=16,
+            precision="bf16-mixed",
+            compile_model=True,
+            gradient_checkpointing=False,
+            val_split=0.05,
+            val_split_seed=42,
+            lora_enabled=True,
+            lora_alpha=32,
             base_model_id=uuid4(),
             snapshot_id=uuid4(),
             remote_trainer_id=uuid4(),

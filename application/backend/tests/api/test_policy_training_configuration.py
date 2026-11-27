@@ -16,6 +16,7 @@ from training.policy_training_configuration import (
     LoraDefaults,
     PolicyTrainingConfiguration,
     PolicyTrainingDefaults,
+    SnapflowDefaults,
 )
 
 
@@ -27,6 +28,19 @@ def _default_configuration(policy: str) -> PolicyTrainingConfiguration:
 
 def test_no_policy_has_a_recipe_yet() -> None:
     assert POLICY_TRAINING_CONFIGURATIONS == {}
+
+
+def test_recipe_can_select_steps_without_default_epochs() -> None:
+    defaults = PolicyTrainingDefaults(max_steps=100, snapflow=SnapflowDefaults(distill_steps=25))
+    assert defaults.max_epochs is None
+    assert defaults.max_steps == 100
+    assert defaults.snapflow.distill_epochs is None
+    assert defaults.snapflow.distill_steps == 25
+
+
+def test_recipe_distillation_requires_matching_units() -> None:
+    with pytest.raises(ValidationError, match="same unit"):
+        PolicyTrainingDefaults(max_steps=100, snapflow=SnapflowDefaults())
 
 
 @pytest.mark.parametrize("policy", ["act", "pi05", "unknown-policy"])
@@ -56,7 +70,29 @@ def test_defaults_are_valid_persistable_payloads() -> None:
         lora_use_dora=lora.use_dora,
         snapflow_enabled=defaults.snapflow is not None,
         snapflow_distill_epochs=defaults.snapflow.distill_epochs if defaults.snapflow else 3,
+        snapflow_distill_steps=defaults.snapflow.distill_steps if defaults.snapflow else None,
     )
+    assert LocalTrainJobPayload.model_validate_json(payload.model_dump_json()) == payload
+
+
+def test_step_budgeted_defaults_are_valid_persistable_payloads() -> None:
+    defaults = PolicyTrainingDefaults(max_steps=250, snapflow=SnapflowDefaults(distill_steps=50))
+    values = defaults.model_dump(exclude={"validation", "lora", "snapflow", "precision"})
+    payload = LocalTrainJobPayload(
+        project_id=uuid4(),
+        dataset_id=uuid4(),
+        policy="pi05",
+        model_name="pi05",
+        **values,
+        val_split=defaults.validation.split,
+        val_split_seed=defaults.validation.seed,
+        snapflow_enabled=True,
+        snapflow_distill_epochs=None,
+        snapflow_distill_steps=defaults.snapflow.distill_steps,
+    )
+    assert payload.max_steps == 250
+    assert payload.max_epochs is None
+    assert payload.snapflow_start_step == 250
     assert LocalTrainJobPayload.model_validate_json(payload.model_dump_json()) == payload
 
 

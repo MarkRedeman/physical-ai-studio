@@ -156,7 +156,7 @@ class AwsBatchTrainingBackend:
         s3.put_object(
             Bucket=self._connection.bucket,
             Key=f"{prefix}/spec.json",
-            Body=spec.model_dump_json(exclude={"run_options"}).encode(),
+            Body=spec.model_dump_json(exclude={"run_options"}, exclude_none=True).encode(),
             ContentType="application/json",
         )
 

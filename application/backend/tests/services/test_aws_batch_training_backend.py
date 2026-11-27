@@ -142,14 +142,17 @@ async def test_catalog_excludes_policies_without_a_provisioned_target(connection
 @pytest.mark.parametrize(
     "policy,queue", [("act", "small"), ("smolvla", "small"), ("pi05", "medium"), ("molmoact2", "large")]
 )
-async def test_submit_routes_by_policy_and_ingests_artifact(context, aws, monkeypatch, tmp_path, policy, queue) -> None:
+@pytest.mark.parametrize("steps", [None, 100])
+async def test_submit_routes_by_policy_and_ingests_artifact(
+    context, aws, monkeypatch, tmp_path, policy, queue, steps
+) -> None:
     batch, s3 = aws
     context.payload.policy = policy
     context.model.policy = policy
     archive = tmp_path / "dataset.zip"
     archive.write_bytes(b"dataset")
     monkeypatch.setattr(f"{MODULE}.DatasetDownloadService.create_dataset_archive", lambda self, path: archive)
-    monkeypatch.setattr(f"{MODULE}.build_spec", lambda context: TrainingJobSpec(policy=policy))
+    monkeypatch.setattr(f"{MODULE}.build_spec", lambda context: TrainingJobSpec(policy=policy, max_steps=steps))
     monkeypatch.setattr(
         f"{MODULE}.get_settings",
         lambda: MagicMock(
@@ -170,6 +173,10 @@ async def test_submit_routes_by_policy_and_ingests_artifact(context, aws, monkey
     assert submitted["parameters"] == {"job_prefix": f"jobs/{context.job.id}"}
     assert submitted["containerOverrides"]["environment"] == [{"name": "HF_TOKEN", "value": "test-token"}]
     assert b"test-token" not in s3.put_object.call_args.kwargs["Body"]
+    spec = yaml.safe_load(s3.put_object.call_args.kwargs["Body"])
+    assert spec.get("max_steps") == steps
+    assert spec.get("max_epochs") == (5 if steps is None else None)
+    assert "snapflow_start_step" not in spec
     assert (context.output_dir / "model.ckpt").read_text() == "trained"
     context.on_remote_job_id.assert_awaited_once()
 

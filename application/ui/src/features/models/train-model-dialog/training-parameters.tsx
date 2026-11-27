@@ -39,6 +39,20 @@ export const RECOMMENDED_PRECISION: Record<string, string> = {
  * one to distil it, so a single-epoch run cannot use SnapFlow at all.
  */
 export const MIN_EPOCHS_FOR_SNAPFLOW = 2;
+export type TrainingLimitUnit = 'epochs' | 'steps';
+
+const describeTrainingSteps = (unit: TrainingLimitUnit, steps: number | undefined, autoBatch: boolean) => {
+    if (steps === undefined) {
+        return undefined;
+    }
+    if (unit === 'steps') {
+        return `Training steps: ${steps.toLocaleString()}`;
+    }
+    if (autoBatch) {
+        return 'Training steps: set when training starts (Auto batch size)';
+    }
+    return `Estimated training steps: ${steps.toLocaleString()}`;
+};
 
 export const PRECISION_LABELS: Record<string, string> = {
     'bf16-mixed': 'BF16 Mixed',
@@ -48,8 +62,12 @@ export const PRECISION_LABELS: Record<string, string> = {
 
 interface TrainingParametersProps {
     help?: SchemaPolicyTrainingConfiguration['help'];
+    limitUnit: TrainingLimitUnit;
+    onLimitUnitChange: (value: TrainingLimitUnit) => void;
     maxEpochs: number;
     onMaxEpochsChange: (value: number) => void;
+    maxSteps: number;
+    onMaxStepsChange: (value: number) => void;
     batchSize: number;
     trainingSteps?: number;
     onBatchSizeChange: (value: number) => void;
@@ -86,12 +104,18 @@ interface TrainingParametersProps {
     onSnapflowEnabledChange: (value: boolean) => void;
     snapflowDistillEpochs: number;
     onSnapflowDistillEpochsChange: (value: number) => void;
+    snapflowDistillSteps: number;
+    onSnapflowDistillStepsChange: (value: number) => void;
 }
 
 export const TrainingParameters = ({
     help = {},
+    limitUnit,
+    onLimitUnitChange,
     maxEpochs,
     onMaxEpochsChange,
+    maxSteps,
+    onMaxStepsChange,
     batchSize,
     trainingSteps,
     onBatchSizeChange,
@@ -126,6 +150,8 @@ export const TrainingParameters = ({
     onSnapflowEnabledChange,
     snapflowDistillEpochs,
     onSnapflowDistillEpochsChange,
+    snapflowDistillSteps,
+    onSnapflowDistillStepsChange,
 }: TrainingParametersProps) => (
     <Flex direction='column' gap='size-250' width='100%'>
         <h3 className={classes.sectionHeading}>Training settings</h3>
@@ -183,32 +209,42 @@ export const TrainingParameters = ({
             </Flex>
         </div>
         <div className={classes.parameterGrid}>
+            <Picker
+                label='Training limit'
+                selectedKey={limitUnit}
+                onSelectionChange={(key) => {
+                    if (key === 'epochs' || key === 'steps') {
+                        onLimitUnitChange(key);
+                    }
+                }}
+                width='100%'
+            >
+                <Item key='epochs'>Epochs</Item>
+                <Item key='steps'>Steps</Item>
+            </Picker>
             <NumberField
-                label='Max Epochs'
-                description={
-                    trainingSteps === undefined
-                        ? undefined
-                        : autoScaleBatchSize
-                          ? 'Training steps: set when training starts (Auto batch size)'
-                          : `Estimated training steps: ${trainingSteps.toLocaleString()}`
-                }
-                value={maxEpochs}
-                onChange={onMaxEpochsChange}
+                label={limitUnit === 'epochs' ? 'Max Epochs' : 'Max Steps'}
+                description={describeTrainingSteps(limitUnit, trainingSteps, autoScaleBatchSize)}
+                value={limitUnit === 'epochs' ? maxEpochs : maxSteps}
+                onChange={limitUnit === 'epochs' ? onMaxEpochsChange : onMaxStepsChange}
                 minValue={1}
-                maxValue={1000}
+                maxValue={limitUnit === 'epochs' ? 10_000 : 100_000}
                 step={1}
                 width='100%'
                 contextualHelp={
                     <ContextualHelp variant='info'>
-                        <Heading>Max epochs</Heading>
+                        <Heading>{limitUnit === 'epochs' ? 'Max epochs' : 'Max steps'}</Heading>
                         <Content>
                             <Text>
-                                {help['max_epochs'] ?? (
-                                    <>
-                                        Total number of training epochs. Training will stop after this many full passes
-                                        through the dataset. We recommend training for 5 to 10 epochs.
-                                    </>
-                                )}
+                                {limitUnit === 'epochs'
+                                    ? (help['max_epochs'] ?? (
+                                          <>
+                                              Total number of training epochs. Training will stop after this many full
+                                              passes through the dataset. We recommend training for 5 to 10 epochs.
+                                          </>
+                                      ))
+                                    : (help['max_steps'] ??
+                                      'Optimizer updates. Batch size controls samples per update.')}
                             </Text>
                         </Content>
                     </ContextualHelp>
@@ -464,7 +500,7 @@ export const TrainingParameters = ({
                             isEmphasized
                             isSelected={snapflowEnabled}
                             onChange={onSnapflowEnabledChange}
-                            isDisabled={maxEpochs < MIN_EPOCHS_FOR_SNAPFLOW}
+                            isDisabled={limitUnit === 'epochs' && maxEpochs < MIN_EPOCHS_FOR_SNAPFLOW}
                         >
                             SnapFlow distillation
                         </Checkbox>
@@ -487,23 +523,34 @@ export const TrainingParameters = ({
                     {snapflowEnabled && (
                         <div className={classes.optionFields}>
                             <NumberField
-                                label='Distillation epochs'
+                                label={limitUnit === 'epochs' ? 'Distillation epochs' : 'Distillation steps'}
                                 maxWidth='size-2400'
-                                value={snapflowDistillEpochs}
-                                onChange={onSnapflowDistillEpochsChange}
+                                value={limitUnit === 'epochs' ? snapflowDistillEpochs : snapflowDistillSteps}
+                                onChange={
+                                    limitUnit === 'epochs'
+                                        ? onSnapflowDistillEpochsChange
+                                        : onSnapflowDistillStepsChange
+                                }
                                 minValue={1}
-                                maxValue={10_000}
+                                maxValue={limitUnit === 'epochs' ? 10_000 : 100_000}
                                 step={1}
                                 width='100%'
-                                isDisabled={!snapflowEnabled || maxEpochs < MIN_EPOCHS_FOR_SNAPFLOW}
+                                isDisabled={
+                                    !snapflowEnabled || (limitUnit === 'epochs' && maxEpochs < MIN_EPOCHS_FOR_SNAPFLOW)
+                                }
                                 contextualHelp={
                                     <ContextualHelp variant='info'>
-                                        <Heading>Distillation epochs</Heading>
+                                        <Heading>
+                                            {limitUnit === 'epochs' ? 'Distillation epochs' : 'Distillation steps'}
+                                        </Heading>
                                         <Content>
                                             <Text>
-                                                {help['snapflow.distill_epochs'] ??
-                                                    'How many additional epochs to perform distilling after normal ' +
-                                                        'finetuning. We recommend 2-5 epochs.'}
+                                                {limitUnit === 'epochs'
+                                                    ? (help['snapflow.distill_epochs'] ??
+                                                      'How many additional epochs to perform distilling after normal ' +
+                                                          'finetuning. We recommend 2-5 epochs.')
+                                                    : (help['snapflow.distill_steps'] ??
+                                                      'Extra optimizer updates after the teacher.')}
                                             </Text>
                                         </Content>
                                     </ContextualHelp>
