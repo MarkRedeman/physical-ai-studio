@@ -137,6 +137,18 @@ class Rldx1TrainingDefaults(PolicyTrainingDefaults):
     )
 
 
+class Xr0TrainingDefaults(PolicyTrainingDefaults):
+    """XR0 starting defaults; does not reproduce the full SO101 reference recipe."""
+
+    max_epochs: EpochCount | None = Field(
+        default=5,
+        description=(
+            "Five epochs is a starting point. The SO101 reference recipe uses 30,000 optimizer steps and "
+            "gradient accumulation; these defaults do not reproduce that full recipe."
+        ),
+    )
+
+
 POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
     "act": PolicyTrainingConfiguration.from_defaults(
         ACTTrainingDefaults(num_workers=4, validation=ValidationDefaults(seed=42))
@@ -156,6 +168,12 @@ POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
         Pi05TrainingDefaults(compile_model=True, validation=ValidationDefaults(seed=42))
     ),
     "rldx1": PolicyTrainingConfiguration.from_defaults(Rldx1TrainingDefaults(gradient_checkpointing=True)),
+    "xr0": PolicyTrainingConfiguration.from_defaults(
+        Xr0TrainingDefaults(
+            gradient_checkpointing=True,
+            validation=ValidationDefaults(split=0.05, seed=42),
+        )
+    ),
 }
 """Per-policy recipe overrides; absent policies use the shared defaults."""
 

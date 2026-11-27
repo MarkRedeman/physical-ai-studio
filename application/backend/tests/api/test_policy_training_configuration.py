@@ -19,6 +19,7 @@ from training.policy_catalog import (
     Pi05TrainingDefaults,
     Rldx1TrainingDefaults,
     SmolVLATrainingDefaults,
+    Xr0TrainingDefaults,
 )
 from training.policy_training_configuration import (
     BatchSize,
@@ -43,7 +44,7 @@ def test_act_recipe_matches_the_reference_defaults() -> None:
     assert configuration.defaults.precision == "32-true"
     assert configuration.defaults.validation.seed == 42
     assert configuration.help["batch_size"] == ACTTrainingDefaults.model_fields["batch_size"].description
-    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2", "smolvla", "pi05", "rldx1"}
+    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act", "molmoact2", "smolvla", "pi05", "rldx1", "xr0"}
 
 
 def test_molmoact2_recipe_matches_the_reference_defaults() -> None:
@@ -90,6 +91,15 @@ def test_rldx1_recipe_is_a_documented_starting_point() -> None:
     assert configuration.defaults.max_epochs == 5
     assert configuration.defaults.gradient_checkpointing is True
     assert configuration.help["max_epochs"] == Rldx1TrainingDefaults.model_fields["max_epochs"].description
+
+
+def test_xr0_recipe_is_a_documented_starting_point() -> None:
+    configuration = _default_configuration("xr0")
+    assert configuration.defaults.max_epochs == 5
+    assert configuration.defaults.gradient_checkpointing is True
+    assert configuration.defaults.validation.split == 0.05
+    assert configuration.defaults.validation.seed == 42
+    assert configuration.help["max_epochs"] == Xr0TrainingDefaults.model_fields["max_epochs"].description
 
 
 def test_recipe_can_select_steps_without_default_epochs() -> None:
