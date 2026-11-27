@@ -5,12 +5,48 @@ from importlib import metadata
 
 from loguru import logger
 from packaging.requirements import Requirement
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from training.policy_training_configuration import PolicyTrainingConfiguration, PolicyTrainingDefaults
+from training.policy_training_configuration import (
+    BatchSize,
+    EpochCount,
+    PolicyTrainingConfiguration,
+    PolicyTrainingDefaults,
+    Precision,
+    ValidationDefaults,
+)
 
-POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {}
-"""Per-policy recipe overrides. Empty means every policy uses the shared defaults."""
+
+class ACTTrainingDefaults(PolicyTrainingDefaults):
+    """ACT defaults validated against the SO101 reference recipe."""
+
+    batch_size: BatchSize = Field(
+        default=8,
+        description="The ACT baseline uses batch size 8. Larger images and more cameras need more memory.",
+    )
+    max_epochs: EpochCount | None = Field(
+        default=10,
+        description=(
+            "The 200-episode SO101 baseline uses 10 epochs, roughly 100k steps at batch 8. "
+            "Smaller datasets need more epochs for the same update budget. Validate on your robot."
+        ),
+    )
+    precision: Precision = Field(
+        default="32-true",
+        description="The single-arm ACT baseline uses FP32, without automatic mixed precision.",
+    )
+    augment_images: bool = Field(
+        default=False,
+        description="Disabled in the baseline. Enable it only if it improves held-out task performance.",
+    )
+
+
+POLICY_TRAINING_CONFIGURATIONS: dict[str, PolicyTrainingConfiguration] = {
+    "act": PolicyTrainingConfiguration.from_defaults(
+        ACTTrainingDefaults(num_workers=4, validation=ValidationDefaults(seed=42))
+    ),
+}
+"""Per-policy recipe overrides; absent policies use the shared defaults."""
 
 DEFAULT_POLICY_TRAINING_CONFIGURATION = PolicyTrainingConfiguration.from_defaults(PolicyTrainingDefaults())
 

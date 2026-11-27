@@ -10,7 +10,7 @@ from pydantic import Field, ValidationError
 
 from main import app
 from schemas.job import LocalTrainJobPayload
-from training.policy_catalog import POLICY_TRAINING_CONFIGURATIONS
+from training.policy_catalog import POLICY_TRAINING_CONFIGURATIONS, ACTTrainingDefaults
 from training.policy_training_configuration import (
     BatchSize,
     LoraDefaults,
@@ -26,8 +26,15 @@ def _default_configuration(policy: str) -> PolicyTrainingConfiguration:
     return PolicyTrainingConfiguration.model_validate(response.json())
 
 
-def test_no_policy_has_a_recipe_yet() -> None:
-    assert POLICY_TRAINING_CONFIGURATIONS == {}
+def test_act_recipe_matches_the_reference_defaults() -> None:
+    configuration = _default_configuration("act")
+    assert configuration.defaults.batch_size == 8
+    assert configuration.defaults.max_epochs == 10
+    assert configuration.defaults.num_workers == 4
+    assert configuration.defaults.precision == "32-true"
+    assert configuration.defaults.validation.seed == 42
+    assert configuration.help["batch_size"] == ACTTrainingDefaults.model_fields["batch_size"].description
+    assert set(POLICY_TRAINING_CONFIGURATIONS) == {"act"}
 
 
 def test_recipe_can_select_steps_without_default_epochs() -> None:
@@ -43,9 +50,8 @@ def test_recipe_distillation_requires_matching_units() -> None:
         PolicyTrainingDefaults(max_steps=100, snapflow=SnapflowDefaults())
 
 
-@pytest.mark.parametrize("policy", ["act", "pi05", "unknown-policy"])
-def test_every_policy_uses_the_shared_defaults(policy: str) -> None:
-    configuration = _default_configuration(policy)
+def test_unknown_policy_uses_the_shared_defaults() -> None:
+    configuration = _default_configuration("unknown-policy")
     assert configuration.defaults == PolicyTrainingDefaults()
     assert configuration.help == {}
 
